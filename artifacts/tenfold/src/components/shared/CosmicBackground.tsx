@@ -80,14 +80,13 @@ function drawTenfold(
   mobile: boolean
 ) {
   const fontSize = Math.min(W * 0.115, H * 0.2, 110);
-  // Slow fold: oscillate between 0 and ~22 degrees
   const foldAngle = Math.sin(time * 0.00028) * 0.38;
   const foldScaleX = Math.cos(foldAngle);
-
-  // Text y offset so it sits slightly above centre
   const textY = cy - fontSize * 0.08;
-
   const LAYERS = mobile ? 3 : 7;
+
+  // Icon size relative to font
+  const iconSize = fontSize * 0.72;
 
   ctx.save();
   ctx.translate(cx, textY);
@@ -96,26 +95,52 @@ function drawTenfold(
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  // Back depth layers — extruded 3D look
+  // Measure text to figure out where icon sits
+  const textW = ctx.measureText('TENFOLD').width;
+  const iconGap = fontSize * 0.18;
+  // Icon is placed to the left of the text block
+  const iconX = -(textW / 2) - iconSize * 0.5 - iconGap;
+
+  // ── Depth extrusion layers ────────────────────────────
   for (let d = LAYERS; d >= 1; d--) {
     const dAlpha = 0.22 - d * 0.026;
     const shiftX = d * 2.2 * Math.sin(foldAngle + 0.3);
     const shiftY = d * 1.4;
     ctx.fillStyle = `rgba(60,30,160,${Math.max(dAlpha, 0.02)})`;
     ctx.fillText('TENFOLD', shiftX, shiftY);
+    // Icon depth layers — teal extrusion
+    ctx.font = `${iconSize}px 'Syne', sans-serif`;
+    ctx.fillStyle = `rgba(0,120,140,${Math.max(dAlpha, 0.02)})`;
+    ctx.fillText('✦', iconX + shiftX, shiftY);
+    ctx.font = `800 ${fontSize}px 'Syne', sans-serif`;
   }
 
-  // Front face glow
+  // ── Front face: TENFOLD ───────────────────────────────
   ctx.shadowColor = 'rgba(124,92,252,0.55)';
   ctx.shadowBlur = 28;
   ctx.fillStyle = 'rgba(124,92,252,0.18)';
   ctx.fillText('TENFOLD', 0, 0);
-
-  // Slightly brighter stroke outline on front face
   ctx.shadowBlur = 0;
   ctx.strokeStyle = 'rgba(157,132,253,0.22)';
   ctx.lineWidth = 0.6;
   ctx.strokeText('TENFOLD', 0, 0);
+
+  // ── Front face: spark icon in cyan gradient ───────────
+  ctx.font = `${iconSize}px 'Syne', sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // Radial gradient: cyan centre → electric blue edge
+  const grad = ctx.createRadialGradient(iconX, 0, 0, iconX, 0, iconSize * 0.7);
+  grad.addColorStop(0, 'rgba(0,255,240,0.85)');
+  grad.addColorStop(0.5, 'rgba(0,212,255,0.55)');
+  grad.addColorStop(1, 'rgba(80,140,255,0.0)');
+
+  ctx.shadowColor = 'rgba(0,212,255,0.7)';
+  ctx.shadowBlur = 22;
+  ctx.fillStyle = grad;
+  ctx.fillText('✦', iconX, 0);
+  ctx.shadowBlur = 0;
 
   ctx.restore();
 }
