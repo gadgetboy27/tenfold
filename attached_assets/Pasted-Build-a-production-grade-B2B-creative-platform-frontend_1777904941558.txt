@@ -1,0 +1,511 @@
+Build a production-grade B2B creative platform frontend called "Tenfold" — 
+a modern AI content creation and social publishing tool. This is a pure 
+frontend application (React + Tailwind) that connects to an existing 
+backend API via environment variable VITE_API_URL.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+VISUAL DESIGN BRIEF
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Aesthetic: Dark-first, cinematic, premium. Think Midjourney meets Linear.
+Not corporate. Not friendly-startup-pastel. Serious creative tool energy.
+
+Colour system:
+- Background: #0A0A0A (near black)
+- Surface: #111111 (cards, panels)
+- Surface raised: #1A1A1A (hover states, inputs)
+- Border: rgba(255,255,255,0.08) (subtle, never harsh)
+- Accent primary: #7C5CFC (electric purple — brand colour)
+- Accent glow: rgba(124,92,252,0.15) (for active states, focus rings)
+- Text primary: #F0F0F0
+- Text secondary: #888888
+- Text muted: #444444
+- Success: #22C55E
+- Warning: #F59E0B
+- Error: #EF4444
+
+Typography:
+- Display/headings: 'Syne' (Google Fonts) — geometric, distinctive
+- Body/UI: 'Inter' (Google Fonts) — clean, readable
+- Monospace (job IDs, credits): 'JetBrains Mono' (Google Fonts)
+
+Motion principles:
+- All state transitions: 200ms ease
+- Image cards entering: staggered fade-up (60ms delay between each)
+- Loading states: subtle pulse animation, never spinner
+- Hover on cards: scale(1.02) + border brightens to rgba(255,255,255,0.15)
+- Active/selected states: purple glow border + inner purple tint
+- Panel slides: 300ms cubic-bezier(0.4, 0, 0.2, 1)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LAYOUT ARCHITECTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Three-panel layout (desktop, ≥1280px):
+
+┌─────────────────────────────────────────────────────────┐
+│ TOP BAR: Logo | Workspace name | Credits meter | Avatar │
+├──────────┬──────────────────────────────┬───────────────┤
+│          │                              │               │
+│  LEFT    │   MAIN CANVAS               │  RIGHT        │
+│  RAIL    │   (image grid / anchor /    │  PANEL        │
+│  160px   │    composition view)        │  320px        │
+│          │                             │               │
+│  Step    │   This is the hero area.    │  Controls     │
+│  tracker │   Full height. Dominant.    │  for current  │
+│  + nav   │                             │  step         │
+│          │                             │               │
+├──────────┴──────────────────────────────┴───────────────┤
+│ BOTTOM INPUT BAR: Prompt field + Generate button        │
+└─────────────────────────────────────────────────────────┘
+
+Mobile (< 768px): single column, bottom sheet for controls,
+bottom tab bar for navigation between steps.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+THE 5-STEP PIPELINE (LEFT RAIL NAVIGATION)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+The left rail shows a vertical step tracker. Steps unlock sequentially.
+Completed steps show a checkmark. Current step has the purple accent.
+Locked steps are muted and non-clickable.
+
+STEP 1 — CREATE
+  Icon: Sparkles
+  Label: "Create"
+  State: Always available
+
+STEP 2 — SELECT
+  Icon: Target/crosshair
+  Label: "Select"
+  State: Unlocks after images generated
+
+STEP 3 — EXPAND
+  Icon: Layers
+  Label: "Expand"
+  State: Unlocks after anchor selected
+
+STEP 4 — COMPOSE
+  Icon: PenTool
+  Label: "Compose"
+  State: Unlocks after at least one expansion done
+
+STEP 5 — PUBLISH
+  Icon: Send
+  Label: "Publish"
+  State: Unlocks after composition saved
+
+Below the steps: a mini credit meter.
+Shows current balance (e.g. "347 cr") with a thin arc progress bar
+showing percentage of monthly allocation used.
+Clicking it opens billing modal.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 1: CREATE — Prompt Input
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+MAIN CANVAS (when no images generated yet):
+- Full height empty state
+- Large faint "T" watermark in background (Tenfold branding)
+- Centre: "Describe what you want to create" in Syne 32px
+- Sub: "Tenfold will generate 6 image variations for you to choose from"
+- Below that: a 3×2 ghost grid (6 skeleton cards) showing what's coming
+- Each skeleton card has a subtle shimmer animation
+
+BOTTOM INPUT BAR (always visible):
+- Full width dark input field, 56px tall, rounded-lg
+- Placeholder: "A confident founder presenting at a tech conference, 
+  golden hour lighting, professional, aspirational..."
+- Right side of input: 
+  - Aspect ratio picker (square / portrait / landscape / story) — icon buttons
+  - Style picker dropdown (photorealistic / illustration / cinematic / 3D)
+  - "Generate" button — purple gradient, 140px wide, 
+    text: "Generate · 18 cr"
+    Shows credit cost before confirming
+- On submit: validate user has enough credits via 
+  GET {VITE_API_URL}/api/credits/balance
+  If insufficient: show inline error with "Top up credits" link
+  If sufficient: POST {VITE_API_URL}/api/campaigns with prompt + params
+
+LOADING STATE (after Generate pressed):
+- 6 skeleton cards in the main canvas with shimmer
+- Top bar shows: "Generating 6 images..." with animated dots
+- Credit deducted immediately (shown in credit meter)
+- Connect to backend via Supabase Realtime or poll 
+  GET {VITE_API_URL}/api/campaigns/{id} every 2 seconds
+- As each image completes, it fades in to replace its skeleton card
+  (staggered, not all at once — creates a satisfying progressive reveal)
+
+RIGHT PANEL — Step 1 controls:
+- "Aspect ratio" section with 4 format buttons:
+  Square (1:1), Portrait (4:5), Landscape (16:9), Story (9:16)
+  Show visual rectangle preview of each ratio
+- "Style" section: 4 style chips (Photorealistic, Illustration, Cinematic, 3D)
+- "Advanced" collapsible section:
+  - Seed input (number field, optional)
+  - Negative prompt textarea
+  - Quality slider (Fast ← → Quality) with credit cost indicator that updates
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 2: SELECT — Image Grid + Anchor System
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+This is the hero interaction of the whole product. Make it feel excellent.
+
+MAIN CANVAS:
+- 6 images in a 3×2 responsive grid
+- Each image card:
+  - Rounded-xl, overflow hidden
+  - Image fills 100% of card (object-cover)
+  - On hover: overlay appears with:
+    - Subtle dark gradient at bottom
+    - Bottom row of action icons:
+      [Expand ↗] [Vary 🔀] [Upscale ⬆] [Download ↓]
+    - Each icon has tooltip on hover
+  - On click (select as anchor):
+    - Card gets purple glow border (3px, rgba(124,92,252,0.8))
+    - Subtle purple inner shadow
+    - Small "ANCHOR" badge appears top-left (purple pill)
+    - All other cards dim slightly (opacity 0.6)
+    - Right panel slides to show anchor confirmation
+
+- Below the grid: a subtle row of 6 tiny dot indicators
+  (like a carousel indicator) — clicking re-scrolls to that image
+
+IMAGE ACTIONS (when hovering a card):
+- Expand: opens image in full-screen lightbox with zoom
+- Vary: calls POST {VITE_API_URL}/api/jobs with type: 'image_variation',
+  costs 3 credits, generates a new variation and adds it to the grid
+- Upscale: costs 2 credits, replaces image with upscaled version
+- Download: direct download of the image file
+
+ANCHOR SELECTION FLOW:
+- Clicking an image (not an action icon) selects it as anchor
+- Confirmation appears in right panel:
+  "This will be your creative anchor — everything builds from this image"
+  [Use This Image →] button in purple
+  [Choose Different] ghost button
+
+- On confirm: PATCH {VITE_API_URL}/api/campaigns/{id}/anchor
+  with { anchorAssetId: selectedAssetId }
+  Then advance to Step 3 with transition animation
+
+RIGHT PANEL — Step 2:
+- "Selected image" section showing thumbnail of chosen image
+- "Quick actions" section:
+  - [Generate 6 more] button — reruns generation with same prompt, 18cr
+  - [Edit prompt] — collapses back to Step 1 with prompt pre-filled
+- "Quality" section showing generation details (model, seed, params)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 3: EXPAND — Format Branching
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+MAIN CANVAS:
+- The anchor image is pinned top-left, 280px square, rounded-xl
+  Label underneath: "Your anchor image"
+- To the right and below: 4 large format option cards in a 2×2 grid:
+
+FORMAT CARD DESIGN:
+Each card is 220px × 160px, dark surface, rounded-xl, border.
+On hover: border brightens, slight lift.
+Once generated: card fills with preview thumbnail + status badge.
+
+Card 1 — VIDEO
+  Icon: large film frame icon (40px, purple)
+  Title: "Video"
+  Subtitle: "10 to 60 second clip"
+  Credit indicator: "15 – 80 cr"
+  Duration selector (visible on card): [10s] [30s] [60s] pill buttons
+  [Generate Video] button — purple outline
+  After generation: shows video thumbnail with play button overlay
+  Status badge: GENERATING (amber pulse) / READY (green)
+
+Card 2 — MUSIC
+  Icon: waveform / musical note (40px, purple)
+  Title: "Music"
+  Subtitle: "30s background track"
+  Credit indicator: "8 cr"
+  Mood selector: [Uplifting] [Corporate] [Dramatic] [Chill]
+  [Generate Music] button — purple outline
+  After generation: shows waveform visualisation + play button
+  Status: GENERATING / READY
+
+Card 3 — SCRIPT
+  Icon: document with lines (40px, purple)  
+  Title: "Script"
+  Subtitle: "Caption or voiceover"
+  Credit indicator: "1 cr" (fast, via Claude)
+  Platform selector: [Instagram] [LinkedIn] [TikTok] [Facebook]
+  Tone: [Professional] [Casual] [Playful]
+  [Generate Script] button — purple outline
+  After generation: shows text preview (first 100 chars, truncated)
+  Status: GENERATING / READY (scripts are near-instant)
+
+Card 4 — VARIATIONS
+  Icon: grid/branches (40px, purple)
+  Title: "More Images"
+  Subtitle: "Variations of your anchor"
+  Credit indicator: "3 cr each"
+  [Generate Variation] button — purple outline
+  Shows mini 2×2 grid of variations once generated
+
+EACH FORMAT CARD — when generated — gets a subtle green glow 
+and a [Preview] button that opens the asset in a panel/modal.
+
+RIGHT PANEL — Step 3:
+- "Your expansions" section: 
+  Mini status list of each format (icon + label + status chip)
+  Shows: Not started / Generating / Ready / Failed
+- "Next step" section:
+  "When you're happy with your content, move to Compose"
+  [Go to Compose →] button — active once at least 1 expansion is ready
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 4: COMPOSE — Final Product Assembly
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+MAIN CANVAS — split preview:
+- Left half: live preview of the composition (updates as user edits)
+- Right half: (on mobile: below) editing controls
+
+PREVIEW AREA:
+- Shows the anchor image (or video thumbnail) at target dimensions
+- Text overlays rendered on top in real-time as user types
+- Brand logo shown in corner if enabled
+- Format selector tabs at top: [Square] [Portrait] [Landscape] [Story] [Reel]
+  Clicking a tab reshapes the preview in real time
+
+COMPOSITION CONTROLS (right side):
+Section: "Caption & Text"
+- Main caption textarea (for the post itself)
+- "Add text overlay" button — adds a text block to the image
+  Each text block has: content field, size (S/M/L), position 
+  (top/centre/bottom), colour picker (6 preset + custom)
+- Hashtag field with # prefix, comma separated
+  Shows: "12/30 hashtags" counter
+
+Section: "Brand Kit"
+- Toggle: "Apply brand logo" (on/off)
+  If workspace has logo uploaded: shows logo preview + position selector
+  If not: "Upload logo in Settings" link
+- Toggle: "Apply brand colours" (on/off)
+  Shows the workspace primary colour as a swatch
+
+Section: "Format"
+- Output format buttons: Post / Story / Reel / Banner
+- Platform optimisation toggle: 
+  "Auto-size for platform" — adjusts dimensions per platform requirements
+
+Section: "Include Assets"  
+- Checklist of what to include in the final package:
+  [✓] Anchor image
+  [ ] Video (if generated)
+  [ ] Music track (if generated)  
+  [✓] Script / caption (if generated)
+
+[Save Composition] button at bottom of controls
+- Calls POST {VITE_API_URL}/api/compositions with overlay + branding params
+- Shows progress bar while backend composes with Sharp
+- On complete: "Composition ready!" toast + [Go to Publish →] becomes active
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 5: PUBLISH — Ayrshare Distribution
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+MAIN CANVAS:
+- Left: Final asset preview (the composed output)
+  Below: Caption preview exactly as it will appear on each platform
+  
+- Right: Publication settings
+
+PLATFORM SELECTION:
+- Grid of social platform buttons (2×N grid, wrapped)
+  Each platform as a rounded pill with icon + name:
+  Instagram | Facebook | LinkedIn | TikTok | YouTube
+  Twitter/X | Pinterest | Reddit | Threads | Bluesky
+  
+  Connected platforms: full colour, selectable (click to toggle selected)
+  Not connected: greyed out with lock icon + "Connect" on hover
+  
+  Load connected platforms from: 
+  GET {VITE_API_URL}/api/social/profiles
+
+SCHEDULE OPTIONS:
+- "When to post" section:
+  [Post Now] [Schedule] toggle
+  If Schedule selected: date/time picker appears
+
+CAPTION EDITOR:
+- Pre-filled with generated script if available
+- Character counter per platform (platform-specific limits)
+  Instagram: 2200 | Twitter: 280 | LinkedIn: 3000 | TikTok: 2200
+  Shows character count in colour (green → amber → red as limit approaches)
+
+FINAL PUBLISH:
+[Publish to Selected Platforms] button
+- Full width, large, purple gradient, 56px tall
+- Shows: "Publishing to 3 platforms..." loading state
+- Calls POST {VITE_API_URL}/api/publish
+- On success: 
+  - Full screen success moment: 
+    Purple burst animation from button
+    "Your content is live on [Platform1], [Platform2], [Platform3]"
+    Confetti (tasteful, not childish — small purple/white particles)
+  - Below: "Start a new campaign" and "View analytics" buttons
+
+RIGHT PANEL — Step 5:
+- "Connected accounts" mini list with platform icons + handle names
+  [+ Connect more] link → goes to Settings → Social
+- "Previous posts" mini feed showing last 3 publish records
+  Each with platform icon + date + status chip
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GLOBAL UI COMPONENTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TOP BAR (always visible, 56px, border-bottom):
+- Left: "Tenfold" wordmark in Syne font + purple dot
+- Centre: Current campaign name (editable, click to rename inline)
+- Right: 
+  Credits display: [⬡ 347 cr] pill button (opens top-up modal on click)
+  Workspace switcher dropdown (shows workspace name, avatar initial)
+  User avatar (opens profile/logout dropdown)
+
+CREDIT METER (top bar):
+- Shows as: "⬡ 347" in JetBrains Mono
+- Colour: green if >30% remaining, amber if 10–30%, red if <10%
+- On click: slides down a mini panel showing:
+  Current balance, monthly allocation, usage this month
+  [Buy More Credits] button → Stripe checkout
+  [View Transaction History] link
+
+TOAST NOTIFICATIONS:
+- Bottom-right, stacked
+- Types: success (green), error (red), info (purple), warning (amber)
+- Auto-dismiss after 4 seconds
+- Job completion toasts: "Your video is ready" [View →]
+
+JOB STATUS INDICATOR:
+- When any job is running: subtle pulsing dot in top bar (purple)
+  On hover: shows mini job queue list with progress bars
+- Jobs poll GET {VITE_API_URL}/api/campaigns/{id} every 2 seconds
+  Or connect to Supabase Realtime if VITE_SUPABASE_URL is set
+
+MODALS:
+- Dark overlay (rgba(0,0,0,0.7)) with blur(4px)
+- Card centres in viewport, max-width 540px
+- Close on overlay click or Escape key
+- Slide up + fade in on open, reverse on close
+
+SETTINGS SIDEBAR (accessible from avatar menu):
+- Full-height right drawer, 400px wide
+- Sections: Brand Kit | Social Accounts | Billing | Team | Account
+- Brand Kit section:
+  Logo upload (drag/drop or click) — shows preview after upload
+  Primary colour picker
+  Font selector (6 options: Inter, Syne, Poppins, Playfair, Montserrat, DM Sans)
+- Social Accounts section:
+  List of platforms with connect/disconnect status
+  [Connect Account] opens Ayrshare linking URL from 
+  GET {VITE_API_URL}/api/social/connect
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+API INTEGRATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Base URL: import.meta.env.VITE_API_URL (default: http://localhost:3000)
+
+Every API call:
+- Include header: Authorization: Bearer {supabaseAccessToken}
+- Include header: x-workspace-slug: {currentWorkspaceSlug}
+- Handle 402: show "Insufficient credits" inline error with top-up link
+- Handle 401: redirect to /login
+- Handle 5xx: show toast "Something went wrong, please try again"
+
+Key endpoints used by frontend:
+GET  /api/credits/balance          → show in credit meter
+POST /api/campaigns                → create campaign (returns campaignId)
+GET  /api/campaigns/{id}           → poll for job + asset status
+PATCH /api/campaigns/{id}/anchor   → set anchor image
+POST /api/jobs                     → create video/music/script/variation job
+POST /api/compositions             → run composition
+POST /api/publish                  → publish to Ayrshare
+GET  /api/social/profiles          → load connected platforms
+GET  /api/social/connect           → get Ayrshare link URL
+POST /api/credits/purchase         → open Stripe checkout
+
+Auth: use @supabase/supabase-js for session management.
+On app load: check session. If none: redirect to /login.
+Store access token in memory (not localStorage).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EMPTY STATES (critical for UX quality)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Every empty state must feel intentional and guide the user forward:
+
+No campaigns yet:
+  Large icon: Sparkles (purple, 64px)
+  Heading: "Your first campaign starts here"
+  Body: "Type a description of what you want to create.
+         Tenfold handles the rest."
+  [Start Creating] button → focuses prompt input
+
+No social accounts connected:
+  Icon: Link (purple)
+  "Connect your social accounts to start publishing"
+  [Connect Accounts →] → opens settings to social section
+
+Insufficient credits:
+  Icon: Zap (amber)
+  "You need X more credits for this"
+  [Buy Credits] purple button
+  [View Plans] ghost button
+
+Job failed:
+  Icon: AlertCircle (red)
+  "Generation failed — no credits were charged"
+  [Try Again] button
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TECH STACK FOR THIS FRONTEND
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- React 18 with Vite
+- TypeScript (strict)
+- Tailwind CSS with custom theme extending the colour system above
+- Lucide React for all icons (consistent, clean)
+- @supabase/supabase-js for auth session management
+- Zustand for global state (currentCampaign, creditBalance, workspaceSlug)
+- React Query (TanStack Query) for API calls + polling
+- Framer Motion for animations (image grid stagger, panel transitions,
+  publish success burst)
+- react-hot-toast for toast notifications
+
+Environment variables:
+VITE_API_URL=http://localhost:3000
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BUILD ORDER (do not skip steps)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Tailwind config + design tokens + Google Fonts
+2. Layout shell (TopBar, LeftRail, MainCanvas, RightPanel)
+3. Step tracker in LeftRail with unlock logic
+4. Zustand store (campaign state, credits, step)
+5. Step 1: PromptForm + BottomInputBar + loading state
+6. Step 2: ImageGrid + anchor selection interaction
+7. Step 3: FormatBranch cards with status
+8. Step 4: CompositionCanvas + text overlay UI
+9. Step 5: PlatformPicker + publish flow + success state
+10. Auth: Supabase session check + login page
+11. Settings drawer
+12. Credit meter + top-up modal
+13. Empty states for all views
+14. Polish: animations, transitions, mobile responsive
+
+Build all 14 steps. Do not stop at a demo — this needs to be 
+a shippable production frontend.
