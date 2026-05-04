@@ -13,11 +13,6 @@ export default function Step1Create() {
       <div className="h-full flex flex-col items-center justify-center relative">
         <CosmicBackground />
 
-        {/* Faint T watermark */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none" style={{ zIndex: 1 }}>
-          <span className="font-serif font-bold text-white" style={{ fontSize: '38vh', opacity: 0.025, lineHeight: 1 }}>T</span>
-        </div>
-
         <div className="relative text-center max-w-md mx-auto" style={{ zIndex: 2 }}>
           <motion.div
             initial={{ opacity: 0, y: 12 }}
