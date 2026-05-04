@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Check, Anchor } from 'lucide-react';
 
 export default function Step2Select() {
-  const { generatedAssets, selectedAnchorId, completeStep, setStep } = useAppStore();
+  const { generatedAssets, selectedAnchorId, completeStep, setStep, aspectRatio } = useAppStore();
 
   useEffect(() => {
     if (generatedAssets.length > 0) {
@@ -34,7 +34,11 @@ export default function Step2Select() {
             </p>
           </div>
 
-          <div className="grid grid-cols-3 gap-6">
+          <div className={`grid gap-6 ${
+            aspectRatio === '16:9' ? 'grid-cols-2' :
+            aspectRatio === '4:5' || aspectRatio === '9:16' ? 'grid-cols-4' :
+            'grid-cols-3'
+          }`}>
             {generatedAssets.map((asset, i) => (
               <ImageCard key={asset.id} asset={asset} index={i} />
             ))}

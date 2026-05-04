@@ -41,10 +41,19 @@ export default function FloatingPromptBar() {
     setCreditBalance(creditBalance - 18);
     setIsGenerating(true);
 
+    const DIMS: Record<string, string> = {
+      '1:1':  '800/800',
+      '4:5':  '640/800',
+      '16:9': '800/450',
+      '9:16': '450/800',
+    };
+    const dims = DIMS[aspectRatio] ?? '800/800';
+
     setTimeout(() => {
+      const base = Date.now();
       const newAssets = Array.from({ length: 6 }).map((_, i) => ({
-        id: `asset-${Date.now()}-${i}`,
-        url: `https://picsum.photos/seed/${Date.now() + i}/800/800`,
+        id: `asset-${base}-${i}`,
+        url: `https://picsum.photos/seed/${base + i}/${dims}`,
         prompt,
         aspectRatio,
         style,

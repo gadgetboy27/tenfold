@@ -4,6 +4,8 @@ export interface Asset {
   id: string;
   url: string;
   prompt: string;
+  aspectRatio?: string;
+  style?: string;
   seed?: number;
   model?: string;
   createdAt: string;

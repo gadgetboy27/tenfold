@@ -1,3 +1,4 @@
+import React from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { Sparkles } from 'lucide-react';
 import SkeletonCard from '../shared/SkeletonCard';
@@ -5,14 +6,21 @@ import CosmicBackground from '../shared/CosmicBackground';
 import { motion } from 'framer-motion';
 import ImageCard from '../shared/ImageCard';
 
+const GRID_COLS: Record<string, string> = {
+  '1:1':  'grid-cols-3',
+  '4:5':  'grid-cols-4',
+  '16:9': 'grid-cols-2',
+  '9:16': 'grid-cols-4',
+};
+
 export default function Step1Create() {
-  const { generatedAssets, isGenerating } = useAppStore();
+  const { generatedAssets, isGenerating, aspectRatio } = useAppStore();
+  const gridCols = GRID_COLS[aspectRatio] ?? 'grid-cols-3';
 
   if (generatedAssets.length === 0 && !isGenerating) {
     return (
       <div className="h-full flex flex-col items-center justify-center relative">
         <CosmicBackground />
-
         <div className="relative text-center max-w-md mx-auto" style={{ zIndex: 2 }}>
           <motion.div
             initial={{ opacity: 0, y: 12 }}
@@ -48,9 +56,9 @@ export default function Step1Create() {
     <div className="h-full flex flex-col items-center justify-center pb-32 pt-8 relative">
       <CosmicBackground />
       <div className="relative w-full max-w-5xl mx-auto" style={{ zIndex: 2 }}>
-        <div className="grid grid-cols-3 gap-5">
+        <div className={`grid ${gridCols} gap-5`}>
           {isGenerating
-            ? Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} delay={i} />)
+            ? Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} delay={i} aspectRatio={aspectRatio} />)
             : generatedAssets.map((asset, i) => <ImageCard key={asset.id} asset={asset} index={i} />)
           }
         </div>
