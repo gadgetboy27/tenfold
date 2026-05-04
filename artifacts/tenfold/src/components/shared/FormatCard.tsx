@@ -1,11 +1,13 @@
 import React from 'react';
 import { useAppStore } from '@/store/useAppStore';
-import { Play, Loader2, CheckCircle, Music2, FileText, LayoutGrid } from 'lucide-react';
+import { Play, Loader2, CheckCircle, Music2, FileText, ChevronLeft, ChevronRight, PenTool } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
+type CardType = 'video' | 'music' | 'script' | 'slides' | 'logo';
+
 interface FormatCardProps {
-  type: 'video' | 'music' | 'script' | 'variations';
+  type: CardType;
   title: string;
   subtitle: string;
   cost: string;
@@ -14,24 +16,21 @@ interface FormatCardProps {
   onGenerate: () => void;
 }
 
+/* ── Ready-state components ── */
+
 function VideoReady({ url }: { url?: string }) {
   return (
     <div className="relative rounded-lg overflow-hidden aspect-video bg-black/40 mb-4">
-      {url ? (
-        <img src={url} alt="Video preview" className="w-full h-full object-cover opacity-70" />
-      ) : (
-        <div className="w-full h-full flex items-center justify-center bg-primary/5">
-          <Play className="w-8 h-8 text-primary/40" />
-        </div>
-      )}
+      {url
+        ? <img src={url} alt="Video preview" className="w-full h-full object-cover opacity-70" />
+        : <div className="w-full h-full flex items-center justify-center bg-primary/5"><Play className="w-8 h-8 text-primary/40" /></div>
+      }
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="w-12 h-12 rounded-full bg-primary/90 flex items-center justify-center shadow-lg shadow-primary/30 hover:scale-110 transition-transform cursor-pointer">
           <Play className="w-5 h-5 text-white ml-1" />
         </div>
       </div>
-      <div className="absolute top-2 right-2 bg-green-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full tracking-wider">
-        READY
-      </div>
+      <div className="absolute top-2 right-2 bg-green-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full tracking-wider">READY</div>
     </div>
   );
 }
@@ -43,24 +42,18 @@ function MusicReady() {
         <div className="w-9 h-9 rounded-full bg-green-500/20 flex items-center justify-center">
           <Music2 className="w-4 h-4 text-green-400" />
         </div>
-        <div>
+        <div className="flex-1">
           <p className="text-sm font-medium text-foreground">Track ready</p>
           <p className="text-xs text-muted-foreground">30s background music</p>
         </div>
-        <div className="ml-auto">
-          <div className="w-8 h-8 rounded-full bg-green-500/80 flex items-center justify-center cursor-pointer hover:bg-green-500 transition-colors">
-            <Play className="w-3.5 h-3.5 text-white ml-0.5" />
-          </div>
+        <div className="w-8 h-8 rounded-full bg-green-500/80 flex items-center justify-center cursor-pointer hover:bg-green-500 transition-colors">
+          <Play className="w-3.5 h-3.5 text-white ml-0.5" />
         </div>
       </div>
-      {/* Waveform bars */}
       <div className="flex items-end gap-0.5 h-8">
         {Array.from({ length: 32 }).map((_, i) => (
-          <div
-            key={i}
-            className="flex-1 rounded-full bg-green-500/50"
-            style={{ height: `${20 + Math.sin(i * 0.8) * 12 + Math.cos(i * 1.3) * 8}%` }}
-          />
+          <div key={i} className="flex-1 rounded-full bg-green-500/50"
+            style={{ height: `${20 + Math.sin(i * 0.8) * 12 + Math.cos(i * 1.3) * 8}%` }} />
         ))}
       </div>
     </div>
@@ -82,27 +75,86 @@ function ScriptReady({ content }: { content?: string }) {
   );
 }
 
-function VariationsReady({ anchorUrl }: { anchorUrl?: string }) {
-  const seeds = [42, 99, 17, 55];
+function SlidesReady({ urls }: { urls?: string[] }) {
+  const [active, setActive] = React.useState(0);
+  const slides = urls ?? Array.from({ length: 6 }, (_, i) =>
+    `https://picsum.photos/seed/${900 + i}/800/450`
+  );
+  const prev = () => setActive(a => Math.max(0, a - 1));
+  const next = () => setActive(a => Math.min(slides.length - 1, a + 1));
+
+  return (
+    <div className="mb-4">
+      {/* Main slide viewer */}
+      <div className="relative rounded-lg overflow-hidden aspect-video bg-black/40 mb-2">
+        <img src={slides[active]} alt={`Slide ${active + 1}`} className="w-full h-full object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/0 to-black/30" />
+        <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] font-mono px-2 py-0.5 rounded">
+          {active + 1} / {slides.length}
+        </div>
+        {active > 0 && (
+          <button onClick={prev} className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors">
+            <ChevronLeft className="w-4 h-4 text-white" />
+          </button>
+        )}
+        {active < slides.length - 1 && (
+          <button onClick={next} className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors">
+            <ChevronRight className="w-4 h-4 text-white" />
+          </button>
+        )}
+      </div>
+      {/* Filmstrip thumbnails */}
+      <div className="flex gap-1.5 overflow-x-auto pb-1">
+        {slides.map((url, i) => (
+          <button
+            key={i}
+            onClick={() => setActive(i)}
+            className={cn(
+              'shrink-0 w-14 rounded overflow-hidden border transition-all',
+              i === active ? 'border-green-400 opacity-100' : 'border-border opacity-50 hover:opacity-75'
+            )}
+          >
+            <img src={url} alt={`Slide ${i + 1}`} className="w-full aspect-video object-cover" />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LogoReady({ urls }: { urls?: string[] }) {
+  const seeds = [201, 202, 203, 204];
+  const variants = [
+    { label: 'Dark', filter: 'none', bg: 'bg-[#0A0A0A]' },
+    { label: 'Light', filter: 'invert(1) brightness(1.1)', bg: 'bg-white' },
+    { label: 'Mono', filter: 'grayscale(1) contrast(1.3)', bg: 'bg-zinc-900' },
+    { label: 'Color', filter: 'saturate(1.6) contrast(1.1)', bg: 'bg-zinc-800' },
+  ];
+
   return (
     <div className="grid grid-cols-2 gap-2 mb-4">
-      {seeds.map((seed, i) => (
-        <div key={seed} className="aspect-square rounded-lg overflow-hidden border border-green-500/20 relative">
+      {variants.map((v, i) => (
+        <div key={v.label} className={`rounded-lg overflow-hidden border border-border ${v.bg} p-2 relative group cursor-pointer`}>
           <img
-            src={anchorUrl ? `https://picsum.photos/seed/${seed + Date.now() % 1000}/400/400` : `https://picsum.photos/seed/${seed}/400/400`}
-            alt={`Variation ${i + 1}`}
-            className="w-full h-full object-cover"
+            src={urls?.[i] ?? `https://picsum.photos/seed/${seeds[i]}/200/200`}
+            alt={`Logo variant ${v.label}`}
+            className="w-full aspect-square object-cover rounded"
+            style={{ filter: v.filter }}
           />
-          <div className="absolute inset-0 bg-black/0 hover:bg-black/20 transition-colors cursor-pointer" />
+          <div className="absolute inset-0 flex items-end p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <span className="text-[9px] font-bold text-white bg-black/60 px-1.5 py-0.5 rounded backdrop-blur-sm">{v.label}</span>
+          </div>
         </div>
       ))}
     </div>
   );
 }
 
+/* ── Main component ── */
+
 export default function FormatCard({ type, title, subtitle, cost, icon: Icon, children, onGenerate }: FormatCardProps) {
   const { expansions, generatedAssets, selectedAnchorId } = useAppStore();
-  const expansion = expansions[type];
+  const expansion = expansions[type as keyof typeof expansions];
   const anchor = generatedAssets.find(a => a.id === selectedAnchorId);
 
   const isGenerating = expansion?.status === 'generating';
@@ -116,7 +168,6 @@ export default function FormatCard({ type, title, subtitle, cost, icon: Icon, ch
         isReady ? 'border-green-500/40 bg-green-500/[0.03]' : 'border-border hover:border-primary/50'
       )}
     >
-      {/* Generating overlay */}
       {isGenerating && (
         <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center">
           <Loader2 className="w-8 h-8 text-primary animate-spin mb-3" />
@@ -124,12 +175,9 @@ export default function FormatCard({ type, title, subtitle, cost, icon: Icon, ch
         </div>
       )}
 
-      {/* Header — always visible */}
+      {/* Header */}
       <div className="flex justify-between items-start mb-4">
-        <div className={cn(
-          'w-10 h-10 rounded-lg flex items-center justify-center transition-colors',
-          isReady ? 'bg-green-500/20' : 'bg-primary/10'
-        )}>
+        <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center transition-colors', isReady ? 'bg-green-500/20' : 'bg-primary/10')}>
           {isReady
             ? <CheckCircle className="w-5 h-5 text-green-400" />
             : <Icon className="w-5 h-5 text-primary" />
@@ -141,35 +189,28 @@ export default function FormatCard({ type, title, subtitle, cost, icon: Icon, ch
       <h3 className="font-serif text-lg font-bold text-foreground">{title}</h3>
       <p className="text-sm text-muted-foreground mb-4">{subtitle}</p>
 
-      {/* Ready-state result */}
-      {isReady && type === 'video' && <VideoReady url={expansion?.url ?? anchor?.url} />}
-      {isReady && type === 'music' && <MusicReady />}
-      {isReady && type === 'script' && <ScriptReady content={expansion?.content} />}
-      {isReady && type === 'variations' && <VariationsReady anchorUrl={anchor?.url} />}
+      {/* Ready states */}
+      {isReady && type === 'video'   && <VideoReady url={expansion?.url ?? anchor?.url} />}
+      {isReady && type === 'music'   && <MusicReady />}
+      {isReady && type === 'script'  && <ScriptReady content={expansion?.content} />}
+      {isReady && type === 'slides'  && <SlidesReady urls={expansion?.urls} />}
+      {isReady && type === 'logo'    && <LogoReady urls={expansion?.urls} />}
 
-      {/* Controls — only shown before generation */}
+      {/* Pre-generation controls */}
       {!isReady && (
         <>
           <div className="space-y-4 flex-1">{children}</div>
           <div className="mt-4 pt-4 border-t border-border">
-            <Button
-              variant="outline"
-              className="w-full border-primary text-primary hover:bg-primary hover:text-white transition-colors"
-              onClick={onGenerate}
-            >
+            <Button variant="outline" className="w-full border-primary text-primary hover:bg-primary hover:text-white transition-colors" onClick={onGenerate}>
               Generate {title}
             </Button>
           </div>
         </>
       )}
 
-      {/* Re-generate option after ready */}
       {isReady && (
         <div className="mt-auto pt-3 border-t border-green-500/20">
-          <button
-            onClick={onGenerate}
-            className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
-          >
+          <button onClick={onGenerate} className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors py-1">
             Re-generate
           </button>
         </div>

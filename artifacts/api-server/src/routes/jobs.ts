@@ -5,7 +5,7 @@ import { deductCredits } from "./credits.js";
 
 const router = Router();
 
-type JobType = "video" | "music" | "script" | "image_variation" | "upscale";
+type JobType = "video" | "music" | "script" | "image_variation" | "upscale" | "slide_deck" | "logo";
 type JobStatus = "pending" | "generating" | "ready" | "failed";
 
 interface Job {

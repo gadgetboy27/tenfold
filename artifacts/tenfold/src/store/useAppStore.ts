@@ -14,8 +14,9 @@ export interface Asset {
 export interface Expansion {
   id: string;
   status: 'generating' | 'ready' | 'failed';
-  type: 'video' | 'music' | 'script' | 'variations';
+  type: 'video' | 'music' | 'script' | 'slides' | 'logo';
   url?: string;
+  urls?: string[]; // For slides (multiple images)
   content?: string; // For script
   createdAt: string;
 }
@@ -29,7 +30,7 @@ interface AppStore {
   campaignName: string;
   selectedAnchorId: string | null;
   generatedAssets: Asset[];
-  expansions: { video?: Expansion; music?: Expansion; script?: Expansion; variations?: Expansion };
+  expansions: { video?: Expansion; music?: Expansion; script?: Expansion; slides?: Expansion; logo?: Expansion };
   isGenerating: boolean;
   aspectRatio: string;
   style: string;
