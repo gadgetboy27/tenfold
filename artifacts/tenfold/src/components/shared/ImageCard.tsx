@@ -46,7 +46,12 @@ export default function ImageCard({ asset, index }: ImageCardProps) {
 
   const handleAction = (e: React.MouseEvent, action: string) => {
     e.stopPropagation();
-    console.log(`Action: ${action}`);
+    // TODO: wire each action to real API job when keys are added
+    // expand → open full-screen lightbox
+    // vary   → POST /api/jobs { type: 'image_variation', anchorAssetId: asset.id }
+    // upscale → POST /api/jobs { type: 'upscale', assetId: asset.id }
+    // download → fetch asset.url and trigger browser download
+    void action;
   };
 
   return (

@@ -96,6 +96,21 @@ export default function Step4Compose() {
                   <CheckSquare className="w-4 h-4 text-primary" /> Background Track
                 </div>
               )}
+              {expansions.script?.status === 'ready' && (
+                <div className="flex items-center gap-2 text-sm text-foreground">
+                  <CheckSquare className="w-4 h-4 text-primary" /> Caption
+                </div>
+              )}
+              {expansions.slides?.status === 'ready' && (
+                <div className="flex items-center gap-2 text-sm text-foreground">
+                  <CheckSquare className="w-4 h-4 text-primary" /> Slide Deck
+                </div>
+              )}
+              {expansions.logo?.status === 'ready' && (
+                <div className="flex items-center gap-2 text-sm text-foreground">
+                  <CheckSquare className="w-4 h-4 text-primary" /> Logo Design
+                </div>
+              )}
             </div>
           </section>
         </div>

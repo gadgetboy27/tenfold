@@ -90,7 +90,14 @@ export default function Step5Publish() {
 
         <div className="flex gap-4 z-10">
           <Button variant="outline" className="border-border text-foreground hover:bg-secondary">View analytics</Button>
-          <Button className="bg-primary text-white hover:bg-primary/90">Start new campaign</Button>
+          <Button
+            className="bg-primary text-white hover:bg-primary/90"
+            onClick={() => {
+              useAppStore.getState().resetCampaign();
+            }}
+          >
+            Start new campaign
+          </Button>
         </div>
       </motion.div>
     );
@@ -107,7 +114,7 @@ export default function Step5Publish() {
             <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-bold text-xs">ACME</div>
             <div>
               <div className="text-sm font-medium text-foreground">Acme Corp</div>
-              <div className="text-xs text-muted-foreground">Just now • 🌍</div>
+              <div className="text-xs text-muted-foreground">Just now</div>
             </div>
           </div>
           

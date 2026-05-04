@@ -30,6 +30,8 @@ const CREDIT_COSTS: Record<JobType, number> = {
   script: 1,
   image_variation: 3,
   upscale: 2,
+  slide_deck: 12,
+  logo: 6,
 };
 
 /**
@@ -72,6 +74,8 @@ router.post("/jobs", requireAuth, (req, res) => {
     mood,
     platform,
     tone,
+    count,
+    style,
   } = req.body as {
     type: JobType;
     campaignId: string;
@@ -81,6 +85,8 @@ router.post("/jobs", requireAuth, (req, res) => {
     mood?: string;
     platform?: string;
     tone?: string;
+    count?: number;
+    style?: string;
   };
 
   if (!type || !campaignId) {
@@ -119,16 +125,34 @@ router.post("/jobs", requireAuth, (req, res) => {
   jobs.set(jobId, job);
 
   // Simulate completion delay (replace with real async job processing)
-  const delay = type === "script" ? 800 : type === "music" ? 4000 : type === "video" ? 8000 : 2500;
+  const delay =
+    type === "script" ? 800 :
+    type === "music" ? 4000 :
+    type === "video" ? 8000 :
+    type === "logo" ? 3000 :
+    type === "slide_deck" ? 5000 :
+    2500;
+
   setTimeout(() => {
     job.status = "ready";
     job.completedAt = new Date().toISOString();
 
-    // TODO: set real output from AI service
+    // TODO: replace each branch with the real AI service call
     if (type === "script") {
       job.outputText = `Ready to level up? This content was built to inspire — and it shows. Whether you're building a brand or scaling a vision, every frame tells your story. #${platform || "content"} #creative #tenfold`;
     } else if (type === "music") {
-      job.outputUrl = `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3`; // placeholder
+      job.outputUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3";
+    } else if (type === "slide_deck") {
+      // TODO: generate real slide images with Replicate/fal.ai
+      const slideCount = typeof count === "number" && count > 0 ? count : 6;
+      (job as any).outputUrls = Array.from({ length: slideCount }, (_, i) =>
+        `https://picsum.photos/seed/${jobId.slice(0, 8)}${i}/800/450`
+      );
+    } else if (type === "logo") {
+      // TODO: generate real logo with Replicate/fal.ai
+      (job as any).outputUrls = Array.from({ length: 4 }, (_, i) =>
+        `https://picsum.photos/seed/${jobId.slice(0, 8)}L${i}/400/400`
+      );
     } else {
       job.outputUrl = `https://picsum.photos/seed/${jobId}/800/800`;
     }
