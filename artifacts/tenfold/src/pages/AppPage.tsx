@@ -4,7 +4,7 @@ import { useLocation } from 'wouter';
 import TopBar from '@/components/layout/TopBar';
 import LeftRail from '@/components/layout/LeftRail';
 import RightPanel from '@/components/layout/RightPanel';
-import BottomInputBar from '@/components/layout/BottomInputBar';
+import FloatingPromptBar from '@/components/layout/FloatingPromptBar';
 import Step1Create from '@/components/steps/Step1Create';
 import Step2Select from '@/components/steps/Step2Select';
 import Step3Expand from '@/components/steps/Step3Expand';
@@ -25,12 +25,10 @@ export default function AppPage() {
   }, [session, isDevBypass, loading, setLocation]);
 
   if (loading) {
-    return <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center" />;
+    return <div className="min-h-screen bg-[#0A0A0A]" />;
   }
 
-  if (!session && !isDevBypass) {
-    return null;
-  }
+  if (!session && !isDevBypass) return null;
 
   const renderStep = () => {
     switch (currentStep) {
@@ -44,27 +42,28 @@ export default function AppPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-[#0A0A0A] text-foreground">
+    <div className="flex flex-col h-screen overflow-hidden bg-[#0A0A0A] text-[#F0F0F0]">
       <TopBar />
-      
+
       <div className="flex flex-1 overflow-hidden">
         <LeftRail />
-        
-        <main className="flex-1 flex flex-col relative overflow-hidden bg-background">
+
+        <main className="flex-1 relative overflow-hidden" style={{ background: '#0A0A0A' }}>
           <AnimatePresence mode="wait">
             <motion.div
               key={currentStep}
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.2 }}
-              className="flex-1 overflow-y-auto overflow-x-hidden p-6"
+              className="absolute inset-0 overflow-y-auto overflow-x-hidden p-6"
             >
               {renderStep()}
             </motion.div>
           </AnimatePresence>
-          
-          {currentStep === 1 && <BottomInputBar />}
+
+          {/* Floating prompt bar — only on step 1 */}
+          {currentStep === 1 && <FloatingPromptBar />}
         </main>
 
         <RightPanel />
