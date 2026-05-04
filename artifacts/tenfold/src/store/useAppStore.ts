@@ -29,6 +29,8 @@ interface AppStore {
   generatedAssets: Asset[];
   expansions: { video?: Expansion; music?: Expansion; script?: Expansion; variations?: Expansion };
   isGenerating: boolean;
+  aspectRatio: string;
+  style: string;
   
   setStep: (step: 1 | 2 | 3 | 4 | 5) => void;
   setCampaignId: (id: string) => void;
@@ -39,6 +41,8 @@ interface AppStore {
   setGeneratedAssets: (assets: Asset[]) => void;
   updateExpansion: (type: keyof AppStore['expansions'], expansion: Expansion) => void;
   setIsGenerating: (isGenerating: boolean) => void;
+  setAspectRatio: (r: string) => void;
+  setStyle: (s: string) => void;
   completeStep: (step: number) => void;
   resetCampaign: () => void;
 }
@@ -54,6 +58,8 @@ export const useAppStore = create<AppStore>((set) => ({
   generatedAssets: [],
   expansions: {},
   isGenerating: false,
+  aspectRatio: '1:1',
+  style: 'Photorealistic',
 
   setStep: (step) => set({ currentStep: step }),
   setCampaignId: (id) => set({ currentCampaignId: id }),
@@ -64,6 +70,8 @@ export const useAppStore = create<AppStore>((set) => ({
   setGeneratedAssets: (assets) => set({ generatedAssets: assets }),
   updateExpansion: (type, expansion) => set((state) => ({ expansions: { ...state.expansions, [type]: expansion } })),
   setIsGenerating: (isGenerating) => set({ isGenerating }),
+  setAspectRatio: (r) => set({ aspectRatio: r }),
+  setStyle: (s) => set({ style: s }),
   completeStep: (step) => set((state) => {
     const newCompleted = new Set(state.completedSteps);
     newCompleted.add(step);

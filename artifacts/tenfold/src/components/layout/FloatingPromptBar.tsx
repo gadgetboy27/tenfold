@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
-import { Sparkles, ChevronDown } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 
@@ -15,9 +15,19 @@ const STYLES = ['Photorealistic', 'Illustration', 'Cinematic', '3D'];
 
 export default function FloatingPromptBar() {
   const [prompt, setPrompt] = useState('');
-  const [aspectRatio, setAspectRatio] = useState('1:1');
-  const [style, setStyle] = useState('Photorealistic');
-  const { creditBalance, setCreditBalance, setIsGenerating, setGeneratedAssets, isGenerating } = useAppStore();
+  const {
+    creditBalance,
+    setCreditBalance,
+    setIsGenerating,
+    setGeneratedAssets,
+    isGenerating,
+    aspectRatio,
+    style,
+    setAspectRatio,
+    setStyle,
+    setStep,
+    completeStep,
+  } = useAppStore();
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,10 +46,14 @@ export default function FloatingPromptBar() {
         id: `asset-${Date.now()}-${i}`,
         url: `https://picsum.photos/seed/${Date.now() + i}/800/800`,
         prompt,
+        aspectRatio,
+        style,
         createdAt: new Date().toISOString(),
       }));
       setGeneratedAssets(newAssets);
       setIsGenerating(false);
+      completeStep(1);
+      setStep(2);
       toast.success('6 images ready — pick your anchor');
     }, 3000);
   };

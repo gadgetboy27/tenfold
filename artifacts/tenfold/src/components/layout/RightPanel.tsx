@@ -10,40 +10,52 @@ import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
 export default function RightPanel() {
-  const { currentStep, selectedAnchorId, generatedAssets, creditBalance, setCreditBalance, expansions } = useAppStore();
+  const { currentStep, selectedAnchorId, generatedAssets, creditBalance, setCreditBalance, expansions, aspectRatio, style, setAspectRatio, setStyle } = useAppStore();
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const anchor = generatedAssets.find(a => a.id === selectedAnchorId);
+
+  const RATIO_SHAPES: Record<string, { h: string; w: string }> = {
+    '1:1':  { h: 'h-8',  w: 'w-8' },
+    '4:5':  { h: 'h-10', w: 'w-8' },
+    '16:9': { h: 'h-6',  w: 'w-10' },
+    '9:16': { h: 'h-10', w: 'w-6' },
+  };
 
   const renderStep1Settings = () => (
     <div className="space-y-6">
       <div>
         <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3 block">Aspect Ratio</label>
         <div className="grid grid-cols-4 gap-2">
-          {[
-            { id: '1:1', label: '1:1', h: 'h-8 w-8' },
-            { id: '4:5', label: '4:5', h: 'h-10 w-8' },
-            { id: '16:9', label: '16:9', h: 'h-6 w-10' },
-            { id: '9:16', label: '9:16', h: 'h-10 w-6' },
-          ].map(ar => (
-            <button key={ar.id} className="flex flex-col items-center gap-2 group">
-              <div className="h-12 flex items-center justify-center">
-                <div className={`border border-border rounded-sm group-hover:border-primary transition-colors ${ar.h} ${ar.id === '16:9' ? 'border-primary bg-primary/10' : ''}`} />
-              </div>
-              <span className={`text-xs ${ar.id === '16:9' ? 'text-primary font-medium' : 'text-muted-foreground'}`}>{ar.label}</span>
-            </button>
-          ))}
+          {Object.entries(RATIO_SHAPES).map(([id, shape]) => {
+            const isActive = aspectRatio === id;
+            return (
+              <button key={id} onClick={() => setAspectRatio(id)} className="flex flex-col items-center gap-2 group">
+                <div className="h-12 flex items-center justify-center">
+                  <div className={`border rounded-sm transition-colors ${shape.h} ${shape.w} ${isActive ? 'border-primary bg-primary/10' : 'border-border group-hover:border-primary/60'}`} />
+                </div>
+                <span className={`text-xs transition-colors ${isActive ? 'text-primary font-medium' : 'text-muted-foreground group-hover:text-foreground'}`}>{id}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
       <div>
         <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3 block">Style</label>
         <div className="flex flex-wrap gap-2">
-          {['Photorealistic', 'Illustration', 'Cinematic', '3D'].map(style => (
-            <button key={style} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${style === 'Cinematic' ? 'bg-primary/20 text-primary border border-primary/30' : 'bg-secondary text-muted-foreground border border-transparent hover:text-foreground'}`}>
-              {style}
-            </button>
-          ))}
+          {['Photorealistic', 'Illustration', 'Cinematic', '3D'].map(s => {
+            const isActive = style === s;
+            return (
+              <button
+                key={s}
+                onClick={() => setStyle(s)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${isActive ? 'bg-primary/20 text-primary border border-primary/30' : 'bg-secondary text-muted-foreground border border-transparent hover:text-foreground hover:border-muted-foreground/30'}`}
+              >
+                {s}
+              </button>
+            );
+          })}
         </div>
       </div>
 
