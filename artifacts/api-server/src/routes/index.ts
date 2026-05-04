@@ -6,6 +6,7 @@ import jobsRouter from "./jobs.js";
 import compositionsRouter from "./compositions.js";
 import socialRouter from "./social.js";
 import publishRouter from "./publish.js";
+import promptRouter from "./prompt.js";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(jobsRouter);
 router.use(compositionsRouter);
 router.use(socialRouter);
 router.use(publishRouter);
+router.use(promptRouter);
 
 export default router;
