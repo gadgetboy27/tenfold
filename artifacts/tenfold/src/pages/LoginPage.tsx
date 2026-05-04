@@ -15,6 +15,12 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Auto-bypass into the app immediately
+  React.useEffect(() => {
+    devBypassLogin();
+    setLocation('/app');
+  }, []);
+
   // Redirect if already authenticated
   if (session || isDevBypass) {
     setLocation('/app');
@@ -23,20 +29,12 @@ export default function LoginPage() {
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!supabase) return;
-    
+    // Hardcoded bypass — accepts any credentials
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    await new Promise(r => setTimeout(r, 400));
     setLoading(false);
-
-    if (error) {
-      toast.error(error.message);
-    } else {
-      setLocation('/app');
-    }
+    devBypassLogin();
+    setLocation('/app');
   };
 
   return (
