@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { Film, Music, FileText, LayoutGrid } from 'lucide-react';
 import FormatCard from '../shared/FormatCard';
+import AnchorGuide from '../shared/AnchorGuide';
 import toast from 'react-hot-toast';
 
 export default function Step3Expand() {
+  const [showGuide, setShowGuide] = useState(true);
   const { generatedAssets, selectedAnchorId, updateExpansion, setCreditBalance, creditBalance } = useAppStore();
 
   const anchor = generatedAssets.find(a => a.id === selectedAnchorId);
@@ -34,7 +36,8 @@ export default function Step3Expand() {
   if (!anchor) return null;
 
   return (
-    <div className="h-full flex gap-8">
+    <div className="h-full flex gap-8 relative">
+      {showGuide && <AnchorGuide onDismiss={() => setShowGuide(false)} />}
       <div className="w-72 shrink-0 space-y-4">
         <h2 className="font-serif text-xl font-bold text-foreground">Your anchor</h2>
         <div className="aspect-square rounded-xl overflow-hidden border border-border shadow-lg">

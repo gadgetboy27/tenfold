@@ -22,7 +22,9 @@ export default function FormatCard({ type, title, subtitle, cost, icon: Icon, ch
   const isReady = expansion?.status === 'ready';
 
   return (
-    <div className={cn(
+    <div
+      data-guide-id={type}
+      className={cn(
       "bg-card border rounded-xl p-5 flex flex-col relative overflow-hidden transition-colors",
       isReady ? "border-success/50 bg-success/5" : "border-border hover:border-primary/50"
     )}>
