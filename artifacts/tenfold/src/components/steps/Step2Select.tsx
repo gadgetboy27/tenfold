@@ -2,7 +2,8 @@ import React, { useEffect } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import ImageCard from '../shared/ImageCard';
 import { Button } from '@/components/ui/button';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Check, Anchor } from 'lucide-react';
 
 export default function Step2Select() {
   const { generatedAssets, selectedAnchorId, completeStep, setStep } = useAppStore();
@@ -13,6 +14,8 @@ export default function Step2Select() {
     }
   }, [generatedAssets, completeStep]);
 
+  const selectedAsset = generatedAssets.find(a => a.id === selectedAnchorId);
+
   const handleConfirmAnchor = () => {
     if (selectedAnchorId) {
       completeStep(2);
@@ -21,27 +24,16 @@ export default function Step2Select() {
   };
 
   return (
-    <div className="h-full flex flex-col relative pb-20">
-      <div className="flex-1 overflow-y-auto pt-8 flex justify-center">
+    <div className="h-full flex flex-col relative">
+      <div className="flex-1 overflow-y-auto pt-8 pb-32 flex justify-center">
         <div className="w-full max-w-5xl px-6">
-          <div className="mb-6 flex justify-between items-end">
-            <div>
-              <h2 className="font-serif text-2xl font-bold text-foreground">Select your anchor</h2>
-              <p className="text-muted-foreground text-sm mt-1">This image will be the foundation for your video, music, and social posts.</p>
-            </div>
-            
-            {selectedAnchorId && (
-              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-                <Button 
-                  onClick={handleConfirmAnchor}
-                  className="bg-primary hover:bg-primary/90 text-white"
-                >
-                  Use This Image →
-                </Button>
-              </motion.div>
-            )}
+          <div className="mb-6">
+            <h2 className="font-serif text-2xl font-bold text-foreground">Select your anchor</h2>
+            <p className="text-muted-foreground text-sm mt-1">
+              This image becomes the foundation for your video, music, and social posts. Click to select.
+            </p>
           </div>
-          
+
           <div className="grid grid-cols-3 gap-6">
             {generatedAssets.map((asset, i) => (
               <ImageCard key={asset.id} asset={asset} index={i} />
@@ -50,11 +42,55 @@ export default function Step2Select() {
 
           <div className="mt-8 flex justify-center gap-2">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className={`w-2 h-2 rounded-full ${i < generatedAssets.length ? 'bg-primary' : 'bg-secondary'}`} />
+              <div key={i} className={`w-2 h-2 rounded-full transition-colors ${i < generatedAssets.length ? 'bg-primary' : 'bg-secondary'}`} />
             ))}
           </div>
         </div>
       </div>
+
+      {/* Sticky anchor confirmation bar */}
+      <AnimatePresence>
+        {selectedAsset && (
+          <motion.div
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 35 }}
+            className="absolute bottom-0 inset-x-0 z-30 p-4"
+          >
+            <div className="max-w-5xl mx-auto">
+              <div className="flex items-center gap-4 bg-card/95 backdrop-blur-md border border-primary/30 rounded-2xl px-5 py-4 shadow-[0_0_40px_rgba(124,92,252,0.2)]">
+                {/* Thumbnail */}
+                <div className="relative w-14 h-14 rounded-lg overflow-hidden border-2 border-primary shrink-0">
+                  <img src={selectedAsset.url} alt="Selected anchor" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-primary/20" />
+                  <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-primary flex items-center justify-center">
+                    <Check className="w-2.5 h-2.5 text-white" />
+                  </div>
+                </div>
+
+                {/* Label */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-muted-foreground uppercase tracking-widest font-mono mb-0.5">Anchor selected</p>
+                  <p className="text-sm text-foreground font-medium truncate">
+                    {selectedAsset.prompt.substring(0, 60)}{selectedAsset.prompt.length > 60 ? '...' : ''}
+                  </p>
+                </div>
+
+                {/* CTA */}
+                <Button
+                  onClick={handleConfirmAnchor}
+                  size="lg"
+                  className="bg-primary hover:bg-primary/90 text-white font-semibold px-8 shrink-0 gap-2"
+                >
+                  <Anchor className="w-4 h-4" />
+                  Confirm Anchor
+                </Button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
