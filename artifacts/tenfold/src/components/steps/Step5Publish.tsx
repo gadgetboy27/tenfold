@@ -9,7 +9,7 @@ import { api } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
 
 export default function Step5Publish() {
-  const { generatedAssets, selectedAnchorId, expansions, currentCampaignId, workspaceSlug, resetCampaign } = useAppStore();
+  const { generatedAssets, selectedAnchorId, expansions, currentCompositionId, workspaceSlug, resetCampaign } = useAppStore();
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['linkedin']);
   const [caption, setCaption] = useState(expansions.script?.content || 'Excited to share this new piece with the world.');
   const [isPublishing, setIsPublishing] = useState(false);
@@ -42,13 +42,17 @@ export default function Step5Publish() {
         ? (await supabase.auth.getSession()).data.session?.access_token
         : undefined;
 
+      if (!currentCompositionId) {
+        throw new Error('No composition saved — complete Step 4 first');
+      }
+
       const res = await api('/api/publish', {
         method: 'POST',
         body: JSON.stringify({
-          campaignId: currentCampaignId ?? 'demo',
+          compositionId: currentCompositionId,
           platforms: selectedPlatforms,
           caption,
-          anchorAssetId: selectedAnchorId,
+          hashtags: [],
         }),
         token: token ?? undefined,
         workspaceSlug,
