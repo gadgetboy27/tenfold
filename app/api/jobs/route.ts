@@ -76,7 +76,7 @@ export async function POST(req: Request) {
         })
         .where(eq(creativeJobs.id, jobId));
 
-      return NextResponse.json({ jobId, result: result.text }, { status: 201 });
+      return NextResponse.json({ jobId, creditCost: cost, status: 'ready', result: result.text }, { status: 201 });
     }
 
     // All other types go through fal.ai async queue
@@ -93,7 +93,7 @@ export async function POST(req: Request) {
       .set({ falRequestId: requestId, status: 'processing', updatedAt: new Date() })
       .where(eq(creativeJobs.id, jobId));
 
-    return NextResponse.json({ jobId, requestId }, { status: 201 });
+    return NextResponse.json({ jobId, requestId, creditCost: cost, status: 'processing' }, { status: 201 });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     const status = msg === 'Unauthorized' ? 401 : 500;

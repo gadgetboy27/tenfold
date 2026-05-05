@@ -15,11 +15,13 @@ export const createJobSchema = z.object({
   campaignId: z.string().uuid(),
   type: z.enum([
     'image_generation',
-    'video_generation',
-    'music_generation',
-    'script_generation',
     'image_variation',
     'upscale',
+    'video_10s',
+    'video_30s',
+    'video_60s',
+    'music_generation',
+    'script_generation',
   ]),
   params: z.record(z.string(), z.unknown()).default({}),
 });
