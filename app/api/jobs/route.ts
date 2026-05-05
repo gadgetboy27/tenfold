@@ -23,6 +23,22 @@ function buildFalInput(type: string, params: Record<string, unknown>, prompt: st
       seed: params.seed as number | undefined,
     };
   }
+  if (type === 'video_10s' || type === 'video_30s' || type === 'video_60s') {
+    const durationMap: Record<string, '5' | '10'> = { video_10s: '5', video_30s: '10', video_60s: '10' };
+    return {
+      image_url: params.imageUrl as string,
+      prompt: prompt || (params.prompt as string) || '',
+      duration: durationMap[type],
+      aspect_ratio: '16:9',
+    };
+  }
+  if (type === 'music_generation') {
+    return {
+      prompt: prompt || (params.mood as string) || 'uplifting background music',
+      seconds_total: 30,
+      steps: 100,
+    };
+  }
   return params;
 }
 

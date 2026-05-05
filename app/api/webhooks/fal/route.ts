@@ -70,7 +70,6 @@ async function handleSuccess(
       const assetId = uuidv4();
       const storagePath = `${job.workspaceId}/${job.campaignId}/${assetId}.jpg`;
 
-      // Download and upload to Supabase Storage
       const imgRes = await fetch(img.url);
       const buffer = await imgRes.arrayBuffer();
       await supabase.storage
@@ -91,6 +90,53 @@ async function handleSuccess(
         heightPx: img.height,
       });
     }
+  }
+
+  if (payload.video) {
+    const assetId = uuidv4();
+    const ext = payload.video.content_type === 'video/mp4' ? 'mp4' : 'mp4';
+    const storagePath = `${job.workspaceId}/${job.campaignId}/${assetId}.${ext}`;
+
+    const vidRes = await fetch(payload.video.url);
+    const buffer = await vidRes.arrayBuffer();
+    await supabase.storage
+      .from('assets')
+      .upload(storagePath, buffer, { contentType: payload.video.content_type ?? 'video/mp4' });
+
+    const { data: urlData } = supabase.storage.from('assets').getPublicUrl(storagePath);
+
+    assetRows.push({
+      id: assetId,
+      campaignId: job.campaignId,
+      workspaceId: job.workspaceId,
+      jobId: job.id,
+      type: 'video',
+      url: urlData.publicUrl,
+      storagePath,
+    });
+  }
+
+  if (payload.audio_file) {
+    const assetId = uuidv4();
+    const storagePath = `${job.workspaceId}/${job.campaignId}/${assetId}.mp3`;
+
+    const audRes = await fetch(payload.audio_file.url);
+    const buffer = await audRes.arrayBuffer();
+    await supabase.storage
+      .from('assets')
+      .upload(storagePath, buffer, { contentType: payload.audio_file.content_type ?? 'audio/mpeg' });
+
+    const { data: urlData } = supabase.storage.from('assets').getPublicUrl(storagePath);
+
+    assetRows.push({
+      id: assetId,
+      campaignId: job.campaignId,
+      workspaceId: job.workspaceId,
+      jobId: job.id,
+      type: 'audio',
+      url: urlData.publicUrl,
+      storagePath,
+    });
   }
 
   if (assetRows.length > 0) {
