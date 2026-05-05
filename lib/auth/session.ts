@@ -36,9 +36,12 @@ export async function getSession(req: Request): Promise<Session> {
 
   const url = new URL(req.url);
   const workspaceSlug =
-    url.searchParams.get('workspace') ?? req.headers.get('x-workspace-slug');
+    url.searchParams.get('workspace') ?? req.headers.get('x-workspace-slug') ?? null;
 
-  if (!workspaceSlug) throw new Error('Workspace not specified');
+  // Build where clause: if slug is provided validate it, otherwise find by user ID alone
+  const whereClause = workspaceSlug
+    ? and(eq(workspaceMembers.userId, userId), eq(workspaces.slug, workspaceSlug))
+    : eq(workspaceMembers.userId, userId);
 
   const membership = await db
     .select({
@@ -48,9 +51,7 @@ export async function getSession(req: Request): Promise<Session> {
     })
     .from(workspaceMembers)
     .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
-    .where(
-      and(eq(workspaceMembers.userId, userId), eq(workspaces.slug, workspaceSlug)),
-    )
+    .where(whereClause)
     .limit(1)
     .then((rows) => rows[0]);
 
