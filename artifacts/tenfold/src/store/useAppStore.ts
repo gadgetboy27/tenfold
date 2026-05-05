@@ -55,7 +55,7 @@ export const useAppStore = create<AppStore>((set) => ({
   currentStep: 1,
   completedSteps: new Set<number>(),
   creditBalance: 347,
-  workspaceSlug: 'acme-corp',
+  workspaceSlug: 'test-workspace',
   campaignName: 'Untitled Campaign',
   selectedAnchorId: null,
   generatedAssets: [],

@@ -24,11 +24,20 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 function slugFromUser(user: User): string {
-  // Try explicit metadata first, then derive from email domain
-  const meta = user.user_metadata as Record<string, unknown> | undefined;
-  if (meta?.workspace_slug && typeof meta.workspace_slug === 'string') {
-    return meta.workspace_slug;
+  // 1. app_metadata — set by the backend/admin after workspace creation
+  const appMeta = user.app_metadata as Record<string, unknown> | undefined;
+  if (appMeta?.workspace_slug && typeof appMeta.workspace_slug === 'string') {
+    return appMeta.workspace_slug;
   }
+  // 2. user_metadata — may be set during sign-up
+  const userMeta = user.user_metadata as Record<string, unknown> | undefined;
+  if (userMeta?.workspace_slug && typeof userMeta.workspace_slug === 'string') {
+    return userMeta.workspace_slug;
+  }
+  // 3. Fallback: keep whatever slug is already in the store (user may have set it via /callback)
+  const storeSlug = useAppStore.getState().workspaceSlug;
+  if (storeSlug) return storeSlug;
+  // 4. Last resort: derive from email domain
   const email = user.email ?? '';
   const domain = email.split('@')[1]?.split('.')[0] ?? 'workspace';
   return domain.toLowerCase().replace(/[^a-z0-9-]/g, '-');
