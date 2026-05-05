@@ -30,3 +30,10 @@ externalPort = 80
 [[ports]]
 localPort = 18928
 externalPort = 3000
+
+[userenv]
+
+[userenv.shared]
+VITE_SUPABASE_URL = "https://gbccfqpmoteicpumhkuj.supabase.co"
+VITE_SUPABASE_ANON_KEY = "sb_publishable_ZgH9DMO7DOSuTkkOecxrwA_woBSThIT"
+VITE_API_URL = "https://marketyou-mu.vercel.app"

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocation } from 'wouter';
 import { supabase } from '@/lib/supabase';
@@ -15,26 +15,27 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Auto-bypass into the app immediately
-  React.useEffect(() => {
-    devBypassLogin();
-    setLocation('/app');
-  }, []);
-
-  // Redirect if already authenticated
-  if (session || isDevBypass) {
-    setLocation('/app');
-    return null;
-  }
+  useEffect(() => {
+    if (session || isDevBypass) {
+      setLocation('/app');
+    }
+  }, [session, isDevBypass]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Hardcoded bypass — accepts any credentials
+    if (!supabase) {
+      devBypassLogin();
+      setLocation('/app');
+      return;
+    }
     setLoading(true);
-    await new Promise(r => setTimeout(r, 400));
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
-    devBypassLogin();
-    setLocation('/app');
+    if (error) {
+      toast.error(error.message);
+    } else {
+      setLocation('/app');
+    }
   };
 
   return (
@@ -42,76 +43,74 @@ export default function LoginPage() {
       <div className="w-full max-w-md space-y-8">
         <div className="flex flex-col items-center text-center">
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center text-primary-foreground font-serif font-bold text-2xl">
+            <div className="w-12 h-12 bg-[#7C5CFC] rounded-xl flex items-center justify-center text-white font-bold text-2xl" style={{ fontFamily: 'Syne, sans-serif' }}>
               T
             </div>
-            <h1 className="font-serif text-4xl text-foreground font-bold tracking-tight">Tenfold</h1>
+            <h1 className="text-4xl text-[#F0F0F0] font-bold tracking-tight" style={{ fontFamily: 'Syne, sans-serif' }}>Tenfold</h1>
           </div>
-          <h2 className="text-2xl text-foreground font-medium">Sign in to your workspace</h2>
-          <p className="text-muted-foreground mt-2">Enter your credentials to access the platform</p>
+          <h2 className="text-2xl text-[#F0F0F0] font-medium">Sign in to your workspace</h2>
+          <p className="text-[#666] mt-2 text-sm">Enter your credentials to access the platform</p>
         </div>
 
-        <form onSubmit={handleSignIn} className="bg-card border border-border p-8 rounded-2xl space-y-6 shadow-2xl">
+        <form
+          onSubmit={handleSignIn}
+          className="rounded-2xl border border-white/10 p-8 space-y-6 shadow-2xl"
+          style={{ background: 'rgba(20,20,20,0.8)' }}
+        >
           <div className="space-y-2">
-            <Label htmlFor="email" className="text-foreground">Email</Label>
+            <Label htmlFor="email" className="text-[#CCC] text-sm">Email</Label>
             <Input
               id="email"
               type="email"
               placeholder="name@company.com"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="bg-background border-border text-foreground h-12"
+              onChange={e => setEmail(e.target.value)}
+              className="bg-[#111] border-white/10 text-[#F0F0F0] h-12 placeholder-[#444]"
               required
               data-testid="input-email"
             />
           </div>
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="password" className="text-foreground">Password</Label>
-            </div>
+            <Label htmlFor="password" className="text-[#CCC] text-sm">Password</Label>
             <Input
               id="password"
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="bg-background border-border text-foreground h-12"
+              onChange={e => setPassword(e.target.value)}
+              className="bg-[#111] border-white/10 text-[#F0F0F0] h-12"
               required
               data-testid="input-password"
             />
           </div>
 
-          <Button 
-            type="submit" 
-            className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base rounded-lg transition-all"
-            disabled={loading || !supabase}
+          <Button
+            type="submit"
+            className="w-full h-12 font-medium text-base rounded-xl"
+            style={{ background: 'linear-gradient(135deg, #7C5CFC, #9D84FD)' }}
+            disabled={loading}
             data-testid="button-submit"
           >
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Sign In'}
           </Button>
 
           {!supabase && (
-            <div className="pt-4 border-t border-border mt-6">
-              <p className="text-sm text-muted-foreground text-center mb-4">
-                No Supabase URL configured.
-              </p>
-              <Button 
-                type="button" 
-                variant="outline" 
-                className="w-full h-12 border-primary/50 text-primary hover:bg-primary/10"
-                onClick={() => {
-                  devBypassLogin();
-                  setLocation('/app');
-                }}
+            <div className="pt-4 border-t border-white/10">
+              <p className="text-xs text-[#555] text-center mb-3">Supabase not configured</p>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full h-11 border-[#7C5CFC]/40 text-[#9D84FD] hover:bg-[#7C5CFC]/10"
+                onClick={() => { devBypassLogin(); setLocation('/app'); }}
                 data-testid="button-dev-bypass"
               >
-                [Dev Mode] Enter App
+                Dev Mode — Enter App
               </Button>
             </div>
           )}
         </form>
 
-        <p className="text-center text-muted-foreground text-sm">
-          Don't have an account? <a href="#" className="text-primary hover:underline">Start free trial</a>
+        <p className="text-center text-[#555] text-sm">
+          Don't have an account? <a href="#" className="text-[#7C5CFC] hover:underline">Start free trial</a>
         </p>
       </div>
     </div>

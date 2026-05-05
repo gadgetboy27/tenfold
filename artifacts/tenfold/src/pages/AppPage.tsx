@@ -12,11 +12,13 @@ import Step4Compose from '@/components/steps/Step4Compose';
 import Step5Publish from '@/components/steps/Step5Publish';
 import { useAppStore } from '@/store/useAppStore';
 import { AnimatePresence, motion } from 'framer-motion';
+import { api } from '@/lib/api';
+import { supabase } from '@/lib/supabase';
 
 export default function AppPage() {
   const { session, isDevBypass, loading } = useAuth();
   const [, setLocation] = useLocation();
-  const { currentStep } = useAppStore();
+  const { currentStep, setCreditBalance, workspaceSlug } = useAppStore();
 
   useEffect(() => {
     if (!loading && !session && !isDevBypass) {
@@ -24,10 +26,32 @@ export default function AppPage() {
     }
   }, [session, isDevBypass, loading, setLocation]);
 
-  if (loading) {
-    return <div className="min-h-screen bg-[#0A0A0A]" />;
-  }
+  /* Sync credit balance from the backend on mount */
+  useEffect(() => {
+    if (!session && !isDevBypass) return;
+    const fetchBalance = async () => {
+      try {
+        const token = supabase
+          ? (await supabase.auth.getSession()).data.session?.access_token
+          : undefined;
+        const res = await api('/api/credits/balance', {
+          token: token ?? undefined,
+          workspaceSlug,
+        });
+        if (res.ok) {
+          const data = await res.json() as { balance: number };
+          if (typeof data.balance === 'number') {
+            setCreditBalance(data.balance);
+          }
+        }
+      } catch {
+        // Backend unreachable — keep the store default
+      }
+    };
+    fetchBalance();
+  }, [session, isDevBypass]);
 
+  if (loading) return <div className="min-h-screen bg-[#0A0A0A]" />;
   if (!session && !isDevBypass) return null;
 
   const renderStep = () => {
@@ -62,7 +86,6 @@ export default function AppPage() {
             </motion.div>
           </AnimatePresence>
 
-          {/* Floating prompt bar — only on step 1 */}
           {currentStep === 1 && <FloatingPromptBar />}
         </main>
 

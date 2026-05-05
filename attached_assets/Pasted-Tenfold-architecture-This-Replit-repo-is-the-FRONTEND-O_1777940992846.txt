@@ -1,0 +1,25 @@
+Tenfold architecture:                                     
+  - This Replit repo is the FRONTEND ONLY (React + Vite)                                 
+  - The backend API lives at: https://marketyou-mu.vercel.app                              
+  - Auth: use @supabase/supabase-js in the browser
+    - SUPABASE_URL: https://gbccfqpmoteicpumhkuj.supabase.co                               
+    - SUPABASE_ANON_KEY: sb_publishable_ZgH9DMO7DOSuTkkOecxrwA_woBSThIT                    
+    - After login, Supabase sets a session cookie the backend reads automatically          
+                                                                                           
+  Every API call needs one header:                                                         
+    x-workspace-slug: <the user's workspace slug>                                          
+    (returned from the /callback redirect URL after first login)                           
+                                                                                           
+  Example API calls:                                                                       
+    POST https://marketyou-mu.vercel.app/api/campaigns                                     
+    POST https://marketyou-mu.vercel.app/api/jobs                                          
+    GET  https://marketyou-mu.vercel.app/api/credits/balance                             
+    POST https://marketyou-mu.vercel.app/api/credits/purchase → returns { url } → redirect 
+  user there                                                                               
+    POST https://marketyou-mu.vercel.app/api/compositions                                  
+    POST https://marketyou-mu.vercel.app/api/publish                                       
+                                                                                           
+  For payments: call /api/credits/purchase with { priceId }, get back a Stripe URL,        
+  redirect the user to it.                                                                 
+  Stripe handles payment, then redirects back to your app.                                 
+  No Stripe code lives in the frontend.

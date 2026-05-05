@@ -2,24 +2,56 @@ import React, { useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Check, CheckSquare, Image as ImageIcon, Type, Palette } from 'lucide-react';
+import { CheckSquare, Image as ImageIcon, Type, Palette } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { api } from '@/lib/api';
+import { supabase } from '@/lib/supabase';
 
 export default function Step4Compose() {
-  const { generatedAssets, selectedAnchorId, expansions, setStep, completeStep } = useAppStore();
+  const { generatedAssets, selectedAnchorId, expansions, setStep, completeStep, currentCampaignId, workspaceSlug } = useAppStore();
   const [caption, setCaption] = useState(expansions.script?.content || '');
   const [isSaving, setIsSaving] = useState(false);
 
   const anchor = generatedAssets.find(a => a.id === selectedAnchorId);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setIsSaving(true);
-    setTimeout(() => {
-      setIsSaving(false);
-      toast.success("Composition ready!");
+    try {
+      const token = supabase
+        ? (await supabase.auth.getSession()).data.session?.access_token
+        : undefined;
+
+      const res = await api('/api/compositions', {
+        method: 'POST',
+        body: JSON.stringify({
+          campaignId: currentCampaignId ?? 'demo',
+          anchorAssetId: selectedAnchorId,
+          caption,
+          includedAssets: {
+            video: expansions.video?.status === 'ready',
+            music: expansions.music?.status === 'ready',
+            script: expansions.script?.status === 'ready',
+            slides: expansions.slides?.status === 'ready',
+            logo: expansions.logo?.status === 'ready',
+          },
+        }),
+        token: token ?? undefined,
+        workspaceSlug,
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(err.error ?? `Save failed (${res.status})`);
+      }
+
+      toast.success('Composition ready');
       completeStep(4);
       setStep(5);
-    }, 1500);
+    } catch (err: unknown) {
+      toast.error((err as Error).message ?? 'Could not save composition');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -32,8 +64,6 @@ export default function Step4Compose() {
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-6 pt-12">
               <p className="text-white text-sm font-medium drop-shadow-md line-clamp-3">{caption}</p>
             </div>
-            
-            {/* Brand Logo Placeholder */}
             <div className="absolute top-4 right-4 w-8 h-8 bg-white rounded flex items-center justify-center opacity-80 shadow-md">
               <span className="text-black font-bold text-xs">ACME</span>
             </div>
@@ -44,14 +74,14 @@ export default function Step4Compose() {
       {/* Composition Controls (Right) */}
       <div className="w-full md:w-96 flex flex-col gap-4">
         <div className="bg-card border border-border rounded-xl p-4 flex flex-col flex-1 overflow-y-auto space-y-6">
-          
+
           <section>
             <div className="flex items-center gap-2 mb-3 text-sm font-medium text-foreground">
               <Type className="w-4 h-4 text-primary" /> Caption & Text
             </div>
-            <Textarea 
+            <Textarea
               value={caption}
-              onChange={(e) => setCaption(e.target.value)}
+              onChange={e => setCaption(e.target.value)}
               className="min-h-[120px] bg-background border-border text-sm resize-none"
               placeholder="Write a caption..."
             />
@@ -115,12 +145,12 @@ export default function Step4Compose() {
           </section>
         </div>
 
-        <Button 
-          onClick={handleSave} 
+        <Button
+          onClick={handleSave}
           disabled={isSaving}
           className="w-full h-12 bg-primary hover:bg-primary/90 text-white font-medium text-base rounded-lg"
         >
-          {isSaving ? "Processing..." : "Save Composition"}
+          {isSaving ? 'Saving...' : 'Save Composition'}
         </Button>
       </div>
     </div>

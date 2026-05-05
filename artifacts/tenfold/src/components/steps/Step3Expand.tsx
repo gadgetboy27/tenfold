@@ -4,8 +4,16 @@ import { Film, Music, FileText, Presentation, PenTool } from 'lucide-react';
 import FormatCard from '../shared/FormatCard';
 import AnchorGuide from '../shared/AnchorGuide';
 import toast from 'react-hot-toast';
+import { api } from '@/lib/api';
+import { supabase } from '@/lib/supabase';
 
-const BASE = import.meta.env.BASE_URL?.replace(/\/$/, '') ?? '';
+async function getAuthHeaders(): Promise<{ token?: string; workspaceSlug?: string }> {
+  const token = supabase
+    ? (await supabase.auth.getSession()).data.session?.access_token
+    : undefined;
+  const workspaceSlug = useAppStore.getState().workspaceSlug;
+  return { token: token ?? undefined, workspaceSlug };
+}
 
 async function createJob(params: {
   type: string;
@@ -16,33 +24,43 @@ async function createJob(params: {
   platform?: string;
   tone?: string;
   count?: number;
+  style?: string;
 }) {
-  const res = await fetch(`${BASE}/api/jobs`, {
+  const auth = await getAuthHeaders();
+  const res = await api('/api/jobs', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
+    ...auth,
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error((err as any).error ?? `Job creation failed (${res.status})`);
+    throw new Error((err as { error?: string }).error ?? `Job creation failed (${res.status})`);
   }
   return res.json() as Promise<{ jobId: string; status: string; creditCost: number }>;
 }
 
-async function pollJob(jobId: string, onReady: (job: any) => void, onError: (msg: string) => void) {
+async function pollJob(
+  jobId: string,
+  onReady: (job: Record<string, unknown>) => void,
+  onError: (msg: string) => void,
+) {
   const MAX_ATTEMPTS = 40;
   let attempts = 0;
+  const auth = await getAuthHeaders();
+
   const tick = async () => {
     if (attempts >= MAX_ATTEMPTS) { onError('Job timed out'); return; }
     attempts++;
     try {
-      const res = await fetch(`${BASE}/api/jobs/${jobId}`);
+      const res = await api(`/api/jobs/${jobId}`, auth);
       if (!res.ok) { onError('Failed to check job status'); return; }
-      const job = await res.json();
+      const job = await res.json() as Record<string, unknown>;
       if (job.status === 'ready') { onReady(job); return; }
       if (job.status === 'failed') { onError('Generation failed'); return; }
       setTimeout(tick, 1500);
-    } catch { onError('Network error'); }
+    } catch {
+      onError('Network error');
+    }
   };
   setTimeout(tick, 1000);
 }
@@ -54,18 +72,18 @@ export default function Step3Expand() {
   const { generatedAssets, selectedAnchorId, updateExpansion, setCreditBalance, creditBalance, currentCampaignId } = useAppStore();
   const anchor = generatedAssets.find(a => a.id === selectedAnchorId);
 
-  const handleGenerate = async (type: ExpandType, opts: Record<string, any> = {}) => {
+  const handleGenerate = async (type: ExpandType, opts: Record<string, unknown> = {}) => {
     if (!anchor) return;
 
     updateExpansion(type, { id: 'pending', status: 'generating', type, createdAt: new Date().toISOString() });
 
     try {
-      const apiType = type === 'slides' ? 'slide_deck' : type === 'logo' ? 'logo' : type === 'variations' ? 'image_variation' : type;
+      const apiType = type === 'slides' ? 'slide_deck' : type;
       const { jobId, creditCost } = await createJob({
         type: apiType,
         campaignId: currentCampaignId ?? 'demo',
         anchorAssetId: anchor.id,
-        ...opts,
+        ...opts as Record<string, string | number>,
       });
 
       setCreditBalance(creditBalance - creditCost);
@@ -74,28 +92,30 @@ export default function Step3Expand() {
         jobId,
         (job) => {
           updateExpansion(type, {
-            id: job.id,
+            id: job.id as string,
             status: 'ready',
             type,
-            createdAt: job.createdAt,
-            url: job.outputUrl ?? undefined,
-            urls: job.outputUrls ?? undefined,
-            content: job.outputText ?? undefined,
+            createdAt: job.createdAt as string,
+            url: (job.outputUrl as string) ?? undefined,
+            urls: (job.outputUrls as string[]) ?? undefined,
+            content: (job.outputText as string) ?? undefined,
           });
-          toast.success(`${title(type)} ready`);
+          toast.success(`${TITLES[type]} ready`);
         },
         (msg) => {
           updateExpansion(type, { id: 'error', status: 'failed', type, createdAt: new Date().toISOString() });
           toast.error(msg);
-        }
+        },
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
       updateExpansion(type, { id: 'error', status: 'failed', type, createdAt: new Date().toISOString() });
-      toast.error(err.message ?? 'Generation failed');
+      toast.error((err as Error).message ?? 'Generation failed');
     }
   };
 
-  const title = (t: ExpandType) => ({ video: 'Video', music: 'Music', script: 'Script', slides: 'Slide deck', logo: 'Logo' }[t]);
+  const TITLES: Record<ExpandType, string> = {
+    video: 'Video', music: 'Music', script: 'Script', slides: 'Slide deck', logo: 'Logo',
+  };
 
   if (!anchor) return null;
 
