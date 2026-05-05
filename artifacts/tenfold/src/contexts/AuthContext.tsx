@@ -58,17 +58,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // getUser() makes a live server request — always returns current user_metadata
+    // (getSession() returns a cached JWT that may predate admin.updateUserById calls)
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) setWorkspaceSlug(slugFromUser(session.user));
+      if (session) {
+        const { data: { user } } = await supabase.auth.getUser();
+        setUser(user);
+        if (user) setWorkspaceSlug(slugFromUser(user));
+      } else {
+        setUser(null);
+      }
       setLoading(false);
-    });
+    })();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) setWorkspaceSlug(slugFromUser(session.user));
+      if (session) {
+        const { data: { user } } = await supabase.auth.getUser();
+        setUser(user);
+        if (user) setWorkspaceSlug(slugFromUser(user));
+      } else {
+        setUser(null);
+      }
     });
 
     return () => subscription.unsubscribe();
