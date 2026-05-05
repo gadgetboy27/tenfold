@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAppStore } from '@/store/useAppStore';
-import { Play, Loader2, CheckCircle, Music2, FileText, ChevronLeft, ChevronRight, PenTool } from 'lucide-react';
+import { Play, Loader2, CheckCircle, Music2, FileText, ChevronLeft, ChevronRight, PenTool, Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -15,8 +15,6 @@ interface FormatCardProps {
   children: React.ReactNode;
   onGenerate: () => void;
 }
-
-/* ── Ready-state components ── */
 
 function VideoReady({ url }: { url?: string }) {
   return (
@@ -61,6 +59,19 @@ function MusicReady() {
 }
 
 function ScriptReady({ content }: { content?: string }) {
+  const [copied, setCopied] = React.useState(false);
+
+  const handleCopy = async () => {
+    if (!content) return;
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard access denied — silently ignore */
+    }
+  };
+
   return (
     <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-4 mb-4">
       <div className="flex items-center gap-2 mb-2">
@@ -70,42 +81,54 @@ function ScriptReady({ content }: { content?: string }) {
       <p className="text-sm text-foreground leading-relaxed line-clamp-4">
         {content ?? 'Your caption has been generated.'}
       </p>
-      <button className="mt-2 text-xs text-primary hover:underline">Copy to clipboard</button>
+      <button
+        onClick={handleCopy}
+        className="mt-2 text-xs text-primary hover:underline flex items-center gap-1 transition-colors"
+      >
+        {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+        {copied ? 'Copied' : 'Copy to clipboard'}
+      </button>
     </div>
   );
 }
 
 function SlidesReady({ urls }: { urls?: string[] }) {
   const [active, setActive] = React.useState(0);
-  const slides = urls ?? Array.from({ length: 6 }, (_, i) =>
-    `https://picsum.photos/seed/${900 + i}/800/450`
-  );
+
+  if (!urls || urls.length === 0) {
+    return (
+      <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-6 mb-4 flex flex-col items-center justify-center gap-2 text-center">
+        <CheckCircle className="w-6 h-6 text-green-400" />
+        <p className="text-sm font-medium text-foreground">Slide deck generated</p>
+        <p className="text-xs text-muted-foreground">Preview unavailable — download link will appear here once ready.</p>
+      </div>
+    );
+  }
+
   const prev = () => setActive(a => Math.max(0, a - 1));
-  const next = () => setActive(a => Math.min(slides.length - 1, a + 1));
+  const next = () => setActive(a => Math.min(urls.length - 1, a + 1));
 
   return (
     <div className="mb-4">
-      {/* Main slide viewer */}
       <div className="relative rounded-lg overflow-hidden aspect-video bg-black/40 mb-2">
-        <img src={slides[active]} alt={`Slide ${active + 1}`} className="w-full h-full object-cover" />
+        <img src={urls[active]} alt={`Slide ${active + 1}`} className="w-full h-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-b from-black/0 to-black/30" />
         <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] font-mono px-2 py-0.5 rounded">
-          {active + 1} / {slides.length}
+          {active + 1} / {urls.length}
         </div>
         {active > 0 && (
           <button onClick={prev} className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors">
             <ChevronLeft className="w-4 h-4 text-white" />
           </button>
         )}
-        {active < slides.length - 1 && (
+        {active < urls.length - 1 && (
           <button onClick={next} className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors">
             <ChevronRight className="w-4 h-4 text-white" />
           </button>
         )}
       </div>
-      {/* Filmstrip thumbnails */}
       <div className="flex gap-1.5 overflow-x-auto pb-1">
-        {slides.map((url, i) => (
+        {urls.map((url, i) => (
           <button
             key={i}
             onClick={() => setActive(i)}
@@ -123,7 +146,6 @@ function SlidesReady({ urls }: { urls?: string[] }) {
 }
 
 function LogoReady({ urls }: { urls?: string[] }) {
-  const seeds = [201, 202, 203, 204];
   const variants = [
     { label: 'Dark', filter: 'none', bg: 'bg-[#0A0A0A]' },
     { label: 'Light', filter: 'invert(1) brightness(1.1)', bg: 'bg-white' },
@@ -131,12 +153,24 @@ function LogoReady({ urls }: { urls?: string[] }) {
     { label: 'Color', filter: 'saturate(1.6) contrast(1.1)', bg: 'bg-zinc-800' },
   ];
 
+  if (!urls || urls.length === 0) {
+    return (
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        {variants.map(v => (
+          <div key={v.label} className={`rounded-lg border border-border ${v.bg} p-2 flex items-center justify-center aspect-square`}>
+            <PenTool className="w-6 h-6 text-green-400/50" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="grid grid-cols-2 gap-2 mb-4">
       {variants.map((v, i) => (
         <div key={v.label} className={`rounded-lg overflow-hidden border border-border ${v.bg} p-2 relative group cursor-pointer`}>
           <img
-            src={urls?.[i] ?? `https://picsum.photos/seed/${seeds[i]}/200/200`}
+            src={urls[i] ?? urls[0]}
             alt={`Logo variant ${v.label}`}
             className="w-full aspect-square object-cover rounded"
             style={{ filter: v.filter }}
@@ -149,8 +183,6 @@ function LogoReady({ urls }: { urls?: string[] }) {
     </div>
   );
 }
-
-/* ── Main component ── */
 
 export default function FormatCard({ type, title, subtitle, cost, icon: Icon, children, onGenerate }: FormatCardProps) {
   const { expansions, generatedAssets, selectedAnchorId } = useAppStore();
@@ -175,7 +207,6 @@ export default function FormatCard({ type, title, subtitle, cost, icon: Icon, ch
         </div>
       )}
 
-      {/* Header */}
       <div className="flex justify-between items-start mb-4">
         <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center transition-colors', isReady ? 'bg-green-500/20' : 'bg-primary/10')}>
           {isReady
@@ -189,14 +220,12 @@ export default function FormatCard({ type, title, subtitle, cost, icon: Icon, ch
       <h3 className="font-serif text-lg font-bold text-foreground">{title}</h3>
       <p className="text-sm text-muted-foreground mb-4">{subtitle}</p>
 
-      {/* Ready states */}
-      {isReady && type === 'video'   && <VideoReady url={expansion?.url ?? anchor?.url} />}
-      {isReady && type === 'music'   && <MusicReady />}
-      {isReady && type === 'script'  && <ScriptReady content={expansion?.content} />}
-      {isReady && type === 'slides'  && <SlidesReady urls={expansion?.urls} />}
-      {isReady && type === 'logo'    && <LogoReady urls={expansion?.urls} />}
+      {isReady && type === 'video'  && <VideoReady url={expansion?.url ?? anchor?.url} />}
+      {isReady && type === 'music'  && <MusicReady />}
+      {isReady && type === 'script' && <ScriptReady content={expansion?.content} />}
+      {isReady && type === 'slides' && <SlidesReady urls={expansion?.urls} />}
+      {isReady && type === 'logo'   && <LogoReady urls={expansion?.urls} />}
 
-      {/* Pre-generation controls */}
       {!isReady && (
         <>
           <div className="space-y-4 flex-1">{children}</div>

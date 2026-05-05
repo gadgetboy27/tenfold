@@ -179,14 +179,28 @@ export default function RightPanel() {
           </div>
         )}
 
-        <div className="border-t border-border pt-6 mt-auto">
+        <div className="border-t border-border pt-6 mt-auto space-y-2">
           <Button 
             className="w-full bg-primary hover:bg-primary/90 text-white"
             disabled={!Object.values(expansions).some(e => e?.status === 'ready')}
-            onClick={() => useAppStore.getState().setStep(4)}
+            onClick={() => {
+              useAppStore.getState().completeStep(3);
+              useAppStore.getState().setStep(4);
+            }}
           >
             Go to Compose →
           </Button>
+          {!Object.values(expansions).some(e => e?.status === 'ready') && (
+            <button
+              className="w-full text-xs text-muted-foreground hover:text-foreground py-1.5 transition-colors"
+              onClick={() => {
+                useAppStore.getState().completeStep(3);
+                useAppStore.getState().setStep(4);
+              }}
+            >
+              Skip — compose without expansions
+            </button>
+          )}
         </div>
       </div>
     );
