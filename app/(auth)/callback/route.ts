@@ -68,5 +68,10 @@ export async function GET(request: NextRequest) {
     });
   });
 
+  // Store workspace slug in user metadata so the frontend can read it without an extra API call
+  await supabase.auth.admin.updateUserById(user.id, {
+    user_metadata: { workspace_slug: slug },
+  });
+
   return NextResponse.redirect(`${origin}/${slug}`);
 }
