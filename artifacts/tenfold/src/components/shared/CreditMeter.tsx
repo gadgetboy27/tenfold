@@ -16,12 +16,39 @@ const PACKS = [
 ];
 
 export default function CreditMeter() {
-  const { creditBalance, workspaceSlug } = useAppStore();
+  const { creditBalance, workspaceSlug, setCreditBalance } = useAppStore();
   const [open, setOpen] = useState(false);
   const [purchasing, setPurchasing] = useState<string | null>(null);
+  const [topping, setTopping] = useState(false);
 
   const isLow     = creditBalance < 50;
   const isWarning = creditBalance >= 50 && creditBalance < 150;
+
+  const handleTopUp = async () => {
+    setTopping(true);
+    try {
+      const token = supabase
+        ? (await supabase.auth.getSession()).data.session?.access_token
+        : undefined;
+      const res = await api('/api/dev/grant-credits', {
+        method: 'POST',
+        token: token ?? undefined,
+        workspaceSlug,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(err.error ?? 'Top-up failed');
+      }
+      const { granted } = await res.json() as { granted: number };
+      setCreditBalance(creditBalance + granted);
+      toast.success(`+${granted} credits added`);
+      setOpen(false);
+    } catch (err: unknown) {
+      toast.error((err as Error).message ?? 'Could not add credits');
+    } finally {
+      setTopping(false);
+    }
+  };
 
   const handlePurchase = async (priceId: string) => {
     setPurchasing(priceId);
@@ -97,6 +124,16 @@ export default function CreditMeter() {
             Running low — top up to keep generating.
           </div>
         )}
+
+        {/* Test credits — quick top-up during development */}
+        <button
+          onClick={handleTopUp}
+          disabled={topping}
+          className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-dashed border-primary/40 bg-primary/5 hover:bg-primary/10 transition-colors text-sm mb-4 disabled:opacity-50"
+        >
+          <span className="text-primary font-medium">+ 200 test credits</span>
+          {topping && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
+        </button>
 
         {/* Credit packs */}
         <div className="space-y-2 mb-4">
