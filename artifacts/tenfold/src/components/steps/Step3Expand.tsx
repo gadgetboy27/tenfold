@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
-import { Film, Music, FileText, Presentation, PenTool } from 'lucide-react';
+import { Film, Music, FileText } from 'lucide-react';
 import FormatCard from '../shared/FormatCard';
 import AnchorGuide from '../shared/AnchorGuide';
 import toast from 'react-hot-toast';
@@ -15,28 +15,18 @@ async function getAuthHeaders(): Promise<{ token?: string; workspaceSlug?: strin
   return { token: token ?? undefined, workspaceSlug };
 }
 
-async function createJob(params: {
-  type: string;
-  campaignId: string;
-  anchorAssetId?: string;
-  duration?: number;
-  mood?: string;
-  platform?: string;
-  tone?: string;
-  count?: number;
-  style?: string;
-}) {
+async function createJob(type: string, campaignId: string, params: Record<string, unknown>) {
   const auth = await getAuthHeaders();
   const res = await api('/api/jobs', {
     method: 'POST',
-    body: JSON.stringify(params),
+    body: JSON.stringify({ type, campaignId, params }),
     ...auth,
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error((err as { error?: string }).error ?? `Job creation failed (${res.status})`);
   }
-  return res.json() as Promise<{ jobId: string; status: string; creditCost: number }>;
+  return res.json() as Promise<{ jobId: string; status: string; creditCost: number; result?: string }>;
 }
 
 async function pollJob(
@@ -65,51 +55,77 @@ async function pollJob(
   setTimeout(tick, 1000);
 }
 
-type ExpandType = 'video' | 'music' | 'script' | 'slides' | 'logo';
+type ExpandType = 'video' | 'music' | 'script';
+const TITLES: Record<ExpandType, string> = { video: 'Video', music: 'Music', script: 'Caption' };
 
 export default function Step3Expand() {
   const [showGuide, setShowGuide] = useState(true);
+  const [videoDuration, setVideoDuration] = useState<10 | 30 | 60>(10);
+  const [videoMood, setVideoMood] = useState('Uplifting');
+  const [scriptPlatform, setScriptPlatform] = useState('instagram');
+  const [scriptTone, setScriptTone] = useState('professional');
   const { generatedAssets, selectedAnchorId, updateExpansion, setCreditBalance, creditBalance, currentCampaignId } = useAppStore();
   const anchor = generatedAssets.find(a => a.id === selectedAnchorId);
 
-  const handleGenerate = async (type: ExpandType, opts: Record<string, unknown> = {}) => {
-    if (!anchor) return;
+  const syncBalance = async () => {
+    try {
+      const auth = await getAuthHeaders();
+      const res = await api('/api/credits/balance', auth);
+      if (res.ok) {
+        const data = await res.json() as { balance: number };
+        if (typeof data.balance === 'number') setCreditBalance(data.balance);
+      }
+    } catch { /* non-critical */ }
+  };
 
+  const handleGenerate = async (type: ExpandType) => {
+    if (!anchor) return;
     updateExpansion(type, { id: 'pending', status: 'generating', type, createdAt: new Date().toISOString() });
 
     try {
-      const apiType = type === 'slides' ? 'slide_deck' : type;
-      const { jobId, creditCost } = await createJob({
-        type: apiType,
-        campaignId: currentCampaignId ?? 'demo',
-        anchorAssetId: anchor.id,
-        ...opts as Record<string, string | number>,
-      });
+      const campaignId = currentCampaignId ?? 'demo';
 
-      setCreditBalance(creditBalance - creditCost);
+      // Script returns synchronously — no polling needed
+      if (type === 'script') {
+        const PLATFORM_MAP: Record<string, string> = { IG: 'instagram', LI: 'linkedin', TikTok: 'tiktok' };
+        const TONE_MAP: Record<string, string> = { Pro: 'professional', Casual: 'casual', Playful: 'playful' };
+        const { creditCost, result } = await createJob('script_generation', campaignId, {
+          imageDescription: anchor.prompt,
+          businessName: 'My Business',
+          platform: PLATFORM_MAP[scriptPlatform] ?? scriptPlatform,
+          tone: TONE_MAP[scriptTone] ?? scriptTone,
+          maxWords: 50,
+        });
+        setCreditBalance(creditBalance - (creditCost ?? 1));
+        updateExpansion('script', { id: 'done', status: 'ready', type: 'script', content: result ?? '', createdAt: new Date().toISOString() });
+        toast.success('Caption ready');
+        return;
+      }
+
+      const jobType =
+        type === 'video' ? (`video_${videoDuration}s` as 'video_10s' | 'video_30s' | 'video_60s')
+        : 'music_generation';
+
+      const jobParams: Record<string, unknown> =
+        type === 'video'
+          ? { imageUrl: anchor.url, prompt: anchor.prompt, duration: videoDuration }
+          : { mood: videoMood, prompt: anchor.prompt };
+
+      const { jobId, creditCost } = await createJob(jobType, campaignId, jobParams);
+      setCreditBalance(creditBalance - (creditCost ?? 0));
 
       pollJob(
         jobId,
         async (job) => {
           updateExpansion(type, {
-            id: job.id as string,
+            id: (job.id as string) ?? 'done',
             status: 'ready',
             type,
-            createdAt: job.createdAt as string,
-            url: (job.outputUrl as string) ?? undefined,
-            urls: (job.outputUrls as string[]) ?? undefined,
-            content: (job.outputText as string) ?? undefined,
+            createdAt: (job.createdAt as string) ?? new Date().toISOString(),
+            url: (job.outputUrl as string) ?? (job.outputUrls as string[])?.[0],
           });
           toast.success(`${TITLES[type]} ready`);
-          // Re-sync balance from server after credit spend
-          try {
-            const auth = await getAuthHeaders();
-            const balRes = await api('/api/credits/balance', auth);
-            if (balRes.ok) {
-              const bal = await balRes.json() as { balance: number };
-              if (typeof bal.balance === 'number') setCreditBalance(bal.balance);
-            }
-          } catch { /* non-critical */ }
+          await syncBalance();
         },
         (msg) => {
           updateExpansion(type, { id: 'error', status: 'failed', type, createdAt: new Date().toISOString() });
@@ -120,10 +136,6 @@ export default function Step3Expand() {
       updateExpansion(type, { id: 'error', status: 'failed', type, createdAt: new Date().toISOString() });
       toast.error((err as Error).message ?? 'Generation failed');
     }
-  };
-
-  const TITLES: Record<ExpandType, string> = {
-    video: 'Video', music: 'Music', script: 'Script', slides: 'Slide deck', logo: 'Logo',
   };
 
   if (!anchor) return null;
@@ -143,35 +155,44 @@ export default function Step3Expand() {
         </p>
       </div>
 
-      {/* Format cards — 3 cols top row, 2 cols bottom row */}
+      {/* Format cards — 3 columns */}
       <div className="flex-1 space-y-4">
         <div className="grid grid-cols-3 gap-4">
           <FormatCard type="video" title="Video" subtitle="10–60s cinematic clip" cost="15–80 cr" icon={Film}
-            onGenerate={() => handleGenerate('video', { duration: 10 })}>
+            onGenerate={() => handleGenerate('video')}>
             <div className="flex gap-2">
-              {['10s', '30s', '60s'].map(t => (
-                <button key={t} className="flex-1 py-1.5 text-xs rounded-full border border-border bg-background hover:border-primary/50 hover:text-primary transition-colors">{t}</button>
+              {([10, 30, 60] as const).map(t => (
+                <button key={t} type="button" onClick={() => setVideoDuration(t)}
+                  className={`flex-1 py-1.5 text-xs rounded-full border transition-colors ${videoDuration === t ? 'border-primary/50 text-primary bg-primary/10' : 'border-border bg-background hover:border-primary/50 hover:text-primary'}`}>
+                  {t}s
+                </button>
               ))}
             </div>
           </FormatCard>
 
           <FormatCard type="music" title="Music" subtitle="30s background track" cost="8 cr" icon={Music}
-            onGenerate={() => handleGenerate('music', { mood: 'Uplifting' })}>
+            onGenerate={() => handleGenerate('music')}>
             <div className="grid grid-cols-2 gap-1.5">
               {['Uplifting', 'Corporate', 'Dramatic', 'Chill'].map(m => (
-                <button key={m} className="py-1.5 text-xs rounded-full border border-border bg-background hover:border-primary/50 hover:text-primary transition-colors">{m}</button>
+                <button key={m} type="button" onClick={() => setVideoMood(m)}
+                  className={`py-1.5 text-xs rounded-full border transition-colors ${videoMood === m ? 'border-primary/50 text-primary bg-primary/10' : 'border-border bg-background hover:border-primary/50 hover:text-primary'}`}>
+                  {m}
+                </button>
               ))}
             </div>
           </FormatCard>
 
-          <FormatCard type="script" title="Caption" subtitle="Platform-ready caption or voiceover" cost="1 cr" icon={FileText}
-            onGenerate={() => handleGenerate('script', { platform: 'IG', tone: 'Pro' })}>
+          <FormatCard type="script" title="Caption" subtitle="Platform-ready caption" cost="1 cr" icon={FileText}
+            onGenerate={() => handleGenerate('script')}>
             <div className="space-y-2">
               <div className="flex gap-2 items-center">
                 <span className="text-[10px] text-muted-foreground uppercase w-12">Platform</span>
                 <div className="flex gap-1 flex-wrap flex-1">
                   {['IG', 'LI', 'TikTok'].map(p => (
-                    <button key={p} className="px-2 py-1 text-[10px] rounded border border-border bg-background hover:border-primary/50">{p}</button>
+                    <button key={p} type="button" onClick={() => setScriptPlatform(p)}
+                      className={`px-2 py-1 text-[10px] rounded border transition-colors ${scriptPlatform === p ? 'border-primary/50 text-primary bg-primary/10' : 'border-border bg-background hover:border-primary/50'}`}>
+                      {p}
+                    </button>
                   ))}
                 </div>
               </div>
@@ -179,53 +200,10 @@ export default function Step3Expand() {
                 <span className="text-[10px] text-muted-foreground uppercase w-12">Tone</span>
                 <div className="flex gap-1 flex-wrap flex-1">
                   {['Pro', 'Casual', 'Playful'].map(t => (
-                    <button key={t} className="px-2 py-1 text-[10px] rounded border border-border bg-background hover:border-primary/50">{t}</button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </FormatCard>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <FormatCard type="slides" title="Slide Deck" subtitle="Sequence of presentation-ready static images" cost="12 cr" icon={Presentation}
-            onGenerate={() => handleGenerate('slides', { count: 6 })}>
-            <div className="space-y-2">
-              <div className="flex gap-2 items-center">
-                <span className="text-[10px] text-muted-foreground uppercase w-12">Slides</span>
-                <div className="flex gap-1">
-                  {['4', '6', '8', '12'].map(n => (
-                    <button key={n} className="px-2.5 py-1 text-[10px] rounded-full border border-border bg-background hover:border-primary/50">{n}</button>
-                  ))}
-                </div>
-              </div>
-              <div className="flex gap-2 items-center">
-                <span className="text-[10px] text-muted-foreground uppercase w-12">Format</span>
-                <div className="flex gap-1">
-                  {['16:9', '4:3', '1:1'].map(f => (
-                    <button key={f} className="px-2.5 py-1 text-[10px] rounded-full border border-border bg-background hover:border-primary/50">{f}</button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </FormatCard>
-
-          <FormatCard type="logo" title="Logo Design" subtitle="Brand logo concepts in multiple styles" cost="6 cr" icon={PenTool}
-            onGenerate={() => handleGenerate('logo')}>
-            <div className="space-y-2">
-              <div className="flex gap-2 items-center">
-                <span className="text-[10px] text-muted-foreground uppercase w-12">Style</span>
-                <div className="flex gap-1 flex-wrap flex-1">
-                  {['Minimal', 'Bold', 'Geometric', 'Script'].map(s => (
-                    <button key={s} className="px-2 py-1 text-[10px] rounded border border-border bg-background hover:border-primary/50">{s}</button>
-                  ))}
-                </div>
-              </div>
-              <div className="flex gap-2 items-center">
-                <span className="text-[10px] text-muted-foreground uppercase w-12">Icon</span>
-                <div className="flex gap-1">
-                  {['With', 'Without', 'Only'].map(i => (
-                    <button key={i} className="px-2 py-1 text-[10px] rounded border border-border bg-background hover:border-primary/50">{i}</button>
+                    <button key={t} type="button" onClick={() => setScriptTone(t)}
+                      className={`px-2 py-1 text-[10px] rounded border transition-colors ${scriptTone === t ? 'border-primary/50 text-primary bg-primary/10' : 'border-border bg-background hover:border-primary/50'}`}>
+                      {t}
+                    </button>
                   ))}
                 </div>
               </div>

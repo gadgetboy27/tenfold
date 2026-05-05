@@ -34,13 +34,11 @@ function slugFromUser(user: User): string {
   if (userMeta?.workspace_slug && typeof userMeta.workspace_slug === 'string') {
     return userMeta.workspace_slug;
   }
-  // 3. Fallback: keep whatever slug is already in the store (user may have set it via /callback)
+  // 3. Keep whatever slug is already in the store — don't guess from email domain
   const storeSlug = useAppStore.getState().workspaceSlug;
   if (storeSlug) return storeSlug;
-  // 4. Last resort: derive from email domain
-  const email = user.email ?? '';
-  const domain = email.split('@')[1]?.split('.')[0] ?? 'workspace';
-  return domain.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  // 4. No slug available — return empty, API calls will fail until user sets workspace
+  return '';
 }
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

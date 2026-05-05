@@ -1,10 +1,10 @@
 import React from 'react';
 import { useAppStore } from '@/store/useAppStore';
-import { Play, Loader2, CheckCircle, Music2, FileText, ChevronLeft, ChevronRight, PenTool, Copy, Check } from 'lucide-react';
+import { Play, Loader2, CheckCircle, Music2, FileText, Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-type CardType = 'video' | 'music' | 'script' | 'slides' | 'logo';
+type CardType = 'video' | 'music' | 'script';
 
 interface FormatCardProps {
   type: CardType;
@@ -92,101 +92,9 @@ function ScriptReady({ content }: { content?: string }) {
   );
 }
 
-function SlidesReady({ urls }: { urls?: string[] }) {
-  const [active, setActive] = React.useState(0);
-
-  if (!urls || urls.length === 0) {
-    return (
-      <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-6 mb-4 flex flex-col items-center justify-center gap-2 text-center">
-        <CheckCircle className="w-6 h-6 text-green-400" />
-        <p className="text-sm font-medium text-foreground">Slide deck generated</p>
-        <p className="text-xs text-muted-foreground">Preview unavailable — download link will appear here once ready.</p>
-      </div>
-    );
-  }
-
-  const prev = () => setActive(a => Math.max(0, a - 1));
-  const next = () => setActive(a => Math.min(urls.length - 1, a + 1));
-
-  return (
-    <div className="mb-4">
-      <div className="relative rounded-lg overflow-hidden aspect-video bg-black/40 mb-2">
-        <img src={urls[active]} alt={`Slide ${active + 1}`} className="w-full h-full object-cover" />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/0 to-black/30" />
-        <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] font-mono px-2 py-0.5 rounded">
-          {active + 1} / {urls.length}
-        </div>
-        {active > 0 && (
-          <button onClick={prev} className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors">
-            <ChevronLeft className="w-4 h-4 text-white" />
-          </button>
-        )}
-        {active < urls.length - 1 && (
-          <button onClick={next} className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors">
-            <ChevronRight className="w-4 h-4 text-white" />
-          </button>
-        )}
-      </div>
-      <div className="flex gap-1.5 overflow-x-auto pb-1">
-        {urls.map((url, i) => (
-          <button
-            key={i}
-            onClick={() => setActive(i)}
-            className={cn(
-              'shrink-0 w-14 rounded overflow-hidden border transition-all',
-              i === active ? 'border-green-400 opacity-100' : 'border-border opacity-50 hover:opacity-75'
-            )}
-          >
-            <img src={url} alt={`Slide ${i + 1}`} className="w-full aspect-video object-cover" />
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function LogoReady({ urls }: { urls?: string[] }) {
-  const variants = [
-    { label: 'Dark', filter: 'none', bg: 'bg-[#0A0A0A]' },
-    { label: 'Light', filter: 'invert(1) brightness(1.1)', bg: 'bg-white' },
-    { label: 'Mono', filter: 'grayscale(1) contrast(1.3)', bg: 'bg-zinc-900' },
-    { label: 'Color', filter: 'saturate(1.6) contrast(1.1)', bg: 'bg-zinc-800' },
-  ];
-
-  if (!urls || urls.length === 0) {
-    return (
-      <div className="grid grid-cols-2 gap-2 mb-4">
-        {variants.map(v => (
-          <div key={v.label} className={`rounded-lg border border-border ${v.bg} p-2 flex items-center justify-center aspect-square`}>
-            <PenTool className="w-6 h-6 text-green-400/50" />
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid grid-cols-2 gap-2 mb-4">
-      {variants.map((v, i) => (
-        <div key={v.label} className={`rounded-lg overflow-hidden border border-border ${v.bg} p-2 relative group cursor-pointer`}>
-          <img
-            src={urls[i] ?? urls[0]}
-            alt={`Logo variant ${v.label}`}
-            className="w-full aspect-square object-cover rounded"
-            style={{ filter: v.filter }}
-          />
-          <div className="absolute inset-0 flex items-end p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-            <span className="text-[9px] font-bold text-white bg-black/60 px-1.5 py-0.5 rounded backdrop-blur-sm">{v.label}</span>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export default function FormatCard({ type, title, subtitle, cost, icon: Icon, children, onGenerate }: FormatCardProps) {
   const { expansions, generatedAssets, selectedAnchorId } = useAppStore();
-  const expansion = expansions[type as keyof typeof expansions];
+  const expansion = expansions[type];
   const anchor = generatedAssets.find(a => a.id === selectedAnchorId);
 
   const isGenerating = expansion?.status === 'generating';
@@ -223,8 +131,6 @@ export default function FormatCard({ type, title, subtitle, cost, icon: Icon, ch
       {isReady && type === 'video'  && <VideoReady url={expansion?.url ?? anchor?.url} />}
       {isReady && type === 'music'  && <MusicReady />}
       {isReady && type === 'script' && <ScriptReady content={expansion?.content} />}
-      {isReady && type === 'slides' && <SlidesReady urls={expansion?.urls} />}
-      {isReady && type === 'logo'   && <LogoReady urls={expansion?.urls} />}
 
       {!isReady && (
         <>

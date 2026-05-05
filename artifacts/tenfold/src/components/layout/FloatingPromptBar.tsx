@@ -81,7 +81,7 @@ export default function FloatingPromptBar() {
   const {
     creditBalance, setCreditBalance, setIsGenerating, setGeneratedAssets,
     isGenerating, aspectRatio, style, setAspectRatio, setStyle,
-    setStep, completeStep, setCampaignId, workspaceSlug, currentCampaignId, campaignName,
+    setStep, completeStep, setCampaignId, workspaceSlug, currentCampaignId,
   } = useAppStore();
 
   /* ── Debounced prompt analysis ── */
@@ -118,32 +118,40 @@ export default function FloatingPromptBar() {
         : undefined;
       const authOpts = { token: token ?? undefined, workspaceSlug };
 
+      const ASPECT_MAP: Record<string, string> = {
+        '1:1': 'square_hd',
+        '4:5': 'portrait_4_3',
+        '16:9': 'landscape_16_9',
+        '9:16': 'portrait_16_9',
+      };
+
       // Step 1: create or reuse campaign
       let campaignId = currentCampaignId;
       if (!campaignId) {
         const campRes = await api('/api/campaigns', {
           method: 'POST',
-          body: JSON.stringify({ name: campaignName }),
+          body: JSON.stringify({ prompt }),
           ...authOpts,
         });
-        if (campRes.ok) {
-          const camp = await campRes.json() as { id: string };
-          campaignId = camp.id;
-          setCampaignId(campaignId);
+        if (!campRes.ok) {
+          const err = await campRes.json().catch(() => ({})) as { error?: string };
+          throw new Error(err.error ?? `Campaign creation failed (${campRes.status})`);
         }
-        // If campaign creation fails (e.g. dev without backend), fall through with null
+        const camp = await campRes.json() as { id: string };
+        campaignId = camp.id;
+        setCampaignId(campaignId);
       }
 
-      // Step 2: submit image job
+      // Step 2: submit image generation job
       const jobRes = await api('/api/jobs', {
         method: 'POST',
         body: JSON.stringify({
-          type: 'image',
-          campaignId: campaignId ?? 'demo',
-          prompt,
-          aspectRatio,
-          style,
-          count: 6,
+          type: 'image_generation',
+          campaignId,
+          params: {
+            prompt,
+            imageSize: ASPECT_MAP[aspectRatio] ?? 'square_hd',
+          },
         }),
         ...authOpts,
       });
@@ -161,22 +169,31 @@ export default function FloatingPromptBar() {
         if (attempts >= 40) throw new Error('Job timed out');
         const statusRes = await api(`/api/jobs/${jobId}`, authOpts);
         if (!statusRes.ok) throw new Error('Status check failed');
-        const job = await statusRes.json() as { status: string; outputUrls?: string[] };
+        const job = await statusRes.json() as { status: string; outputUrls?: string[]; assets?: Array<{ id: string; url: string }> };
 
         if (job.status === 'ready') {
-          const urls: string[] = job.outputUrls ?? [];
+          const dbAssets = (job.assets ?? []) as Array<{ id: string; url: string }>;
+          const urls: string[] = job.outputUrls ?? dbAssets.map((a) => a.url);
           if (urls.length === 0) {
             throw new Error('Generation completed but no images were returned. Please try again.');
           }
-          const base = Date.now();
-          const newAssets = urls.map((url, i) => ({
-            id: `asset-${base}-${i}`,
-            url,
-            prompt,
-            aspectRatio,
-            style,
-            createdAt: new Date().toISOString(),
-          }));
+          const newAssets = dbAssets.length > 0
+            ? dbAssets.map((a) => ({
+                id: a.id,
+                url: a.url,
+                prompt,
+                aspectRatio,
+                style,
+                createdAt: new Date().toISOString(),
+              }))
+            : urls.map((url, i) => ({
+                id: `asset-${Date.now()}-${i}`,
+                url,
+                prompt,
+                aspectRatio,
+                style,
+                createdAt: new Date().toISOString(),
+              }));
           setGeneratedAssets(newAssets);
           setIsGenerating(false);
           completeStep(1);

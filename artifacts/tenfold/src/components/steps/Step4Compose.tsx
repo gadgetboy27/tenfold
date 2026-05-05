@@ -8,7 +8,7 @@ import { api } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
 
 export default function Step4Compose() {
-  const { generatedAssets, selectedAnchorId, expansions, setStep, completeStep, currentCampaignId, workspaceSlug } = useAppStore();
+  const { generatedAssets, selectedAnchorId, expansions, setStep, completeStep, currentCampaignId, setCompositionId, workspaceSlug } = useAppStore();
   const [caption, setCaption] = useState(expansions.script?.content || '');
   const [isSaving, setIsSaving] = useState(false);
 
@@ -26,14 +26,11 @@ export default function Step4Compose() {
         body: JSON.stringify({
           campaignId: currentCampaignId ?? 'demo',
           anchorAssetId: selectedAnchorId,
+          format: 'square',
+          textOverlays: caption ? [{ text: caption, position: 'bottom', style: {} }] : [],
+          branding: { logo: false, primaryColor: false },
           caption,
-          includedAssets: {
-            video: expansions.video?.status === 'ready',
-            music: expansions.music?.status === 'ready',
-            script: expansions.script?.status === 'ready',
-            slides: expansions.slides?.status === 'ready',
-            logo: expansions.logo?.status === 'ready',
-          },
+          hashtags: [],
         }),
         token: token ?? undefined,
         workspaceSlug,
@@ -44,6 +41,8 @@ export default function Step4Compose() {
         throw new Error(err.error ?? `Save failed (${res.status})`);
       }
 
+      const composition = await res.json() as { id: string };
+      setCompositionId(composition.id);
       toast.success('Composition ready');
       completeStep(4);
       setStep(5);
@@ -129,16 +128,6 @@ export default function Step4Compose() {
               {expansions.script?.status === 'ready' && (
                 <div className="flex items-center gap-2 text-sm text-foreground">
                   <CheckSquare className="w-4 h-4 text-primary" /> Caption
-                </div>
-              )}
-              {expansions.slides?.status === 'ready' && (
-                <div className="flex items-center gap-2 text-sm text-foreground">
-                  <CheckSquare className="w-4 h-4 text-primary" /> Slide Deck
-                </div>
-              )}
-              {expansions.logo?.status === 'ready' && (
-                <div className="flex items-center gap-2 text-sm text-foreground">
-                  <CheckSquare className="w-4 h-4 text-primary" /> Logo Design
                 </div>
               )}
             </div>
