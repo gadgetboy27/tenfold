@@ -3,14 +3,29 @@ import { useAppStore } from '@/store/useAppStore';
 import CreditMeter from '../shared/CreditMeter';
 import JobStatusIndicator from '../shared/JobStatusIndicator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Pen } from 'lucide-react';
+import { Pen, LogOut, User } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { useAuth } from '@/contexts/AuthContext';
+import { useLocation } from 'wouter';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 export default function TopBar() {
   const { campaignName, setCampaignName, isGenerating } = useAppStore();
+  const { user, signOut } = useAuth();
+  const [, setLocation] = useLocation();
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(campaignName);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const initials = user?.email
+    ? user.email.slice(0, 2).toUpperCase()
+    : 'JD';
 
   const handleEdit = () => {
     setIsEditing(true);
@@ -19,18 +34,18 @@ export default function TopBar() {
   };
 
   const handleSave = () => {
-    if (editValue.trim()) {
-      setCampaignName(editValue);
-    }
+    if (editValue.trim()) setCampaignName(editValue);
     setIsEditing(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSave();
-    } else if (e.key === 'Escape') {
-      setIsEditing(false);
-    }
+    if (e.key === 'Enter') handleSave();
+    else if (e.key === 'Escape') setIsEditing(false);
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    setLocation('/login');
   };
 
   return (
@@ -49,7 +64,7 @@ export default function TopBar() {
             Generating assets...
           </div>
         ) : (
-          <div 
+          <div
             className="flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-secondary cursor-pointer transition-colors group"
             onClick={handleEdit}
             data-testid="text-campaign-name"
@@ -58,7 +73,7 @@ export default function TopBar() {
               <Input
                 ref={inputRef}
                 value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
+                onChange={e => setEditValue(e.target.value)}
                 onBlur={handleSave}
                 onKeyDown={handleKeyDown}
                 className="h-7 w-48 text-sm bg-background border-primary px-2"
@@ -76,9 +91,36 @@ export default function TopBar() {
       <div className="flex items-center justify-end gap-4 w-64">
         <JobStatusIndicator />
         <CreditMeter />
-        <Avatar className="w-8 h-8 border border-border cursor-pointer">
-          <AvatarFallback className="bg-secondary text-foreground text-xs font-medium">JD</AvatarFallback>
-        </Avatar>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Avatar className="w-8 h-8 border border-border cursor-pointer hover:border-primary/50 transition-colors">
+              <AvatarFallback className="bg-secondary text-foreground text-xs font-medium">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48 bg-card border-border">
+            {user?.email && (
+              <>
+                <div className="px-3 py-2">
+                  <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                </div>
+                <DropdownMenuSeparator className="bg-border" />
+              </>
+            )}
+            <DropdownMenuItem className="gap-2 text-sm cursor-pointer" disabled>
+              <User className="w-4 h-4" /> Account settings
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="bg-border" />
+            <DropdownMenuItem
+              className="gap-2 text-sm text-red-400 focus:text-red-400 cursor-pointer"
+              onClick={handleSignOut}
+            >
+              <LogOut className="w-4 h-4" /> Sign out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );
