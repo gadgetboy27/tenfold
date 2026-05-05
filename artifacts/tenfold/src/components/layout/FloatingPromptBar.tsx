@@ -157,9 +157,6 @@ export default function FloatingPromptBar() {
       setCreditBalance(creditBalance - (creditCost ?? 18));
 
       // Step 3: poll for results
-      const DIMS: Record<string, string> = { '1:1':'800/800', '4:5':'640/800', '16:9':'800/450', '9:16':'450/800' };
-      const dims = DIMS[aspectRatio] ?? '800/800';
-
       const poll = async (attempts = 0) => {
         if (attempts >= 40) throw new Error('Job timed out');
         const statusRes = await api(`/api/jobs/${jobId}`, authOpts);
@@ -167,10 +164,11 @@ export default function FloatingPromptBar() {
         const job = await statusRes.json() as { status: string; outputUrls?: string[] };
 
         if (job.status === 'ready') {
+          const urls: string[] = job.outputUrls ?? [];
+          if (urls.length === 0) {
+            throw new Error('Generation completed but no images were returned. Please try again.');
+          }
           const base = Date.now();
-          const urls: string[] = job.outputUrls ?? Array.from({ length: 6 }).map((_, i) =>
-            `https://picsum.photos/seed/${base + i}/${dims}`
-          );
           const newAssets = urls.map((url, i) => ({
             id: `asset-${base}-${i}`,
             url,
@@ -184,6 +182,14 @@ export default function FloatingPromptBar() {
           completeStep(1);
           setStep(2);
           toast.success('6 images ready — pick your anchor');
+          // Re-sync balance from server after credit spend
+          try {
+            const balRes = await api('/api/credits/balance', authOpts);
+            if (balRes.ok) {
+              const bal = await balRes.json() as { balance: number };
+              if (typeof bal.balance === 'number') setCreditBalance(bal.balance);
+            }
+          } catch { /* non-critical — keep optimistic value */ }
         } else if (job.status === 'failed') {
           throw new Error('Generation failed');
         } else {

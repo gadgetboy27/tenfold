@@ -104,7 +104,7 @@ export default function Step5Publish() {
         </p>
 
         <div className="flex gap-4 z-10">
-          <Button variant="outline" className="border-border text-foreground hover:bg-secondary">View analytics</Button>
+          <Button variant="outline" className="border-border text-muted-foreground opacity-50 cursor-not-allowed" disabled>View analytics (coming soon)</Button>
           <Button
             className="bg-primary text-white hover:bg-primary/90"
             onClick={resetCampaign}

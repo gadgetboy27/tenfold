@@ -44,8 +44,8 @@ export default function AppPage() {
             setCreditBalance(data.balance);
           }
         }
-      } catch {
-        // Backend unreachable — keep the store default
+      } catch (err) {
+        console.error('[AppPage] Could not fetch credit balance:', err);
       }
     };
     fetchBalance();

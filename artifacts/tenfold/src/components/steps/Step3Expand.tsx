@@ -90,7 +90,7 @@ export default function Step3Expand() {
 
       pollJob(
         jobId,
-        (job) => {
+        async (job) => {
           updateExpansion(type, {
             id: job.id as string,
             status: 'ready',
@@ -101,6 +101,15 @@ export default function Step3Expand() {
             content: (job.outputText as string) ?? undefined,
           });
           toast.success(`${TITLES[type]} ready`);
+          // Re-sync balance from server after credit spend
+          try {
+            const auth = await getAuthHeaders();
+            const balRes = await api('/api/credits/balance', auth);
+            if (balRes.ok) {
+              const bal = await balRes.json() as { balance: number };
+              if (typeof bal.balance === 'number') setCreditBalance(bal.balance);
+            }
+          } catch { /* non-critical */ }
         },
         (msg) => {
           updateExpansion(type, { id: 'error', status: 'failed', type, createdAt: new Date().toISOString() });

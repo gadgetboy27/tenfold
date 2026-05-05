@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Hexagon, CreditCard, Clock, Loader2 } from 'lucide-react';
+import { Hexagon, Clock, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
