@@ -26,9 +26,10 @@ export default function AppPage() {
     }
   }, [session, isDevBypass, loading, setLocation]);
 
-  /* Sync credit balance from the backend on mount */
+  /* Sync credit balance from the backend on mount and whenever workspaceSlug arrives */
   useEffect(() => {
     if (!session && !isDevBypass) return;
+    if (!workspaceSlug) return; // slug arrives asynchronously via getUser(); wait for it
     const fetchBalance = async () => {
       try {
         const token = supabase
@@ -49,7 +50,7 @@ export default function AppPage() {
       }
     };
     fetchBalance();
-  }, [session, isDevBypass]);
+  }, [session, isDevBypass, workspaceSlug]);
 
   if (loading) return <div className="min-h-screen bg-[#0A0A0A]" />;
   if (!session && !isDevBypass) return null;
