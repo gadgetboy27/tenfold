@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import { falWebhookPayloadSchema } from '@/lib/fal/webhooks';
 import { refundCredits } from '@/lib/credits/refund';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { recordJobCost } from '@/lib/costs/tracker';
 import { v4 as uuidv4 } from 'uuid';
 
 export async function POST(req: Request) {
@@ -100,6 +101,8 @@ async function handleSuccess(
     .update(creativeJobs)
     .set({ status: 'completed', completedAt: new Date(), updatedAt: new Date() })
     .where(eq(creativeJobs.id, job.id));
+
+  await recordJobCost(job.id, job.type);
 }
 
 async function handleFailure(job: typeof creativeJobs.$inferSelect, errorMessage: string) {

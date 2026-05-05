@@ -7,9 +7,10 @@ import { createJobSchema } from '@/lib/validation/schemas';
 import { debitCredits } from '@/lib/credits/debit';
 import { CREDIT_COSTS, type CreditCostKey } from '@/lib/credits/costs';
 import { enqueueJob } from '@/lib/fal/queue';
+import { generateScript } from '@/lib/claude/script';
+import { recordJobCost } from '@/lib/costs/tracker';
 import { v4 as uuidv4 } from 'uuid';
 
-// Image generation input shape for fal.ai
 function buildFalInput(type: string, params: Record<string, unknown>, prompt: string) {
   if (type === 'image_generation') {
     return {
@@ -38,14 +39,13 @@ export async function POST(req: Request) {
     const creditType = body.type as CreditCostKey;
     const cost = CREDIT_COSTS[creditType];
 
-    // 1. Debit credits atomically — fail fast if insufficient
     const debit = await debitCredits(session.workspaceId, jobId, creditType);
     if (!debit.success) {
       return NextResponse.json({ error: 'Insufficient credits' }, { status: 402 });
     }
 
-    // 2. Create job row
     const prompt = (body.params.prompt as string) ?? '';
+
     await db.insert(creativeJobs).values({
       id: jobId,
       campaignId: body.campaignId,
@@ -56,7 +56,30 @@ export async function POST(req: Request) {
       creditsCharged: cost,
     });
 
-    // 3. Enqueue to fal.ai — non-blocking
+    // Script generation is synchronous — handle inline with exact token cost
+    if (body.type === 'script_generation') {
+      const result = await generateScript({
+        imageDescription: (body.params.imageDescription as string) ?? '',
+        businessName: (body.params.businessName as string) ?? '',
+        platform: (body.params.platform as string) ?? 'instagram',
+        tone: (body.params.tone as 'professional' | 'casual' | 'playful') ?? 'professional',
+        maxWords: (body.params.maxWords as number) ?? 50,
+      });
+
+      await db
+        .update(creativeJobs)
+        .set({
+          status: 'completed',
+          completedAt: new Date(),
+          updatedAt: new Date(),
+          actualCostUsd: result.actualCostUsd,
+        })
+        .where(eq(creativeJobs.id, jobId));
+
+      return NextResponse.json({ jobId, result: result.text }, { status: 201 });
+    }
+
+    // All other types go through fal.ai async queue
     const webhookUrl = `${process.env.APP_URL}/api/webhooks/fal`;
     const falInput = buildFalInput(body.type, body.params, prompt);
     const { requestId } = await enqueueJob(
@@ -65,7 +88,6 @@ export async function POST(req: Request) {
       webhookUrl,
     );
 
-    // 4. Store fal request_id
     await db
       .update(creativeJobs)
       .set({ falRequestId: requestId, status: 'processing', updatedAt: new Date() })

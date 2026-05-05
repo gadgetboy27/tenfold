@@ -151,6 +151,8 @@ export const creativeJobs = pgTable(
     inputParams: jsonb('input_params').notNull().default('{}'),
     errorMessage: text('error_message'),
     creditsCharged: integer('credits_charged').notNull().default(0),
+    actualCostUsd: real('actual_cost_usd'),
+    providerDurationMs: integer('provider_duration_ms'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     completedAt: timestamp('completed_at', { withTimezone: true }),
