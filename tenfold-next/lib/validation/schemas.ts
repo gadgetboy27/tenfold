@@ -2,10 +2,10 @@ import { z } from 'zod';
 
 export const createCampaignSchema = z.object({
   prompt: z.string().min(3).max(2000),
+  aspectRatio: z.string().max(10).default('1:1'),
+  style: z.string().max(200).default('Photorealistic'),
   parameters: z
     .object({
-      aspectRatio: z.enum(['square_hd', 'portrait_4_3', 'landscape_16_9']).optional(),
-      style: z.string().max(200).optional(),
       seed: z.number().int().positive().optional(),
     })
     .default({}),

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
-import { webhookLogs, creativeJobs, assets } from '@/db/schema';
+import { webhookLogs, creativeJobs, assets, campaigns } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { falWebhookPayloadSchema } from '@/lib/fal/webhooks';
 import { refundCredits } from '@/lib/credits/refund';
@@ -147,6 +147,14 @@ async function handleSuccess(
     .update(creativeJobs)
     .set({ status: 'completed', completedAt: new Date(), updatedAt: new Date() })
     .where(eq(creativeJobs.id, job.id));
+
+  // Flip campaign to 'ready' once the image generation job completes
+  if (job.type === 'image_generation') {
+    await db
+      .update(campaigns)
+      .set({ status: 'ready', updatedAt: new Date() })
+      .where(eq(campaigns.id, job.campaignId));
+  }
 
   await recordJobCost(job.id, job.type);
 }
