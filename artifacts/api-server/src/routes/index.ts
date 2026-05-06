@@ -7,6 +7,7 @@ import compositionsRouter from "./compositions.js";
 import socialRouter from "./social.js";
 import publishRouter from "./publish.js";
 import promptRouter from "./prompt.js";
+import webhooksRouter from "./webhooks.js";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(compositionsRouter);
 router.use(socialRouter);
 router.use(publishRouter);
 router.use(promptRouter);
+router.use(webhooksRouter);
 
 export default router;

@@ -1,177 +1,240 @@
 import { Router } from "express";
 import { randomUUID } from "crypto";
-import { requireAuth } from "../middlewares/auth.js";
-import { deductCredits } from "./credits.js";
+import { requireAuth, debitCredits } from "../middlewares/auth.js";
+import { db } from "@workspace/db";
+import { creativeJobs } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
+import { fal } from "@fal-ai/client";
+import Anthropic from "@anthropic-ai/sdk";
+import { logger } from "../lib/logger.js";
 
 const router = Router();
 
-type JobType = "video" | "music" | "script" | "image_variation" | "upscale" | "slide_deck" | "logo";
-type JobStatus = "pending" | "generating" | "ready" | "failed";
-
-interface Job {
-  id: string;
-  type: JobType;
-  campaignId: string;
-  workspaceSlug: string;
-  status: JobStatus;
-  outputUrl: string | null;
-  outputText: string | null;
-  creditCost: number;
-  params: Record<string, unknown>;
-  createdAt: string;
-  completedAt: string | null;
-}
-
-const jobs = new Map<string, Job>();
+type JobType =
+  | "video_10s"
+  | "video_30s"
+  | "video_60s"
+  | "music_generation"
+  | "script_generation"
+  | "image_variation"
+  | "upscale";
 
 const CREDIT_COSTS: Record<JobType, number> = {
-  video: 15,        // up to 80 for longer clips
-  music: 8,
-  script: 1,
+  video_10s: 15,
+  video_30s: 40,
+  video_60s: 80,
+  music_generation: 8,
+  script_generation: 1,
   image_variation: 3,
   upscale: 2,
-  slide_deck: 12,
-  logo: 6,
 };
+
+const FAL_MODELS: Record<string, string> = {
+  video_10s: "fal-ai/kling-video/v1.6/pro/image-to-video",
+  video_30s: "fal-ai/kling-video/v1.6/pro/image-to-video",
+  video_60s: "fal-ai/kling-video/v1.6/pro/image-to-video",
+  music_generation: "fal-ai/stable-audio",
+  image_variation: "fal-ai/flux-pro/kontext",
+  upscale: "fal-ai/clarity-upscaler",
+};
+
+function configureFal(): void {
+  const key = process.env["FAL_API_KEY"];
+  if (!key) throw new Error("FAL_API_KEY is not configured");
+  fal.config({ credentials: key });
+}
+
+function getWebhookUrl(): string {
+  const base =
+    process.env["APP_URL"] ??
+    process.env["NEXT_PUBLIC_APP_URL"] ??
+    (process.env["REPLIT_DEV_DOMAIN"]
+      ? `https://${process.env["REPLIT_DEV_DOMAIN"]}`
+      : "");
+  return `${base}/api/webhooks/fal`;
+}
+
+function buildFalInput(
+  type: JobType,
+  params: Record<string, unknown>,
+): Record<string, unknown> {
+  if (type === "video_10s") {
+    return {
+      image_url: params["anchorUrl"] ?? params["imageUrl"],
+      prompt: params["prompt"] ?? "",
+      duration: "5",
+      aspect_ratio: "16:9",
+    };
+  }
+  if (type === "video_30s" || type === "video_60s") {
+    return {
+      image_url: params["anchorUrl"] ?? params["imageUrl"],
+      prompt: params["prompt"] ?? "",
+      duration: "10",
+      aspect_ratio: "16:9",
+    };
+  }
+  if (type === "music_generation") {
+    return {
+      prompt: params["mood"] ?? params["prompt"] ?? "uplifting background music",
+      seconds_total: 30,
+      steps: 100,
+    };
+  }
+  if (type === "image_variation") {
+    return {
+      image_url: params["anchorUrl"] ?? params["imageUrl"],
+      prompt: params["prompt"] ?? "",
+    };
+  }
+  if (type === "upscale") {
+    return { image_url: params["assetUrl"] ?? params["imageUrl"] };
+  }
+  return params;
+}
 
 /**
  * POST /api/jobs
- * Creates an async generation job (video, music, script, variation, upscale).
- *
- * TODO — real implementations:
- *
- * VIDEO (Runway Gen-3 / Kling / Sora):
- *   import RunwayML from "@runwayml/sdk";
- *   const client = new RunwayML({ apiKey: process.env.RUNWAY_API_KEY });
- *   const task = await client.imageToVideo.create({ model: "gen3a_turbo", promptImage: anchorUrl, duration });
- *   // Poll task.id for completion, store output URL
- *
- * MUSIC (Suno API / Udio):
- *   POST https://studio-api.suno.ai/api/generate with prompt derived from anchor description
- *   // Returns clip_id, poll for audio URL
- *
- * SCRIPT (Claude / GPT-4o):
- *   import Anthropic from "@anthropic-ai/sdk";
- *   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
- *   const msg = await client.messages.create({ model: "claude-opus-4-5", max_tokens: 512,
- *     messages: [{ role: "user", content: `Write a ${tone} ${platform} caption for: ${anchorPrompt}` }]
- *   });
- *   job.outputText = msg.content[0].text;
- *
- * IMAGE VARIATION (Replicate / fal.ai img2img):
- *   const output = await replicate.run("stability-ai/sdxl:...", { input: { image: anchorUrl, prompt, strength: 0.7 } });
- *
- * UPSCALE (Real-ESRGAN via Replicate):
- *   const output = await replicate.run("nightmareai/real-esrgan:...", { input: { image: assetUrl, scale: 2 } });
+ * Creates an async generation job (video, music, image variation, upscale).
+ * Script generation is handled synchronously via Anthropic.
  */
-router.post("/jobs", requireAuth, (req, res) => {
+router.post("/jobs", requireAuth, async (req, res) => {
   const {
     type,
     campaignId,
-    anchorAssetId,
-    assetId,
-    duration,
-    mood,
-    platform,
-    tone,
-    count,
-    style,
-  } = req.body as {
-    type: JobType;
-    campaignId: string;
-    anchorAssetId?: string;
-    assetId?: string;
-    duration?: number;
-    mood?: string;
-    platform?: string;
-    tone?: string;
-    count?: number;
-    style?: string;
-  };
+    ...params
+  } = req.body as { type: JobType; campaignId: string } & Record<string, unknown>;
 
   if (!type || !campaignId) {
     res.status(400).json({ error: "type and campaignId are required" });
     return;
   }
 
-  const ws = req.workspaceSlug!;
-  let cost = CREDIT_COSTS[type];
-
-  // Video cost scales with duration
-  if (type === "video" && duration) {
-    cost = duration <= 10 ? 15 : duration <= 30 ? 35 : 80;
+  if (!(type in CREDIT_COSTS)) {
+    res.status(400).json({ error: `Unknown job type: ${type}` });
+    return;
   }
 
-  if (!deductCredits(ws, cost)) {
+  const workspaceId = req.workspaceId!;
+  const cost = CREDIT_COSTS[type];
+  const jobId = randomUUID();
+
+  // Debit credits first
+  const debit = await debitCredits(workspaceId, jobId, type, cost);
+  if (!debit.success) {
     res.status(402).json({ error: "Insufficient credits", required: cost });
     return;
   }
 
-  const jobId = randomUUID();
-  const job: Job = {
-    id: jobId,
-    type,
-    campaignId,
-    workspaceSlug: ws,
-    status: "generating",
-    outputUrl: null,
-    outputText: null,
-    creditCost: cost,
-    params: { anchorAssetId, assetId, duration, mood, platform, tone },
-    createdAt: new Date().toISOString(),
-    completedAt: null,
-  };
+  try {
+    // ── Script: synchronous Anthropic call ──────────────────────────────────
+    if (type === "script_generation") {
+      const key = process.env["ANTHROPIC_API_KEY"];
+      if (!key) {
+        res.status(501).json({ error: "ANTHROPIC_API_KEY not configured" });
+        return;
+      }
 
-  jobs.set(jobId, job);
+      const anthropic = new Anthropic({ apiKey: key });
+      const platform = (params["platform"] as string) ?? "instagram";
+      const tone = (params["tone"] as string) ?? "professional";
+      const businessName = (params["businessName"] as string) ?? "";
+      const imageDesc = (params["imageDescription"] as string) ?? "";
 
-  // Simulate completion delay (replace with real async job processing)
-  const delay =
-    type === "script" ? 800 :
-    type === "music" ? 4000 :
-    type === "video" ? 8000 :
-    type === "logo" ? 3000 :
-    type === "slide_deck" ? 5000 :
-    2500;
+      const msg = await anthropic.messages.create({
+        model: "claude-haiku-4-5",
+        max_tokens: 512,
+        messages: [
+          {
+            role: "user",
+            content: `Write a ${tone} social media caption for ${platform}.
+Business: ${businessName}
+Image: ${imageDesc}
+Max words: 50
+Return only the caption text, no explanation.`,
+          },
+        ],
+      });
 
-  setTimeout(() => {
-    job.status = "ready";
-    job.completedAt = new Date().toISOString();
+      const text = msg.content[0].type === "text" ? msg.content[0].text.trim() : "";
 
-    // TODO: replace each branch with the real AI service call
-    if (type === "script") {
-      job.outputText = `Ready to level up? This content was built to inspire — and it shows. Whether you're building a brand or scaling a vision, every frame tells your story. #${platform || "content"} #creative #tenfold`;
-    } else if (type === "music") {
-      job.outputUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3";
-    } else if (type === "slide_deck") {
-      // TODO: generate real slide images with Replicate/fal.ai
-      const slideCount = typeof count === "number" && count > 0 ? count : 6;
-      (job as any).outputUrls = Array.from({ length: slideCount }, (_, i) =>
-        `https://picsum.photos/seed/${jobId.slice(0, 8)}${i}/800/450`
-      );
-    } else if (type === "logo") {
-      // TODO: generate real logo with Replicate/fal.ai
-      (job as any).outputUrls = Array.from({ length: 4 }, (_, i) =>
-        `https://picsum.photos/seed/${jobId.slice(0, 8)}L${i}/400/400`
-      );
-    } else {
-      job.outputUrl = `https://picsum.photos/seed/${jobId}/800/800`;
+      await db.insert(creativeJobs).values({
+        id: jobId,
+        campaignId,
+        workspaceId,
+        type,
+        status: "completed",
+        inputParams: params as Record<string, unknown>,
+        creditsCharged: cost,
+        completedAt: new Date(),
+      });
+
+      res.status(201).json({ jobId, status: "ready", creditCost: cost, result: text });
+      return;
     }
-  }, delay);
 
-  res.status(201).json({ jobId, status: "generating", creditCost: cost });
+    // ── Async fal.ai jobs ─────────────────────────────────────────────────
+    const modelId = FAL_MODELS[type];
+    if (!modelId) {
+      res.status(400).json({ error: `No fal.ai model for type: ${type}` });
+      return;
+    }
+
+    configureFal();
+    const falInput = buildFalInput(type, params as Record<string, unknown>);
+    const webhookUrl = getWebhookUrl();
+
+    const result = await (fal.queue.submit as (
+      model: string,
+      opts: { input: unknown; webhookUrl: string },
+    ) => Promise<{ request_id: string }>)(modelId, {
+      input: falInput,
+      webhookUrl,
+    });
+
+    await db.insert(creativeJobs).values({
+      id: jobId,
+      campaignId,
+      workspaceId,
+      type,
+      status: "processing",
+      falRequestId: result.request_id,
+      inputParams: falInput as Record<string, unknown>,
+      creditsCharged: cost,
+    });
+
+    logger.info({ jobId, type, falRequestId: result.request_id }, "Job queued");
+    res.status(201).json({ jobId, status: "processing", creditCost: cost });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    logger.error({ err, jobId, type }, "Job creation failed");
+    res.status(500).json({ error: msg });
+  }
 });
 
 /**
  * GET /api/jobs/:id
- * Poll a specific job for completion.
+ * Polls a job for completion status and output.
  */
-router.get("/jobs/:id", requireAuth, (req, res) => {
-  const job = jobs.get(req.params["id"]!);
-  if (!job || job.workspaceSlug !== req.workspaceSlug) {
-    res.status(404).json({ error: "Job not found" });
-    return;
+router.get("/jobs/:id", requireAuth, async (req, res) => {
+  try {
+    const job = await db.query.creativeJobs.findFirst({
+      where: and(
+        eq(creativeJobs.id, req.params["id"]!),
+        eq(creativeJobs.workspaceId, req.workspaceId!),
+      ),
+    });
+
+    if (!job) {
+      res.status(404).json({ error: "Job not found" });
+      return;
+    }
+
+    res.json(job);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "DB error";
+    res.status(500).json({ error: msg });
   }
-  res.json(job);
 });
 
 export default router;
