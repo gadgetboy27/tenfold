@@ -11,14 +11,23 @@ import { generateScript } from '@/lib/claude/script';
 import { recordJobCost } from '@/lib/costs/tracker';
 import { v4 as uuidv4 } from 'uuid';
 
+const STYLE_SUFFIXES: Record<string, string> = {
+  Photorealistic: 'photorealistic, ultra-detailed, sharp focus, professional photography',
+  Illustration:   'digital illustration, artistic, stylized, vibrant colors',
+  Cinematic:      'cinematic, film grain, dramatic lighting, anamorphic lens, widescreen',
+  '3D':           '3D render, CGI, volumetric lighting, octane render, subsurface scattering',
+};
+
 function buildFalInput(type: string, params: Record<string, unknown>, prompt: string) {
   if (type === 'image_generation') {
+    const styleSuffix = STYLE_SUFFIXES[params.style as string] ?? '';
+    const fullPrompt = styleSuffix ? `${prompt}, ${styleSuffix}` : prompt;
     return {
-      prompt,
+      prompt: fullPrompt,
       image_size: (params.imageSize as string) ?? 'square_hd',
       num_images: 6,
       num_inference_steps: 28,
-      guidance_scale: 3.5,
+      guidance_scale: 5,
       enable_safety_checker: true,
       seed: params.seed as number | undefined,
     };
