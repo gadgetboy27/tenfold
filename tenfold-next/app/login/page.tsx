@@ -1,46 +1,29 @@
 'use client';
 
-import { useState } from 'react';
-import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { useState, useTransition } from 'react';
+import { signInWithPassword, sendMagicLink } from './actions';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState<'password' | 'magic'>('password');
   const [error, setError] = useState('');
   const [magicSent, setMagicSent] = useState(false);
-  const [mode, setMode] = useState<'password' | 'magic'>('password');
+  const [isPending, startTransition] = useTransition();
 
-  const supabase = createSupabaseBrowserClient();
-
-  const handlePasswordLogin = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-    } else {
-      window.location.href = '/';
-    }
-  };
+    const formData = new FormData(e.currentTarget);
 
-  const handleMagicLink = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+    startTransition(async () => {
+      if (mode === 'password') {
+        const result = await signInWithPassword(formData);
+        if (result?.error) setError(result.error);
+      } else {
+        const result = await sendMagicLink(formData);
+        if (result?.error) setError(result.error);
+        else if (result?.success) setMagicSent(true);
+      }
     });
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-    } else {
-      setMagicSent(true);
-      setLoading(false);
-    }
   };
 
   return (
@@ -49,7 +32,7 @@ export default function LoginPage() {
         <div className="mb-8 text-center">
           <span className="font-serif font-bold text-3xl text-foreground flex items-center justify-center gap-2">
             Tenfold
-            <span className="w-2 h-2 rounded-full bg-primary mb-0.5 inline-block"></span>
+            <span className="w-2 h-2 rounded-full bg-primary mb-0.5 inline-block" />
           </span>
           <p className="mt-2 text-muted-foreground text-sm">Sign in to your workspace</p>
         </div>
@@ -63,18 +46,26 @@ export default function LoginPage() {
                 </svg>
               </div>
               <h2 className="font-medium text-foreground mb-2">Check your email</h2>
-              <p className="text-sm text-muted-foreground">We sent a magic link to <strong className="text-foreground">{email}</strong></p>
+              <p className="text-sm text-muted-foreground">We sent a magic link to your inbox.</p>
+              <button
+                onClick={() => setMagicSent(false)}
+                className="mt-4 text-xs text-primary hover:underline"
+              >
+                Back to sign in
+              </button>
             </div>
           ) : (
             <>
               <div className="flex gap-2 mb-5 bg-secondary rounded-lg p-1">
                 <button
+                  type="button"
                   onClick={() => setMode('password')}
                   className={`flex-1 py-1.5 text-sm rounded-md transition-colors ${mode === 'password' ? 'bg-card text-foreground font-medium' : 'text-muted-foreground'}`}
                 >
                   Password
                 </button>
                 <button
+                  type="button"
                   onClick={() => setMode('magic')}
                   className={`flex-1 py-1.5 text-sm rounded-md transition-colors ${mode === 'magic' ? 'bg-card text-foreground font-medium' : 'text-muted-foreground'}`}
                 >
@@ -82,14 +73,14 @@ export default function LoginPage() {
                 </button>
               </div>
 
-              <form onSubmit={mode === 'password' ? handlePasswordLogin : handleMagicLink} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="text-xs text-muted-foreground mb-1.5 block">Email</label>
                   <input
                     type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    name="email"
                     required
+                    autoComplete="email"
                     placeholder="you@company.com"
                     className="w-full h-10 bg-background border border-border rounded-lg px-3 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary/60 transition-colors"
                   />
@@ -100,9 +91,9 @@ export default function LoginPage() {
                     <label className="text-xs text-muted-foreground mb-1.5 block">Password</label>
                     <input
                       type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      name="password"
                       required
+                      autoComplete="current-password"
                       placeholder="••••••••"
                       className="w-full h-10 bg-background border border-border rounded-lg px-3 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary/60 transition-colors"
                     />
@@ -117,10 +108,14 @@ export default function LoginPage() {
 
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={isPending}
                   className="w-full h-10 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? 'Please wait...' : mode === 'password' ? 'Sign In' : 'Send Magic Link'}
+                  {isPending
+                    ? 'Please wait…'
+                    : mode === 'password'
+                    ? 'Sign In'
+                    : 'Send Magic Link'}
                 </button>
               </form>
             </>
