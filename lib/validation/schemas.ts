@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 export const createCampaignSchema = z.object({
   prompt: z.string().min(3).max(2000),
+  aspectRatio: z.enum(['1:1', '4:5', '16:9', '9:16']).optional(),
+  style: z.string().max(100).optional(),
   parameters: z
     .object({
       aspectRatio: z.enum(['square_hd', 'portrait_4_3', 'landscape_16_9']).optional(),

@@ -19,7 +19,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       db.select().from(assets).where(eq(assets.campaignId, id)),
     ]);
 
-    return NextResponse.json({ ...campaign, jobs, assets: campaignAssets });
+    // Derive campaign status from job outcomes
+    const allDone = jobs.length > 0 && jobs.every(j => j.status === 'completed');
+    const anyFailed = jobs.every(j => j.status === 'failed');
+    const computedStatus = allDone ? 'ready' : anyFailed ? 'failed' : campaign.status;
+
+    return NextResponse.json({ ...campaign, status: computedStatus, jobs, assets: campaignAssets });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json({ error: msg }, { status: 500 });
