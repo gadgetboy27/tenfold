@@ -2,7 +2,29 @@
 
 ## Overview
 
-pnpm workspace monorepo using TypeScript. The primary user-facing artifact is **Tenfold** — a B2B AI creative platform (Next.js App Router) at `tenfold-next/`. This Replit instance is the **UI layer only** — all business logic and data lives on the Vercel backend.
+pnpm workspace monorepo using TypeScript. The primary user-facing artifact is **Tenfold** — a B2B AI creative platform (Next.js App Router) at `tenfold-next/`. This Replit instance is the **UI layer only** — all business logic and data lives on the Vercel backend at `https://marketyou-mu.vercel.app`.
+
+> **READ THIS FILE FIRST** before starting any work in this repo. It defines the non-negotiable architecture rules below. Violating them (adding a DB, adding business logic, hardcoding the Vercel URL) will be reverted.
+
+## Golden rule — never build a backend here
+
+This repo is **UI + Supabase auth ONLY**. The Vercel backend already exists and owns everything else:
+
+- **Use** the existing Vercel backend via relative `/api/*` calls (proxied by `next.config.ts` rewrites). It handles credits, campaigns, jobs, Stripe, fal.ai, Anthropic, Resend, image composition, social publishing, workspaces, and all DB writes.
+- **Do NOT** add Next.js route handlers for business logic, install Drizzle/postgres/Stripe/fal/Anthropic/Resend/Sharp, create local DB schemas/migrations, or hardcode `VITE_API_URL` in components.
+- **Allowed** Next.js route handlers: only `app/(auth)/callback/route.ts` (Supabase OAuth code exchange). Allowed server actions: only auth flows in `app/login/actions.ts`.
+- If a backend endpoint is missing, **ask for it to be added on Vercel** — do not build a workaround here.
+
+## Backend contract (Vercel endpoints we rely on)
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/workspaces/me` | Returns `{ workspaceId, slug, role }` for the authenticated user |
+| `POST /api/workspaces/provision` | Idempotent — creates workspace if missing, returns `{ workspaceId, slug }` |
+| `GET /api/credits/balance` | Workspace credit balance (also used as workspace-existence guard) |
+| `/api/*` (everything else) | All other product endpoints — campaigns, jobs, generation, publish, etc. |
+
+All endpoints accept `Authorization: Bearer <supabase access token>` and `x-workspace-slug: <slug>` (added automatically by `lib/api.ts`).
 
 ## Run & Operate
 
@@ -42,8 +64,7 @@ pnpm workspace monorepo using TypeScript. The primary user-facing artifact is **
 
 - **No local DB or backend logic**: All business logic (credits, campaigns, jobs, Stripe, AI) lives on the Vercel backend. This repo is pure UI + auth.
 - **API proxy via Next.js rewrites**: All `/api/*` requests go Browser → Next.js server → Vercel backend. Avoids CORS entirely; components use relative `/api/*` URLs.
-- **Workspace discovery on login**: `signInWithPassword` calls `VITE_API_URL/api/workspaces/me` (then `/api/workspaces`) with the user's Bearer token to find their real workspace slug before redirecting. The hardcoded `test-workspace` fallback is explicitly skipped.
-- **OAuth callback is backend-first**: The callback route asks the Vercel backend for the user's workspace; if none exists it attempts to provision one via `POST /api/workspaces`. Slug is then stored in Supabase user metadata for fast password-login lookups.
+- **Workspace resolver (`lib/workspace.ts`)**: shared by the OAuth callback and password sign-in. Order: (1) read `user_metadata.workspace_slug` fast-path, (2) `GET /api/workspaces/me`, (3) `POST /api/workspaces/provision` (idempotent — handles cold-start). Result is written back to user metadata so subsequent logins skip the network. The literal `"test-workspace"` in metadata is treated as invalid.
 - **DashboardClient workspace guard**: On mount, if `/api/credits/balance` returns 403/404, a clear "Workspace not found" screen is shown with a sign-out link — no silent zero-credit state.
 - **PromptBuilder replaces FloatingPromptBar**: Step 1 now uses a structured chip-checklist (Subject / Setting / Mood / Lighting / Composition) that auto-assembles the prompt, with style suffixes baked in.
 
