@@ -2,12 +2,11 @@
 
 ## Overview
 
-pnpm workspace monorepo using TypeScript. The primary user-facing artifact is **Tenfold** — a B2B AI creative platform (Next.js App Router) at `tenfold-next/`. The Replit instance is the **UI layer only** — all API calls are proxied server-side to the deployed Vercel backend.
+pnpm workspace monorepo using TypeScript. The primary user-facing artifact is **Tenfold** — a B2B AI creative platform (Next.js App Router) at `tenfold-next/`. This Replit instance is the **UI layer only** — all business logic and data lives on the Vercel backend.
 
 ## Run & Operate
 
 - `pnpm run typecheck` — full typecheck across all packages
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - Tenfold Next.js app: workflow `artifacts/tenfold: web` (runs on `$PORT`)
 
 ## Stack
@@ -17,8 +16,8 @@ pnpm workspace monorepo using TypeScript. The primary user-facing artifact is **
 - **Package manager**: pnpm
 - **TypeScript version**: 5.9
 - **Frontend**: Next.js 16 (App Router), Tailwind CSS, Zustand, Framer Motion, Radix UI, Supabase SSR
-- **Auth**: Supabase (anon key, sessionStorage-based browser client)
-- **Backend**: Vercel deployment at `VITE_API_URL` — proxied via Next.js rewrites
+- **Auth**: Supabase (browser client uses sessionStorage; server client uses cookies)
+- **Backend**: Vercel deployment at `VITE_API_URL` — proxied via Next.js rewrites. No local DB or business logic.
 
 ## Where things live
 
@@ -26,61 +25,59 @@ pnpm workspace monorepo using TypeScript. The primary user-facing artifact is **
   - `next.config.ts` — rewrites `/api/:path*` → `VITE_API_URL/api/:path*` (server-side proxy, no CORS)
   - `app/(dashboard)/[workspace]/page.tsx` — main dashboard entry (server-side, auth-gated)
   - `app/login/page.tsx` — Supabase auth (password + magic link)
-  - `app/(auth)/callback/route.ts` — Supabase OAuth callback (only route handler in Next.js)
-  - `proxy.ts` — Next.js middleware (CORS + Supabase session refresh + auth guard)
-  - `components/layout/` — DashboardClient, TopBar, LeftRail, RightPanel, StepView, FloatingPromptBar
+  - `app/login/actions.ts` — server actions: sign-in discovers real workspace slug from Vercel backend
+  - `app/(auth)/callback/route.ts` — OAuth callback: gets/provisions workspace via Vercel backend only
+  - `proxy.ts` — Next.js middleware (Supabase session refresh + auth guard)
+  - `components/layout/` — DashboardClient, TopBar, LeftRail, RightPanel, StepView, PromptBuilder
   - `components/steps/` — Step1Create–Step5Publish
   - `components/shared/` — CreditMeter, ImageCard, FormatCard, SkeletonCard, CosmicBackground, JobStatusIndicator
   - `components/ui/` — Radix UI wrappers (Button, Popover, DropdownMenu, etc.)
   - `store/useAppStore.ts` — Zustand global state
-  - `lib/api.ts` — fetch helper with auto Supabase Bearer token + `x-workspace-slug` header (calls relative `/api/*`)
+  - `lib/api.ts` — fetch helper with auto Supabase Bearer token + `x-workspace-slug` header
   - `lib/supabase/client.ts` — browser Supabase client (sessionStorage-based)
   - `lib/supabase/server.ts` — server Supabase client (cookie-based)
-- `artifacts/api-server/` — Express server (present but claims no proxy paths; not used in production)
-- `lib/db/src/schema/index.ts` — shared Drizzle schema (mirrors the Vercel backend's DB)
+  - `lib/supabase/admin.ts` — service-role client (used only in OAuth callback to write user metadata)
 
 ## Architecture decisions
 
-- **API proxy via Next.js rewrites**: All `/api/*` requests go Browser → Next.js server → Vercel backend. This avoids CORS entirely and requires no changes to frontend component code.
-- **Express server idle**: The Express server artifact exists but `paths = []` in its `artifact.toml` so it claims no proxy routes. It can be used for local experiments without affecting production.
-- **Three env vars only**: `VITE_API_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` — already set in Replit. Next.js reads `VITE_API_URL` directly (server-side) via `next.config.ts`.
-- Supabase auth uses `sessionStorage` (not `localStorage`) on the browser client to avoid cross-tab session leakage
-- `lib/api.ts` auto-attaches Bearer token and `x-workspace-slug` header — components never import Supabase directly
-- `allowedDevOrigins` in `next.config.ts` permits Replit's proxied preview iframe (`*.replit.dev`)
-- GitHub remote: `gadgetboy27/tenfold`, branch: `ui` only — never push to `master`
+- **No local DB or backend logic**: All business logic (credits, campaigns, jobs, Stripe, AI) lives on the Vercel backend. This repo is pure UI + auth.
+- **API proxy via Next.js rewrites**: All `/api/*` requests go Browser → Next.js server → Vercel backend. Avoids CORS entirely; components use relative `/api/*` URLs.
+- **Workspace discovery on login**: `signInWithPassword` calls `VITE_API_URL/api/workspaces/me` (then `/api/workspaces`) with the user's Bearer token to find their real workspace slug before redirecting. The hardcoded `test-workspace` fallback is explicitly skipped.
+- **OAuth callback is backend-first**: The callback route asks the Vercel backend for the user's workspace; if none exists it attempts to provision one via `POST /api/workspaces`. Slug is then stored in Supabase user metadata for fast password-login lookups.
+- **DashboardClient workspace guard**: On mount, if `/api/credits/balance` returns 403/404, a clear "Workspace not found" screen is shown with a sign-out link — no silent zero-credit state.
+- **PromptBuilder replaces FloatingPromptBar**: Step 1 now uses a structured chip-checklist (Subject / Setting / Mood / Lighting / Composition) that auto-assembles the prompt, with style suffixes baked in.
 
 ## Required env vars (already set)
 
-| Var | Value |
-|-----|-------|
-| `VITE_API_URL` | `https://marketyou-mu.vercel.app` |
-| `VITE_SUPABASE_URL` | `https://gbccfqpmoteicpumhkuj.supabase.co` |
-| `VITE_SUPABASE_ANON_KEY` | Supabase publishable key |
-| `NEXT_PUBLIC_SUPABASE_URL` | Same as VITE_SUPABASE_URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Same as VITE_SUPABASE_ANON_KEY |
+| Var | Purpose |
+|-----|---------|
+| `VITE_API_URL` | Vercel backend base URL (`https://marketyou-mu.vercel.app`) |
+| `VITE_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `VITE_SUPABASE_ANON_KEY` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service-role key (OAuth callback only, to write user metadata) |
 
 ## Product
 
-5-step AI creative workflow: (1) Generate images from a text prompt, (2) Select an anchor image, (3) Expand into video/music/caption, (4) Compose with branding, (5) Publish to social platforms.
+5-step AI creative workflow: (1) Generate images via structured prompt builder, (2) Select an anchor image, (3) Expand into video/music/caption, (4) Compose with branding, (5) Publish to social platforms.
 
 ## User preferences
 
+- All backend work goes through the Vercel API — no local DB, no Drizzle, no Stripe/fal.ai/Anthropic in this repo
 - Always work on the `ui` branch — never `master`
 - Pages in `app/(dashboard)/[workspace]/`, components in `components/`
-- GitHub push target: `https://github.com/gadgetboy27/tenfold`
+- GitHub push target: `https://github.com/gadgetboy27/tenfold`, branch `ui`
 - No mock/placeholder data — production-ready only
-- Frontend calls relative `/api/*` URLs — do NOT hardcode the Vercel URL in components
+- Frontend calls relative `/api/*` URLs — never hardcode the Vercel URL in components
 
 ## Gotchas
 
 - Next.js 16 uses `proxy.ts` (not `middleware.ts`) — export must be named `proxy`, not `middleware`
-- `VITE_API_URL` is read server-side in `next.config.ts` — it does NOT need a `NEXT_PUBLIC_` prefix since it's only used in the rewrites config (server-side)
-- Lucide-react (newer versions) removed social media icons — use `Globe` as placeholder
-- The `PORT` env var is set by the workflow config; `next dev -p ${PORT:-3000}` reads it correctly
-- Never add Next.js API routes for business logic — the Vercel backend handles all `/api/*` routes
+- `VITE_API_URL` is server-side only in `next.config.ts` — no `NEXT_PUBLIC_` prefix needed
+- Lucide-react newer versions removed social media icons — use `Globe` as placeholder
+- `PORT` is set by the workflow; `next dev -p ${PORT:-3000}` reads it correctly
+- Never add Next.js API routes for business logic — the Vercel backend owns all `/api/*` routes
 
 ## Pointers
 
-- See `.local/skills/pnpm-workspace` for workspace structure and TypeScript setup
 - Tenfold GitHub repo: `gadgetboy27/tenfold`, branch `ui`
 - Vercel backend: `https://marketyou-mu.vercel.app`
