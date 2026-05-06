@@ -11,7 +11,8 @@ export async function GET(req: Request) {
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
+    const stack = err instanceof Error ? err.stack : undefined;
     const status = msg === 'Unauthorized' ? 401 : msg === 'Not a workspace member' ? 404 : 500;
-    return NextResponse.json({ error: msg }, { status });
+    return NextResponse.json({ error: msg, detail: stack }, { status });
   }
 }

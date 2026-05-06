@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { db } from '@/db';
@@ -7,23 +8,28 @@ import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 
 export async function POST(req: Request) {
-  // Verify the caller is authenticated
-  const supabase = await createSupabaseServerClient();
-  const { data: { user }, error } = await supabase.auth.getUser();
+  let userId: string | undefined;
 
-  // Also accept Bearer token (Replit / external frontend)
-  let userId = user?.id;
-  if (!userId) {
-    const authHeader = req.headers.get('authorization');
-    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    if (token) {
-      const admin = createSupabaseAdminClient();
-      const { data } = await admin.auth.getUser(token);
-      userId = data.user?.id;
-    }
+  // Bearer token path (Replit / external frontend) — same anon-key verification
+  // used by getSession(), which is already working for /api/workspaces/me
+  const authHeader = req.headers.get('authorization');
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
+  if (bearerToken) {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    );
+    const { data } = await supabase.auth.getUser(bearerToken);
+    userId = data.user?.id;
+  } else {
+    // Cookie path (Next.js SSR pages)
+    const supabase = await createSupabaseServerClient();
+    const { data } = await supabase.auth.getUser();
+    userId = data.user?.id;
   }
 
-  if (error || !userId) {
+  if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
