@@ -9,23 +9,31 @@ import { api } from '@/lib/api';
 
 type ExpandType = 'video' | 'music' | 'script';
 
-async function createJob(type: string, campaignId: string, params: Record<string, unknown>, workspaceSlug: string) {
-  const res = await api('/api/jobs', {
-    method: 'POST',
-    body: JSON.stringify({ type, campaignId, params }),
-    workspaceSlug,
-  });
-  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as { error?: string }).error ?? `Job failed (${res.status})`); }
-  return res.json() as Promise<{ jobId: string; status: string; creditCost: number; result?: string }>;
-}
+// API job types map 1:1 to the server's JobType enum
+const JOB_TYPE: Record<ExpandType, string> = {
+  video: 'video',
+  music: 'music',
+  script: 'script',
+};
 
 export default function Step3Expand() {
   const [videoDuration, setVideoDuration] = useState<10 | 30 | 60>(10);
   const [videoMood, setVideoMood] = useState('Uplifting');
   const [scriptPlatform, setScriptPlatform] = useState('IG');
   const [scriptTone, setScriptTone] = useState('Pro');
-  const { generatedAssets, selectedAnchorId, updateExpansion, setCreditBalance, creditBalance, currentCampaignId, workspaceSlug } = useAppStore();
+
+  const {
+    generatedAssets, selectedAnchorId, updateExpansion,
+    setCreditBalance, creditBalance, currentCampaignId, workspaceSlug,
+  } = useAppStore();
   const anchor = generatedAssets.find(a => a.id === selectedAnchorId);
+
+  const syncBalance = () => {
+    api('/api/credits/balance', { workspaceSlug })
+      .then(r => r.json())
+      .then((d: { balance?: number }) => { if (typeof d.balance === 'number') setCreditBalance(d.balance); })
+      .catch(() => {});
+  };
 
   const handleGenerate = async (type: ExpandType) => {
     if (!anchor) return;
@@ -34,47 +42,67 @@ export default function Step3Expand() {
     try {
       const campaignId = currentCampaignId ?? 'demo';
 
+      // Build flat body matching the server's expected fields
+      const PLATFORM_MAP: Record<string, string> = { IG: 'instagram', LI: 'linkedin', TikTok: 'tiktok' };
+      const TONE_MAP: Record<string, string> = { Pro: 'professional', Casual: 'casual', Playful: 'playful' };
+
+      const body: Record<string, unknown> = {
+        type: JOB_TYPE[type],
+        campaignId,
+        anchorAssetId: selectedAnchorId,
+      };
+      if (type === 'video')  body.duration = videoDuration;
+      if (type === 'music')  body.mood = videoMood;
       if (type === 'script') {
-        const PLATFORM_MAP: Record<string, string> = { IG: 'instagram', LI: 'linkedin', TikTok: 'tiktok' };
-        const TONE_MAP: Record<string, string> = { Pro: 'professional', Casual: 'casual', Playful: 'playful' };
-        const { creditCost, result } = await createJob('script_generation', campaignId, {
-          imageDescription: anchor.prompt,
-          businessName: 'My Business',
-          platform: PLATFORM_MAP[scriptPlatform] ?? scriptPlatform,
-          tone: TONE_MAP[scriptTone] ?? scriptTone,
-          maxWords: 50,
-        }, workspaceSlug);
-        setCreditBalance(creditBalance - (creditCost ?? 1));
-        updateExpansion('script', { status: 'ready', content: result ?? '' });
-        toast.success('Caption ready');
-        return;
+        body.platform = PLATFORM_MAP[scriptPlatform] ?? scriptPlatform.toLowerCase();
+        body.tone     = TONE_MAP[scriptTone] ?? scriptTone.toLowerCase();
       }
 
-      const jobType = type === 'video' ? `video_${videoDuration}s` : 'music_generation';
-      const jobParams = type === 'video'
-        ? { imageUrl: anchor.url, prompt: anchor.prompt, duration: videoDuration }
-        : { mood: videoMood, prompt: anchor.prompt };
+      const jobRes = await api('/api/jobs', {
+        method: 'POST',
+        body: JSON.stringify(body),
+        workspaceSlug,
+      });
 
-      const { jobId, creditCost } = await createJob(jobType, campaignId, jobParams, workspaceSlug);
+      if (!jobRes.ok) {
+        const e = await jobRes.json().catch(() => ({})) as { error?: string };
+        throw new Error(e.error ?? `Job failed (${jobRes.status})`);
+      }
+
+      const { jobId, creditCost } = await jobRes.json() as { jobId: string; creditCost: number };
       setCreditBalance(creditBalance - (creditCost ?? 0));
 
+      // Poll until ready
       let attempts = 0;
       const poll = async (): Promise<void> => {
         if (attempts++ >= 40) throw new Error('Job timed out');
         await new Promise(r => setTimeout(r, 1500));
+
         const res = await api(`/api/jobs/${jobId}`, { workspaceSlug });
         if (!res.ok) throw new Error('Status check failed');
-        const job = await res.json() as { status: string; outputUrl?: string; outputUrls?: string[] };
+
+        const job = await res.json() as {
+          status: string;
+          outputUrl?: string;
+          outputText?: string;
+        };
+
         if (job.status === 'ready') {
-          updateExpansion(type, { status: 'ready', url: job.outputUrl ?? job.outputUrls?.[0] });
-          toast.success(`${type === 'video' ? 'Video' : 'Music'} ready`);
-          api('/api/credits/balance', { workspaceSlug }).then(r => r.json()).then((d: { balance?: number }) => { if (typeof d.balance === 'number') setCreditBalance(d.balance); }).catch(() => {});
+          // Script returns outputText; video/music return outputUrl
+          updateExpansion(type, {
+            status: 'ready',
+            url: job.outputUrl,
+            content: job.outputText,
+          });
+          toast.success(`${type === 'video' ? 'Video' : type === 'music' ? 'Music' : 'Caption'} ready`);
+          syncBalance();
         } else if (job.status === 'failed') {
           throw new Error('Generation failed');
         } else {
           return poll();
         }
       };
+
       await poll();
     } catch (err: unknown) {
       updateExpansion(type, { status: 'failed' });
@@ -83,24 +111,26 @@ export default function Step3Expand() {
   };
 
   if (!anchor) return (
-    <div className="h-full flex items-center justify-center text-muted-foreground">
-      No anchor selected. Go back to step 2.
+    <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
+      No anchor selected — go back to step 2.
     </div>
   );
 
   return (
     <div className="h-full overflow-y-auto p-8">
       <div className="max-w-5xl mx-auto flex gap-8">
+        {/* Anchor thumbnail */}
         <div className="w-56 shrink-0 space-y-4">
           <h2 className="font-serif text-xl font-bold text-foreground">Your anchor</h2>
           <div className="aspect-square rounded-xl overflow-hidden border border-border shadow-lg">
             <img src={anchor.url} alt="Anchor" className="w-full h-full object-cover" />
           </div>
           <p className="text-sm text-muted-foreground bg-secondary/50 p-3 rounded-lg border border-border/50 italic">
-            &ldquo;{anchor.prompt.substring(0, 80)}{anchor.prompt.length > 80 ? '...' : ''}&rdquo;
+            &ldquo;{anchor.prompt.substring(0, 80)}{anchor.prompt.length > 80 ? '…' : ''}&rdquo;
           </p>
         </div>
 
+        {/* Format cards */}
         <div className="flex-1 grid grid-cols-3 gap-4 content-start">
           <FormatCard type="video" title="Video" subtitle="10–60s cinematic clip" cost="15–80 cr" icon={Film} onGenerate={() => handleGenerate('video')}>
             <div className="flex gap-2">
