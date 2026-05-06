@@ -31,5 +31,6 @@ export async function api(path: string, options: ApiOptions = {}): Promise<Respo
   if (token) headers['Authorization'] = `Bearer ${token}`;
   if (workspaceSlug) headers['x-workspace-slug'] = workspaceSlug;
 
-  return fetch(path, { ...fetchOptions, headers });
+  const base = process.env.NEXT_PUBLIC_API_URL ?? '';
+  return fetch(`${base}${path}`, { ...fetchOptions, headers });
 }
