@@ -20,3 +20,18 @@ run = "cd /home/runner/workspace/tenfold-next && npm run dev"
 [services.env]
 PORT = "18928"
 BASE_PATH = "/"
+
+[services.production]
+
+[services.production.build]
+args = ["npm", "--prefix", "tenfold-next", "run", "build"]
+
+[services.production.build.env]
+NODE_ENV = "production"
+
+[services.production.run]
+args = ["npm", "--prefix", "tenfold-next", "run", "start"]
+
+[services.production.run.env]
+PORT = "18928"
+NODE_ENV = "production"
