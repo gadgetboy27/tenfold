@@ -7,7 +7,6 @@ import { api } from '@/lib/api';
 import TopBar from './TopBar';
 import LeftRail from './LeftRail';
 import RightPanel from './RightPanel';
-import FloatingPromptBar from './FloatingPromptBar';
 import StepView from './StepView';
 
 interface Props {
@@ -38,7 +37,6 @@ export default function DashboardClient({ workspaceSlug, user }: Props) {
         <LeftRail />
         <main className="flex-1 relative overflow-hidden">
           <StepView />
-          <FloatingPromptBar />
         </main>
         <RightPanel />
       </div>
