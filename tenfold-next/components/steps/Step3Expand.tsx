@@ -9,12 +9,36 @@ import { api } from '@/lib/api';
 
 type ExpandType = 'video' | 'music' | 'script';
 
-// API job types map 1:1 to the server's JobType enum
 const JOB_TYPE: Record<ExpandType, string> = {
   video: 'video',
   music: 'music',
   script: 'script',
 };
+
+// Normalise the job response — backends vary on field naming (camelCase vs snake_case)
+function extractUrl(job: Record<string, unknown>): string | undefined {
+  return (
+    (job.outputUrl as string | undefined) ||
+    (job.output_url as string | undefined) ||
+    (job.url as string | undefined) ||
+    (job.videoUrl as string | undefined) ||
+    (job.audioUrl as string | undefined) ||
+    (job.mediaUrl as string | undefined) ||
+    undefined
+  );
+}
+
+function extractText(job: Record<string, unknown>): string | undefined {
+  return (
+    (job.outputText as string | undefined) ||
+    (job.output_text as string | undefined) ||
+    (job.text as string | undefined) ||
+    (job.caption as string | undefined) ||
+    (job.script as string | undefined) ||
+    (job.content as string | undefined) ||
+    undefined
+  );
+}
 
 export default function Step3Expand() {
   const [videoDuration, setVideoDuration] = useState<10 | 30 | 60>(10);
@@ -42,7 +66,6 @@ export default function Step3Expand() {
     try {
       const campaignId = currentCampaignId ?? 'demo';
 
-      // Build flat body matching the server's expected fields
       const PLATFORM_MAP: Record<string, string> = { IG: 'instagram', LI: 'linkedin', TikTok: 'tiktok' };
       const TONE_MAP: Record<string, string> = { Pro: 'professional', Casual: 'casual', Playful: 'playful' };
 
@@ -69,35 +92,42 @@ export default function Step3Expand() {
         throw new Error(e.error ?? `Job failed (${jobRes.status})`);
       }
 
-      const { jobId, creditCost } = await jobRes.json() as { jobId: string; creditCost: number };
-      setCreditBalance(creditBalance - (creditCost ?? 0));
+      const jobData = await jobRes.json() as { jobId?: string; job_id?: string; id?: string; creditCost?: number; credit_cost?: number };
+      const jobId = jobData.jobId ?? jobData.job_id ?? jobData.id;
+      if (!jobId) throw new Error('No job ID returned from server');
 
-      // Poll until ready
+      const creditCost = jobData.creditCost ?? jobData.credit_cost ?? 0;
+      setCreditBalance(creditBalance - creditCost);
+
       let attempts = 0;
       const poll = async (): Promise<void> => {
-        if (attempts++ >= 40) throw new Error('Job timed out');
-        await new Promise(r => setTimeout(r, 1500));
+        if (attempts++ >= 40) throw new Error('Job timed out — the server may still be processing. Check back later.');
+        await new Promise(r => setTimeout(r, 2000));
 
         const res = await api(`/api/jobs/${jobId}`, { workspaceSlug });
         if (!res.ok) throw new Error('Status check failed');
 
-        const job = await res.json() as {
-          status: string;
-          outputUrl?: string;
-          outputText?: string;
-        };
+        const job = await res.json() as Record<string, unknown>;
+        const jobStatus = (job.status as string) ?? '';
 
-        if (job.status === 'ready') {
-          // Script returns outputText; video/music return outputUrl
+        if (jobStatus === 'ready' || jobStatus === 'completed' || jobStatus === 'done') {
+          const outputUrl = extractUrl(job);
+          const outputText = extractText(job);
+
           updateExpansion(type, {
             status: 'ready',
-            url: job.outputUrl,
-            content: job.outputText,
+            url: outputUrl,
+            content: outputText,
           });
-          toast.success(`${type === 'video' ? 'Video' : type === 'music' ? 'Music' : 'Caption'} ready`);
+
+          if (!outputUrl && !outputText) {
+            toast.success(`${title(type)} generated — but no output URL was returned. Try regenerating.`);
+          } else {
+            toast.success(`${title(type)} ready!`);
+          }
           syncBalance();
-        } else if (job.status === 'failed') {
-          throw new Error('Generation failed');
+        } else if (jobStatus === 'failed' || jobStatus === 'error') {
+          throw new Error('Generation failed on the server');
         } else {
           return poll();
         }
@@ -109,6 +139,10 @@ export default function Step3Expand() {
       toast.error((err as Error).message ?? 'Generation failed');
     }
   };
+
+  function title(type: ExpandType) {
+    return type === 'video' ? 'Video' : type === 'music' ? 'Music' : 'Caption';
+  }
 
   if (!anchor) return (
     <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
