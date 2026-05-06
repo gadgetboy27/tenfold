@@ -34,6 +34,9 @@ interface AppStore {
   isGenerating: boolean;
   aspectRatio: string;
   style: string;
+  numInferenceSteps: number;
+  guidanceScale: number;
+  seed: number | null;
 
   setStep: (step: 1 | 2 | 3 | 4 | 5) => void;
   setCampaignId: (id: string) => void;
@@ -47,6 +50,9 @@ interface AppStore {
   setIsGenerating: (v: boolean) => void;
   setAspectRatio: (r: string) => void;
   setStyle: (s: string) => void;
+  setNumInferenceSteps: (n: number) => void;
+  setGuidanceScale: (n: number) => void;
+  setSeed: (n: number | null) => void;
   completeStep: (step: number) => void;
   resetCampaign: () => void;
 }
@@ -65,6 +71,9 @@ export const useAppStore = create<AppStore>()((set) => ({
   isGenerating: false,
   aspectRatio: '1:1',
   style: 'Photorealistic',
+  numInferenceSteps: 28,
+  guidanceScale: 3.5,
+  seed: null,
 
   setStep: (step) => set({ currentStep: step }),
   setCampaignId: (id) => set({ currentCampaignId: id }),
@@ -79,6 +88,9 @@ export const useAppStore = create<AppStore>()((set) => ({
   setIsGenerating: (v) => set({ isGenerating: v }),
   setAspectRatio: (r) => set({ aspectRatio: r }),
   setStyle: (s) => set({ style: s }),
+  setNumInferenceSteps: (n) => set({ numInferenceSteps: n }),
+  setGuidanceScale: (n) => set({ guidanceScale: n }),
+  setSeed: (n) => set({ seed: n }),
   completeStep: (step) =>
     set((state) => {
       const next = new Set(state.completedSteps);

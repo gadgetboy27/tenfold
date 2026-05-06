@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '@/store/useAppStore';
-import { Sparkles } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Sparkles, SlidersHorizontal, RefreshCw } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
 
@@ -37,14 +37,47 @@ function analyzePrompt(prompt: string) {
   return { score };
 }
 
+function SliderRow({ label, value, min, max, step, onChange, display }: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (n: number) => void;
+  display: string;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-[10px] font-mono text-[#555] uppercase tracking-wider w-16 shrink-0">{label}</span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={e => onChange(Number(e.target.value))}
+        className="flex-1 h-1 appearance-none rounded-full cursor-pointer"
+        style={{
+          background: `linear-gradient(to right, #7C5CFC ${((value - min) / (max - min)) * 100}%, #2a2a2a ${((value - min) / (max - min)) * 100}%)`,
+          accentColor: '#7C5CFC',
+        }}
+      />
+      <span className="text-[10px] font-mono text-[#7C5CFC] w-8 text-right shrink-0">{display}</span>
+    </div>
+  );
+}
+
 export default function FloatingPromptBar() {
   const [prompt, setPrompt] = useState('');
   const [score, setScore] = useState<number | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const {
-    creditBalance, setCreditBalance, setIsGenerating, setGeneratedAssets,
+    setCreditBalance, setIsGenerating, setGeneratedAssets,
     isGenerating, aspectRatio, style, setAspectRatio, setStyle,
+    numInferenceSteps, guidanceScale, seed,
+    setNumInferenceSteps, setGuidanceScale, setSeed,
     setStep, completeStep, setCampaignId, workspaceSlug, currentStep,
   } = useAppStore();
 
@@ -71,10 +104,16 @@ export default function FloatingPromptBar() {
     setIsGenerating(true);
 
     try {
-      // POST /api/campaigns — creates campaign AND kicks off image generation (costs 18 cr server-side)
       const campRes = await api('/api/campaigns', {
         method: 'POST',
-        body: JSON.stringify({ prompt, aspectRatio, style }),
+        body: JSON.stringify({
+          prompt,
+          aspectRatio,
+          style,
+          numInferenceSteps,
+          guidanceScale,
+          ...(seed !== null ? { seed } : {}),
+        }),
         workspaceSlug,
       });
 
@@ -87,13 +126,11 @@ export default function FloatingPromptBar() {
       const campaignId = camp.campaignId;
       setCampaignId(campaignId);
 
-      // Sync credit balance after the server deducts 18 cr
       api('/api/credits/balance', { workspaceSlug })
         .then(r => r.json())
         .then((d: { balance?: number }) => { if (typeof d.balance === 'number') setCreditBalance(d.balance); })
         .catch(() => {});
 
-      // Poll GET /api/campaigns/:id until status === 'ready'
       let attempts = 0;
       const poll = async (): Promise<void> => {
         if (attempts++ >= 60) throw new Error('Generation timed out — please try again');
@@ -124,7 +161,6 @@ export default function FloatingPromptBar() {
           setStep(2);
           toast.success('6 images ready — pick your anchor');
 
-          // Final balance sync
           api('/api/credits/balance', { workspaceSlug })
             .then(r => r.json())
             .then((d: { balance?: number }) => { if (typeof d.balance === 'number') setCreditBalance(d.balance); })
@@ -164,7 +200,7 @@ export default function FloatingPromptBar() {
           transition: 'box-shadow 0.4s ease',
         }}
       >
-        {/* Aspect ratio + style toolbar */}
+        {/* Aspect ratio + style + advanced toggle toolbar */}
         <div className="flex items-center gap-2 px-4 pt-3 pb-2 border-b border-white/[0.06]">
           <span className="text-xs text-[#444] font-mono uppercase tracking-wider mr-1">Ratio</span>
           {ASPECT_RATIOS.map(r => (
@@ -179,13 +215,78 @@ export default function FloatingPromptBar() {
               className={`px-2.5 py-1 rounded-md text-xs transition-all ${style === s ? 'bg-[#7C5CFC]/20 text-[#7C5CFC] border border-[#7C5CFC]/40' : 'text-[#888] hover:text-[#F0F0F0] border border-transparent'}`}
               data-testid={`button-style-${s}`}>{s}</button>
           ))}
-          {score !== null && (
-            <div className="ml-auto flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full" style={{ background: isStrong ? '#22C55E' : isFair ? '#F59E0B' : '#EF4444' }} />
-              <span className="text-[10px] font-mono" style={{ color: isStrong ? '#22C55E' : isFair ? '#F59E0B' : '#EF4444' }}>{score}/100</span>
-            </div>
-          )}
+          <div className="ml-auto flex items-center gap-2">
+            {score !== null && (
+              <div className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full" style={{ background: isStrong ? '#22C55E' : isFair ? '#F59E0B' : '#EF4444' }} />
+                <span className="text-[10px] font-mono" style={{ color: isStrong ? '#22C55E' : isFair ? '#F59E0B' : '#EF4444' }}>{score}/100</span>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(v => !v)}
+              data-testid="button-advanced"
+              title="Advanced settings"
+              className={`p-1.5 rounded-md transition-all ${showAdvanced ? 'text-[#7C5CFC] bg-[#7C5CFC]/10' : 'text-[#555] hover:text-[#888]'}`}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
+
+        {/* Advanced controls */}
+        <AnimatePresence initial={false}>
+          {showAdvanced && (
+            <motion.div
+              key="advanced"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className="overflow-hidden"
+            >
+              <div className="px-4 pt-3 pb-2 border-b border-white/[0.06] flex flex-col gap-3">
+                <SliderRow
+                  label="Steps"
+                  value={numInferenceSteps}
+                  min={10}
+                  max={50}
+                  step={1}
+                  onChange={setNumInferenceSteps}
+                  display={String(numInferenceSteps)}
+                />
+                <SliderRow
+                  label="Guidance"
+                  value={guidanceScale}
+                  min={1}
+                  max={10}
+                  step={0.5}
+                  onChange={setGuidanceScale}
+                  display={guidanceScale.toFixed(1)}
+                />
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] font-mono text-[#555] uppercase tracking-wider w-16 shrink-0">Seed</span>
+                  <input
+                    type="number"
+                    placeholder="random"
+                    value={seed ?? ''}
+                    onChange={e => setSeed(e.target.value === '' ? null : Number(e.target.value))}
+                    className="flex-1 bg-white/5 border border-white/10 rounded-md px-2.5 py-1 text-[11px] font-mono text-[#ccc] placeholder-[#444] outline-none focus:border-[#7C5CFC]/50 transition-colors"
+                    data-testid="input-seed"
+                  />
+                  <button
+                    type="button"
+                    title="Randomise seed"
+                    onClick={() => setSeed(Math.floor(Math.random() * 2_147_483_647))}
+                    className="p-1.5 rounded-md text-[#555] hover:text-[#888] transition-colors shrink-0"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Prompt input */}
         <div className="flex items-center gap-3 px-4 py-3">
