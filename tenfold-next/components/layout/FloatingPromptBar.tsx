@@ -13,7 +13,26 @@ const ASPECT_RATIOS = [
   { label: '16:9', value: '16:9' },
   { label: '9:16', value: '9:16' },
 ];
+
 const STYLES = ['Photorealistic', 'Illustration', 'Cinematic', '3D'];
+
+const STYLE_SUFFIXES: Record<string, string> = {
+  Photorealistic:
+    'photorealistic, ultra-detailed, 8k resolution, sharp focus, professional photography, natural lighting, lifelike textures',
+  Illustration:
+    'digital illustration, highly detailed artwork, vibrant colors, professional illustration, clean lines, artstation quality',
+  Cinematic:
+    'cinematic, dramatic lighting, film grain, anamorphic lens, color graded, shallow depth of field, movie still, widescreen',
+  '3D':
+    '3D render, octane render, physically based rendering, studio lighting, 8k, subsurface scattering, hyperrealistic materials',
+};
+
+function buildEnrichedPrompt(userPrompt: string, style: string): string {
+  const suffix = STYLE_SUFFIXES[style];
+  if (!suffix) return userPrompt;
+  const trimmed = userPrompt.trim().replace(/,?\s*$/, '');
+  return `${trimmed}, ${suffix}`;
+}
 
 function analyzePrompt(prompt: string) {
   const text = prompt.toLowerCase();
@@ -21,10 +40,10 @@ function analyzePrompt(prompt: string) {
   if (wordCount < 3) return null;
 
   const hasSubject  = ['person','woman','man','founder','ceo','team','product','brand','professional'].some(w => text.includes(w)) || wordCount >= 8;
-  const hasSetting  = ['office','outdoor','studio','conference','city','room','street','urban','rooftop'].some(w => text.includes(w));
+  const hasSetting  = ['office','outdoor','studio','conference','city','room','street','urban','rooftop','waterfall','mountain','forest','beach','landscape'].some(w => text.includes(w));
   const hasStyle    = ['cinematic','professional','editorial','minimal','bold','warm','dark','bright','moody','photorealistic'].some(w => text.includes(w));
-  const hasMood     = ['inspiring','exciting','calm','energetic','confident','aspirational','premium','dynamic','powerful'].some(w => text.includes(w));
-  const hasLighting = ['golden hour','backlit','rim light','soft light','studio lighting','natural light','neon','sunset','spotlight'].some(w => text.includes(w));
+  const hasMood     = ['inspiring','exciting','calm','energetic','confident','aspirational','premium','dynamic','powerful','serene','majestic','dramatic'].some(w => text.includes(w));
+  const hasLighting = ['golden hour','backlit','rim light','soft light','studio lighting','natural light','neon','sunset','spotlight','snow','mist','fog'].some(w => text.includes(w));
 
   const score = Math.min(100, Math.round(
     (hasSubject ? 90 : wordCount >= 5 ? 30 : 0) * 0.28 +
@@ -97,6 +116,11 @@ export default function FloatingPromptBar() {
   const isStrong = (score ?? 0) >= 70;
   const isFair   = (score ?? 0) >= 45;
 
+  const enrichedPrompt = prompt.trim() ? buildEnrichedPrompt(prompt, style) : '';
+  const enrichedPreview = enrichedPrompt.length > 80
+    ? enrichedPrompt.slice(0, 80) + '…'
+    : enrichedPrompt;
+
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt.trim() || isGenerating) return;
@@ -107,7 +131,7 @@ export default function FloatingPromptBar() {
       const campRes = await api('/api/campaigns', {
         method: 'POST',
         body: JSON.stringify({
-          prompt,
+          prompt: enrichedPrompt,
           aspectRatio,
           style,
           numInferenceSteps,
@@ -289,11 +313,11 @@ export default function FloatingPromptBar() {
         </AnimatePresence>
 
         {/* Prompt input */}
-        <div className="flex items-center gap-3 px-4 py-3">
+        <div className="flex items-center gap-3 px-4 pt-3 pb-2">
           <input
             value={prompt}
             onChange={e => setPrompt(e.target.value)}
-            placeholder="A confident founder presenting at a tech conference, golden hour lighting, professional, aspirational..."
+            placeholder="Waterfalls with a snow-filled backdrop, mist rising, golden hour..."
             className="flex-1 bg-transparent text-[#F0F0F0] placeholder-[#444] text-sm outline-none"
             data-testid="input-prompt"
           />
@@ -311,6 +335,25 @@ export default function FloatingPromptBar() {
             {isGenerating ? 'Generating...' : 'Generate · 18 cr'}
           </button>
         </div>
+
+        {/* Enriched prompt preview */}
+        <AnimatePresence initial={false}>
+          {prompt.trim().length > 0 && (
+            <motion.div
+              key="preview"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.15 }}
+              className="overflow-hidden"
+            >
+              <div className="px-4 pb-3 flex items-start gap-1.5">
+                <span className="text-[10px] font-mono text-[#3a3a3a] uppercase tracking-wider shrink-0 mt-px">Sending →</span>
+                <span className="text-[10px] font-mono text-[#3a3a3a] leading-relaxed line-clamp-2">{enrichedPreview}</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </form>
     </motion.div>
   );
