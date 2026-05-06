@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { db } from '@/db';
-import { workspaces, workspaceMembers, creditAccounts } from '@/db/schema';
+import { workspaces, workspaceMembers, creditAccounts, creditTransactions } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -64,12 +65,20 @@ export async function GET(request: NextRequest) {
     });
     await tx.insert(creditAccounts).values({
       workspaceId,
-      cachedBalance: 0,
+      cachedBalance: 50,
+    });
+    await tx.insert(creditTransactions).values({
+      workspaceId,
+      type: 'grant',
+      amount: 50,
+      balanceAfter: 50,
+      description: 'Welcome credits',
     });
   });
 
-  // Store workspace slug in user metadata so the frontend can read it without an extra API call
-  await supabase.auth.admin.updateUserById(user.id, {
+  // Store workspace slug in user metadata — requires service role key
+  const adminClient = createSupabaseAdminClient();
+  await adminClient.auth.admin.updateUserById(user.id, {
     user_metadata: { workspace_slug: slug },
   });
 
