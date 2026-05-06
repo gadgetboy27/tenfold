@@ -2,45 +2,8 @@
 
 import { redirect } from 'next/navigation';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-
-const API_URL = process.env.VITE_API_URL ?? '';
-
-/** Try to discover the user's real workspace slug from the Vercel backend. */
-async function fetchWorkspaceSlugFromBackend(token: string): Promise<string | null> {
-  const headers = {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json',
-  };
-
-  // Try /api/workspaces/me (single workspace for the authed user)
-  try {
-    const res = await fetch(`${API_URL}/api/workspaces/me`, { headers });
-    if (res.ok) {
-      const json = await res.json() as Record<string, unknown>;
-      const slug =
-        (json.slug as string | undefined) ??
-        ((json.workspace as Record<string, unknown> | undefined)?.slug as string | undefined);
-      if (slug) return slug;
-    }
-  } catch { /* continue */ }
-
-  // Try /api/workspaces (list)
-  try {
-    const res = await fetch(`${API_URL}/api/workspaces`, { headers });
-    if (res.ok) {
-      const json = await res.json() as unknown;
-      const arr = Array.isArray(json)
-        ? json
-        : (json as Record<string, unknown>).workspaces;
-      if (Array.isArray(arr) && arr.length > 0) {
-        const slug = (arr[0] as Record<string, unknown>).slug as string | undefined;
-        if (slug) return slug;
-      }
-    }
-  } catch { /* continue */ }
-
-  return null;
-}
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { resolveWorkspaceSlug } from '@/lib/workspace';
 
 export async function signInWithPassword(formData: FormData) {
   const email = formData.get('email') as string;
@@ -58,26 +21,30 @@ export async function signInWithPassword(formData: FormData) {
   }
 
   const token = data.session?.access_token;
-
-  // 1. Ask the Vercel backend for the user's real workspace slug
-  if (token) {
-    const backendSlug = await fetchWorkspaceSlugFromBackend(token);
-    if (backendSlug) {
-      redirect(`/${backendSlug}`);
-    }
+  if (!token || !data.user) {
+    return { error: 'Sign-in succeeded but no session was returned' };
   }
 
-  // 2. Fall back to workspace_slug stored in Supabase user metadata
-  const metaSlug =
-    (data.user?.user_metadata?.workspace_slug as string | undefined) ??
-    (data.user?.user_metadata?.workspaceSlug as string | undefined);
+  // Resolve workspace using the same flow as the OAuth callback:
+  // metadata → backend discovery → backend provisioning
+  const slug = await resolveWorkspaceSlug(data.user, token);
 
-  if (metaSlug && metaSlug !== 'test-workspace') {
-    redirect(`/${metaSlug}`);
+  if (!slug) {
+    return { error: 'Your account has no workspace yet and we could not provision one. Please contact support.' };
   }
 
-  // 3. Last resort: user ID (always valid as a stable identifier)
-  redirect(`/${data.user.id}`);
+  // Sync resolved slug back to metadata if it changed (e.g. cold-start provisioning)
+  const currentMeta = data.user.user_metadata?.workspace_slug as string | undefined;
+  if (currentMeta !== slug) {
+    try {
+      const admin = createSupabaseAdminClient();
+      await admin.auth.admin.updateUserById(data.user.id, {
+        user_metadata: { workspace_slug: slug },
+      });
+    } catch { /* non-fatal */ }
+  }
+
+  redirect(`/${slug}`);
 }
 
 export async function sendMagicLink(formData: FormData) {
