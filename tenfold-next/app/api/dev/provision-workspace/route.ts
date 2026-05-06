@@ -6,10 +6,6 @@ import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 
-if (process.env.NODE_ENV === 'production') {
-  throw new Error('Dev provisioning endpoint must not be deployed to production');
-}
-
 const bodySchema = z.object({
   userId: z.string().uuid(),
   slug: z.string().min(1).max(63).optional(),

@@ -1,4 +1,4 @@
-import { stripe } from './client';
+import { getStripe } from './client';
 import { db } from '@/db';
 import { subscriptions, workspaces } from '@/db/schema';
 import { eq } from 'drizzle-orm';
@@ -14,7 +14,7 @@ export async function getOrCreateStripeCustomer(workspaceId: string): Promise<st
     where: eq(workspaces.id, workspaceId),
   });
 
-  const customer = await stripe.customers.create({
+  const customer = await getStripe().customers.create({
     name: workspace?.name,
     metadata: { workspaceId },
   });

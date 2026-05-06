@@ -1,5 +1,8 @@
 import { fal } from '@fal-ai/client';
 
-fal.config({ credentials: process.env.FAL_API_KEY });
-
-export { fal };
+export function getConfiguredFal() {
+  const key = process.env.FAL_API_KEY;
+  if (!key) throw new Error('FAL_API_KEY is not configured');
+  fal.config({ credentials: key });
+  return fal;
+}

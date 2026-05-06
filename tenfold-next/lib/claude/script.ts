@@ -1,6 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk';
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+function getAnthropic(): Anthropic {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) throw new Error('ANTHROPIC_API_KEY is not configured');
+  return new Anthropic({ apiKey: key });
+}
 
 // claude-sonnet-4-6 pricing per 1M tokens (USD)
 const INPUT_COST_PER_M = 3.0;
@@ -22,6 +26,7 @@ export interface ScriptResult {
 }
 
 export async function generateScript(params: GenerateScriptParams): Promise<ScriptResult> {
+  const anthropic = getAnthropic();
   const message = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 512,

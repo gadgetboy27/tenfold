@@ -1,11 +1,11 @@
 import Stripe from 'stripe';
-import { stripe } from './client';
+import { getStripe } from './client';
 import { db } from '@/db';
 import { creditAccounts, creditTransactions, subscriptions } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 
 export function verifyStripeWebhook(body: string, signature: string): Stripe.Event {
-  return stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET!);
+  return getStripe().webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET!);
 }
 
 // These are evaluated at call time so env vars are always populated
@@ -101,7 +101,7 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
       const stripeSubId = sub.stripeSubscriptionId;
       if (!stripeSubId) break;
 
-      const invoiceSub = await stripe.subscriptions.retrieve(stripeSubId);
+      const invoiceSub = await getStripe().subscriptions.retrieve(stripeSubId);
       const priceId = invoiceSub.items.data[0]?.price?.id;
       if (!priceId) break;
 

@@ -1,4 +1,4 @@
-import { fal } from './client';
+import { getConfiguredFal } from './client';
 import { FAL_MODELS, type FalModelKey } from './models';
 
 export async function enqueueJob(
@@ -7,7 +7,7 @@ export async function enqueueJob(
   webhookUrl: string,
 ): Promise<{ requestId: string }> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const result = await (fal.queue.submit as (endpointId: string, opts: { input: unknown; webhookUrl: string }) => Promise<{ request_id: string }>)(
+  const result = await (getConfiguredFal().queue.submit as (endpointId: string, opts: { input: unknown; webhookUrl: string }) => Promise<{ request_id: string }>)(
     FAL_MODELS[modelKey],
     { input, webhookUrl },
   );
