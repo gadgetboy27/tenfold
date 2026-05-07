@@ -2,16 +2,11 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { db } from '@/db';
-import { workspaces, workspaceMembers, creditAccounts, creditTransactions } from '@/db/schema';
-import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 
 export async function POST(req: Request) {
   let userId: string | undefined;
 
-  // Bearer token path (Replit / external frontend) — same anon-key verification
-  // used by getSession(), which is already working for /api/workspaces/me
   const authHeader = req.headers.get('authorization');
   const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
@@ -23,7 +18,6 @@ export async function POST(req: Request) {
     const { data } = await supabase.auth.getUser(bearerToken);
     userId = data.user?.id;
   } else {
-    // Cookie path (Next.js SSR pages)
     const supabase = await createSupabaseServerClient();
     const { data } = await supabase.auth.getUser();
     userId = data.user?.id;
@@ -33,24 +27,25 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Already provisioned — return existing workspace
-  const existingMember = await db.query.workspaceMembers.findFirst({
-    where: eq(workspaceMembers.userId, userId),
-  });
+  const admin = createSupabaseAdminClient();
 
-  if (existingMember) {
-    const existing = await db.query.workspaces.findFirst({
-      where: eq(workspaces.id, existingMember.workspaceId),
-    });
+  // Already provisioned — return existing workspace (idempotent)
+  const { data: existingRows } = await admin
+    .from('workspace_members')
+    .select('workspace_id, workspaces!inner(id, slug)')
+    .eq('user_id', userId)
+    .limit(1);
+
+  if (existingRows?.length) {
+    const row = existingRows[0] as { workspace_id: string; workspaces: { id: string; slug: string } };
     return NextResponse.json({
-      workspaceId: existingMember.workspaceId,
-      slug: existing?.slug,
+      workspaceId: row.workspace_id,
+      slug: row.workspaces.slug,
       alreadyProvisioned: true,
     });
   }
 
   // Resolve display name from Supabase Auth
-  const admin = createSupabaseAdminClient();
   const { data: userData } = await admin.auth.admin.getUserById(userId);
   const authUser = userData?.user;
   const email = authUser?.email ?? '';
@@ -71,20 +66,34 @@ export async function POST(req: Request) {
 
   const WELCOME_CREDITS = 50;
 
-  await db.transaction(async (tx) => {
-    await tx.insert(workspaces).values({ id: workspaceId, name: baseName, slug, ownerId: userId! });
-    await tx.insert(workspaceMembers).values({ workspaceId, userId: userId!, role: 'owner' });
-    await tx.insert(creditAccounts).values({ workspaceId, cachedBalance: WELCOME_CREDITS });
-    await tx.insert(creditTransactions).values({
-      workspaceId,
+  // Sequential inserts via admin client (service role bypasses RLS)
+  const { error: wsErr } = await admin
+    .from('workspaces')
+    .insert({ id: workspaceId, name: baseName, slug, owner_id: userId });
+  if (wsErr) return NextResponse.json({ error: `workspace: ${wsErr.message}` }, { status: 500 });
+
+  const { error: memErr } = await admin
+    .from('workspace_members')
+    .insert({ workspace_id: workspaceId, user_id: userId, role: 'owner' });
+  if (memErr) return NextResponse.json({ error: `member: ${memErr.message}` }, { status: 500 });
+
+  const { error: acctErr } = await admin
+    .from('credit_accounts')
+    .insert({ workspace_id: workspaceId, cached_balance: WELCOME_CREDITS });
+  if (acctErr) return NextResponse.json({ error: `credits: ${acctErr.message}` }, { status: 500 });
+
+  const { error: txErr } = await admin
+    .from('credit_transactions')
+    .insert({
+      workspace_id: workspaceId,
       type: 'grant',
       amount: WELCOME_CREDITS,
-      balanceAfter: WELCOME_CREDITS,
+      balance_after: WELCOME_CREDITS,
       description: 'Welcome credits',
     });
-  });
+  if (txErr) return NextResponse.json({ error: `tx: ${txErr.message}` }, { status: 500 });
 
-  // Cache slug in user metadata so next login skips this endpoint entirely
+  // Cache slug in user metadata so next login skips this endpoint
   await admin.auth.admin.updateUserById(userId, {
     user_metadata: { workspace_slug: slug },
   });

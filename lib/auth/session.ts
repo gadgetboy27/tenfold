@@ -1,8 +1,6 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createClient } from '@supabase/supabase-js';
-import { db } from '@/db';
-import { workspaceMembers, workspaces } from '@/db/schema';
-import { and, eq } from 'drizzle-orm';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 
 export interface Session {
   userId: string;
@@ -38,29 +36,34 @@ export async function getSession(req: Request): Promise<Session> {
   const workspaceSlug =
     url.searchParams.get('workspace') ?? req.headers.get('x-workspace-slug') ?? null;
 
-  // Build where clause: if slug is provided validate it, otherwise find by user ID alone
-  const whereClause = workspaceSlug
-    ? and(eq(workspaceMembers.userId, userId), eq(workspaces.slug, workspaceSlug))
-    : eq(workspaceMembers.userId, userId);
+  // Use admin client (REST API path) to avoid dependency on postgres pooler for auth
+  const admin = createSupabaseAdminClient();
 
-  const membership = await db
-    .select({
-      workspaceId: workspaceMembers.workspaceId,
-      role: workspaceMembers.role,
-      slug: workspaces.slug,
-    })
-    .from(workspaceMembers)
-    .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
-    .where(whereClause)
-    .limit(1)
-    .then((rows) => rows[0]);
+  // Look up membership, optionally filtering by slug
+  let memberQuery = admin
+    .from('workspace_members')
+    .select('workspace_id, role, workspaces!inner(id, slug)')
+    .eq('user_id', userId)
+    .limit(1);
 
-  if (!membership) throw new Error('Not a workspace member');
+  if (workspaceSlug) {
+    memberQuery = memberQuery.eq('workspaces.slug', workspaceSlug);
+  }
+
+  const { data: rows, error: memberError } = await memberQuery;
+
+  if (memberError) throw new Error(`Session lookup failed: ${memberError.message}`);
+
+  const row = rows?.[0] as
+    | { workspace_id: string; role: string; workspaces: { id: string; slug: string } }
+    | undefined;
+
+  if (!row) throw new Error('Not a workspace member');
 
   return {
     userId,
-    workspaceId: membership.workspaceId,
-    role: membership.role,
-    workspaceSlug: membership.slug,
+    workspaceId: row.workspace_id,
+    role: row.role,
+    workspaceSlug: row.workspaces.slug,
   };
 }
