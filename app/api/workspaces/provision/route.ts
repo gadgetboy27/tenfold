@@ -39,6 +39,10 @@ export async function POST(req: Request) {
   if (existingRows?.length) {
     const row = existingRows[0] as unknown as { workspace_id: string; workspaces: { id: string; slug: string }[] };
     const ws = row.workspaces[0];
+    // Ensure user_metadata always has the slug so AuthContext can read it on next login
+    await admin.auth.admin.updateUserById(userId, {
+      user_metadata: { workspace_slug: ws?.slug },
+    });
     return NextResponse.json({
       workspaceId: row.workspace_id,
       slug: ws?.slug,
