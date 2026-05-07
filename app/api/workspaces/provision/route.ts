@@ -37,10 +37,11 @@ export async function POST(req: Request) {
     .limit(1);
 
   if (existingRows?.length) {
-    const row = existingRows[0] as { workspace_id: string; workspaces: { id: string; slug: string } };
+    const row = existingRows[0] as unknown as { workspace_id: string; workspaces: { id: string; slug: string }[] };
+    const ws = row.workspaces[0];
     return NextResponse.json({
       workspaceId: row.workspace_id,
-      slug: row.workspaces.slug,
+      slug: ws?.slug,
       alreadyProvisioned: true,
     });
   }

@@ -54,8 +54,8 @@ export async function getSession(req: Request): Promise<Session> {
 
   if (memberError) throw new Error(`Session lookup failed: ${memberError.message}`);
 
-  const row = rows?.[0] as
-    | { workspace_id: string; role: string; workspaces: { id: string; slug: string } }
+  const row = rows?.[0] as unknown as
+    | { workspace_id: string; role: string; workspaces: { id: string; slug: string }[] }
     | undefined;
 
   if (!row) throw new Error('Not a workspace member');
@@ -64,6 +64,6 @@ export async function getSession(req: Request): Promise<Session> {
     userId,
     workspaceId: row.workspace_id,
     role: row.role,
-    workspaceSlug: row.workspaces.slug,
+    workspaceSlug: row.workspaces[0]?.slug ?? '',
   };
 }
