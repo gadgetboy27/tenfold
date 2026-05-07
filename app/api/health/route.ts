@@ -16,7 +16,14 @@ export async function GET() {
     await db.select({ n: sql<number>`1` }).from(workspaces).limit(1);
     checks.db = 'ok';
   } catch (err) {
-    checks.db = err instanceof Error ? err.message : 'unknown error';
+    const e = err as Error & { code?: string; detail?: string; hint?: string; routine?: string };
+    checks.db = JSON.stringify({
+      message: e.message,
+      code: e.code,
+      detail: e.detail,
+      hint: e.hint,
+      routine: e.routine,
+    });
   }
 
   const ok = checks.db === 'ok';
