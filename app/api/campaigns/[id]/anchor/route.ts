@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/session';
-import { db } from '@/db';
-import { campaigns, assets } from '@/db/schema';
-import { and, eq } from 'drizzle-orm';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { setAnchorSchema } from '@/lib/validation/schemas';
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -10,24 +8,28 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const session = await getSession(req);
     const { id } = await params;
     const { assetId } = setAnchorSchema.parse(await req.json());
+    const admin = createSupabaseAdminClient();
 
     // Confirm asset belongs to this campaign + workspace
-    const asset = await db.query.assets.findFirst({
-      where: and(
-        eq(assets.id, assetId),
-        eq(assets.campaignId, id),
-        eq(assets.workspaceId, session.workspaceId),
-      ),
-    });
+    const { data: asset } = await admin
+      .from('assets')
+      .select('id')
+      .eq('id', assetId)
+      .eq('campaign_id', id)
+      .eq('workspace_id', session.workspaceId)
+      .single();
+
     if (!asset) return NextResponse.json({ error: 'Asset not found' }, { status: 404 });
 
-    const [updated] = await db
-      .update(campaigns)
-      .set({ anchorAssetId: assetId, status: 'expanding', updatedAt: new Date() })
-      .where(and(eq(campaigns.id, id), eq(campaigns.workspaceId, session.workspaceId)))
-      .returning();
+    const { data: updated, error } = await admin
+      .from('campaigns')
+      .update({ anchor_asset_id: assetId, status: 'expanding' })
+      .eq('id', id)
+      .eq('workspace_id', session.workspaceId)
+      .select()
+      .single();
 
-    if (!updated) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+    if (error || !updated) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
     return NextResponse.json(updated);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';

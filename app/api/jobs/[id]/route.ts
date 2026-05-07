@@ -1,41 +1,45 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/session';
-import { db } from '@/db';
-import { creativeJobs, assets } from '@/db/schema';
-import { and, eq } from 'drizzle-orm';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getSession(req);
     const { id } = await params;
+    const admin = createSupabaseAdminClient();
 
-    const job = await db.query.creativeJobs.findFirst({
-      where: and(eq(creativeJobs.id, id), eq(creativeJobs.workspaceId, session.workspaceId)),
-    });
+    const { data: job } = await admin
+      .from('creative_jobs')
+      .select('*')
+      .eq('id', id)
+      .eq('workspace_id', session.workspaceId)
+      .single();
 
     if (!job) return NextResponse.json({ error: 'Job not found' }, { status: 404 });
 
-    const jobAssets = await db
-      .select({ id: assets.id, url: assets.url, type: assets.type })
-      .from(assets)
-      .where(eq(assets.jobId, job.id));
+    const j = job as {
+      id: string; status: string; type: string; credits_charged: number;
+      error_message: string | null; created_at: string; completed_at: string | null;
+    };
 
-    const outputUrls = jobAssets.map((a) => a.url);
-    const outputText = job.status === 'completed' && job.type === 'script_generation'
-      ? undefined
-      : undefined;
+    const { data: jobAssets } = await admin
+      .from('assets')
+      .select('id, url, type')
+      .eq('job_id', j.id);
+
+    const assetList = jobAssets ?? [];
+    const outputUrls = assetList.map((a: { url: string }) => a.url);
 
     return NextResponse.json({
-      id: job.id,
-      status: job.status === 'completed' ? 'ready' : job.status,
-      type: job.type,
-      creditCost: job.creditsCharged,
-      assets: jobAssets,
+      id: j.id,
+      status: j.status === 'completed' ? 'ready' : j.status,
+      type: j.type,
+      creditCost: j.credits_charged,
+      assets: assetList,
       outputUrls,
-      outputText,
-      errorMessage: job.errorMessage,
-      createdAt: job.createdAt,
-      completedAt: job.completedAt,
+      errorMessage: j.error_message,
+      createdAt: j.created_at,
+      completedAt: j.completed_at,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';

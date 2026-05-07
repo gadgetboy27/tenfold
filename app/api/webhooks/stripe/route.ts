@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/db';
-import { webhookLogs } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { verifyStripeWebhook, handleStripeEvent } from '@/lib/stripe/webhooks';
 
-// Raw body required for signature verification — do not use req.json()
+// Raw body required for Stripe signature verification — do not use req.json()
 export async function POST(req: Request) {
   const body = await req.text();
   const signature = req.headers.get('stripe-signature') ?? '';
@@ -16,18 +14,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
   }
 
-  // Log first for idempotency — duplicate events are silently dropped
-  const logged = await db
-    .insert(webhookLogs)
-    .values({
-      source: 'stripe',
-      eventId: event.id,
-      payload: JSON.parse(body) as Record<string, unknown>,
-    })
-    .onConflictDoNothing()
-    .returning();
+  const admin = createSupabaseAdminClient();
 
-  if (logged.length === 0) return NextResponse.json({ ok: true });
+  // Log first for idempotency — duplicate events are silently dropped
+  const { error: logErr } = await admin.from('webhook_logs').insert({
+    source: 'stripe',
+    event_id: event.id,
+    payload: JSON.parse(body) as Record<string, unknown>,
+  });
+
+  if (logErr) {
+    if (logErr.code === '23505') return NextResponse.json({ ok: true });
+    return NextResponse.json({ error: logErr.message }, { status: 500 });
+  }
 
   let processingError: string | undefined;
   try {
@@ -36,10 +35,10 @@ export async function POST(req: Request) {
     processingError = err instanceof Error ? err.message : 'Unknown error';
   }
 
-  await db
-    .update(webhookLogs)
-    .set({ processed: true, error: processingError })
-    .where(eq(webhookLogs.eventId, event.id));
+  await admin
+    .from('webhook_logs')
+    .update({ processed: true, error: processingError ?? null })
+    .eq('event_id', event.id);
 
   if (processingError) {
     return NextResponse.json({ error: processingError }, { status: 500 });

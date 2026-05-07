@@ -1,28 +1,31 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/session';
-import { db } from '@/db';
-import { workspaces } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createAyrshareProfile, generateSocialConnectUrl } from '@/lib/ayrshare/profiles';
 
 export async function GET(req: Request) {
   try {
     const session = await getSession(req);
+    const admin = createSupabaseAdminClient();
 
-    const workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.id, session.workspaceId),
-    });
+    const { data: workspace } = await admin
+      .from('workspaces')
+      .select('id, name, ayrshare_profile_key')
+      .eq('id', session.workspaceId)
+      .single();
+
     if (!workspace) return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
 
-    let profileKey = workspace.ayrshareProfileKey;
+    const ws = workspace as { id: string; name: string; ayrshare_profile_key: string | null };
+    let profileKey = ws.ayrshare_profile_key;
 
     if (!profileKey) {
-      const profile = await createAyrshareProfile(workspace.name);
+      const profile = await createAyrshareProfile(ws.name);
       profileKey = profile.profileKey;
-      await db
-        .update(workspaces)
-        .set({ ayrshareProfileKey: profileKey, updatedAt: new Date() })
-        .where(eq(workspaces.id, session.workspaceId));
+      await admin
+        .from('workspaces')
+        .update({ ayrshare_profile_key: profileKey })
+        .eq('id', session.workspaceId);
     }
 
     const connectUrl = await generateSocialConnectUrl(profileKey);

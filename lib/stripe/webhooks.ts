@@ -1,14 +1,11 @@
 import Stripe from 'stripe';
 import { stripe } from './client';
-import { db } from '@/db';
-import { creditAccounts, creditTransactions, subscriptions } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 
 export function verifyStripeWebhook(body: string, signature: string): Stripe.Event {
   return stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET!);
 }
 
-// These are evaluated at call time so env vars are always populated
 function creditGrantForPack(priceId: string): number | undefined {
   const map: Record<string, number> = {
     [process.env.STRIPE_PRICE_25CR!]: 25,
@@ -33,39 +30,38 @@ async function grantCredits(
   description: string,
   stripePaymentIntentId?: string,
 ): Promise<void> {
-  await db.transaction(async (tx) => {
-    const [account] = await tx
-      .select()
-      .from(creditAccounts)
-      .where(eq(creditAccounts.workspaceId, workspaceId))
-      .for('update');
+  const admin = createSupabaseAdminClient();
 
-    if (!account) return;
+  const { data: account } = await admin
+    .from('credit_accounts')
+    .select('cached_balance')
+    .eq('workspace_id', workspaceId)
+    .single();
 
-    const newBalance = account.cachedBalance + amount;
+  if (!account) return;
+  const newBalance = (account as { cached_balance: number }).cached_balance + amount;
 
-    await tx.insert(creditTransactions).values({
-      workspaceId,
-      type: 'purchase',
-      amount,
-      balanceAfter: newBalance,
-      description,
-      stripePaymentIntentId,
-    });
-
-    await tx
-      .update(creditAccounts)
-      .set({ cachedBalance: newBalance, updatedAt: new Date() })
-      .where(eq(creditAccounts.workspaceId, workspaceId));
+  await admin.from('credit_transactions').insert({
+    workspace_id: workspaceId,
+    type: 'purchase',
+    amount,
+    balance_after: newBalance,
+    description,
+    stripe_payment_intent_id: stripePaymentIntentId ?? null,
   });
+
+  await admin
+    .from('credit_accounts')
+    .update({ cached_balance: newBalance })
+    .eq('workspace_id', workspaceId);
 }
 
 export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
+  const admin = createSupabaseAdminClient();
+
   switch (event.type) {
     case 'checkout.session.completed': {
       const session = event.data.object as Stripe.Checkout.Session;
-      // Only handle one-off credit pack purchases here;
-      // subscription initial payment is handled via invoice.payment_succeeded
       if (session.mode !== 'payment') break;
 
       const workspaceId = session.metadata?.workspaceId;
@@ -86,28 +82,28 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
 
     case 'invoice.payment_succeeded': {
       const invoice = event.data.object as Stripe.Invoice;
-      if (invoice.billing_reason === 'manual') break; // skip manual invoices
+      if (invoice.billing_reason === 'manual') break;
 
       const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
       if (!customerId) break;
 
-      const sub = await db.query.subscriptions.findFirst({
-        where: eq(subscriptions.stripeCustomerId, customerId),
-      });
+      const { data: sub } = await admin
+        .from('subscriptions')
+        .select('workspace_id, stripe_subscription_id')
+        .eq('stripe_customer_id', customerId)
+        .single();
+
       if (!sub) break;
+      const s = sub as { workspace_id: string; stripe_subscription_id: string | null };
+      if (!s.stripe_subscription_id) break;
 
-      // Retrieve subscription to get current price (SDK v22: line items no longer carry price directly)
-      // Use the stripeSubscriptionId we already have stored rather than invoice.subscription (removed in v22)
-      const stripeSubId = sub.stripeSubscriptionId;
-      if (!stripeSubId) break;
-
-      const invoiceSub = await stripe.subscriptions.retrieve(stripeSubId);
+      const invoiceSub = await stripe.subscriptions.retrieve(s.stripe_subscription_id);
       const priceId = invoiceSub.items.data[0]?.price?.id;
       if (!priceId) break;
 
       const result = creditsForSubscriptionTier(priceId);
       if (result) {
-        await grantCredits(sub.workspaceId, result.credits, 'Monthly subscription credits');
+        await grantCredits(s.workspace_id, result.credits, 'Monthly subscription credits');
       }
       break;
     }
@@ -117,44 +113,37 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
       const stripeSub = event.data.object as Stripe.Subscription;
       const customerId = typeof stripeSub.customer === 'string' ? stripeSub.customer : stripeSub.customer.id;
       const priceId = stripeSub.items.data[0]?.price?.id;
-
       const tierResult = priceId ? creditsForSubscriptionTier(priceId) : undefined;
       const tier = tierResult?.tier ?? 'payg';
 
-      // current_period_* removed from Stripe.Subscription type in SDK v22 — read from items
       const firstItem = stripeSub.items.data[0] as (typeof stripeSub.items.data[0]) & {
         current_period_start?: number;
         current_period_end?: number;
       };
-      const periodStart = firstItem.current_period_start
-        ? new Date(firstItem.current_period_start * 1000)
-        : undefined;
-      const periodEnd = firstItem.current_period_end
-        ? new Date(firstItem.current_period_end * 1000)
-        : undefined;
 
-      await db
-        .update(subscriptions)
-        .set({
-          stripeSubscriptionId: stripeSub.id,
+      await admin
+        .from('subscriptions')
+        .update({
+          stripe_subscription_id: stripeSub.id,
           tier,
           status: stripeSub.status,
-          creditsPerPeriod: tierResult?.credits ?? 0,
-          currentPeriodStart: periodStart,
-          currentPeriodEnd: periodEnd,
-          updatedAt: new Date(),
+          credits_per_period: tierResult?.credits ?? 0,
+          current_period_start: firstItem.current_period_start
+            ? new Date(firstItem.current_period_start * 1000).toISOString() : null,
+          current_period_end: firstItem.current_period_end
+            ? new Date(firstItem.current_period_end * 1000).toISOString() : null,
         })
-        .where(eq(subscriptions.stripeCustomerId, customerId));
+        .eq('stripe_customer_id', customerId);
       break;
     }
 
     case 'customer.subscription.deleted': {
       const stripeSub = event.data.object as Stripe.Subscription;
       const customerId = typeof stripeSub.customer === 'string' ? stripeSub.customer : stripeSub.customer.id;
-      await db
-        .update(subscriptions)
-        .set({ tier: 'payg', status: 'canceled', creditsPerPeriod: 0, updatedAt: new Date() })
-        .where(eq(subscriptions.stripeCustomerId, customerId));
+      await admin
+        .from('subscriptions')
+        .update({ tier: 'payg', status: 'canceled', credits_per_period: 0 })
+        .eq('stripe_customer_id', customerId);
       break;
     }
   }

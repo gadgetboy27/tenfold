@@ -1,37 +1,35 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/session';
-import { db } from '@/db';
-import { socialProfiles, workspaces } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { getConnectedPlatforms } from '@/lib/ayrshare/profiles';
 
 export async function GET(req: Request) {
   try {
     const session = await getSession(req);
+    const admin = createSupabaseAdminClient();
 
-    const workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.id, session.workspaceId),
-    });
+    const { data: workspace } = await admin
+      .from('workspaces')
+      .select('ayrshare_profile_key')
+      .eq('id', session.workspaceId)
+      .single();
 
-    if (!workspace?.ayrshareProfileKey) {
-      return NextResponse.json([]);
-    }
+    const ws = workspace as { ayrshare_profile_key: string | null } | null;
+    if (!ws?.ayrshare_profile_key) return NextResponse.json([]);
 
-    // Sync live status from Ayrshare then return DB records
-    const activePlatforms = await getConnectedPlatforms(workspace.ayrshareProfileKey);
+    const activePlatforms = await getConnectedPlatforms(ws.ayrshare_profile_key);
     for (const platform of activePlatforms) {
-      await db
-        .insert(socialProfiles)
-        .values({ workspaceId: session.workspaceId, platform })
-        .onConflictDoNothing();
+      await admin
+        .from('social_profiles')
+        .upsert({ workspace_id: session.workspaceId, platform }, { onConflict: 'workspace_id,platform', ignoreDuplicates: true });
     }
 
-    const profiles = await db
-      .select()
-      .from(socialProfiles)
-      .where(eq(socialProfiles.workspaceId, session.workspaceId));
+    const { data: profiles } = await admin
+      .from('social_profiles')
+      .select('*')
+      .eq('workspace_id', session.workspaceId);
 
-    return NextResponse.json(profiles);
+    return NextResponse.json(profiles ?? []);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     const status = msg === 'Unauthorized' ? 401 : 500;
