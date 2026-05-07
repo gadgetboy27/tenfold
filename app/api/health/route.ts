@@ -4,10 +4,19 @@ import { workspaces } from '@/db/schema';
 import { sql } from 'drizzle-orm';
 
 export async function GET() {
+  let dbHost = 'parse-error';
+  let dbUser = 'parse-error';
+  try {
+    const u = new URL(process.env.DATABASE_URL ?? '');
+    dbHost = u.hostname;
+    dbUser = u.username;
+  } catch {}
+
   const checks: Record<string, string> = {
     db: 'untested',
-    DATABASE_URL: process.env.DATABASE_URL ? 'set' : 'MISSING',
-    SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ? 'set' : 'MISSING',
+    dbHost,
+    dbUser,
+    SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'MISSING',
     SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 'set' : 'MISSING',
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY ? 'set' : 'MISSING',
   };
