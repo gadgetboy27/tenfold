@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/session';
-import { db } from '@/db';
-import { campaigns, creativeJobs } from '@/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createCampaignSchema } from '@/lib/validation/schemas';
 import { debitCredits } from '@/lib/credits/debit';
 import { CREDIT_COSTS } from '@/lib/credits/costs';
@@ -26,13 +24,15 @@ const STYLE_SUFFIXES: Record<string, string> = {
 export async function GET(req: Request) {
   try {
     const session = await getSession(req);
-    const list = await db
-      .select()
-      .from(campaigns)
-      .where(eq(campaigns.workspaceId, session.workspaceId))
-      .orderBy(desc(campaigns.createdAt))
+    const admin = createSupabaseAdminClient();
+    const { data, error } = await admin
+      .from('campaigns')
+      .select('*')
+      .eq('workspace_id', session.workspaceId)
+      .order('created_at', { ascending: false })
       .limit(50);
-    return NextResponse.json(list);
+    if (error) throw new Error(error.message);
+    return NextResponse.json(data ?? []);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     const status = msg === 'Unauthorized' ? 401 : msg === 'Not a workspace member' ? 403 : 500;
@@ -44,6 +44,7 @@ export async function POST(req: Request) {
   try {
     const session = await getSession(req);
     const body = createCampaignSchema.parse(await req.json());
+    const admin = createSupabaseAdminClient();
 
     const campaignId = uuidv4();
     const jobId = uuidv4();
@@ -60,25 +61,27 @@ export async function POST(req: Request) {
     const fullPrompt = styleSuffix ? `${body.prompt}, ${styleSuffix}` : body.prompt;
 
     // 2. Create campaign row
-    await db.insert(campaigns).values({
+    const { error: campErr } = await admin.from('campaigns').insert({
       id: campaignId,
-      workspaceId: session.workspaceId,
-      createdBy: session.userId,
+      workspace_id: session.workspaceId,
+      created_by: session.userId,
       prompt: body.prompt,
       parameters: { aspectRatio: body.aspectRatio, style: body.style },
       status: 'generating',
     });
+    if (campErr) throw new Error(campErr.message);
 
     // 3. Create job row
-    await db.insert(creativeJobs).values({
+    const { error: jobErr } = await admin.from('creative_jobs').insert({
       id: jobId,
-      campaignId,
-      workspaceId: session.workspaceId,
+      campaign_id: campaignId,
+      workspace_id: session.workspaceId,
       type: 'image_generation',
       status: 'queued',
-      inputParams: { prompt: fullPrompt, imageSize, style: body.style },
-      creditsCharged: cost,
+      input_params: { prompt: fullPrompt, imageSize, style: body.style },
+      credits_charged: cost,
     });
+    if (jobErr) throw new Error(jobErr.message);
 
     // 4. Enqueue to fal.ai
     const webhookUrl = `${process.env.APP_URL}/api/webhooks/fal`;
@@ -92,12 +95,12 @@ export async function POST(req: Request) {
     }, webhookUrl);
 
     // 5. Update job with fal request ID
-    await db
-      .update(creativeJobs)
-      .set({ falRequestId: requestId, status: 'processing', updatedAt: new Date() })
-      .where(eq(creativeJobs.id, jobId));
+    await admin
+      .from('creative_jobs')
+      .update({ fal_request_id: requestId, status: 'processing' })
+      .eq('id', jobId);
 
-    return NextResponse.json({ campaignId, status: 'generating' }, { status: 201 });
+    return NextResponse.json({ campaignId, jobId, status: 'generating' }, { status: 201 });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     const status = msg === 'Unauthorized' ? 401 : msg === 'Insufficient credits' ? 402 : 500;

@@ -1,14 +1,11 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/session';
-import { db } from '@/db';
-import { creativeJobs } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createJobSchema } from '@/lib/validation/schemas';
 import { debitCredits } from '@/lib/credits/debit';
 import { CREDIT_COSTS, type CreditCostKey } from '@/lib/credits/costs';
 import { enqueueJob } from '@/lib/fal/queue';
 import { generateScript } from '@/lib/claude/script';
-import { recordJobCost } from '@/lib/costs/tracker';
 import { v4 as uuidv4 } from 'uuid';
 
 const STYLE_SUFFIXES: Record<string, string> = {
@@ -55,6 +52,7 @@ export async function POST(req: Request) {
   try {
     const session = await getSession(req);
     const body = createJobSchema.parse(await req.json());
+    const admin = createSupabaseAdminClient();
 
     if (!(body.type in CREDIT_COSTS)) {
       return NextResponse.json({ error: 'Unknown job type' }, { status: 400 });
@@ -71,17 +69,18 @@ export async function POST(req: Request) {
 
     const prompt = (body.params.prompt as string) ?? '';
 
-    await db.insert(creativeJobs).values({
+    const { error: jobErr } = await admin.from('creative_jobs').insert({
       id: jobId,
-      campaignId: body.campaignId,
-      workspaceId: session.workspaceId,
+      campaign_id: body.campaignId,
+      workspace_id: session.workspaceId,
       type: body.type,
       status: 'queued',
-      inputParams: body.params,
-      creditsCharged: cost,
+      input_params: body.params,
+      credits_charged: cost,
     });
+    if (jobErr) throw new Error(jobErr.message);
 
-    // Script generation is synchronous — handle inline with exact token cost
+    // Script generation is synchronous
     if (body.type === 'script_generation') {
       const result = await generateScript({
         imageDescription: (body.params.imageDescription as string) ?? '',
@@ -91,15 +90,10 @@ export async function POST(req: Request) {
         maxWords: (body.params.maxWords as number) ?? 50,
       });
 
-      await db
-        .update(creativeJobs)
-        .set({
-          status: 'completed',
-          completedAt: new Date(),
-          updatedAt: new Date(),
-          actualCostUsd: result.actualCostUsd,
-        })
-        .where(eq(creativeJobs.id, jobId));
+      await admin
+        .from('creative_jobs')
+        .update({ status: 'completed', actual_cost_usd: result.actualCostUsd })
+        .eq('id', jobId);
 
       return NextResponse.json({ jobId, creditCost: cost, status: 'ready', result: result.text }, { status: 201 });
     }
@@ -113,10 +107,10 @@ export async function POST(req: Request) {
       webhookUrl,
     );
 
-    await db
-      .update(creativeJobs)
-      .set({ falRequestId: requestId, status: 'processing', updatedAt: new Date() })
-      .where(eq(creativeJobs.id, jobId));
+    await admin
+      .from('creative_jobs')
+      .update({ fal_request_id: requestId, status: 'processing' })
+      .eq('id', jobId);
 
     return NextResponse.json({ jobId, requestId, creditCost: cost, status: 'processing' }, { status: 201 });
   } catch (err) {

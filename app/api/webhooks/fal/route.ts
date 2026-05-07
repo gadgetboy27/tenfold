@@ -1,15 +1,21 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/db';
-import { webhookLogs, creativeJobs, assets } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { falWebhookPayloadSchema } from '@/lib/fal/webhooks';
 import { refundCredits } from '@/lib/credits/refund';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { recordJobCost } from '@/lib/costs/tracker';
 import { v4 as uuidv4 } from 'uuid';
 
+interface CreativeJob {
+  id: string;
+  campaign_id: string;
+  workspace_id: string;
+  type: string;
+  credits_charged: number;
+}
+
 export async function POST(req: Request) {
   const rawPayload: unknown = await req.json();
+  const admin = createSupabaseAdminClient();
 
   const parsed = falWebhookPayloadSchema.safeParse(rawPayload);
   if (!parsed.success) {
@@ -18,28 +24,32 @@ export async function POST(req: Request) {
   const payload = parsed.data;
 
   // 1. Log first for idempotency — duplicate webhooks do nothing
-  const logged = await db
-    .insert(webhookLogs)
-    .values({
-      source: 'fal',
-      eventId: payload.request_id,
-      payload: rawPayload as Record<string, unknown>,
-    })
-    .onConflictDoNothing()
-    .returning();
-
-  if (logged.length === 0) return NextResponse.json({ ok: true });
-
-  // 2. Locate the job
-  const job = await db.query.creativeJobs.findFirst({
-    where: eq(creativeJobs.falRequestId, payload.request_id),
+  const { error: logErr } = await admin.from('webhook_logs').insert({
+    source: 'fal',
+    event_id: payload.request_id,
+    payload: rawPayload as Record<string, unknown>,
   });
 
+  if (logErr) {
+    // Unique constraint violation = already processed
+    if (logErr.code === '23505') return NextResponse.json({ ok: true });
+    return NextResponse.json({ error: logErr.message }, { status: 500 });
+  }
+
+  // 2. Locate the job
+  const { data: jobRow } = await admin
+    .from('creative_jobs')
+    .select('id, campaign_id, workspace_id, type, credits_charged')
+    .eq('fal_request_id', payload.request_id)
+    .single();
+
+  const job = jobRow as CreativeJob | null;
+
   if (!job) {
-    await db
-      .update(webhookLogs)
-      .set({ error: 'Unknown job', processed: true })
-      .where(eq(webhookLogs.eventId, payload.request_id));
+    await admin
+      .from('webhook_logs')
+      .update({ error: 'Unknown job', processed: true })
+      .eq('event_id', payload.request_id);
     return NextResponse.json({ error: 'Unknown job' }, { status: 404 });
   }
 
@@ -49,113 +59,113 @@ export async function POST(req: Request) {
     await handleFailure(job, payload.error ?? 'fal.ai job failed');
   }
 
-  // 4. Mark processed
-  await db
-    .update(webhookLogs)
-    .set({ processed: true })
-    .where(eq(webhookLogs.eventId, payload.request_id));
+  // 3. Mark processed
+  await admin
+    .from('webhook_logs')
+    .update({ processed: true })
+    .eq('event_id', payload.request_id);
 
   return NextResponse.json({ ok: true });
 }
 
 async function handleSuccess(
-  job: typeof creativeJobs.$inferSelect,
+  job: CreativeJob,
   payload: NonNullable<ReturnType<typeof falWebhookPayloadSchema.parse>['payload']>,
 ) {
-  const supabase = createSupabaseAdminClient();
-  const assetRows: (typeof assets.$inferInsert)[] = [];
+  const admin = createSupabaseAdminClient();
+  const assetInserts: Record<string, unknown>[] = [];
 
   if (payload.images) {
     for (const img of payload.images) {
       const assetId = uuidv4();
-      const storagePath = `${job.workspaceId}/${job.campaignId}/${assetId}.jpg`;
+      const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.jpg`;
 
       const imgRes = await fetch(img.url);
       const buffer = await imgRes.arrayBuffer();
-      await supabase.storage
+      await admin.storage
         .from('assets')
         .upload(storagePath, buffer, { contentType: img.content_type ?? 'image/jpeg' });
 
-      const { data: urlData } = supabase.storage.from('assets').getPublicUrl(storagePath);
+      const { data: urlData } = admin.storage.from('assets').getPublicUrl(storagePath);
 
-      assetRows.push({
+      assetInserts.push({
         id: assetId,
-        campaignId: job.campaignId,
-        workspaceId: job.workspaceId,
-        jobId: job.id,
+        campaign_id: job.campaign_id,
+        workspace_id: job.workspace_id,
+        job_id: job.id,
         type: 'image',
         url: urlData.publicUrl,
-        storagePath,
-        widthPx: img.width,
-        heightPx: img.height,
+        storage_path: storagePath,
+        width_px: img.width,
+        height_px: img.height,
       });
     }
   }
 
   if (payload.video) {
     const assetId = uuidv4();
-    const ext = payload.video.content_type === 'video/mp4' ? 'mp4' : 'mp4';
-    const storagePath = `${job.workspaceId}/${job.campaignId}/${assetId}.${ext}`;
+    const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.mp4`;
 
     const vidRes = await fetch(payload.video.url);
     const buffer = await vidRes.arrayBuffer();
-    await supabase.storage
+    await admin.storage
       .from('assets')
       .upload(storagePath, buffer, { contentType: payload.video.content_type ?? 'video/mp4' });
 
-    const { data: urlData } = supabase.storage.from('assets').getPublicUrl(storagePath);
+    const { data: urlData } = admin.storage.from('assets').getPublicUrl(storagePath);
 
-    assetRows.push({
+    assetInserts.push({
       id: assetId,
-      campaignId: job.campaignId,
-      workspaceId: job.workspaceId,
-      jobId: job.id,
+      campaign_id: job.campaign_id,
+      workspace_id: job.workspace_id,
+      job_id: job.id,
       type: 'video',
       url: urlData.publicUrl,
-      storagePath,
+      storage_path: storagePath,
     });
   }
 
   if (payload.audio_file) {
     const assetId = uuidv4();
-    const storagePath = `${job.workspaceId}/${job.campaignId}/${assetId}.mp3`;
+    const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.mp3`;
 
     const audRes = await fetch(payload.audio_file.url);
     const buffer = await audRes.arrayBuffer();
-    await supabase.storage
+    await admin.storage
       .from('assets')
       .upload(storagePath, buffer, { contentType: payload.audio_file.content_type ?? 'audio/mpeg' });
 
-    const { data: urlData } = supabase.storage.from('assets').getPublicUrl(storagePath);
+    const { data: urlData } = admin.storage.from('assets').getPublicUrl(storagePath);
 
-    assetRows.push({
+    assetInserts.push({
       id: assetId,
-      campaignId: job.campaignId,
-      workspaceId: job.workspaceId,
-      jobId: job.id,
+      campaign_id: job.campaign_id,
+      workspace_id: job.workspace_id,
+      job_id: job.id,
       type: 'audio',
       url: urlData.publicUrl,
-      storagePath,
+      storage_path: storagePath,
     });
   }
 
-  if (assetRows.length > 0) {
-    await db.insert(assets).values(assetRows);
+  if (assetInserts.length > 0) {
+    await admin.from('assets').insert(assetInserts);
   }
 
-  await db
-    .update(creativeJobs)
-    .set({ status: 'completed', completedAt: new Date(), updatedAt: new Date() })
-    .where(eq(creativeJobs.id, job.id));
+  await admin
+    .from('creative_jobs')
+    .update({ status: 'completed', completed_at: new Date().toISOString() })
+    .eq('id', job.id);
 
   await recordJobCost(job.id, job.type);
 }
 
-async function handleFailure(job: typeof creativeJobs.$inferSelect, errorMessage: string) {
-  await db
-    .update(creativeJobs)
-    .set({ status: 'failed', errorMessage, updatedAt: new Date() })
-    .where(eq(creativeJobs.id, job.id));
+async function handleFailure(job: CreativeJob, errorMessage: string) {
+  const admin = createSupabaseAdminClient();
+  await admin
+    .from('creative_jobs')
+    .update({ status: 'failed', error_message: errorMessage })
+    .eq('id', job.id);
 
   await refundCredits(job.id);
 }

@@ -1,6 +1,4 @@
-import { db } from '@/db';
-import { creativeJobs, creditTransactions } from '@/db/schema';
-import { eq, gte, and, sql } from 'drizzle-orm';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { PROVIDER_COST_USD, CREDIT_VALUE_USD } from './rates';
 
 export async function recordJobCost(
@@ -9,11 +7,15 @@ export async function recordJobCost(
   overrideCostUsd?: number,
   durationMs?: number,
 ): Promise<void> {
+  const admin = createSupabaseAdminClient();
   const actualCostUsd = overrideCostUsd ?? PROVIDER_COST_USD[jobType] ?? 0;
-  await db
-    .update(creativeJobs)
-    .set({ actualCostUsd, providerDurationMs: durationMs })
-    .where(eq(creativeJobs.id, jobId));
+  await admin
+    .from('creative_jobs')
+    .update({
+      actual_cost_usd: actualCostUsd,
+      ...(durationMs !== undefined ? { provider_duration_ms: durationMs } : {}),
+    })
+    .eq('id', jobId);
 }
 
 export interface UsageSummary {
@@ -43,38 +45,33 @@ export interface JobTypeSummary {
 export async function getUsageSummary(
   workspaceId: string,
   from: Date,
-  to: Date,
+  _to: Date,
 ): Promise<UsageSummary> {
-  const jobs = await db
-    .select({
-      type: creativeJobs.type,
-      status: creativeJobs.status,
-      creditsCharged: creativeJobs.creditsCharged,
-      actualCostUsd: creativeJobs.actualCostUsd,
-    })
-    .from(creativeJobs)
-    .where(
-      and(
-        eq(creativeJobs.workspaceId, workspaceId),
-        gte(creativeJobs.createdAt, from),
-      ),
-    );
+  const admin = createSupabaseAdminClient();
+  const { data: rows } = await admin
+    .from('creative_jobs')
+    .select('type, status, credits_charged, actual_cost_usd')
+    .eq('workspace_id', workspaceId)
+    .gte('created_at', from.toISOString());
+
+  const jobs = (rows ?? []) as {
+    type: string;
+    status: string;
+    credits_charged: number;
+    actual_cost_usd: number | null;
+  }[];
 
   const byType: Record<string, JobTypeSummary> = {};
-  let totalJobs = 0;
-  let completedJobs = 0;
-  let failedJobs = 0;
-  let totalCredits = 0;
-  let totalRevenue = 0;
-  let totalCost = 0;
+  let totalJobs = 0, completedJobs = 0, failedJobs = 0;
+  let totalCredits = 0, totalRevenue = 0, totalCost = 0;
 
   for (const job of jobs) {
     totalJobs++;
     if (job.status === 'completed') completedJobs++;
     if (job.status === 'failed') failedJobs++;
 
-    const credits = job.creditsCharged ?? 0;
-    const costUsd = job.actualCostUsd ?? PROVIDER_COST_USD[job.type] ?? 0;
+    const credits = job.credits_charged ?? 0;
+    const costUsd = job.actual_cost_usd ?? PROVIDER_COST_USD[job.type] ?? 0;
     const revenueUsd = credits * CREDIT_VALUE_USD;
 
     totalCredits += credits;
@@ -82,15 +79,7 @@ export async function getUsageSummary(
     totalCost += costUsd;
 
     if (!byType[job.type]) {
-      byType[job.type] = {
-        type: job.type,
-        jobs: 0,
-        creditsCharged: 0,
-        revenueUsd: 0,
-        actualCostUsd: 0,
-        marginUsd: 0,
-        marginPct: 0,
-      };
+      byType[job.type] = { type: job.type, jobs: 0, creditsCharged: 0, revenueUsd: 0, actualCostUsd: 0, marginUsd: 0, marginPct: 0 };
     }
     byType[job.type].jobs++;
     byType[job.type].creditsCharged += credits;
@@ -107,13 +96,9 @@ export async function getUsageSummary(
   }));
 
   const grossMarginUsd = totalRevenue - totalCost;
-
   return {
-    periodStart: from,
-    periodEnd: to,
-    totalJobs,
-    completedJobs,
-    failedJobs,
+    periodStart: from, periodEnd: _to,
+    totalJobs, completedJobs, failedJobs,
     totalCreditsCharged: totalCredits,
     revenueUsd: round(totalRevenue),
     actualCostUsd: round(totalCost),

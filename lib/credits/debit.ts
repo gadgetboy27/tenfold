@@ -1,43 +1,41 @@
-import { db, type DrizzleClient } from '@/db';
-import { creditAccounts, creditTransactions } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { CREDIT_COSTS, type CreditCostKey } from './costs';
 
 export async function debitCredits(
   workspaceId: string,
   jobId: string,
   type: CreditCostKey,
-  client: DrizzleClient = db,
 ): Promise<{ success: boolean; newBalance: number }> {
-  return client.transaction(async (tx) => {
-    const cost = CREDIT_COSTS[type];
+  const admin = createSupabaseAdminClient();
+  const cost = CREDIT_COSTS[type];
 
-    const [account] = await tx
-      .select()
-      .from(creditAccounts)
-      .where(eq(creditAccounts.workspaceId, workspaceId))
-      .for('update');
+  const { data: account } = await admin
+    .from('credit_accounts')
+    .select('cached_balance')
+    .eq('workspace_id', workspaceId)
+    .single();
 
-    if (!account || account.cachedBalance < cost) {
-      return { success: false, newBalance: account?.cachedBalance ?? 0 };
-    }
+  const currentBalance = (account as { cached_balance: number } | null)?.cached_balance ?? 0;
 
-    const newBalance = account.cachedBalance - cost;
+  if (currentBalance < cost) {
+    return { success: false, newBalance: currentBalance };
+  }
 
-    await tx.insert(creditTransactions).values({
-      workspaceId,
-      jobId,
-      type: 'spend',
-      amount: -cost,
-      balanceAfter: newBalance,
-      description: `${type} job`,
-    });
+  const newBalance = currentBalance - cost;
 
-    await tx
-      .update(creditAccounts)
-      .set({ cachedBalance: newBalance, updatedAt: new Date() })
-      .where(eq(creditAccounts.workspaceId, workspaceId));
-
-    return { success: true, newBalance };
+  await admin.from('credit_transactions').insert({
+    workspace_id: workspaceId,
+    job_id: jobId,
+    type: 'spend',
+    amount: -cost,
+    balance_after: newBalance,
+    description: `${type} job`,
   });
+
+  await admin
+    .from('credit_accounts')
+    .update({ cached_balance: newBalance })
+    .eq('workspace_id', workspaceId);
+
+  return { success: true, newBalance };
 }
