@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
+import { workspaces } from '@/db/schema';
 import { sql } from 'drizzle-orm';
 
 export async function GET() {
@@ -12,7 +13,7 @@ export async function GET() {
   };
 
   try {
-    await db.execute(sql`SELECT 1`);
+    await db.select({ n: sql<number>`1` }).from(workspaces).limit(1);
     checks.db = 'ok';
   } catch (err) {
     checks.db = err instanceof Error ? err.message : 'unknown error';
