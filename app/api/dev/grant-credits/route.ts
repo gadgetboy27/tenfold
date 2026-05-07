@@ -1,39 +1,36 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/session';
-import { db } from '@/db';
-import { creditAccounts, creditTransactions } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 
 const GRANT_AMOUNT = 200;
 
 export async function POST(req: Request) {
   try {
     const session = await getSession(req);
+    const admin = createSupabaseAdminClient();
 
-    await db.transaction(async (tx) => {
-      const [account] = await tx
-        .select()
-        .from(creditAccounts)
-        .where(eq(creditAccounts.workspaceId, session.workspaceId))
-        .for('update');
+    const { data: account } = await admin
+      .from('credit_accounts')
+      .select('cached_balance')
+      .eq('workspace_id', session.workspaceId)
+      .single();
 
-      if (!account) throw new Error('Credit account not found');
+    if (!account) throw new Error('Credit account not found');
 
-      const newBalance = account.cachedBalance + GRANT_AMOUNT;
+    const newBalance = (account as { cached_balance: number }).cached_balance + GRANT_AMOUNT;
 
-      await tx.insert(creditTransactions).values({
-        workspaceId: session.workspaceId,
-        type: 'grant',
-        amount: GRANT_AMOUNT,
-        balanceAfter: newBalance,
-        description: 'Test credit top-up',
-      });
-
-      await tx
-        .update(creditAccounts)
-        .set({ cachedBalance: newBalance })
-        .where(eq(creditAccounts.workspaceId, session.workspaceId));
+    await admin.from('credit_transactions').insert({
+      workspace_id: session.workspaceId,
+      type: 'grant',
+      amount: GRANT_AMOUNT,
+      balance_after: newBalance,
+      description: 'Test credit top-up',
     });
+
+    await admin
+      .from('credit_accounts')
+      .update({ cached_balance: newBalance })
+      .eq('workspace_id', session.workspaceId);
 
     return NextResponse.json({ granted: GRANT_AMOUNT });
   } catch (err) {

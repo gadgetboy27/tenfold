@@ -1,29 +1,33 @@
-import { db } from '@/db';
-import { creditAccounts, creditTransactions } from '@/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 
 export async function getBalance(workspaceId: string): Promise<number> {
-  const account = await db.query.creditAccounts.findFirst({
-    where: eq(creditAccounts.workspaceId, workspaceId),
-  });
-  return account?.cachedBalance ?? 0;
+  const admin = createSupabaseAdminClient();
+  const { data } = await admin
+    .from('credit_accounts')
+    .select('cached_balance')
+    .eq('workspace_id', workspaceId)
+    .single();
+  return (data as { cached_balance: number } | null)?.cached_balance ?? 0;
 }
 
 export async function getBalanceWithHistory(workspaceId: string) {
-  const [account, transactions] = await Promise.all([
-    db.query.creditAccounts.findFirst({
-      where: eq(creditAccounts.workspaceId, workspaceId),
-    }),
-    db
-      .select()
-      .from(creditTransactions)
-      .where(eq(creditTransactions.workspaceId, workspaceId))
-      .orderBy(desc(creditTransactions.createdAt))
+  const admin = createSupabaseAdminClient();
+  const [accountRes, txRes] = await Promise.all([
+    admin
+      .from('credit_accounts')
+      .select('cached_balance')
+      .eq('workspace_id', workspaceId)
+      .single(),
+    admin
+      .from('credit_transactions')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .order('created_at', { ascending: false })
       .limit(20),
   ]);
 
   return {
-    balance: account?.cachedBalance ?? 0,
-    transactions,
+    balance: (accountRes.data as { cached_balance: number } | null)?.cached_balance ?? 0,
+    transactions: txRes.data ?? [],
   };
 }
