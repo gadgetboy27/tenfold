@@ -13,6 +13,7 @@ export async function GET() {
   } catch {}
 
   const checks: Record<string, string> = {
+    version: 'v3-admin-client',
     db: 'untested',
     restApi: 'untested',
     dbHost,

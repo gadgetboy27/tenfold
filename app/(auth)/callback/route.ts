@@ -1,9 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { db } from '@/db';
-import { workspaces, workspaceMembers, creditAccounts, creditTransactions } from '@/db/schema';
-import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 
 export async function GET(request: NextRequest) {
@@ -22,63 +19,53 @@ export async function GET(request: NextRequest) {
   }
 
   const user = data.user;
+  const admin = createSupabaseAdminClient();
 
   // Check if user already has a workspace
-  const existing = await db.query.workspaceMembers.findFirst({
-    where: eq(workspaceMembers.userId, user.id),
-    with: { workspace: true } as never,
-  });
+  const { data: existing } = await admin
+    .from('workspace_members')
+    .select('workspace_id, workspaces!inner(slug)')
+    .eq('user_id', user.id)
+    .limit(1);
 
-  if (existing) {
-    // Return user to their workspace
-    const workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.ownerId, user.id),
-    });
-    return NextResponse.redirect(`${origin}/${workspace?.slug ?? ''}`);
+  if (existing?.length) {
+    const row = existing[0] as unknown as { workspace_id: string; workspaces: { slug: string }[] };
+    const slug = row.workspaces[0]?.slug ?? '';
+    return NextResponse.redirect(`${origin}/${slug}`);
   }
 
-  // First login — provision workspace + credit account in one transaction
+  // First login — provision workspace + credit account via admin client
   const workspaceId = uuidv4();
   const email = user.email ?? '';
-  const baseName = (user.user_metadata?.full_name as string | undefined)
-    ?? email.split('@')[0]
-    ?? 'My Workspace';
-  const slug = baseName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 40)
-    + '-'
-    + workspaceId.slice(0, 6);
+  const baseName =
+    (user.user_metadata?.full_name as string | undefined) ??
+    email.split('@')[0] ??
+    'My Workspace';
+  const slug =
+    baseName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 40) +
+    '-' +
+    workspaceId.slice(0, 6);
 
-  await db.transaction(async (tx) => {
-    await tx.insert(workspaces).values({
-      id: workspaceId,
-      name: baseName,
-      slug,
-      ownerId: user.id,
-    });
-    await tx.insert(workspaceMembers).values({
-      workspaceId,
-      userId: user.id,
-      role: 'owner',
-    });
-    await tx.insert(creditAccounts).values({
-      workspaceId,
-      cachedBalance: 50,
-    });
-    await tx.insert(creditTransactions).values({
-      workspaceId,
-      type: 'grant',
-      amount: 50,
-      balanceAfter: 50,
-      description: 'Welcome credits',
-    });
+  const { error: wsErr } = await admin
+    .from('workspaces')
+    .insert({ id: workspaceId, name: baseName, slug, owner_id: user.id });
+  if (wsErr) return NextResponse.redirect(`${origin}/login?error=workspace_failed`);
+
+  await admin.from('workspace_members').insert({ workspace_id: workspaceId, user_id: user.id, role: 'owner' });
+  await admin.from('credit_accounts').insert({ workspace_id: workspaceId, cached_balance: 50 });
+  await admin.from('credit_transactions').insert({
+    workspace_id: workspaceId,
+    type: 'grant',
+    amount: 50,
+    balance_after: 50,
+    description: 'Welcome credits',
   });
 
-  // Store workspace slug in user metadata — requires service role key
-  const adminClient = createSupabaseAdminClient();
-  await adminClient.auth.admin.updateUserById(user.id, {
+  await admin.auth.admin.updateUserById(user.id, {
     user_metadata: { workspace_slug: slug },
   });
 
