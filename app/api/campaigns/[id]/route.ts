@@ -94,3 +94,51 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const session = await getSession(req);
+    const { id } = await params;
+    const admin = createSupabaseAdminClient();
+
+    // Confirm campaign belongs to this workspace
+    const { data: campaign } = await admin
+      .from('campaigns')
+      .select('id')
+      .eq('id', id)
+      .eq('workspace_id', session.workspaceId)
+      .single();
+
+    if (!campaign) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+    // Collect all storage paths before deleting rows
+    const { data: assets } = await admin
+      .from('assets')
+      .select('storage_path')
+      .eq('campaign_id', id);
+
+    const storagePaths = (assets ?? [])
+      .map(a => a.storage_path as string)
+      .filter(Boolean);
+
+    // Delete storage files (best-effort — don't fail the whole request if some are missing)
+    if (storagePaths.length > 0) {
+      await admin.storage.from('assets').remove(storagePaths);
+    }
+
+    // Delete campaign — CASCADE removes assets, creative_jobs, compositions
+    const { error: delErr } = await admin
+      .from('campaigns')
+      .delete()
+      .eq('id', id)
+      .eq('workspace_id', session.workspaceId);
+
+    if (delErr) throw new Error(delErr.message);
+
+    return NextResponse.json({ deleted: true });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    const status = msg === 'Unauthorized' ? 401 : 500;
+    return NextResponse.json({ error: msg }, { status });
+  }
+}
