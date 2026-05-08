@@ -48,6 +48,7 @@ interface AppStore {
   aspectRatio: string;
   style: string;
   campaignBrief: CampaignBrief | null;
+  pendingBriefPrompt: string | null;
 
   setStep: (step: 1 | 2 | 3 | 4 | 5) => void;
   setCampaignId: (id: string) => void;
@@ -64,6 +65,7 @@ interface AppStore {
   setStyle: (s: string) => void;
   completeStep: (step: number) => void;
   setCampaignBrief: (brief: CampaignBrief | null) => void;
+  setPendingBriefPrompt: (prompt: string | null) => void;
   loadCampaign: (campaign: CampaignResume) => void;
   resetCampaign: () => void;
 }
@@ -85,6 +87,7 @@ export const useAppStore = create<AppStore>()((set) => ({
   aspectRatio: '1:1',
   style: 'Photorealistic',
   campaignBrief: null,
+  pendingBriefPrompt: null,
 
   setStep: (step) => set({ currentStep: step }),
   setCampaignId: (id) => set({ currentCampaignId: id }),
@@ -107,6 +110,7 @@ export const useAppStore = create<AppStore>()((set) => ({
       return { completedSteps: next };
     }),
   setCampaignBrief: (brief) => set({ campaignBrief: brief }),
+  setPendingBriefPrompt: (prompt) => set({ pendingBriefPrompt: prompt }),
   loadCampaign: (campaign) =>
     set({
       currentCampaignId: campaign.id,
@@ -137,5 +141,6 @@ export const useAppStore = create<AppStore>()((set) => ({
       generationStage: '',
       generationElapsed: 0,
       campaignBrief: null,
+      pendingBriefPrompt: null,
     }),
 }));

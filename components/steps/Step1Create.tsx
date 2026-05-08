@@ -1,6 +1,5 @@
 'use client';
 
-import { useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { Sparkles } from 'lucide-react';
 import CosmicBackground from '@/components/shared/CosmicBackground';
@@ -85,16 +84,9 @@ export default function Step1Create() {
   } = useAppStore();
   const gridCols = GRID_COLS[aspectRatio] ?? 'grid-cols-3';
 
-  // Called by CampaignBriefPanel when the user picks an angle and hits Generate
-  const handleBriefGenerate = useCallback((prompt: string, angleName: string) => {
-    // Inject the selected angle prompt into the FloatingPromptBar's pending generate
-    // by dispatching a custom event the bar listens to
-    window.dispatchEvent(new CustomEvent('tenfold:generate-from-brief', { detail: { prompt, angleName } }));
-  }, []);
-
   // Show brief panel when a brief is loaded (and not yet generating)
   if (campaignBrief && !isGenerating && generatedAssets.length === 0) {
-    return <CampaignBriefPanel onGenerate={handleBriefGenerate} />;
+    return <CampaignBriefPanel />;
   }
 
   if (generatedAssets.length === 0 && !isGenerating) {

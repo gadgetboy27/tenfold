@@ -18,9 +18,7 @@ const GOAL_META: Record<string, { icon: typeof Target; color: string; bg: string
 };
 const DEFAULT_GOAL_META = { icon: Lightbulb, color: 'text-muted-foreground', bg: 'bg-secondary border-border' };
 
-interface Props {
-  onGenerate: (prompt: string, angleName: string) => void;
-}
+interface Props { /* no callback needed — uses store directly */ }
 
 function InsightRow({ label, value }: { label: string; value: string }) {
   return (
@@ -115,8 +113,8 @@ function AngleCard({
   );
 }
 
-export default function CampaignBriefPanel({ onGenerate }: Props) {
-  const { campaignBrief, setCampaignBrief } = useAppStore();
+export default function CampaignBriefPanel(_: Props) {
+  const { campaignBrief, setCampaignBrief, setPendingBriefPrompt } = useAppStore();
   const [selectedAngleId, setSelectedAngleId] = useState<string | null>(
     campaignBrief?.campaignAngles[0]?.id ?? null,
   );
@@ -134,7 +132,9 @@ export default function CampaignBriefPanel({ onGenerate }: Props) {
     const prompt = notes
       ? `${selectedAngle.imagePrompt}. Additional direction: ${notes}`
       : selectedAngle.imagePrompt;
-    onGenerate(prompt, selectedAngle.title);
+    // Signal FloatingPromptBar to generate, then clear the brief
+    setPendingBriefPrompt(prompt);
+    setCampaignBrief(null);
   };
 
   return (

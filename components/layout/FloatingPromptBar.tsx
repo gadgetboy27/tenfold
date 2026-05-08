@@ -48,7 +48,8 @@ export default function FloatingPromptBar() {
     creditBalance, setCreditBalance, setIsGenerating, setGeneratedAssets,
     isGenerating, aspectRatio, style, setAspectRatio, setStyle,
     setStep, completeStep, setCampaignId, workspaceSlug, currentStep,
-    setGenerationStage, setCampaignBrief,
+    setGenerationStage, setCampaignBrief, pendingBriefPrompt, setPendingBriefPrompt,
+    campaignBrief,
   } = useAppStore();
 
   const STAGES = [
@@ -71,22 +72,20 @@ export default function FloatingPromptBar() {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [prompt]);
 
-  // Listen for the brief panel's "generate" event
+  // Auto-generate when a brief angle is selected — pendingBriefPrompt set by CampaignBriefPanel
   useEffect(() => {
-    const handler = (e: Event) => {
-      const { prompt: briefPrompt } = (e as CustomEvent<{ prompt: string; angleName: string }>).detail;
-      setPrompt(briefPrompt);
-      // Trigger generation on next tick
-      setTimeout(() => {
-        document.getElementById('tenfold-generate-btn')?.click();
-      }, 50);
-    };
-    window.addEventListener('tenfold:generate-from-brief', handler);
-    return () => window.removeEventListener('tenfold:generate-from-brief', handler);
-  }, []);
+    if (pendingBriefPrompt && !isGenerating) {
+      const p = pendingBriefPrompt;
+      setPendingBriefPrompt(null);
+      runGenerate(p);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingBriefPrompt]);
 
   const isSentinel = useAppStore.getState().currentCampaignId === '__new__';
   if (currentStep !== 1 && !isSentinel) return null;
+  // Brief panel is showing — it has its own generate CTA; hide the prompt bar
+  if (campaignBrief) return null;
 
   const isStrong = (score ?? 0) >= 70;
   const isFair   = (score ?? 0) >= 45;
