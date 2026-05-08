@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
-import { Film, Music, FileText } from 'lucide-react';
+import { Film, Music, FileText, ArrowRight } from 'lucide-react';
 import FormatCard from '@/components/shared/FormatCard';
+import { Button } from '@/components/ui/button';
+import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
 
@@ -18,6 +20,7 @@ export default function Step3Expand() {
   const {
     generatedAssets, selectedAnchorId, updateExpansion,
     setCreditBalance, creditBalance, currentCampaignId, workspaceSlug,
+    completeStep, setStep, expansions,
   } = useAppStore();
   const anchor = generatedAssets.find(a => a.id === selectedAnchorId);
 
@@ -110,6 +113,8 @@ export default function Step3Expand() {
     }
   };
 
+  const anyReady = expansions.video?.status === 'ready' || expansions.music?.status === 'ready' || expansions.script?.status === 'ready';
+
   if (!anchor) return (
     <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
       No anchor selected — go back to step 2.
@@ -117,7 +122,7 @@ export default function Step3Expand() {
   );
 
   return (
-    <div className="h-full overflow-y-auto p-8">
+    <div className="h-full overflow-y-auto pb-28 p-8 relative">
       <div className="max-w-5xl mx-auto flex gap-8">
         {/* Anchor thumbnail */}
         <div className="w-56 shrink-0 space-y-4">
@@ -130,7 +135,7 @@ export default function Step3Expand() {
           </p>
         </div>
 
-        {/* Format cards */}
+        {/* Format cards — scroll container needs bottom padding for the sticky bar */}
         <div className="flex-1 grid grid-cols-3 gap-4 content-start">
           <FormatCard type="video" title="Video" subtitle="10–60s cinematic clip" cost="15–80 cr" icon={Film} onGenerate={() => handleGenerate('video')}>
             <div className="flex gap-2">
@@ -182,6 +187,31 @@ export default function Step3Expand() {
           </FormatCard>
         </div>
       </div>
+
+      {/* Sticky continue bar — always visible, Expand is optional */}
+      <motion.div
+        initial={{ y: 80, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 400, damping: 35, delay: 0.2 }}
+        className="fixed bottom-0 left-40 right-0 z-30 p-4 pointer-events-none"
+      >
+        <div className="max-w-5xl mx-auto pointer-events-auto">
+          <div className="flex items-center justify-between bg-card/95 backdrop-blur-md border border-border rounded-2xl px-5 py-3 shadow-lg">
+            <p className="text-sm text-muted-foreground">
+              {anyReady
+                ? `${[expansions.video, expansions.music, expansions.script].filter(e => e?.status === 'ready').length} asset${[expansions.video, expansions.music, expansions.script].filter(e => e?.status === 'ready').length !== 1 ? 's' : ''} ready — compose your post`
+                : 'Generate assets above, or skip straight to compose'}
+            </p>
+            <Button
+              onClick={() => { completeStep(3); setStep(4); }}
+              className="bg-primary hover:bg-primary/90 text-white font-semibold gap-2 shrink-0"
+            >
+              Continue to Compose
+              <ArrowRight className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      </motion.div>
     </div>
   );
 }
