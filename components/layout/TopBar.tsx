@@ -6,7 +6,7 @@ import { useAppStore } from '@/store/useAppStore';
 import CreditMeter from '@/components/shared/CreditMeter';
 import JobStatusIndicator from '@/components/shared/JobStatusIndicator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Pen, LogOut, User as UserIcon, Share2 } from 'lucide-react';
+import { Pen, LogOut, User as UserIcon, Share2, ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import {
@@ -14,13 +14,15 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { api } from '@/lib/api';
 
 interface Props {
   user: User;
+  showBack?: boolean;
 }
 
-export default function TopBar({ user }: Props) {
-  const { campaignName, setCampaignName, isGenerating } = useAppStore();
+export default function TopBar({ user, showBack = false }: Props) {
+  const { campaignName, setCampaignName, isGenerating, currentCampaignId, workspaceSlug, resetCampaign } = useAppStore();
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(campaignName);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -34,7 +36,17 @@ export default function TopBar({ user }: Props) {
   };
 
   const handleSave = () => {
-    if (editValue.trim()) setCampaignName(editValue);
+    const trimmed = editValue.trim();
+    if (trimmed) {
+      setCampaignName(trimmed);
+      if (currentCampaignId && currentCampaignId !== '__new__') {
+        api(`/api/campaigns/${currentCampaignId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ name: trimmed }),
+          workspaceSlug,
+        }).catch(() => {});
+      }
+    }
     setIsEditing(false);
   };
 
@@ -52,45 +64,58 @@ export default function TopBar({ user }: Props) {
   return (
     <header className="h-14 flex items-center justify-between px-6 border-b border-border bg-card shrink-0">
       <div className="flex items-center gap-3 w-64">
-        <span className="font-serif font-bold text-xl text-foreground flex items-center gap-1.5">
-          Tenfold
-          <span className="w-1.5 h-1.5 rounded-full bg-primary mb-0.5 inline-block"></span>
-        </span>
+        {showBack ? (
+          <button
+            onClick={resetCampaign}
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors group"
+          >
+            <ChevronLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+            <span className="font-serif font-bold text-xl text-foreground">Tenfold</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-primary mb-0.5 inline-block"></span>
+          </button>
+        ) : (
+          <span className="font-serif font-bold text-xl text-foreground flex items-center gap-1.5">
+            Tenfold
+            <span className="w-1.5 h-1.5 rounded-full bg-primary mb-0.5 inline-block"></span>
+          </span>
+        )}
       </div>
 
       <div className="flex-1 flex justify-center items-center">
-        {isGenerating ? (
-          <div className="flex items-center gap-2 text-sm text-primary font-medium">
-            <span className="w-2 h-2 rounded-full bg-primary animate-pulse inline-block"></span>
-            Generating assets...
-          </div>
-        ) : (
-          <div
-            className="flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-secondary cursor-pointer transition-colors group"
-            onClick={handleEdit}
-            data-testid="text-campaign-name"
-          >
-            {isEditing ? (
-              <Input
-                ref={inputRef}
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                onBlur={handleSave}
-                onKeyDown={handleKeyDown}
-                className="h-7 w-48 text-sm bg-background border-primary px-2"
-              />
-            ) : (
-              <>
-                <span className="text-sm font-medium text-foreground">{campaignName}</span>
-                <Pen className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-              </>
-            )}
-          </div>
+        {showBack && (
+          isGenerating ? (
+            <div className="flex items-center gap-2 text-sm text-primary font-medium">
+              <span className="w-2 h-2 rounded-full bg-primary animate-pulse inline-block"></span>
+              Generating assets...
+            </div>
+          ) : (
+            <div
+              className="flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-secondary cursor-pointer transition-colors group"
+              onClick={handleEdit}
+              data-testid="text-campaign-name"
+            >
+              {isEditing ? (
+                <Input
+                  ref={inputRef}
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onBlur={handleSave}
+                  onKeyDown={handleKeyDown}
+                  className="h-7 w-48 text-sm bg-background border-primary px-2"
+                />
+              ) : (
+                <>
+                  <span className="text-sm font-medium text-foreground">{campaignName}</span>
+                  <Pen className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                </>
+              )}
+            </div>
+          )
         )}
       </div>
 
       <div className="flex items-center justify-end gap-4 w-64">
-        <JobStatusIndicator />
+        {showBack && <JobStatusIndicator />}
         <CreditMeter />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

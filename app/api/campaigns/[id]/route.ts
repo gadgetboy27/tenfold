@@ -66,12 +66,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   try {
     const session = await getSession(req);
     const { id } = await params;
-    const body = (await req.json()) as { status?: string; prompt?: string };
+    const raw = (await req.json()) as {
+      status?: string; prompt?: string; name?: string;
+      current_step?: number; expansion_data?: Record<string, unknown>;
+    };
+    // Whitelist updatable fields
+    const update: Record<string, unknown> = {};
+    if (raw.status !== undefined)         update.status         = raw.status;
+    if (raw.prompt !== undefined)         update.prompt         = raw.prompt;
+    if (raw.name !== undefined)           update.name           = String(raw.name).slice(0, 200);
+    if (raw.current_step !== undefined)   update.current_step   = Math.min(5, Math.max(1, Number(raw.current_step)));
+    if (raw.expansion_data !== undefined) update.expansion_data = raw.expansion_data;
     const admin = createSupabaseAdminClient();
 
     const { data: updated, error } = await admin
       .from('campaigns')
-      .update(body)
+      .update(update)
       .eq('id', id)
       .eq('workspace_id', session.workspaceId)
       .select()

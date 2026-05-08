@@ -27,14 +27,43 @@ export async function GET(req: Request) {
   try {
     const session = await getSession(req);
     const admin = createSupabaseAdminClient();
-    const { data, error } = await admin
+    const { data: campaigns, error } = await admin
       .from('campaigns')
       .select('*')
       .eq('workspace_id', session.workspaceId)
       .order('created_at', { ascending: false })
       .limit(50);
     if (error) throw new Error(error.message);
-    return NextResponse.json(data ?? []);
+    if (!campaigns?.length) return NextResponse.json([]);
+
+    // Fetch first image asset per campaign for thumbnails
+    const ids = campaigns.map(c => c.id as string);
+    const { data: thumbAssets } = await admin
+      .from('assets')
+      .select('id, url, campaign_id')
+      .in('campaign_id', ids)
+      .eq('type', 'image')
+      .order('created_at', { ascending: true });
+
+    const thumbMap: Record<string, string> = {};
+    for (const a of thumbAssets ?? []) {
+      if (!thumbMap[a.campaign_id as string]) thumbMap[a.campaign_id as string] = a.url as string;
+    }
+    // Prefer anchor asset URL when available
+    const anchorIds = campaigns.map(c => c.anchor_asset_id).filter(Boolean) as string[];
+    if (anchorIds.length) {
+      const { data: anchorAssets } = await admin
+        .from('assets').select('id, url').in('id', anchorIds);
+      for (const c of campaigns) {
+        if (c.anchor_asset_id) {
+          const a = anchorAssets?.find(x => x.id === c.anchor_asset_id);
+          if (a) thumbMap[c.id as string] = a.url as string;
+        }
+      }
+    }
+
+    const enriched = campaigns.map(c => ({ ...c, thumbnailUrl: thumbMap[c.id as string] ?? null }));
+    return NextResponse.json(enriched);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     const status = msg === 'Unauthorized' ? 401 : msg === 'Not a workspace member' ? 403 : 500;

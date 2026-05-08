@@ -210,7 +210,17 @@ export default function Step3Expand() {
                 : 'Generate assets above, or skip straight to compose'}
             </p>
             <Button
-              onClick={() => { completeStep(3); setStep(4); }}
+              onClick={() => {
+                completeStep(3);
+                setStep(4);
+                if (currentCampaignId && currentCampaignId !== '__new__') {
+                  api(`/api/campaigns/${currentCampaignId}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ current_step: 4, expansion_data: expansions }),
+                    workspaceSlug,
+                  }).catch(() => {});
+                }
+              }}
               className="bg-primary hover:bg-primary/90 text-white font-semibold gap-2 shrink-0"
             >
               Continue to Compose

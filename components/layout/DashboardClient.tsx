@@ -9,6 +9,7 @@ import LeftRail from './LeftRail';
 import RightPanel from './RightPanel';
 import FloatingPromptBar from './FloatingPromptBar';
 import StepView from './StepView';
+import CampaignLobby from './CampaignLobby';
 
 interface Props {
   workspaceSlug: string;
@@ -16,7 +17,7 @@ interface Props {
 }
 
 export default function DashboardClient({ workspaceSlug, user }: Props) {
-  const { setWorkspaceSlug, setCreditBalance } = useAppStore();
+  const { setWorkspaceSlug, setCreditBalance, currentCampaignId } = useAppStore();
 
   useEffect(() => {
     setWorkspaceSlug(workspaceSlug);
@@ -31,9 +32,22 @@ export default function DashboardClient({ workspaceSlug, user }: Props) {
       .catch(() => {});
   }, [workspaceSlug, setCreditBalance]);
 
+  // No active campaign → show lobby
+  if (!currentCampaignId) {
+    return (
+      <div className="h-screen flex flex-col overflow-hidden bg-background">
+        <TopBar user={user} showBack={false} />
+        <div className="flex-1 overflow-hidden">
+          <CampaignLobby />
+        </div>
+      </div>
+    );
+  }
+
+  // Campaign active → show the 5-step workflow
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-background">
-      <TopBar user={user} />
+      <TopBar user={user} showBack />
       <div className="flex flex-1 overflow-hidden">
         <LeftRail />
         <main className="flex-1 relative overflow-hidden">

@@ -21,6 +21,15 @@ export interface Expansion {
 
 type Expansions = { video?: Expansion; music?: Expansion; script?: Expansion };
 
+export interface CampaignResume {
+  id: string;
+  name: string;
+  current_step: number;
+  anchor_asset_id: string | null;
+  expansion_data: Expansions;
+  imageAssets: Asset[];
+}
+
 interface AppStore {
   currentCampaignId: string | null;
   currentCompositionId: string | null;
@@ -52,6 +61,7 @@ interface AppStore {
   setAspectRatio: (r: string) => void;
   setStyle: (s: string) => void;
   completeStep: (step: number) => void;
+  loadCampaign: (campaign: CampaignResume) => void;
   resetCampaign: () => void;
 }
 
@@ -91,6 +101,22 @@ export const useAppStore = create<AppStore>()((set) => ({
       const next = new Set(state.completedSteps);
       next.add(step);
       return { completedSteps: next };
+    }),
+  loadCampaign: (campaign) =>
+    set({
+      currentCampaignId: campaign.id,
+      currentCompositionId: null,
+      currentStep: Math.min(5, Math.max(1, campaign.current_step)) as 1 | 2 | 3 | 4 | 5,
+      completedSteps: new Set(
+        Array.from({ length: campaign.current_step - 1 }, (_, i) => i + 1),
+      ),
+      campaignName: campaign.name,
+      selectedAnchorId: campaign.anchor_asset_id,
+      generatedAssets: campaign.imageAssets,
+      expansions: campaign.expansion_data ?? {},
+      isGenerating: false,
+      generationStage: '',
+      generationElapsed: 0,
     }),
   resetCampaign: () =>
     set({

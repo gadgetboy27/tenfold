@@ -2,13 +2,14 @@
 
 import { useEffect } from 'react';
 import { useAppStore } from '@/store/useAppStore';
+import { api } from '@/lib/api';
 import ImageCard from '@/components/shared/ImageCard';
 import { Button } from '@/components/ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, Anchor } from 'lucide-react';
 
 export default function Step2Select() {
-  const { generatedAssets, selectedAnchorId, completeStep, setStep, aspectRatio } = useAppStore();
+  const { generatedAssets, selectedAnchorId, completeStep, setStep, aspectRatio, currentCampaignId, workspaceSlug } = useAppStore();
 
   useEffect(() => {
     if (generatedAssets.length > 0) completeStep(1);
@@ -64,7 +65,17 @@ export default function Step2Select() {
                   </p>
                 </div>
                 <Button
-                  onClick={() => { completeStep(2); setStep(3); }}
+                  onClick={() => {
+                    completeStep(2);
+                    setStep(3);
+                    if (currentCampaignId && currentCampaignId !== '__new__') {
+                      api(`/api/campaigns/${currentCampaignId}`, {
+                        method: 'PATCH',
+                        body: JSON.stringify({ current_step: 3 }),
+                        workspaceSlug,
+                      }).catch(() => {});
+                    }
+                  }}
                   size="lg"
                   className="bg-primary hover:bg-primary/90 text-white font-semibold px-8 shrink-0 gap-2"
                 >

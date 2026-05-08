@@ -69,7 +69,9 @@ export default function FloatingPromptBar() {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [prompt]);
 
-  if (currentStep !== 1) return null;
+  // Show on step 1 OR when the campaign slot is the __new__ sentinel (before first generation)
+  const isSentinel = useAppStore.getState().currentCampaignId === '__new__';
+  if (currentStep !== 1 && !isSentinel) return null;
 
   const isStrong = (score ?? 0) >= 70;
   const isFair   = (score ?? 0) >= 45;
@@ -96,6 +98,14 @@ export default function FloatingPromptBar() {
       const camp = await campRes.json() as { campaignId: string; status: string };
       const campaignId = camp.campaignId;
       setCampaignId(campaignId);
+
+      // Persist initial campaign name to DB (replaces __new__ sentinel)
+      const currentName = useAppStore.getState().campaignName;
+      api(`/api/campaigns/${campaignId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ name: currentName }),
+        workspaceSlug,
+      }).catch(() => {});
 
       // Sync credit balance after the server deducts 18 cr
       api('/api/credits/balance', { workspaceSlug })

@@ -36,6 +36,13 @@ export default function Step4Compose() {
       toast.success('Composition ready');
       completeStep(4);
       setStep(5);
+      if (currentCampaignId && currentCampaignId !== '__new__') {
+        api(`/api/campaigns/${currentCampaignId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ current_step: 5 }),
+          workspaceSlug,
+        }).catch(() => {});
+      }
     } catch (err: unknown) {
       toast.error((err as Error).message ?? 'Could not save composition');
     } finally {
