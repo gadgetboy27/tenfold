@@ -3,8 +3,10 @@ import { getSession } from '@/lib/auth/session';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createCampaignSchema } from '@/lib/validation/schemas';
 import { debitCredits } from '@/lib/credits/debit';
+import { refundCredits } from '@/lib/credits/refund';
 import { CREDIT_COSTS } from '@/lib/credits/costs';
 import { enqueueJob } from '@/lib/fal/queue';
+import { validatePrompt } from '@/lib/fal/prompt-validator';
 import { v4 as uuidv4 } from 'uuid';
 
 const ASPECT_TO_IMAGE_SIZE: Record<string, string> = {
@@ -46,6 +48,15 @@ export async function POST(req: Request) {
     const body = createCampaignSchema.parse(await req.json());
     const admin = createSupabaseAdminClient();
 
+    // 0. Validate prompt quality before touching credits
+    const validation = await validatePrompt(body.prompt, body.style ?? 'Photorealistic');
+    if (!validation.isValid) {
+      return NextResponse.json(
+        { error: 'Prompt rejected', issues: validation.issues, refinedPrompt: validation.refinedPrompt },
+        { status: 422 },
+      );
+    }
+
     const campaignId = uuidv4();
     const jobId = uuidv4();
     const cost = CREDIT_COSTS.image_generation;
@@ -83,16 +94,19 @@ export async function POST(req: Request) {
     });
     if (jobErr) throw new Error(jobErr.message);
 
-    // 4. Enqueue to fal.ai
+    // 4. Enqueue to fal.ai — refund credits if submission fails
     const webhookUrl = `${process.env.APP_URL}/api/webhooks/fal`;
-    const { requestId } = await enqueueJob('image_generation', {
-      prompt: fullPrompt,
-      image_size: imageSize,
-      num_images: 6,
-      num_inference_steps: 28,
-      guidance_scale: 5,
-      enable_safety_checker: true,
-    }, webhookUrl);
+    let requestId: string;
+    try {
+      ({ requestId } = await enqueueJob('image_generation', {
+        prompt: fullPrompt,
+        image_size: imageSize,
+        num_images: 4,
+      }, webhookUrl));
+    } catch (falErr) {
+      await refundCredits(jobId);
+      throw falErr;
+    }
 
     // 5. Update job with fal request ID
     await admin

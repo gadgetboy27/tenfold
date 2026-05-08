@@ -24,13 +24,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     const jobList = jobs ?? [];
     const allDone = jobList.length > 0 && jobList.every((j: { status: string }) => j.status === 'completed');
-    const anyFailed = jobList.every((j: { status: string }) => j.status === 'failed');
+    const anyFailed = jobList.length > 0 && jobList.some((j: { status: string }) => j.status === 'failed');
     const computedStatus = allDone ? 'ready' : anyFailed ? 'failed' : (campaign as { status: string }).status;
 
     return NextResponse.json({ ...campaign, status: computedStatus, jobs: jobList, assets: campaignAssets ?? [] });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    const status = msg === 'Unauthorized' ? 401 : msg === 'Not a workspace member' ? 403 : 500;
+    return NextResponse.json({ error: msg }, { status });
   }
 }
 

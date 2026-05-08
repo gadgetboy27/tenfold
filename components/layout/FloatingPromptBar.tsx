@@ -100,7 +100,11 @@ export default function FloatingPromptBar() {
         await new Promise(r => setTimeout(r, 1500));
 
         const statusRes = await api(`/api/campaigns/${campaignId}`, { workspaceSlug });
-        if (!statusRes.ok) throw new Error('Failed to check generation status');
+        if (!statusRes.ok) {
+          const errBody = await statusRes.json().catch(() => ({})) as { error?: string };
+          if (statusRes.status === 401) throw new Error('Session expired — please refresh the page');
+          throw new Error(errBody.error ?? `Status check failed (${statusRes.status})`);
+        }
 
         const campaign = await statusRes.json() as {
           status: string;
@@ -122,7 +126,7 @@ export default function FloatingPromptBar() {
           setIsGenerating(false);
           completeStep(1);
           setStep(2);
-          toast.success('6 images ready — pick your anchor');
+          toast.success('4 images ready — pick your anchor');
 
           // Final balance sync
           api('/api/credits/balance', { workspaceSlug })

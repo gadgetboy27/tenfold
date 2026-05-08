@@ -45,7 +45,7 @@ export default function Step1Create() {
             transition={{ duration: 0.6, delay: 0.3 }}
             className="text-muted-foreground text-base"
           >
-            Tenfold will generate 6 image variations for you to choose from
+            Tenfold will generate 4 image variations for you to choose from
           </motion.p>
         </div>
       </div>
@@ -58,7 +58,7 @@ export default function Step1Create() {
       <div className="relative w-full max-w-5xl mx-auto px-6" style={{ zIndex: 2 }}>
         <div className={`grid ${gridCols} gap-5`}>
           {isGenerating
-            ? Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} delay={i} aspectRatio={aspectRatio} />)
+            ? Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} delay={i} aspectRatio={aspectRatio} />)
             : generatedAssets.map((asset, i) => <ImageCard key={asset.id} asset={asset} index={i} />)
           }
         </div>

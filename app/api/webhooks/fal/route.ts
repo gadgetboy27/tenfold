@@ -3,6 +3,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { falWebhookPayloadSchema } from '@/lib/fal/webhooks';
 import { refundCredits } from '@/lib/credits/refund';
 import { recordJobCost } from '@/lib/costs/tracker';
+import { analyzeJobFailure } from '@/lib/fal/error-analyzer';
 import { v4 as uuidv4 } from 'uuid';
 
 interface CreativeJob {
@@ -11,6 +12,7 @@ interface CreativeJob {
   workspace_id: string;
   type: string;
   credits_charged: number;
+  input_params: Record<string, unknown>;
 }
 
 export async function POST(req: Request) {
@@ -31,15 +33,14 @@ export async function POST(req: Request) {
   });
 
   if (logErr) {
-    // Unique constraint violation = already processed
     if (logErr.code === '23505') return NextResponse.json({ ok: true });
     return NextResponse.json({ error: logErr.message }, { status: 500 });
   }
 
-  // 2. Locate the job
+  // 2. Locate the job (fetch input_params so the error analyzer has the original prompt)
   const { data: jobRow } = await admin
     .from('creative_jobs')
-    .select('id, campaign_id, workspace_id, type, credits_charged')
+    .select('id, campaign_id, workspace_id, type, credits_charged, input_params')
     .eq('fal_request_id', payload.request_id)
     .single();
 
@@ -56,7 +57,7 @@ export async function POST(req: Request) {
   if (payload.status === 'OK' && payload.payload) {
     await handleSuccess(job, payload.payload);
   } else {
-    await handleFailure(job, payload.error ?? 'fal.ai job failed');
+    await handleFailure(job, payload.error ?? 'fal.ai job failed', payload.payload);
   }
 
   // 3. Mark processed
@@ -160,12 +161,44 @@ async function handleSuccess(
   await recordJobCost(job.id, job.type);
 }
 
-async function handleFailure(job: CreativeJob, errorMessage: string) {
+async function handleFailure(
+  job: CreativeJob,
+  errorMessage: string,
+  rawErrorPayload: unknown,
+) {
   const admin = createSupabaseAdminClient();
+
+  const prompt = (job.input_params?.prompt as string) ?? '';
+
+  // Fire-and-forget Claude analysis — refund happens regardless of analysis success
+  const analysisPromise = analyzeJobFailure({
+    jobType: job.type,
+    prompt,
+    errorMessage,
+    rawError: rawErrorPayload,
+  }).catch(() => null);
+
+  // Refund credits immediately — don't wait on Claude
   await admin
     .from('creative_jobs')
-    .update({ status: 'failed', error_message: errorMessage })
+    .update({
+      status: 'failed',
+      error_message: errorMessage,
+      fal_raw_error: rawErrorPayload as Record<string, unknown>,
+    })
     .eq('id', job.id);
 
   await refundCredits(job.id);
+
+  // Store analysis once Claude responds (doesn't block the webhook response)
+  analysisPromise.then(async (analysis) => {
+    if (!analysis) return;
+    await admin
+      .from('creative_jobs')
+      .update({
+        error_analysis: analysis.explanation,
+        suggested_prompt: analysis.suggestedPrompt,
+      })
+      .eq('id', job.id);
+  });
 }
