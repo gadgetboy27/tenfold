@@ -12,7 +12,10 @@ interface StuckJob {
 }
 
 interface FalImageResult {
-  images?: Array<{ url: string; width?: number; height?: number; content_type?: string }>;
+  data: {
+    images?: Array<{ url: string; width?: number; height?: number; content_type?: string }>;
+  };
+  requestId: string;
 }
 
 export async function fetchAndProcessFalJob(job: StuckJob): Promise<boolean> {
@@ -44,7 +47,7 @@ export async function fetchAndProcessFalJob(job: StuckJob): Promise<boolean> {
 
     const assetInserts: Record<string, unknown>[] = [];
 
-    for (const img of result.images ?? []) {
+    for (const img of result.data?.images ?? []) {
       const assetId = uuidv4();
       const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.jpg`;
 
