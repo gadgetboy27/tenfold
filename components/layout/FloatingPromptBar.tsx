@@ -46,7 +46,17 @@ export default function FloatingPromptBar() {
     creditBalance, setCreditBalance, setIsGenerating, setGeneratedAssets,
     isGenerating, aspectRatio, style, setAspectRatio, setStyle,
     setStep, completeStep, setCampaignId, workspaceSlug, currentStep,
+    setGenerationStage,
   } = useAppStore();
+
+  const STAGES = [
+    { after: 0,  label: 'Submitting your prompt…' },
+    { after: 3,  label: 'Waiting for GPU…' },
+    { after: 7,  label: 'Painting your vision…' },
+    { after: 14, label: 'Adding fine details…' },
+    { after: 22, label: 'Almost there…' },
+    { after: 35, label: 'Finishing touches…' },
+  ];
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -98,6 +108,9 @@ export default function FloatingPromptBar() {
       const poll = async (): Promise<void> => {
         if (attempts++ >= 60) throw new Error('Generation timed out — please try again');
         await new Promise(r => setTimeout(r, 1500));
+        const elapsed = attempts * 1.5;
+        const stage = [...STAGES].reverse().find(s => elapsed >= s.after)?.label ?? STAGES[0].label;
+        setGenerationStage(stage, elapsed);
 
         const statusRes = await api(`/api/campaigns/${campaignId}`, { workspaceSlug });
         if (!statusRes.ok) {

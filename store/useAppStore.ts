@@ -32,6 +32,8 @@ interface AppStore {
   generatedAssets: Asset[];
   expansions: Expansions;
   isGenerating: boolean;
+  generationStage: string;
+  generationElapsed: number;
   aspectRatio: string;
   style: string;
 
@@ -45,6 +47,7 @@ interface AppStore {
   setGeneratedAssets: (assets: Asset[]) => void;
   updateExpansion: (type: keyof Expansions, expansion: Expansion) => void;
   setIsGenerating: (v: boolean) => void;
+  setGenerationStage: (stage: string, elapsed: number) => void;
   setAspectRatio: (r: string) => void;
   setStyle: (s: string) => void;
   completeStep: (step: number) => void;
@@ -63,6 +66,8 @@ export const useAppStore = create<AppStore>()((set) => ({
   generatedAssets: [],
   expansions: {},
   isGenerating: false,
+  generationStage: '',
+  generationElapsed: 0,
   aspectRatio: '1:1',
   style: 'Photorealistic',
 
@@ -76,7 +81,8 @@ export const useAppStore = create<AppStore>()((set) => ({
   setGeneratedAssets: (assets) => set({ generatedAssets: assets }),
   updateExpansion: (type, expansion) =>
     set((state) => ({ expansions: { ...state.expansions, [type]: expansion } })),
-  setIsGenerating: (v) => set({ isGenerating: v }),
+  setIsGenerating: (v) => set({ isGenerating: v, generationStage: '', generationElapsed: 0 }),
+  setGenerationStage: (stage, elapsed) => set({ generationStage: stage, generationElapsed: elapsed }),
   setAspectRatio: (r) => set({ aspectRatio: r }),
   setStyle: (s) => set({ style: s }),
   completeStep: (step) =>
@@ -96,5 +102,7 @@ export const useAppStore = create<AppStore>()((set) => ({
       generatedAssets: [],
       expansions: {},
       isGenerating: false,
+      generationStage: '',
+      generationElapsed: 0,
     }),
 }));
