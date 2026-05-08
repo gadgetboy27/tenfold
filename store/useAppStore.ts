@@ -16,6 +16,7 @@ export interface Expansion {
   status: 'idle' | 'pending' | 'ready' | 'failed';
   content?: string;
   url?: string;
+  error?: string;
 }
 
 type Expansions = { video?: Expansion; music?: Expansion; script?: Expansion };

@@ -23,7 +23,9 @@ export default function FormatCard({ type, title, subtitle, cost, icon: Icon, on
   return (
     <div className={cn(
       'flex flex-col gap-4 bg-card border rounded-xl p-5 transition-all duration-200',
-      status === 'ready' ? 'border-success/40 bg-success/5' : 'border-border hover:border-border/80',
+      status === 'ready'  ? 'border-success/40 bg-success/5' :
+      status === 'failed' ? 'border-destructive/30 bg-destructive/5' :
+      'border-border hover:border-border/80',
     )}>
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
@@ -61,6 +63,15 @@ export default function FormatCard({ type, title, subtitle, cost, icon: Icon, on
       {status === 'ready' && type === 'script' && expansion?.content && (
         <div className="border-t border-border/50 pt-4">
           <p className="text-sm text-foreground bg-secondary/50 rounded-lg p-3 italic">"{expansion.content}"</p>
+        </div>
+      )}
+
+      {status === 'failed' && expansion?.error && (
+        <div className="border-t border-destructive/20 pt-4">
+          <div className="flex gap-2 bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+            <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+            <p className="text-xs text-destructive leading-relaxed">{expansion.error}</p>
+          </div>
         </div>
       )}
 

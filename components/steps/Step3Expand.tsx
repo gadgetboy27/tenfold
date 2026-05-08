@@ -64,8 +64,9 @@ export default function Step3Expand() {
       });
 
       if (!jobRes.ok) {
-        const e = await jobRes.json().catch(() => ({})) as { error?: string };
-        throw new Error(e.error ?? `Job failed (${jobRes.status})`);
+        const e = await jobRes.json().catch(() => ({})) as { error?: string; issues?: string[] };
+        const detail = e.issues?.join('; ') ?? e.error ?? `Request failed (${jobRes.status})`;
+        throw new Error(detail);
       }
 
       const postData = await jobRes.json() as {
@@ -93,6 +94,7 @@ export default function Step3Expand() {
         const job = await res.json() as {
           status: string;
           outputUrls?: string[];
+          errorMessage?: string | null;
         };
 
         if (job.status === 'ready') {
@@ -100,7 +102,7 @@ export default function Step3Expand() {
           toast.success(`${type === 'video' ? 'Video' : 'Music'} ready`);
           syncBalance();
         } else if (job.status === 'failed') {
-          throw new Error('Generation failed');
+          throw new Error(job.errorMessage ?? 'Generation failed — please try again');
         } else {
           return poll();
         }
@@ -108,8 +110,9 @@ export default function Step3Expand() {
 
       await poll();
     } catch (err: unknown) {
-      updateExpansion(type, { status: 'failed' });
-      toast.error((err as Error).message ?? 'Generation failed');
+      const message = (err as Error).message ?? 'Generation failed — please try again';
+      updateExpansion(type, { status: 'failed', error: message });
+      toast.error(message);
     }
   };
 

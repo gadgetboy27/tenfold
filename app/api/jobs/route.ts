@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth/session';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createJobSchema } from '@/lib/validation/schemas';
 import { debitCredits } from '@/lib/credits/debit';
+import { refundCredits } from '@/lib/credits/refund';
 import { CREDIT_COSTS, type CreditCostKey } from '@/lib/credits/costs';
 import { enqueueJob } from '@/lib/fal/queue';
 import { generateScript } from '@/lib/claude/script';
@@ -79,20 +80,30 @@ export async function POST(req: Request) {
 
     // Script generation is synchronous
     if (body.type === 'script_generation') {
-      const result = await generateScript({
-        imageDescription: (body.params.imageDescription as string) ?? '',
-        businessName: (body.params.businessName as string) ?? '',
-        platform: (body.params.platform as string) ?? 'instagram',
-        tone: (body.params.tone as 'professional' | 'casual' | 'playful') ?? 'professional',
-        maxWords: (body.params.maxWords as number) ?? 50,
-      });
+      try {
+        const result = await generateScript({
+          imageDescription: (body.params.imageDescription as string) ?? '',
+          businessName: (body.params.businessName as string) ?? '',
+          platform: (body.params.platform as string) ?? 'instagram',
+          tone: (body.params.tone as 'professional' | 'casual' | 'playful') ?? 'professional',
+          maxWords: (body.params.maxWords as number) ?? 50,
+        });
 
-      await admin
-        .from('creative_jobs')
-        .update({ status: 'completed', actual_cost_usd: result.actualCostUsd })
-        .eq('id', jobId);
+        await admin
+          .from('creative_jobs')
+          .update({ status: 'completed', actual_cost_usd: result.actualCostUsd })
+          .eq('id', jobId);
 
-      return NextResponse.json({ jobId, creditCost: cost, status: 'ready', result: result.text }, { status: 201 });
+        return NextResponse.json({ jobId, creditCost: cost, status: 'ready', result: result.text }, { status: 201 });
+      } catch (scriptErr) {
+        const msg = scriptErr instanceof Error ? scriptErr.message : 'Caption generation failed';
+        await admin
+          .from('creative_jobs')
+          .update({ status: 'failed', error_message: msg })
+          .eq('id', jobId);
+        await refundCredits(jobId);
+        return NextResponse.json({ error: msg }, { status: 500 });
+      }
     }
 
     // All other types go through fal.ai async queue

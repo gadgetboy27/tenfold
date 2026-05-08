@@ -39,6 +39,14 @@ export async function fetchAndProcessFalJob(job: StuckJob): Promise<boolean> {
 
   try {
     const status = await fal.queue.status(modelId, { requestId: job.fal_request_id });
+    if ((status.status as string) === 'FAILED') {
+      await admin
+        .from('creative_jobs')
+        .update({ status: 'failed', error_message: 'Generation failed on fal.ai — the model was unable to process your request' })
+        .eq('id', job.id)
+        .eq('status', 'processing');
+      return true;
+    }
     if (status.status !== 'COMPLETED') return false;
   } catch {
     return false;
