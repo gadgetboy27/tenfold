@@ -101,7 +101,7 @@ export async function POST(req: Request) {
       ({ requestId } = await enqueueJob('image_generation', {
         prompt: fullPrompt,
         image_size: imageSize,
-        num_images: 4,
+        num_images: 1,
       }, webhookUrl));
     } catch (falErr) {
       await refundCredits(jobId);

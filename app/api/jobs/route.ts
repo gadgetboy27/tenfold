@@ -22,7 +22,7 @@ function buildFalInput(type: string, params: Record<string, unknown>, prompt: st
     return {
       prompt: fullPrompt,
       image_size: (params.imageSize as string) ?? 'square_hd',
-      num_images: 4,
+      num_images: 1,
       seed: params.seed as number | undefined,
     };
   }

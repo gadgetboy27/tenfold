@@ -126,7 +126,7 @@ export default function FloatingPromptBar() {
           setIsGenerating(false);
           completeStep(1);
           setStep(2);
-          toast.success('4 images ready — pick your anchor');
+          toast.success('Image ready — pick your anchor');
 
           // Final balance sync
           api('/api/credits/balance', { workspaceSlug })
