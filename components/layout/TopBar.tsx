@@ -6,7 +6,8 @@ import { useAppStore } from '@/store/useAppStore';
 import CreditMeter from '@/components/shared/CreditMeter';
 import JobStatusIndicator from '@/components/shared/JobStatusIndicator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Pen, LogOut, User as UserIcon } from 'lucide-react';
+import { Pen, LogOut, User as UserIcon, Share2 } from 'lucide-react';
+import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -108,6 +109,11 @@ export default function TopBar({ user }: Props) {
                 <DropdownMenuSeparator className="bg-border" />
               </>
             )}
+            <DropdownMenuItem className="gap-2 text-sm cursor-pointer" asChild>
+              <Link href={`/${useAppStore.getState().workspaceSlug}/settings/social`}>
+                <Share2 className="w-4 h-4" /> Social connections
+              </Link>
+            </DropdownMenuItem>
             <DropdownMenuItem className="gap-2 text-sm cursor-pointer" disabled>
               <UserIcon className="w-4 h-4" /> Account settings
             </DropdownMenuItem>
