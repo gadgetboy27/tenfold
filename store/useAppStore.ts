@@ -1,6 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
+import type { CampaignBrief } from '@/lib/claude/campaign-brief';
 
 export interface Asset {
   id: string;
@@ -46,6 +47,7 @@ interface AppStore {
   generationElapsed: number;
   aspectRatio: string;
   style: string;
+  campaignBrief: CampaignBrief | null;
 
   setStep: (step: 1 | 2 | 3 | 4 | 5) => void;
   setCampaignId: (id: string) => void;
@@ -61,6 +63,7 @@ interface AppStore {
   setAspectRatio: (r: string) => void;
   setStyle: (s: string) => void;
   completeStep: (step: number) => void;
+  setCampaignBrief: (brief: CampaignBrief | null) => void;
   loadCampaign: (campaign: CampaignResume) => void;
   resetCampaign: () => void;
 }
@@ -81,6 +84,7 @@ export const useAppStore = create<AppStore>()((set) => ({
   generationElapsed: 0,
   aspectRatio: '1:1',
   style: 'Photorealistic',
+  campaignBrief: null,
 
   setStep: (step) => set({ currentStep: step }),
   setCampaignId: (id) => set({ currentCampaignId: id }),
@@ -102,6 +106,7 @@ export const useAppStore = create<AppStore>()((set) => ({
       next.add(step);
       return { completedSteps: next };
     }),
+  setCampaignBrief: (brief) => set({ campaignBrief: brief }),
   loadCampaign: (campaign) =>
     set({
       currentCampaignId: campaign.id,
@@ -131,5 +136,6 @@ export const useAppStore = create<AppStore>()((set) => ({
       isGenerating: false,
       generationStage: '',
       generationElapsed: 0,
+      campaignBrief: null,
     }),
 }));

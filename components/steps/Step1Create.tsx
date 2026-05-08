@@ -1,10 +1,12 @@
 'use client';
 
+import { useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { Sparkles } from 'lucide-react';
 import CosmicBackground from '@/components/shared/CosmicBackground';
 import { motion, AnimatePresence } from 'framer-motion';
 import ImageCard from '@/components/shared/ImageCard';
+import CampaignBriefPanel from '@/components/campaign/CampaignBriefPanel';
 
 const GRID_COLS: Record<string, string> = {
   '1:1':  'grid-cols-3',
@@ -13,12 +15,10 @@ const GRID_COLS: Record<string, string> = {
   '9:16': 'grid-cols-4',
 };
 
-// Approximate how long FLUX takes — used to animate the progress bar
 const EXPECTED_SECONDS = 20;
 
 function GeneratingCard({ aspectRatio, stage, elapsed }: { aspectRatio: string; stage: string; elapsed: number }) {
   const progress = Math.min(95, Math.round((elapsed / EXPECTED_SECONDS) * 100));
-
   const aspectClass: Record<string, string> = {
     '1:1':  'aspect-square',
     '4:5':  'aspect-[4/5]',
@@ -28,7 +28,6 @@ function GeneratingCard({ aspectRatio, stage, elapsed }: { aspectRatio: string; 
 
   return (
     <div className={`relative w-full ${aspectClass[aspectRatio] ?? 'aspect-square'} rounded-xl overflow-hidden border border-border bg-card`}>
-      {/* Animated shimmer gradient */}
       <motion.div
         className="absolute inset-0"
         animate={{ backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] }}
@@ -38,8 +37,6 @@ function GeneratingCard({ aspectRatio, stage, elapsed }: { aspectRatio: string; 
           backgroundSize: '300% 300%',
         }}
       />
-
-      {/* Floating particles */}
       {[...Array(6)].map((_, i) => (
         <motion.div
           key={i}
@@ -49,8 +46,6 @@ function GeneratingCard({ aspectRatio, stage, elapsed }: { aspectRatio: string; 
           transition={{ duration: 2.5 + i * 0.4, repeat: Infinity, delay: i * 0.5, ease: 'easeOut' }}
         />
       ))}
-
-      {/* Centre content */}
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-6">
         <motion.div
           animate={{ scale: [1, 1.12, 1], opacity: [0.7, 1, 0.7] }}
@@ -58,7 +53,6 @@ function GeneratingCard({ aspectRatio, stage, elapsed }: { aspectRatio: string; 
         >
           <Sparkles className="w-8 h-8 text-primary" />
         </motion.div>
-
         <AnimatePresence mode="wait">
           <motion.p
             key={stage}
@@ -71,8 +65,6 @@ function GeneratingCard({ aspectRatio, stage, elapsed }: { aspectRatio: string; 
             {stage}
           </motion.p>
         </AnimatePresence>
-
-        {/* Progress bar */}
         <div className="w-full max-w-[140px] h-1 bg-white/10 rounded-full overflow-hidden">
           <motion.div
             className="h-full bg-gradient-to-r from-primary to-[#9D84FD] rounded-full"
@@ -80,7 +72,6 @@ function GeneratingCard({ aspectRatio, stage, elapsed }: { aspectRatio: string; 
             transition={{ duration: 0.8, ease: 'easeOut' }}
           />
         </div>
-
         <span className="text-[10px] font-mono text-white/20">{Math.round(elapsed)}s</span>
       </div>
     </div>
@@ -88,8 +79,23 @@ function GeneratingCard({ aspectRatio, stage, elapsed }: { aspectRatio: string; 
 }
 
 export default function Step1Create() {
-  const { generatedAssets, isGenerating, aspectRatio, generationStage, generationElapsed } = useAppStore();
+  const {
+    generatedAssets, isGenerating, aspectRatio,
+    generationStage, generationElapsed, campaignBrief,
+  } = useAppStore();
   const gridCols = GRID_COLS[aspectRatio] ?? 'grid-cols-3';
+
+  // Called by CampaignBriefPanel when the user picks an angle and hits Generate
+  const handleBriefGenerate = useCallback((prompt: string, angleName: string) => {
+    // Inject the selected angle prompt into the FloatingPromptBar's pending generate
+    // by dispatching a custom event the bar listens to
+    window.dispatchEvent(new CustomEvent('tenfold:generate-from-brief', { detail: { prompt, angleName } }));
+  }, []);
+
+  // Show brief panel when a brief is loaded (and not yet generating)
+  if (campaignBrief && !isGenerating && generatedAssets.length === 0) {
+    return <CampaignBriefPanel onGenerate={handleBriefGenerate} />;
+  }
 
   if (generatedAssets.length === 0 && !isGenerating) {
     return (
@@ -118,7 +124,7 @@ export default function Step1Create() {
             transition={{ duration: 0.6, delay: 0.3 }}
             className="text-muted-foreground text-base"
           >
-            Tenfold will generate an image for you to work from
+            Tenfold will generate 4 images for you to choose from
           </motion.p>
         </div>
       </div>
