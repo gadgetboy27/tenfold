@@ -95,7 +95,8 @@ export async function POST(req: Request) {
     if (jobErr) throw new Error(jobErr.message);
 
     // 4. Enqueue to fal.ai — refund credits if submission fails
-    const webhookUrl = `${process.env.APP_URL}/api/webhooks/fal`;
+    // Unique per-job URL breaks any circuit-breaker on repeated failures
+    const webhookUrl = `${process.env.APP_URL}/api/webhooks/fal?j=${jobId}`;
     let requestId: string;
     try {
       ({ requestId } = await enqueueJob('image_generation', {

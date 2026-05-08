@@ -96,7 +96,7 @@ export async function POST(req: Request) {
     }
 
     // All other types go through fal.ai async queue
-    const webhookUrl = `${process.env.APP_URL}/api/webhooks/fal`;
+    const webhookUrl = `${process.env.APP_URL}/api/webhooks/fal?j=${jobId}`;
     const falInput = buildFalInput(body.type, body.params, prompt);
     const { requestId } = await enqueueJob(
       body.type as import('@/lib/fal/models').FalModelKey,
