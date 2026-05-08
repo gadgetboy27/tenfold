@@ -122,6 +122,7 @@ export default function FloatingPromptBar() {
         const campaign = await statusRes.json() as {
           status: string;
           assets: Array<{ id: string; url: string; prompt: string; aspectRatio: string; style: string; createdAt: string; status: string }>;
+          jobs?: Array<{ status: string; error_message: string | null; error_analysis: string | null }>;
         };
 
         if (campaign.status === 'ready') {
@@ -147,7 +148,9 @@ export default function FloatingPromptBar() {
             .then((d: { balance?: number }) => { if (typeof d.balance === 'number') setCreditBalance(d.balance); })
             .catch(() => {});
         } else if (campaign.status === 'failed') {
-          throw new Error('Image generation failed — please try again');
+          const failedJob = campaign.jobs?.find(j => j.status === 'failed');
+          const detail = failedJob?.error_analysis ?? failedJob?.error_message ?? null;
+          throw new Error(detail ?? 'Image generation failed — please try again');
         } else {
           return poll();
         }

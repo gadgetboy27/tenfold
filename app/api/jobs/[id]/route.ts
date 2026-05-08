@@ -43,7 +43,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     const j = job as {
       id: string; status: string; type: string; credits_charged: number;
-      error_message: string | null; created_at: string; completed_at: string | null;
+      error_message: string | null; error_analysis: string | null; suggested_prompt: string | null;
+      created_at: string; completed_at: string | null;
     };
 
     const { data: jobAssets } = await admin
@@ -62,6 +63,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       assets: assetList,
       outputUrls,
       errorMessage: j.error_message,
+      errorAnalysis: j.error_analysis,
+      suggestedPrompt: j.suggested_prompt,
       createdAt: j.created_at,
       completedAt: j.completed_at,
     });

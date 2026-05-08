@@ -95,6 +95,8 @@ export default function Step3Expand() {
           status: string;
           outputUrls?: string[];
           errorMessage?: string | null;
+          errorAnalysis?: string | null;
+          suggestedPrompt?: string | null;
         };
 
         if (job.status === 'ready') {
@@ -102,7 +104,9 @@ export default function Step3Expand() {
           toast.success(`${type === 'video' ? 'Video' : 'Music'} ready`);
           syncBalance();
         } else if (job.status === 'failed') {
-          throw new Error(job.errorMessage ?? 'Generation failed — please try again');
+          const msg = job.errorAnalysis ?? job.errorMessage ?? 'Generation failed — please try again';
+          const hint = job.suggestedPrompt ? ` Try: "${job.suggestedPrompt}"` : '';
+          throw new Error(msg + hint);
         } else {
           return poll();
         }
