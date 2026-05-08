@@ -9,13 +9,6 @@ import { api } from '@/lib/api';
 
 type ExpandType = 'video' | 'music' | 'script';
 
-// API job types map 1:1 to the server's JobType enum
-const JOB_TYPE: Record<ExpandType, string> = {
-  video: 'video',
-  music: 'music',
-  script: 'script',
-};
-
 export default function Step3Expand() {
   const [videoDuration, setVideoDuration] = useState<10 | 30 | 60>(10);
   const [videoMood, setVideoMood] = useState('Uplifting');
@@ -41,26 +34,29 @@ export default function Step3Expand() {
 
     try {
       const campaignId = currentCampaignId ?? 'demo';
-
-      // Build flat body matching the server's expected fields
       const PLATFORM_MAP: Record<string, string> = { IG: 'instagram', LI: 'linkedin', TikTok: 'tiktok' };
       const TONE_MAP: Record<string, string> = { Pro: 'professional', Casual: 'casual', Playful: 'playful' };
 
-      const body: Record<string, unknown> = {
-        type: JOB_TYPE[type],
-        campaignId,
-        anchorAssetId: selectedAnchorId,
+      const jobType =
+        type === 'video'  ? (`video_${videoDuration}s` as 'video_10s' | 'video_30s' | 'video_60s') :
+        type === 'music'  ? 'music_generation' :
+                            'script_generation';
+
+      const params: Record<string, unknown> = {
+        imageUrl: anchor.url,
+        prompt: anchor.prompt,
       };
-      if (type === 'video')  body.duration = videoDuration;
-      if (type === 'music')  body.mood = videoMood;
-      if (type === 'script') {
-        body.platform = PLATFORM_MAP[scriptPlatform] ?? scriptPlatform.toLowerCase();
-        body.tone     = TONE_MAP[scriptTone] ?? scriptTone.toLowerCase();
+      if (type === 'music') {
+        params.mood = videoMood;
+      } else if (type === 'script') {
+        params.platform       = PLATFORM_MAP[scriptPlatform] ?? scriptPlatform.toLowerCase();
+        params.tone           = TONE_MAP[scriptTone] ?? scriptTone.toLowerCase();
+        params.imageDescription = anchor.prompt;
       }
 
       const jobRes = await api('/api/jobs', {
         method: 'POST',
-        body: JSON.stringify(body),
+        body: JSON.stringify({ type: jobType, campaignId, params }),
         workspaceSlug,
       });
 
@@ -69,32 +65,36 @@ export default function Step3Expand() {
         throw new Error(e.error ?? `Job failed (${jobRes.status})`);
       }
 
-      const { jobId, creditCost } = await jobRes.json() as { jobId: string; creditCost: number };
-      setCreditBalance(creditBalance - (creditCost ?? 0));
+      const postData = await jobRes.json() as {
+        jobId: string; creditCost: number; status?: string; result?: string;
+      };
+      setCreditBalance(creditBalance - (postData.creditCost ?? 0));
 
-      // Poll until ready
+      // Script generation is synchronous — POST returns final result directly
+      if (postData.status === 'ready' && type === 'script') {
+        updateExpansion(type, { status: 'ready', content: postData.result });
+        toast.success('Caption ready');
+        syncBalance();
+        return;
+      }
+
+      // Async jobs (video, music) — poll until completed
       let attempts = 0;
       const poll = async (): Promise<void> => {
         if (attempts++ >= 40) throw new Error('Job timed out');
         await new Promise(r => setTimeout(r, 1500));
 
-        const res = await api(`/api/jobs/${jobId}`, { workspaceSlug });
+        const res = await api(`/api/jobs/${postData.jobId}`, { workspaceSlug });
         if (!res.ok) throw new Error('Status check failed');
 
         const job = await res.json() as {
           status: string;
-          outputUrl?: string;
-          outputText?: string;
+          outputUrls?: string[];
         };
 
         if (job.status === 'ready') {
-          // Script returns outputText; video/music return outputUrl
-          updateExpansion(type, {
-            status: 'ready',
-            url: job.outputUrl,
-            content: job.outputText,
-          });
-          toast.success(`${type === 'video' ? 'Video' : type === 'music' ? 'Music' : 'Caption'} ready`);
+          updateExpansion(type, { status: 'ready', url: job.outputUrls?.[0] });
+          toast.success(`${type === 'video' ? 'Video' : 'Music'} ready`);
           syncBalance();
         } else if (job.status === 'failed') {
           throw new Error('Generation failed');
