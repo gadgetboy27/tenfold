@@ -6,6 +6,16 @@ import { recordJobCost } from '@/lib/costs/tracker';
 import { analyzeJobFailure } from '@/lib/fal/error-analyzer';
 import { v4 as uuidv4 } from 'uuid';
 
+function resolveAudioContentType(url: string): string {
+  if (url.includes('.wav')) return 'audio/wav';
+  if (url.includes('.mp3')) return 'audio/mpeg';
+  return 'audio/wav';
+}
+
+function audioExtension(url: string): string {
+  return url.includes('.mp3') ? 'mp3' : 'wav';
+}
+
 interface CreativeJob {
   id: string;
   campaign_id: string;
@@ -128,13 +138,14 @@ async function handleSuccess(
 
   if (payload.audio_file) {
     const assetId = uuidv4();
-    const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.mp3`;
+    const ext = audioExtension(payload.audio_file.url);
+    const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.${ext}`;
 
     const audRes = await fetch(payload.audio_file.url);
     const buffer = await audRes.arrayBuffer();
     await admin.storage
       .from('assets')
-      .upload(storagePath, buffer, { contentType: payload.audio_file.content_type ?? 'audio/mpeg' });
+      .upload(storagePath, buffer, { contentType: resolveAudioContentType(payload.audio_file.url) });
 
     const { data: urlData } = admin.storage.from('assets').getPublicUrl(storagePath);
 

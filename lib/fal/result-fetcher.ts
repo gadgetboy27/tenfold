@@ -3,6 +3,17 @@ import { FAL_MODELS, FAL_QUEUE_MODELS, type FalModelKey } from './models';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { v4 as uuidv4 } from 'uuid';
 
+// fal.ai returns 'application/octet-stream' for audio — derive from URL extension
+function resolveAudioContentType(url: string): string {
+  if (url.includes('.wav')) return 'audio/wav';
+  if (url.includes('.mp3')) return 'audio/mpeg';
+  return 'audio/wav';
+}
+
+function audioExtension(url: string): string {
+  return url.includes('.mp3') ? 'mp3' : 'wav';
+}
+
 interface StuckJob {
   id: string;
   campaign_id: string;
@@ -97,12 +108,13 @@ export async function fetchAndProcessFalJob(job: StuckJob): Promise<boolean> {
     if (result.data?.audio_file) {
       const aud = result.data.audio_file;
       const assetId = uuidv4();
-      const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.mp3`;
+      const ext = audioExtension(aud.url);
+      const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.${ext}`;
       const audRes = await fetch(aud.url);
       const buffer = await audRes.arrayBuffer();
       await admin.storage
         .from('assets')
-        .upload(storagePath, buffer, { contentType: aud.content_type ?? 'audio/mpeg' });
+        .upload(storagePath, buffer, { contentType: resolveAudioContentType(aud.url) });
       const { data: urlData } = admin.storage.from('assets').getPublicUrl(storagePath);
       assetInserts.push({
         id: assetId,
