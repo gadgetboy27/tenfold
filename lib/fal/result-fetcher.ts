@@ -1,5 +1,5 @@
 import { fal } from './client';
-import { FAL_MODELS, type FalModelKey } from './models';
+import { FAL_MODELS, FAL_QUEUE_MODELS, type FalModelKey } from './models';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -22,7 +22,9 @@ interface FalResult {
 
 export async function fetchAndProcessFalJob(job: StuckJob): Promise<boolean> {
   const admin = createSupabaseAdminClient();
-  const modelId = FAL_MODELS[job.type as FalModelKey] ?? job.type;
+  const jobType = job.type as FalModelKey;
+  // Use queue alias (base path) for status/result — versioned submit paths differ from queue paths
+  const modelId = FAL_QUEUE_MODELS[jobType] ?? FAL_MODELS[jobType] ?? job.type;
 
   try {
     const status = await fal.queue.status(modelId, { requestId: job.fal_request_id });

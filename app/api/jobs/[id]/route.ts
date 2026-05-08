@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/session';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { fetchAndProcessFalJob } from '@/lib/fal/result-fetcher';
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -16,6 +17,29 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       .single();
 
     if (!job) return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+
+    // If job is stuck processing with a fal request ID and >20s old, poll fal.ai directly
+    const j0 = job as { id: string; status: string; type: string; fal_request_id: string | null; campaign_id: string; workspace_id: string; created_at: string };
+    if (
+      j0.status === 'processing' &&
+      j0.fal_request_id &&
+      Date.now() - new Date(j0.created_at).getTime() > 20_000
+    ) {
+      await fetchAndProcessFalJob({
+        id: j0.id,
+        campaign_id: j0.campaign_id,
+        workspace_id: j0.workspace_id,
+        type: j0.type,
+        fal_request_id: j0.fal_request_id,
+      });
+      // Re-fetch after potential update
+      const { data: refreshed } = await admin
+        .from('creative_jobs')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (refreshed) Object.assign(job, refreshed);
+    }
 
     const j = job as {
       id: string; status: string; type: string; credits_charged: number;
