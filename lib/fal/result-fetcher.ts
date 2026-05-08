@@ -11,9 +11,11 @@ interface StuckJob {
   fal_request_id: string;
 }
 
-interface FalImageResult {
+interface FalResult {
   data: {
-    images?: Array<{ url: string; width?: number; height?: number; content_type?: string }>;
+    images?:     Array<{ url: string; width?: number; height?: number; content_type?: string }>;
+    video?:      { url: string; content_type?: string };
+    audio_file?: { url: string; content_type?: string };
   };
   requestId: string;
 }
@@ -43,22 +45,19 @@ export async function fetchAndProcessFalJob(job: StuckJob): Promise<boolean> {
   try {
     const result = (await fal.queue.result(modelId as FalModelKey, {
       requestId: job.fal_request_id,
-    })) as FalImageResult;
+    })) as FalResult;
 
     const assetInserts: Record<string, unknown>[] = [];
 
     for (const img of result.data?.images ?? []) {
       const assetId = uuidv4();
       const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.jpg`;
-
       const imgRes = await fetch(img.url);
       const buffer = await imgRes.arrayBuffer();
       await admin.storage
         .from('assets')
         .upload(storagePath, buffer, { contentType: img.content_type ?? 'image/jpeg' });
-
       const { data: urlData } = admin.storage.from('assets').getPublicUrl(storagePath);
-
       assetInserts.push({
         id: assetId,
         campaign_id: job.campaign_id,
@@ -69,6 +68,48 @@ export async function fetchAndProcessFalJob(job: StuckJob): Promise<boolean> {
         storage_path: storagePath,
         width_px: img.width,
         height_px: img.height,
+      });
+    }
+
+    if (result.data?.video) {
+      const vid = result.data.video;
+      const assetId = uuidv4();
+      const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.mp4`;
+      const vidRes = await fetch(vid.url);
+      const buffer = await vidRes.arrayBuffer();
+      await admin.storage
+        .from('assets')
+        .upload(storagePath, buffer, { contentType: vid.content_type ?? 'video/mp4' });
+      const { data: urlData } = admin.storage.from('assets').getPublicUrl(storagePath);
+      assetInserts.push({
+        id: assetId,
+        campaign_id: job.campaign_id,
+        workspace_id: job.workspace_id,
+        job_id: job.id,
+        type: 'video',
+        url: urlData.publicUrl,
+        storage_path: storagePath,
+      });
+    }
+
+    if (result.data?.audio_file) {
+      const aud = result.data.audio_file;
+      const assetId = uuidv4();
+      const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.mp3`;
+      const audRes = await fetch(aud.url);
+      const buffer = await audRes.arrayBuffer();
+      await admin.storage
+        .from('assets')
+        .upload(storagePath, buffer, { contentType: aud.content_type ?? 'audio/mpeg' });
+      const { data: urlData } = admin.storage.from('assets').getPublicUrl(storagePath);
+      assetInserts.push({
+        id: assetId,
+        campaign_id: job.campaign_id,
+        workspace_id: job.workspace_id,
+        job_id: job.id,
+        type: 'audio',
+        url: urlData.publicUrl,
+        storage_path: storagePath,
       });
     }
 
