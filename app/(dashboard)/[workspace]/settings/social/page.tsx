@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { api } from '@/lib/api';
-import { ExternalLink, RefreshCw, CheckCircle2, Circle, AlertCircle, Wifi } from 'lucide-react';
+import { ExternalLink, RefreshCw, CheckCircle2, Circle, AlertCircle, Wifi, ArrowUpRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 
@@ -36,11 +36,12 @@ export default function SocialSettingsPage() {
   const params = useParams();
   const workspaceSlug = params.workspace as string;
 
-  const [profiles, setProfiles]   = useState<SocialProfile[]>([]);
-  const [loading, setLoading]     = useState(true);
+  const [profiles, setProfiles]     = useState<SocialProfile[]>([]);
+  const [loading, setLoading]       = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError]         = useState<string | null>(null);
+  const [error, setError]           = useState<string | null>(null);
+  const [needsUpgrade, setNeedsUpgrade] = useState(false);
 
   const fetchProfiles = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -71,7 +72,13 @@ export default function SocialSettingsPage() {
       const res = await api('/api/social/connect', { workspaceSlug });
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as { error?: string };
-        throw new Error(body.error ?? 'Could not generate connect URL');
+        const msg = body.error ?? '';
+        if (msg.includes('business plan') || msg.includes('167')) {
+          setNeedsUpgrade(true);
+          setConnecting(false);
+          return;
+        }
+        throw new Error(msg || `Could not generate connect URL (${res.status})`);
       }
       const { connectUrl } = await res.json() as { connectUrl: string };
 
@@ -146,6 +153,43 @@ export default function SocialSettingsPage() {
           <div>
             <p className="text-sm font-medium text-destructive">Connection error</p>
             <p className="text-xs text-destructive/80 mt-0.5">{error}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Ayrshare upgrade notice */}
+      {needsUpgrade && (
+        <div className="mb-6 p-5 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-foreground mb-1">Ayrshare Business Plan required</p>
+              <p className="text-sm text-muted-foreground mb-3">
+                The in-app social connection popup requires Ayrshare&apos;s Business Plan. You have two options:
+              </p>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <div className="flex items-start gap-2">
+                  <span className="text-amber-400 font-bold mt-0.5">1.</span>
+                  <span>
+                    <strong className="text-foreground">Upgrade Ayrshare</strong> — unlocks the in-app connection flow for all workspaces.{' '}
+                    <a href="https://www.ayrshare.com/business-plan-for-multiple-users/" target="_blank" rel="noreferrer"
+                      className="text-primary underline underline-offset-2 inline-flex items-center gap-1">
+                      View pricing <ArrowUpRight className="w-3 h-3" />
+                    </a>
+                  </span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-amber-400 font-bold mt-0.5">2.</span>
+                  <span>
+                    <strong className="text-foreground">Connect via Ayrshare dashboard</strong> — log in to your Ayrshare account, connect your social platforms there, then hit Refresh below to sync them here.{' '}
+                    <a href="https://app.ayrshare.com" target="_blank" rel="noreferrer"
+                      className="text-primary underline underline-offset-2 inline-flex items-center gap-1">
+                      Open Ayrshare <ArrowUpRight className="w-3 h-3" />
+                    </a>
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
