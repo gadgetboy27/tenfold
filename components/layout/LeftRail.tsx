@@ -1,7 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { useAppStore } from '@/store/useAppStore';
-import { Sparkles, Crosshair, Layers, PenTool, Send, Check } from 'lucide-react';
+import { Sparkles, Crosshair, Layers, PenTool, Send, Check, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const STEPS = [
