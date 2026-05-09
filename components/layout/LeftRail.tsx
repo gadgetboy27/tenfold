@@ -14,7 +14,7 @@ const STEPS = [
 ];
 
 export default function LeftRail() {
-  const { currentStep, completedSteps, setStep, creditBalance } = useAppStore();
+  const { currentStep, completedSteps, setStep, creditBalance, workspaceSlug } = useAppStore();
   const MAX = 500;
   const pct = Math.min(100, Math.round((creditBalance / MAX) * 100));
   const barColor = pct < 20 ? '#EF4444' : pct < 50 ? '#F59E0B' : 'var(--color-primary)';
@@ -56,6 +56,20 @@ export default function LeftRail() {
           })}
         </nav>
       </div>
+
+      {workspaceSlug && (
+        <div className="px-3 pb-2">
+          <Link
+            href={`/${workspaceSlug}/settings/social`}
+            className="flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-all"
+          >
+            <div className="w-8 h-8 rounded-full flex items-center justify-center border-2 border-border bg-card shrink-0">
+              <Settings className="w-4 h-4" />
+            </div>
+            <span>Settings</span>
+          </Link>
+        </div>
+      )}
 
       <div className="p-4 border-t border-border">
         <div className="text-xs font-medium text-muted-foreground mb-2 flex justify-between">
