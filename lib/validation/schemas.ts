@@ -73,7 +73,7 @@ export const publishSchema = z.object({
         'threads',
         'snapchat',
         'bluesky',
-        'google_business',
+        'gmb',
       ]),
     )
     .min(1),
