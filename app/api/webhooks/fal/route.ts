@@ -11,6 +11,7 @@ interface CreativeJob {
   campaign_id: string;
   workspace_id: string;
   type: string;
+  status: string;
   credits_charged: number;
   input_params: Record<string, unknown>;
   fal_request_id: string | null;
@@ -42,7 +43,7 @@ export async function POST(req: Request) {
   const jobId = new URL(req.url).searchParams.get('j');
   const jobQuery = admin
     .from('creative_jobs')
-    .select('id, campaign_id, workspace_id, type, credits_charged, input_params, fal_request_id');
+    .select('id, campaign_id, workspace_id, type, status, credits_charged, input_params, fal_request_id');
 
   const { data: jobRow } = jobId
     ? await jobQuery.eq('id', jobId).single()
@@ -59,6 +60,12 @@ export async function POST(req: Request) {
   if (!job) {
     await admin.from('webhook_logs').update({ error: 'Unknown job', processed: true }).eq('event_id', payload.request_id);
     return NextResponse.json({ error: 'Unknown job' }, { status: 404 });
+  }
+
+  // If the job was cancelled server-side, acknowledge and ignore
+  if ((job as CreativeJob & { status?: string }).status === 'cancelled') {
+    await admin.from('webhook_logs').update({ processed: true }).eq('event_id', payload.request_id);
+    return NextResponse.json({ ok: true });
   }
 
   if (payload.status === 'OK' && payload.payload) {
@@ -143,6 +150,13 @@ async function handleSuccess(
     .update({ status: 'completed', completed_at: new Date().toISOString() })
     .eq('id', job.id);
 
+  // Propagate completion back to the campaign row so the lobby shows correct status
+  await admin
+    .from('campaigns')
+    .update({ status: 'ready' })
+    .eq('id', job.campaign_id)
+    .in('status', ['generating', 'expanding']); // only advance, never revert
+
   await recordJobCost(job.id, job.type);
 }
 
@@ -174,6 +188,14 @@ async function handleFailure(
     .eq('id', job.id);
 
   await refundCredits(job.id);
+
+  // If the image generation itself failed, the campaign has no assets — mark it failed
+  if (job.type === 'image_generation') {
+    await admin
+      .from('campaigns')
+      .update({ status: 'failed' })
+      .eq('id', job.campaign_id);
+  }
 
   // Store analysis once Claude responds (doesn't block the webhook response)
   analysisPromise.then(async (analysis) => {

@@ -62,7 +62,47 @@ export async function GET(req: Request) {
       }
     }
 
-    const enriched = campaigns.map(c => ({ ...c, thumbnailUrl: thumbMap[c.id as string] ?? null }));
+    // Auto-recover campaigns still stuck in 'generating' (webhook may have been missed)
+    const stale = campaigns.filter(c => c.status === 'generating');
+    if (stale.length > 0) {
+      const staleIds = stale.map(c => c.id as string);
+      const { data: jobRows } = await admin
+        .from('creative_jobs')
+        .select('campaign_id, status')
+        .in('campaign_id', staleIds);
+
+      const jobsByCampaign = new Map<string, string[]>();
+      for (const j of jobRows ?? []) {
+        const arr = jobsByCampaign.get(j.campaign_id as string) ?? [];
+        arr.push(j.status as string);
+        jobsByCampaign.set(j.campaign_id as string, arr);
+      }
+
+      const toReady: string[] = [];
+      const toFailed: string[] = [];
+      for (const c of stale) {
+        const statuses = jobsByCampaign.get(c.id as string) ?? [];
+        if (statuses.length === 0) continue;
+        if (statuses.every(s => s === 'completed')) toReady.push(c.id as string);
+        else if (statuses.every(s => s === 'failed' || s === 'cancelled')) toFailed.push(c.id as string);
+      }
+
+      if (toReady.length) {
+        await admin.from('campaigns').update({ status: 'ready' }).in('id', toReady);
+        for (const c of campaigns) { if (toReady.includes(c.id as string)) c.status = 'ready'; }
+      }
+      if (toFailed.length) {
+        await admin.from('campaigns').update({ status: 'failed' }).in('id', toFailed);
+        for (const c of campaigns) { if (toFailed.includes(c.id as string)) c.status = 'failed'; }
+      }
+    }
+
+    const enriched = campaigns.map(c => ({
+      ...c,
+      thumbnailUrl: thumbMap[c.id as string] ?? null,
+      // Tell the client how old the 'generating' state is so it can show a stale indicator
+      generatingSince: c.status === 'generating' ? c.created_at : null,
+    }));
     return NextResponse.json(enriched);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';

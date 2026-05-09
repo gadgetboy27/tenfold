@@ -6,10 +6,11 @@ import { api } from '@/lib/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Sparkles, Clock, ChevronRight, Loader2,
-  Image as ImageIcon, Trash2, AlertTriangle,
+  Image as ImageIcon, Trash2, AlertTriangle, XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import toast from 'react-hot-toast';
 
 interface CampaignRow {
   id: string;
@@ -21,6 +22,7 @@ interface CampaignRow {
   expansion_data: Record<string, unknown>;
   thumbnailUrl: string | null;
   created_at: string;
+  generatingSince: string | null;
 }
 
 const STEP_LABELS = ['', 'Create', 'Select', 'Expand', 'Compose', 'Publish'];
@@ -170,6 +172,7 @@ export default function CampaignLobby() {
   const [campaigns, setCampaigns]         = useState<CampaignRow[]>([]);
   const [loading, setLoading]             = useState(true);
   const [resuming, setResuming]           = useState<string | null>(null);
+  const [cancelling, setCancelling]       = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<CampaignRow | null>(null);
   const [isDeleting, setIsDeleting]       = useState(false);
 
@@ -190,8 +193,27 @@ export default function CampaignLobby() {
     useAppStore.getState().setCampaignId('__new__');
   };
 
+  const handleCancel = async (c: CampaignRow) => {
+    setCancelling(c.id);
+    try {
+      const res = await api(`/api/campaigns/${c.id}/cancel`, { method: 'POST', workspaceSlug });
+      if (res.ok) {
+        const result = await res.json() as { status: string; creditsRefunded: number };
+        setCampaigns(prev => prev.map(x => x.id === c.id ? { ...x, status: result.status } : x));
+        toast.success(
+          result.creditsRefunded > 0
+            ? `Generation cancelled — ${result.creditsRefunded} credits refunded`
+            : 'Generation cancelled',
+        );
+      }
+    } catch {
+      toast.error('Failed to cancel generation');
+    } finally {
+      setCancelling(null);
+    }
+  };
+
   const handleResume = async (c: CampaignRow) => {
-    if (c.status === 'generating') return;
     setResuming(c.id);
     try {
       const res = await api(`/api/campaigns/${c.id}`, { workspaceSlug });
@@ -299,10 +321,18 @@ export default function CampaignLobby() {
                 {campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''}
               </p>
               {campaigns.map((c, i) => {
-                const isGenerating = c.status === 'generating';
-                const isLoading    = resuming === c.id;
-                const stepLabel    = STEP_LABELS[c.current_step] ?? 'Create';
-                const statusColor  = STATUS_COLORS[c.status] ?? STATUS_COLORS.expanding;
+                const isGenerating  = c.status === 'generating';
+                const isLoading     = resuming === c.id;
+                const isCancelling  = cancelling === c.id;
+                const stepLabel     = STEP_LABELS[c.current_step] ?? 'Create';
+                const statusColor   = STATUS_COLORS[c.status] ?? STATUS_COLORS.expanding;
+
+                // How long has it been generating?
+                const generatingMs = c.generatingSince
+                  ? Date.now() - new Date(c.generatingSince).getTime()
+                  : 0;
+                const generatingSecs = Math.floor(generatingMs / 1000);
+                const isStuck = isGenerating && generatingMs > 3 * 60 * 1000; // > 3 min
 
                 return (
                   <motion.div
@@ -311,41 +341,47 @@ export default function CampaignLobby() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, x: -20 }}
                     transition={{ delay: i * 0.04 }}
-                    className={`group flex items-center gap-4 p-4 rounded-xl border bg-card transition-all ${
-                      isGenerating
-                        ? 'border-border opacity-60 cursor-not-allowed'
-                        : 'border-border hover:border-primary/30 hover:bg-card/80'
-                    }`}
+                    className="group flex items-center gap-4 p-4 rounded-xl border bg-card transition-all border-border hover:border-primary/30 hover:bg-card/80"
                   >
-                    {/* Thumbnail — click to resume */}
+                    {/* Thumbnail — always clickable */}
                     <div
                       className="w-14 h-14 rounded-lg overflow-hidden bg-secondary border border-border shrink-0 flex items-center justify-center cursor-pointer"
-                      onClick={() => !isGenerating && !isLoading && handleResume(c)}
+                      onClick={() => !isLoading && handleResume(c)}
                     >
                       {c.thumbnailUrl ? (
                         <img src={c.thumbnailUrl} alt="" className="w-full h-full object-cover" />
                       ) : isGenerating ? (
-                        <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
+                        <Loader2 className="w-5 h-5 text-amber-400 animate-spin" />
                       ) : (
                         <ImageIcon className="w-5 h-5 text-muted-foreground/40" />
                       )}
                     </div>
 
-                    {/* Name + prompt — click to resume */}
+                    {/* Name + prompt — always clickable */}
                     <div
                       className="flex-1 min-w-0 cursor-pointer"
-                      onClick={() => !isGenerating && !isLoading && handleResume(c)}
+                      onClick={() => !isLoading && handleResume(c)}
                     >
                       <p className="text-sm font-semibold text-foreground truncate group-hover:text-primary transition-colors">{c.name}</p>
                       <p className="text-xs text-muted-foreground truncate mt-0.5 italic">
                         &ldquo;{c.prompt.slice(0, 70)}{c.prompt.length > 70 ? '…' : ''}&rdquo;
                       </p>
                       {!isGenerating && <CampaignProgress currentStep={c.current_step} />}
+                      {isGenerating && generatingSecs > 0 && (
+                        <p className="text-[10px] text-amber-400 mt-1">
+                          {isStuck ? '⚠ Generation may be stuck' : `Generating for ${generatingSecs}s…`}
+                        </p>
+                      )}
                     </div>
 
-                    {/* Step badge */}
+                    {/* Step / status badge */}
                     <div className={`text-xs font-medium px-2.5 py-1 rounded-full border shrink-0 ${statusColor}`}>
-                      {isGenerating ? 'Generating…' : `Step ${c.current_step} · ${stepLabel}`}
+                      {isGenerating ? (
+                        <span className="flex items-center gap-1">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Generating
+                        </span>
+                      ) : `Step ${c.current_step} · ${stepLabel}`}
                     </div>
 
                     {/* Time */}
@@ -354,24 +390,45 @@ export default function CampaignLobby() {
                       {timeAgo(c.created_at)}
                     </div>
 
-                    {/* Resume arrow / loading */}
-                    {!isGenerating && (
-                      isLoading
-                        ? <Loader2 className="w-4 h-4 text-primary animate-spin shrink-0" />
-                        : (
-                          <button
-                            type="button"
-                            onClick={() => handleResume(c)}
-                            className="text-muted-foreground hover:text-primary transition-colors shrink-0"
-                            title="Continue campaign"
-                          >
-                            <ChevronRight className="w-4 h-4" />
-                          </button>
-                        )
+                    {/* Cancel button — shown for generating campaigns */}
+                    {isGenerating && (
+                      <button
+                        type="button"
+                        onClick={e => { e.stopPropagation(); handleCancel(c); }}
+                        disabled={isCancelling}
+                        className={cn(
+                          'shrink-0 flex items-center gap-1 text-xs px-2 py-1 rounded-lg border transition-colors',
+                          isStuck
+                            ? 'border-destructive/40 text-destructive hover:bg-destructive/10'
+                            : 'opacity-0 group-hover:opacity-100 border-border text-muted-foreground hover:text-destructive hover:border-destructive/40',
+                        )}
+                        title="Cancel generation and refund credits"
+                      >
+                        {isCancelling
+                          ? <Loader2 className="w-3 h-3 animate-spin" />
+                          : <XCircle className="w-3 h-3" />
+                        }
+                        {isStuck ? 'Cancel' : ''}
+                      </button>
                     )}
 
-                    {/* Delete button — visible on hover, hidden while loading */}
-                    {!isLoading && (
+                    {/* Resume arrow / loading */}
+                    {isLoading
+                      ? <Loader2 className="w-4 h-4 text-primary animate-spin shrink-0" />
+                      : (
+                        <button
+                          type="button"
+                          onClick={() => handleResume(c)}
+                          className="text-muted-foreground hover:text-primary transition-colors shrink-0"
+                          title="Open campaign"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      )
+                    }
+
+                    {/* Delete button — visible on hover */}
+                    {!isLoading && !isCancelling && (
                       <button
                         type="button"
                         onClick={e => { e.stopPropagation(); setConfirmDelete(c); }}
