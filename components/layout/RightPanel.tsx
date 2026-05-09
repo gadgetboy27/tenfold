@@ -5,7 +5,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { ChevronDown, Settings } from 'lucide-react';
+import { ChevronDown, Settings, CheckCircle2, Circle, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const RATIO_SHAPES: Record<string, { h: string; w: string }> = {
@@ -15,8 +15,20 @@ const RATIO_SHAPES: Record<string, { h: string; w: string }> = {
   '9:16': { h: 'h-10', w: 'w-6' },
 };
 
+const CHECKLIST = [
+  { step: 1, label: 'Generate images',    hint: 'Enter a prompt' },
+  { step: 2, label: 'Pick your anchor',   hint: 'Select best image' },
+  { step: 3, label: 'Expand to formats',  hint: 'Video, music, caption (optional)' },
+  { step: 4, label: 'Compose your post',  hint: 'Add text & branding' },
+  { step: 5, label: 'Publish',            hint: 'Post to your channels' },
+];
+
 export default function RightPanel() {
-  const { currentStep, selectedAnchorId, generatedAssets, aspectRatio, style, setAspectRatio, setStyle } = useAppStore();
+  const {
+    currentStep, selectedAnchorId, generatedAssets,
+    aspectRatio, style, setAspectRatio, setStyle,
+    currentCampaignId, expansions, currentCompositionId,
+  } = useAppStore();
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const anchor = generatedAssets.find((a) => a.id === selectedAnchorId);
 
@@ -115,6 +127,72 @@ export default function RightPanel() {
 
         {currentStep > 1 && !anchor && (
           <p className="text-xs text-muted-foreground">No anchor selected yet.</p>
+        )}
+
+        {/* Campaign progress checklist — show when a campaign is active */}
+        {currentCampaignId && (
+          <div className="mt-6 pt-5 border-t border-border">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
+              Campaign Progress
+            </p>
+            <ol className="space-y-2">
+              {CHECKLIST.map(({ step, label, hint }) => {
+                const done =
+                  step === 1 ? currentStep >= 2 :
+                  step === 2 ? currentStep >= 3 && !!selectedAnchorId :
+                  step === 3 ? currentStep >= 4 :
+                  step === 4 ? currentCompositionId != null || currentStep >= 5 :
+                  false;
+                const active = step === currentStep;
+
+                return (
+                  <li key={step} className={cn(
+                    'flex items-start gap-2 text-xs transition-opacity',
+                    done ? 'opacity-50' : active ? 'opacity-100' : 'opacity-40',
+                  )}>
+                    {done
+                      ? <CheckCircle2 className="w-3.5 h-3.5 text-success mt-0.5 shrink-0" />
+                      : active
+                        ? <ChevronRight className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
+                        : <Circle className="w-3.5 h-3.5 text-muted-foreground/50 mt-0.5 shrink-0" />
+                    }
+                    <div className="min-w-0">
+                      <p className={cn('font-medium', done ? 'line-through text-muted-foreground' : active ? 'text-foreground' : 'text-muted-foreground')}>
+                        {label}
+                      </p>
+                      {!done && active && (
+                        <p className="text-[10px] text-muted-foreground mt-0.5">{hint}</p>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+
+            {/* Show expansion status if on step 3+ */}
+            {currentStep >= 3 && (expansions.video || expansions.music || expansions.script) && (
+              <div className="mt-3 pt-3 border-t border-border/50 space-y-1">
+                {(['video', 'music', 'script'] as const).map(type => {
+                  const exp = expansions[type];
+                  if (!exp) return null;
+                  return (
+                    <div key={type} className="flex items-center justify-between text-[10px]">
+                      <span className="text-muted-foreground capitalize">{type === 'script' ? 'Caption' : type}</span>
+                      <span className={cn(
+                        'font-medium px-1.5 py-0.5 rounded-full',
+                        exp.status === 'ready'   ? 'text-success bg-success/10' :
+                        exp.status === 'pending' ? 'text-amber-400 bg-amber-400/10' :
+                        exp.status === 'failed'  ? 'text-destructive bg-destructive/10' :
+                        'text-muted-foreground',
+                      )}>
+                        {exp.status}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </aside>

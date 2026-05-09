@@ -9,6 +9,7 @@ import {
   Image as ImageIcon, Trash2, AlertTriangle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 interface CampaignRow {
   id: string;
@@ -29,6 +30,25 @@ const STATUS_COLORS: Record<string, string> = {
   generating: 'text-amber-400 bg-amber-400/10 border-amber-400/20',
   failed:     'text-destructive bg-destructive/10 border-destructive/20',
 };
+
+function CampaignProgress({ currentStep }: { currentStep: number }) {
+  return (
+    <div className="flex items-center gap-1 mt-1.5" title={`Step ${currentStep} of 5`}>
+      {[1, 2, 3, 4, 5].map(s => (
+        <div
+          key={s}
+          className={cn(
+            'h-1 rounded-full transition-all',
+            s < currentStep  ? 'bg-primary flex-1' :
+            s === currentStep ? 'bg-primary/50 flex-1' :
+            'bg-border flex-1',
+          )}
+        />
+      ))}
+      <span className="text-[10px] text-muted-foreground font-mono ml-1 shrink-0">{currentStep}/5</span>
+    </div>
+  );
+}
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -320,6 +340,7 @@ export default function CampaignLobby() {
                       <p className="text-xs text-muted-foreground truncate mt-0.5 italic">
                         &ldquo;{c.prompt.slice(0, 70)}{c.prompt.length > 70 ? '…' : ''}&rdquo;
                       </p>
+                      {!isGenerating && <CampaignProgress currentStep={c.current_step} />}
                     </div>
 
                     {/* Step badge */}
