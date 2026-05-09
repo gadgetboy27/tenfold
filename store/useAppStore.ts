@@ -18,6 +18,7 @@ export interface Expansion {
   content?: string;
   url?: string;
   error?: string;
+  elapsed?: number;
 }
 
 type Expansions = { video?: Expansion; music?: Expansion; script?: Expansion };

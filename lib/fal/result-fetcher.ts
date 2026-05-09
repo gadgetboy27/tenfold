@@ -3,16 +3,6 @@ import { FAL_MODELS, FAL_QUEUE_MODELS, type FalModelKey } from './models';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { v4 as uuidv4 } from 'uuid';
 
-// fal.ai returns 'application/octet-stream' for audio — derive from URL extension
-function resolveAudioContentType(url: string): string {
-  if (url.includes('.wav')) return 'audio/wav';
-  if (url.includes('.mp3')) return 'audio/mpeg';
-  return 'audio/wav';
-}
-
-function audioExtension(url: string): string {
-  return url.includes('.mp3') ? 'mp3' : 'wav';
-}
 
 interface StuckJob {
   id: string;
@@ -93,45 +83,28 @@ export async function fetchAndProcessFalJob(job: StuckJob): Promise<boolean> {
     }
 
     if (result.data?.video) {
-      const vid = result.data.video;
-      const assetId = uuidv4();
-      const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.mp4`;
-      const vidRes = await fetch(vid.url);
-      const buffer = await vidRes.arrayBuffer();
-      await admin.storage
-        .from('assets')
-        .upload(storagePath, buffer, { contentType: vid.content_type ?? 'video/mp4' });
-      const { data: urlData } = admin.storage.from('assets').getPublicUrl(storagePath);
+      // Store fal.ai CDN URL directly — permanent, no download needed in serverless
       assetInserts.push({
-        id: assetId,
+        id: uuidv4(),
         campaign_id: job.campaign_id,
         workspace_id: job.workspace_id,
         job_id: job.id,
         type: 'video',
-        url: urlData.publicUrl,
-        storage_path: storagePath,
+        url: result.data.video.url,
+        storage_path: null,
       });
     }
 
     if (result.data?.audio_file) {
-      const aud = result.data.audio_file;
-      const assetId = uuidv4();
-      const ext = audioExtension(aud.url);
-      const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.${ext}`;
-      const audRes = await fetch(aud.url);
-      const buffer = await audRes.arrayBuffer();
-      await admin.storage
-        .from('assets')
-        .upload(storagePath, buffer, { contentType: resolveAudioContentType(aud.url) });
-      const { data: urlData } = admin.storage.from('assets').getPublicUrl(storagePath);
+      // Store fal.ai CDN URL directly — permanent, no download needed in serverless
       assetInserts.push({
-        id: assetId,
+        id: uuidv4(),
         campaign_id: job.campaign_id,
         workspace_id: job.workspace_id,
         job_id: job.id,
         type: 'audio',
-        url: urlData.publicUrl,
-        storage_path: storagePath,
+        url: result.data.audio_file.url,
+        storage_path: null,
       });
     }
 

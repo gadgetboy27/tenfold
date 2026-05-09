@@ -82,11 +82,25 @@ export default function Step3Expand() {
         return;
       }
 
-      // Async jobs (video, music) — poll until completed
-      let attempts = 0;
+      // Async jobs (video, music) — adaptive polling with type-aware timeout
+      // Video: fal.ai Kling takes 2-5 min → poll every 6s, up to 5 min
+      // Music: stable-audio takes 30-90s → poll every 4s, up to 3 min
+      const INTERVAL = type === 'video' ? 6000 : 4000;
+      const MAX_MS   = type === 'video' ? 5 * 60 * 1000 : 3 * 60 * 1000;
+      const startedAt = Date.now();
+
       const poll = async (): Promise<void> => {
-        if (attempts++ >= 40) throw new Error('Job timed out');
-        await new Promise(r => setTimeout(r, 1500));
+        const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+        if (Date.now() - startedAt > MAX_MS) {
+          throw new Error(
+            type === 'video'
+              ? 'Video generation timed out after 5 minutes — fal.ai may be under load. Your credits have not been charged. Please retry.'
+              : 'Music generation timed out after 3 minutes. Please retry.',
+          );
+        }
+
+        await new Promise(r => setTimeout(r, INTERVAL));
+        updateExpansion(type, { status: 'pending', elapsed });
 
         const res = await api(`/api/jobs/${postData.jobId}`, { workspaceSlug });
         if (!res.ok) throw new Error('Status check failed');

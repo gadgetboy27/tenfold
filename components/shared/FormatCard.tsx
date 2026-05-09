@@ -83,7 +83,12 @@ export default function FormatCard({ type, title, subtitle, cost, icon: Icon, on
         size="sm"
       >
         {status === 'pending' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-        {status === 'ready' ? `${title} ready` : status === 'pending' ? 'Generating...' : status === 'failed' ? 'Retry' : `Generate ${title}`}
+        {status === 'ready'
+          ? `${title} ready`
+          : status === 'pending'
+            ? expansion?.elapsed ? `Generating… ${expansion.elapsed}s` : 'Generating…'
+            : status === 'failed' ? 'Retry' : `Generate ${title}`
+        }
       </Button>
     </div>
   );

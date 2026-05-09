@@ -6,16 +6,6 @@ import { recordJobCost } from '@/lib/costs/tracker';
 import { analyzeJobFailure } from '@/lib/fal/error-analyzer';
 import { v4 as uuidv4 } from 'uuid';
 
-function resolveAudioContentType(url: string): string {
-  if (url.includes('.wav')) return 'audio/wav';
-  if (url.includes('.mp3')) return 'audio/mpeg';
-  return 'audio/wav';
-}
-
-function audioExtension(url: string): string {
-  return url.includes('.mp3') ? 'mp3' : 'wav';
-}
-
 interface CreativeJob {
   id: string;
   campaign_id: string;
@@ -23,6 +13,7 @@ interface CreativeJob {
   type: string;
   credits_charged: number;
   input_params: Record<string, unknown>;
+  fal_request_id: string | null;
 }
 
 export async function POST(req: Request) {
@@ -47,20 +38,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: logErr.message }, { status: 500 });
   }
 
-  // 2. Locate the job (fetch input_params so the error analyzer has the original prompt)
-  const { data: jobRow } = await admin
+  // 2. Locate the job — prefer lookup by ?j=jobId (more secure) then fall back to fal_request_id
+  const jobId = new URL(req.url).searchParams.get('j');
+  const jobQuery = admin
     .from('creative_jobs')
-    .select('id, campaign_id, workspace_id, type, credits_charged, input_params')
-    .eq('fal_request_id', payload.request_id)
-    .single();
+    .select('id, campaign_id, workspace_id, type, credits_charged, input_params, fal_request_id');
+
+  const { data: jobRow } = jobId
+    ? await jobQuery.eq('id', jobId).single()
+    : await jobQuery.eq('fal_request_id', payload.request_id).single();
 
   const job = jobRow as CreativeJob | null;
 
+  // If we looked up by jobId, verify the stored fal_request_id matches the payload — prevents spoofing
+  if (jobId && job && job.fal_request_id !== payload.request_id) {
+    await admin.from('webhook_logs').update({ error: 'request_id mismatch', processed: true }).eq('event_id', payload.request_id);
+    return NextResponse.json({ ok: true }); // 200 so fal.ai doesn't retry
+  }
+
   if (!job) {
-    await admin
-      .from('webhook_logs')
-      .update({ error: 'Unknown job', processed: true })
-      .eq('event_id', payload.request_id);
+    await admin.from('webhook_logs').update({ error: 'Unknown job', processed: true }).eq('event_id', payload.request_id);
     return NextResponse.json({ error: 'Unknown job' }, { status: 404 });
   }
 
@@ -71,10 +68,7 @@ export async function POST(req: Request) {
   }
 
   // 3. Mark processed
-  await admin
-    .from('webhook_logs')
-    .update({ processed: true })
-    .eq('event_id', payload.request_id);
+  await admin.from('webhook_logs').update({ processed: true }).eq('event_id', payload.request_id);
 
   return NextResponse.json({ ok: true });
 }
@@ -114,49 +108,29 @@ async function handleSuccess(
   }
 
   if (payload.video) {
-    const assetId = uuidv4();
-    const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.mp4`;
-
-    const vidRes = await fetch(payload.video.url);
-    const buffer = await vidRes.arrayBuffer();
-    await admin.storage
-      .from('assets')
-      .upload(storagePath, buffer, { contentType: payload.video.content_type ?? 'video/mp4' });
-
-    const { data: urlData } = admin.storage.from('assets').getPublicUrl(storagePath);
-
+    // Store fal.ai CDN URL directly — downloading 20-100MB in serverless is unreliable
+    // fal.ai CDN URLs (v3.fal.media) are permanent and publicly accessible
     assetInserts.push({
-      id: assetId,
+      id: uuidv4(),
       campaign_id: job.campaign_id,
       workspace_id: job.workspace_id,
       job_id: job.id,
       type: 'video',
-      url: urlData.publicUrl,
-      storage_path: storagePath,
+      url: payload.video.url,
+      storage_path: null,
     });
   }
 
   if (payload.audio_file) {
-    const assetId = uuidv4();
-    const ext = audioExtension(payload.audio_file.url);
-    const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.${ext}`;
-
-    const audRes = await fetch(payload.audio_file.url);
-    const buffer = await audRes.arrayBuffer();
-    await admin.storage
-      .from('assets')
-      .upload(storagePath, buffer, { contentType: resolveAudioContentType(payload.audio_file.url) });
-
-    const { data: urlData } = admin.storage.from('assets').getPublicUrl(storagePath);
-
+    // Store fal.ai CDN URL directly — same rationale as video
     assetInserts.push({
-      id: assetId,
+      id: uuidv4(),
       campaign_id: job.campaign_id,
       workspace_id: job.workspace_id,
       job_id: job.id,
       type: 'audio',
-      url: urlData.publicUrl,
-      storage_path: storagePath,
+      url: payload.audio_file.url,
+      storage_path: null,
     });
   }
 
