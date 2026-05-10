@@ -145,6 +145,7 @@ export async function POST(req: Request) {
       id: campaignId,
       workspace_id: session.workspaceId,
       created_by: session.userId,
+      name: body.name ?? 'Untitled Campaign',
       prompt: body.prompt,
       parameters: { aspectRatio: body.aspectRatio, style: body.style },
       status: 'generating',

@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import type { CampaignBrief } from '@/lib/claude/campaign-brief';
+import { generateCampaignName } from '@/lib/names/generator';
 
 export interface Asset {
   id: string;
@@ -78,7 +79,7 @@ export const useAppStore = create<AppStore>()((set) => ({
   completedSteps: new Set<number>(),
   creditBalance: 0,
   workspaceSlug: '',
-  campaignName: 'Untitled Campaign',
+  campaignName: generateCampaignName(),
   selectedAnchorId: null,
   generatedAssets: [],
   expansions: {},
@@ -134,7 +135,7 @@ export const useAppStore = create<AppStore>()((set) => ({
       currentCompositionId: null,
       currentStep: 1,
       completedSteps: new Set<number>(),
-      campaignName: 'Untitled Campaign',
+      campaignName: generateCampaignName(),
       selectedAnchorId: null,
       generatedAssets: [],
       expansions: {},

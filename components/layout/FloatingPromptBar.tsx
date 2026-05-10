@@ -49,7 +49,7 @@ export default function FloatingPromptBar() {
     isGenerating, aspectRatio, style, setAspectRatio, setStyle,
     setStep, completeStep, setCampaignId, workspaceSlug, currentStep,
     setGenerationStage, setCampaignBrief, pendingBriefPrompt, setPendingBriefPrompt,
-    campaignBrief,
+    campaignBrief, campaignName,
   } = useAppStore();
 
   const STAGES = [
@@ -95,7 +95,7 @@ export default function FloatingPromptBar() {
     try {
       const campRes = await api('/api/campaigns', {
         method: 'POST',
-        body: JSON.stringify({ prompt: finalPrompt, aspectRatio, style }),
+        body: JSON.stringify({ prompt: finalPrompt, aspectRatio, style, name: campaignName }),
         workspaceSlug,
       });
       if (!campRes.ok) {
@@ -113,14 +113,6 @@ export default function FloatingPromptBar() {
       const camp = await campRes.json() as { campaignId: string; status: string };
       const campaignId = camp.campaignId;
       setCampaignId(campaignId);
-
-      // Persist name + clear brief after generation starts
-      const currentName = useAppStore.getState().campaignName;
-      api(`/api/campaigns/${campaignId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ name: currentName }),
-        workspaceSlug,
-      }).catch(() => {});
       setCampaignBrief(null);
 
       api('/api/credits/balance', { workspaceSlug })

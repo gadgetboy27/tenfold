@@ -6,7 +6,7 @@ import { useAppStore } from '@/store/useAppStore';
 import CreditMeter from '@/components/shared/CreditMeter';
 import JobStatusIndicator from '@/components/shared/JobStatusIndicator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Pen, LogOut, User as UserIcon, Share2, ChevronLeft } from 'lucide-react';
+import { Pen, LogOut, User as UserIcon, Share2, ChevronLeft, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import {
@@ -25,6 +25,7 @@ export default function TopBar({ user, showBack = false }: Props) {
   const { campaignName, setCampaignName, isGenerating, currentCampaignId, workspaceSlug, resetCampaign } = useAppStore();
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(campaignName);
+  const [deleteStep, setDeleteStep] = useState<'idle' | 'confirm' | 'deleting'>('idle');
   const inputRef = useRef<HTMLInputElement>(null);
 
   const initials = user.email ? user.email.slice(0, 2).toUpperCase() : 'TF';
@@ -59,6 +60,17 @@ export default function TopBar({ user, showBack = false }: Props) {
     const supabase = createSupabaseBrowserClient();
     await supabase.auth.signOut();
     window.location.href = '/login';
+  };
+
+  const handleDeleteCampaign = async () => {
+    if (!currentCampaignId || currentCampaignId === '__new__') return;
+    setDeleteStep('deleting');
+    try {
+      await api(`/api/campaigns/${currentCampaignId}`, { method: 'DELETE', workspaceSlug });
+      resetCampaign();
+    } catch {
+      setDeleteStep('idle');
+    }
   };
 
   return (
@@ -142,6 +154,45 @@ export default function TopBar({ user, showBack = false }: Props) {
             <DropdownMenuItem className="gap-2 text-sm cursor-pointer" disabled>
               <UserIcon className="w-4 h-4" /> Account settings
             </DropdownMenuItem>
+            <DropdownMenuSeparator className="bg-border" />
+            {showBack && currentCampaignId && currentCampaignId !== '__new__' && (
+              <>
+                <DropdownMenuSeparator className="bg-border" />
+                {deleteStep === 'idle' && (
+                  <DropdownMenuItem
+                    className="gap-2 text-sm text-muted-foreground focus:text-destructive cursor-pointer"
+                    onSelect={e => { e.preventDefault(); setDeleteStep('confirm'); }}
+                  >
+                    <Trash2 className="w-4 h-4" /> Delete campaign
+                  </DropdownMenuItem>
+                )}
+                {deleteStep === 'confirm' && (
+                  <div className="px-2 py-2 space-y-2">
+                    <p className="text-xs text-muted-foreground">Delete &ldquo;{campaignName}&rdquo;?</p>
+                    <div className="flex gap-2">
+                      <button
+                        className="flex-1 text-xs px-2 py-1 rounded border border-border text-muted-foreground hover:text-foreground transition-colors"
+                        onClick={() => setDeleteStep('idle')}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="flex-1 text-xs px-2 py-1 rounded bg-destructive/10 border border-destructive/30 text-destructive hover:bg-destructive/20 transition-colors"
+                        onClick={handleDeleteCampaign}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {deleteStep === 'deleting' && (
+                  <div className="px-3 py-2 flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="w-3 h-3 rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground animate-spin inline-block" />
+                    Deleting…
+                  </div>
+                )}
+              </>
+            )}
             <DropdownMenuSeparator className="bg-border" />
             <DropdownMenuItem
               className="gap-2 text-sm text-red-400 focus:text-red-400 cursor-pointer"

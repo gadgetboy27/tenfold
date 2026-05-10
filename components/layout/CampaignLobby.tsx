@@ -6,7 +6,7 @@ import { api } from '@/lib/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Sparkles, Clock, ChevronRight, Loader2,
-  Image as ImageIcon, Trash2, AlertTriangle, XCircle,
+  Image as ImageIcon, Trash2, AlertTriangle, XCircle, Pen,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -175,6 +175,7 @@ export default function CampaignLobby() {
   const [cancelling, setCancelling]       = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<CampaignRow | null>(null);
   const [isDeleting, setIsDeleting]       = useState(false);
+  const [renaming, setRenaming]           = useState<{ id: string; value: string } | null>(null);
 
   const fetchCampaigns = useCallback(async () => {
     setLoading(true);
@@ -191,6 +192,25 @@ export default function CampaignLobby() {
   const handleNew = () => {
     useAppStore.getState().resetCampaign();
     useAppStore.getState().setCampaignId('__new__');
+  };
+
+  const handleRenameStart = (e: React.MouseEvent, c: CampaignRow) => {
+    e.stopPropagation();
+    setRenaming({ id: c.id, value: c.name });
+  };
+
+  const handleRenameSave = async () => {
+    if (!renaming) return;
+    const trimmed = renaming.value.trim();
+    const id = renaming.id;
+    setRenaming(null);
+    if (!trimmed) return;
+    setCampaigns(prev => prev.map(c => c.id === id ? { ...c, name: trimmed } : c));
+    await api(`/api/campaigns/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name: trimmed }),
+      workspaceSlug,
+    }).catch(() => {});
   };
 
   const handleCancel = async (c: CampaignRow) => {
@@ -357,13 +377,41 @@ export default function CampaignLobby() {
                       )}
                     </div>
 
-                    {/* Name + prompt — always clickable */}
-                    <div
-                      className="flex-1 min-w-0 cursor-pointer"
-                      onClick={() => !isLoading && handleResume(c)}
-                    >
-                      <p className="text-sm font-semibold text-foreground truncate group-hover:text-primary transition-colors">{c.name}</p>
-                      <p className="text-xs text-muted-foreground truncate mt-0.5 italic">
+                    {/* Name + prompt */}
+                    <div className="flex-1 min-w-0">
+                      {renaming?.id === c.id ? (
+                        <input
+                          autoFocus
+                          value={renaming.value}
+                          onChange={e => setRenaming({ ...renaming, value: e.target.value })}
+                          onBlur={handleRenameSave}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') handleRenameSave();
+                            if (e.key === 'Escape') setRenaming(null);
+                          }}
+                          onClick={e => e.stopPropagation()}
+                          className="text-sm font-semibold bg-secondary border border-primary/50 rounded-md px-2 py-0.5 text-foreground outline-none w-full"
+                        />
+                      ) : (
+                        <div
+                          className="flex items-center gap-1.5 group/name cursor-pointer"
+                          onClick={() => !isLoading && handleResume(c)}
+                        >
+                          <p className="text-sm font-semibold text-foreground truncate group-hover:text-primary transition-colors">{c.name}</p>
+                          <button
+                            type="button"
+                            onClick={e => handleRenameStart(e, c)}
+                            className="opacity-0 group-hover/name:opacity-60 hover:!opacity-100 transition-opacity shrink-0"
+                            title="Rename campaign"
+                          >
+                            <Pen className="w-3 h-3 text-muted-foreground" />
+                          </button>
+                        </div>
+                      )}
+                      <p
+                        className="text-xs text-muted-foreground truncate mt-0.5 italic cursor-pointer"
+                        onClick={() => !isLoading && handleResume(c)}
+                      >
                         &ldquo;{c.prompt.slice(0, 70)}{c.prompt.length > 70 ? '…' : ''}&rdquo;
                       </p>
                       {!isGenerating && <CampaignProgress currentStep={c.current_step} />}
