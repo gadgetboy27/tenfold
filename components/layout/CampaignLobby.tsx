@@ -270,11 +270,37 @@ export default function CampaignLobby() {
         expansionData.music = { status: 'ready', url: audioAsset.url };
       }
 
+      // Infer anchor from first image asset when it was never saved to DB
+      // (campaigns created before anchor_asset_id persistence was added)
+      let anchorAssetId = full.anchor_asset_id;
+      const storedStep = full.current_step ?? c.current_step;
+      if (!anchorAssetId && imageAssets.length > 0) {
+        anchorAssetId = imageAssets[0].id;
+        // Back-fill so future loads don't need to infer; also advance step to 2 minimum
+        api(`/api/campaigns/${full.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            anchor_asset_id: anchorAssetId,
+            current_step: Math.max(storedStep, 2),
+          }),
+          workspaceSlug,
+        }).catch(() => {});
+      }
+
+      // Advance step if stored value is lower than what the data implies
+      // (e.g. default step=1 on old campaigns that clearly have images)
+      const inferredStep = (() => {
+        if (storedStep >= 3) return storedStep;
+        if (anchorAssetId) return Math.max(storedStep, 3);
+        if (imageAssets.length > 0) return Math.max(storedStep, 2);
+        return storedStep;
+      })();
+
       loadCampaign({
         id: full.id,
         name: full.name ?? c.name,
-        current_step: full.current_step ?? c.current_step,
-        anchor_asset_id: full.anchor_asset_id,
+        current_step: inferredStep,
+        anchor_asset_id: anchorAssetId,
         expansion_data: expansionData,
         imageAssets,
         compositionId: full.latestCompositionId ?? null,
