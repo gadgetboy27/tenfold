@@ -245,6 +245,7 @@ export default function CampaignLobby() {
         assets: Array<{ id: string; url: string; type: string; created_at: string }>;
         parameters?: { aspectRatio?: string; style?: string };
         prompt: string;
+        latestCompositionId?: string | null;
       };
 
       const imageAssets: Asset[] = (full.assets ?? [])
@@ -257,13 +258,26 @@ export default function CampaignLobby() {
           createdAt: a.created_at,
         }));
 
+      // Rebuild expansion data from saved DB record + any assets not yet reflected there
+      const expansionData = { ...(full.expansion_data ?? {}) } as CampaignResume['expansion_data'];
+
+      const videoAsset = (full.assets ?? []).find(a => a.type === 'video');
+      if (videoAsset && !expansionData.video?.url) {
+        expansionData.video = { status: 'ready', url: videoAsset.url };
+      }
+      const audioAsset = (full.assets ?? []).find(a => a.type === 'audio');
+      if (audioAsset && !expansionData.music?.url) {
+        expansionData.music = { status: 'ready', url: audioAsset.url };
+      }
+
       loadCampaign({
         id: full.id,
         name: full.name ?? c.name,
         current_step: full.current_step ?? c.current_step,
         anchor_asset_id: full.anchor_asset_id,
-        expansion_data: (full.expansion_data ?? {}) as CampaignResume['expansion_data'],
+        expansion_data: expansionData,
         imageAssets,
+        compositionId: full.latestCompositionId ?? null,
       });
     } finally {
       setResuming(null);

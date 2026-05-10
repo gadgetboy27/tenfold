@@ -71,7 +71,7 @@ export default function Step2Select() {
                     if (currentCampaignId && currentCampaignId !== '__new__') {
                       api(`/api/campaigns/${currentCampaignId}`, {
                         method: 'PATCH',
-                        body: JSON.stringify({ current_step: 3 }),
+                        body: JSON.stringify({ current_step: 3, anchor_asset_id: selectedAnchorId }),
                         workspaceSlug,
                       }).catch(() => {});
                     }

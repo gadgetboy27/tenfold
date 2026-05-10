@@ -31,6 +31,7 @@ export interface CampaignResume {
   anchor_asset_id: string | null;
   expansion_data: Expansions;
   imageAssets: Asset[];
+  compositionId?: string | null;
 }
 
 interface AppStore {
@@ -116,7 +117,7 @@ export const useAppStore = create<AppStore>()((set) => ({
   loadCampaign: (campaign) =>
     set({
       currentCampaignId: campaign.id,
-      currentCompositionId: null,
+      currentCompositionId: campaign.compositionId ?? null,
       currentStep: Math.min(5, Math.max(1, campaign.current_step)) as 1 | 2 | 3 | 4 | 5,
       completedSteps: new Set(
         Array.from({ length: campaign.current_step - 1 }, (_, i) => i + 1),

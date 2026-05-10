@@ -18,9 +18,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     if (!campaign) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const [{ data: jobs }, { data: campaignAssets }] = await Promise.all([
+    const [{ data: jobs }, { data: campaignAssets }, { data: compositions }] = await Promise.all([
       admin.from('creative_jobs').select('*').eq('campaign_id', id),
       admin.from('assets').select('*').eq('campaign_id', id),
+      admin.from('compositions').select('id').eq('campaign_id', id).order('created_at', { ascending: false }).limit(1),
     ]);
 
     let jobList = jobs ?? [];
@@ -46,7 +47,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         const allDone2 = jobList.length > 0 && jobList.every((j: { status: string }) => j.status === 'completed');
         const anyFailed2 = jobList.length > 0 && jobList.some((j: { status: string }) => j.status === 'failed');
         const status2 = allDone2 ? 'ready' : anyFailed2 ? 'failed' : (campaign as { status: string }).status;
-        return NextResponse.json({ ...campaign, status: status2, jobs: jobList, assets: refreshedAssets });
+        return NextResponse.json({ ...campaign, status: status2, jobs: jobList, assets: refreshedAssets, latestCompositionId: compositions?.[0]?.id ?? null });
       }
     }
 
@@ -54,7 +55,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const anyFailed = jobList.length > 0 && jobList.some((j: { status: string }) => j.status === 'failed');
     const computedStatus = allDone ? 'ready' : anyFailed ? 'failed' : (campaign as { status: string }).status;
 
-    return NextResponse.json({ ...campaign, status: computedStatus, jobs: jobList, assets: campaignAssets ?? [] });
+    return NextResponse.json({ ...campaign, status: computedStatus, jobs: jobList, assets: campaignAssets ?? [], latestCompositionId: compositions?.[0]?.id ?? null });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     const status = msg === 'Unauthorized' ? 401 : msg === 'Not a workspace member' ? 403 : 500;
@@ -69,14 +70,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const raw = (await req.json()) as {
       status?: string; prompt?: string; name?: string;
       current_step?: number; expansion_data?: Record<string, unknown>;
+      anchor_asset_id?: string | null;
     };
     // Whitelist updatable fields
     const update: Record<string, unknown> = {};
-    if (raw.status !== undefined)         update.status         = raw.status;
-    if (raw.prompt !== undefined)         update.prompt         = raw.prompt;
-    if (raw.name !== undefined)           update.name           = String(raw.name).slice(0, 200);
-    if (raw.current_step !== undefined)   update.current_step   = Math.min(5, Math.max(1, Number(raw.current_step)));
-    if (raw.expansion_data !== undefined) update.expansion_data = raw.expansion_data;
+    if (raw.status !== undefined)           update.status           = raw.status;
+    if (raw.prompt !== undefined)           update.prompt           = raw.prompt;
+    if (raw.name !== undefined)             update.name             = String(raw.name).slice(0, 200);
+    if (raw.current_step !== undefined)     update.current_step     = Math.min(5, Math.max(1, Number(raw.current_step)));
+    if (raw.expansion_data !== undefined)   update.expansion_data   = raw.expansion_data;
+    if (raw.anchor_asset_id !== undefined)  update.anchor_asset_id  = raw.anchor_asset_id;
     const admin = createSupabaseAdminClient();
 
     const { data: updated, error } = await admin

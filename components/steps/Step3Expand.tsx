@@ -79,6 +79,15 @@ export default function Step3Expand() {
         updateExpansion(type, { status: 'ready', content: postData.result });
         toast.success('Caption ready');
         syncBalance();
+        // Persist immediately — don't wait for "Continue to Compose"
+        const saved = useAppStore.getState().expansions;
+        if (currentCampaignId && currentCampaignId !== '__new__') {
+          api(`/api/campaigns/${currentCampaignId}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ expansion_data: saved }),
+            workspaceSlug,
+          }).catch(() => {});
+        }
         return;
       }
 
@@ -117,6 +126,15 @@ export default function Step3Expand() {
           updateExpansion(type, { status: 'ready', url: job.outputUrls?.[0] });
           toast.success(`${type === 'video' ? 'Video' : 'Music'} ready`);
           syncBalance();
+          // Persist immediately — don't wait for "Continue to Compose"
+          const saved = useAppStore.getState().expansions;
+          if (currentCampaignId && currentCampaignId !== '__new__') {
+            api(`/api/campaigns/${currentCampaignId}`, {
+              method: 'PATCH',
+              body: JSON.stringify({ expansion_data: saved }),
+              workspaceSlug,
+            }).catch(() => {});
+          }
         } else if (job.status === 'failed') {
           const msg = job.errorAnalysis ?? job.errorMessage ?? 'Generation failed — please try again';
           const hint = job.suggestedPrompt ? ` Try: "${job.suggestedPrompt}"` : '';
