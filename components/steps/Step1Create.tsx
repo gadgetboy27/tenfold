@@ -91,9 +91,9 @@ export default function Step1Create() {
 
   if (generatedAssets.length === 0 && !isGenerating) {
     return (
-      <div className="h-full flex flex-col items-center justify-center relative">
+      <div className="h-full flex flex-col items-start justify-center relative pt-0 pb-40">
         <CosmicBackground />
-        <div className="relative text-center max-w-md mx-auto" style={{ zIndex: 2 }}>
+        <div className="relative text-center max-w-md mx-auto w-full" style={{ zIndex: 2, marginTop: '-8vh' }}>
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -114,7 +114,8 @@ export default function Step1Create() {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.3 }}
-            className="text-muted-foreground text-base"
+            className="text-base"
+            style={{ color: '#9ca3af' }}
           >
             Tenfold will generate 4 images for you to choose from
           </motion.p>
