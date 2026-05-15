@@ -1,13 +1,42 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { signInWithPassword, sendMagicLink } from './actions';
+import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
 export default function LoginPage() {
   const [mode, setMode] = useState<'password' | 'magic'>('password');
   const [error, setError] = useState('');
   const [magicSent, setMagicSent] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [waitedLong, setWaitedLong] = useState(false);
+  const router = useRouter();
+
+  // Listen for auth session — handles same-browser tab and cross-tab clicks
+  useEffect(() => {
+    if (!magicSent) return;
+    const supabase = createSupabaseBrowserClient();
+
+    // Auth state change fires when any tab in this browser completes the magic link
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
+        const { data: members } = await supabase
+          .from('workspace_members')
+          .select('workspaces!inner(slug)')
+          .eq('user_id', session.user.id)
+          .limit(1);
+        const slug = (members?.[0] as unknown as { workspaces: { slug: string }[] } | undefined)
+          ?.workspaces?.[0]?.slug ?? session.user.id;
+        router.push(`/${slug}`);
+      }
+    });
+
+    // After 90s show the "signed in elsewhere?" hint
+    const timer = setTimeout(() => setWaitedLong(true), 90_000);
+
+    return () => { subscription.unsubscribe(); clearTimeout(timer); };
+  }, [magicSent, router]);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -46,9 +75,26 @@ export default function LoginPage() {
                 </svg>
               </div>
               <h2 className="font-medium text-foreground mb-2">Check your email</h2>
-              <p className="text-sm text-muted-foreground">We sent a magic link to your inbox.</p>
+              <p className="text-sm text-muted-foreground">
+                We sent a magic link to your inbox. If you click it in this browser, you&apos;ll be signed in automatically.
+              </p>
+
+              {waitedLong && (
+                <div className="mt-4 p-3 bg-secondary rounded-lg text-left">
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Clicked the link on another device? Sign in with your password to continue here.
+                  </p>
+                  <button
+                    onClick={() => { setMagicSent(false); setMode('password'); setWaitedLong(false); }}
+                    className="text-xs font-medium text-primary hover:underline"
+                  >
+                    Switch to password sign in →
+                  </button>
+                </div>
+              )}
+
               <button
-                onClick={() => setMagicSent(false)}
+                onClick={() => { setMagicSent(false); setWaitedLong(false); }}
                 className="mt-4 text-xs text-primary hover:underline"
               >
                 Back to sign in

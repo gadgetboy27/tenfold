@@ -1,4 +1,4 @@
-export { middleware } from '@/lib/auth/middleware';
+export { proxy } from '@/lib/auth/middleware';
 
 // config must be defined directly here — Turbopack can't statically parse re-exports
 export const config = {

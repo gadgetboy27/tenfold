@@ -7,7 +7,7 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type,Authorization,x-workspace-slug',
 };
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const isApiRoute = request.nextUrl.pathname.startsWith('/api/');
 
   // Return CORS preflight immediately — no auth needed
