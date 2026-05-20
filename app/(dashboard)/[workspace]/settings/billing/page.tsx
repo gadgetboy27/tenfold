@@ -106,6 +106,7 @@ export default function BillingPage() {
       });
       const body = await res.json() as { url?: string; error?: string };
       if (!res.ok) throw new Error(body.error ?? 'Purchase failed');
+      // eslint-disable-next-line react-hooks/immutability
       if (body.url) window.location.href = body.url;
     } catch (err) {
       toast.error((err as Error).message ?? `Could not start checkout for ${label}`);

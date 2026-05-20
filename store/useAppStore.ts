@@ -52,6 +52,8 @@ interface AppStore {
   style: string;
   campaignBrief: CampaignBrief | null;
   pendingBriefPrompt: string | null;
+  leftDrawerOpen: boolean;
+  rightDrawerOpen: boolean;
 
   setStep: (step: 1 | 2 | 3 | 4 | 5) => void;
   setCampaignId: (id: string) => void;
@@ -69,6 +71,8 @@ interface AppStore {
   completeStep: (step: number) => void;
   setCampaignBrief: (brief: CampaignBrief | null) => void;
   setPendingBriefPrompt: (prompt: string | null) => void;
+  setLeftDrawerOpen: (open: boolean) => void;
+  setRightDrawerOpen: (open: boolean) => void;
   loadCampaign: (campaign: CampaignResume) => void;
   resetCampaign: () => void;
 }
@@ -91,6 +95,8 @@ export const useAppStore = create<AppStore>()((set) => ({
   style: 'Photorealistic',
   campaignBrief: null,
   pendingBriefPrompt: null,
+  leftDrawerOpen: false,
+  rightDrawerOpen: false,
 
   setStep: (step) => set({ currentStep: step }),
   setCampaignId: (id) => set({ currentCampaignId: id }),
@@ -114,6 +120,8 @@ export const useAppStore = create<AppStore>()((set) => ({
     }),
   setCampaignBrief: (brief) => set({ campaignBrief: brief }),
   setPendingBriefPrompt: (prompt) => set({ pendingBriefPrompt: prompt }),
+  setLeftDrawerOpen: (open) => set({ leftDrawerOpen: open }),
+  setRightDrawerOpen: (open) => set({ rightDrawerOpen: open }),
   loadCampaign: (campaign) =>
     set({
       currentCampaignId: campaign.id,
@@ -145,5 +153,7 @@ export const useAppStore = create<AppStore>()((set) => ({
       generationElapsed: 0,
       campaignBrief: null,
       pendingBriefPrompt: null,
+      leftDrawerOpen: false,
+      rightDrawerOpen: false,
     }),
 }));

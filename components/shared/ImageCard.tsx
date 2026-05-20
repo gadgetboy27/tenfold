@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { motion } from 'framer-motion';
 import type { Asset } from '@/store/useAppStore';
 import { useAppStore } from '@/store/useAppStore';
@@ -57,7 +58,7 @@ export default function ImageCard({ asset, index }: ImageCardProps) {
           : 'hover:scale-[1.02] hover:ring-1 ring-border hover:ring-white/20'
       )}
     >
-      <img src={asset.url} alt={asset.prompt} className="w-full h-full object-cover transition-all duration-300" style={{ filter }} />
+      <Image src={asset.url} alt={asset.prompt} fill className="object-cover transition-all duration-300" style={{ filter }} sizes="(max-width: 640px) 100vw, 50vw" />
 
       {style !== 'Photorealistic' && (
         <div className={`absolute top-2 left-2 ${labelColor} text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full tracking-wider backdrop-blur-sm`}>

@@ -48,14 +48,13 @@ export default function DashboardClient({ workspaceSlug, user }: Props) {
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-background">
       <TopBar user={user} showBack />
-      <div className="flex flex-1 overflow-hidden">
-        <LeftRail />
-        <main className="flex-1 relative overflow-hidden">
-          <StepView />
-          <FloatingPromptBar />
-        </main>
-        <RightPanel />
-      </div>
+      <main className="flex-1 relative overflow-hidden">
+        <StepView />
+        <FloatingPromptBar />
+      </main>
+      {/* Overlay drawers — position:fixed, don't affect flex layout */}
+      <LeftRail />
+      <RightPanel />
     </div>
   );
 }

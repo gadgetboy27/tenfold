@@ -416,6 +416,7 @@ export default function SocialSettingsPage() {
 
   // Load checklist from localStorage once workspaceSlug is available
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (workspaceSlug) setChecklist(loadChecklist(workspaceSlug));
   }, [workspaceSlug]);
 
@@ -438,6 +439,7 @@ export default function SocialSettingsPage() {
     }
   }, [workspaceSlug]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchProfiles(); }, [fetchProfiles]);
 
   const handleConnect = async (platformId: string) => {

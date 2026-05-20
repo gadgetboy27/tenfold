@@ -46,6 +46,7 @@ export default function CreditMeter() {
       const res = await api('/api/credits/purchase', { method: 'POST', body: JSON.stringify({ priceId }), workspaceSlug });
       if (!res.ok) { const e = await res.json().catch(() => ({})) as { error?: string }; throw new Error(e.error ?? `Purchase failed (${res.status})`); }
       const { url } = await res.json() as { url: string };
+      // eslint-disable-next-line react-hooks/immutability
       if (url) { setOpen(false); window.location.href = url; }
       else throw new Error('No checkout URL returned');
     } catch (err: unknown) {

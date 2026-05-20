@@ -18,8 +18,6 @@ const GOAL_META: Record<string, { icon: typeof Target; color: string; bg: string
 };
 const DEFAULT_GOAL_META = { icon: Lightbulb, color: 'text-muted-foreground', bg: 'bg-secondary border-border' };
 
-interface Props { /* no callback needed — uses store directly */ }
-
 function InsightRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex gap-3">
@@ -113,7 +111,7 @@ function AngleCard({
   );
 }
 
-export default function CampaignBriefPanel(_: Props) {
+export default function CampaignBriefPanel() {
   const { campaignBrief, setCampaignBrief, setPendingBriefPrompt } = useAppStore();
   const [selectedAngleId, setSelectedAngleId] = useState<string | null>(
     campaignBrief?.campaignAngles[0]?.id ?? null,

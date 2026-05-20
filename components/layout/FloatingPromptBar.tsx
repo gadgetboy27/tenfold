@@ -45,7 +45,7 @@ export default function FloatingPromptBar() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const {
-    creditBalance, setCreditBalance, setIsGenerating, setGeneratedAssets,
+    setCreditBalance, setIsGenerating, setGeneratedAssets,
     isGenerating, aspectRatio, style, setAspectRatio, setStyle,
     setStep, completeStep, setCampaignId, workspaceSlug, currentStep,
     setGenerationStage, setCampaignBrief, pendingBriefPrompt, setPendingBriefPrompt,
@@ -60,35 +60,6 @@ export default function FloatingPromptBar() {
     { after: 22, label: 'Almost there…' },
     { after: 35, label: 'Finishing touches…' },
   ];
-
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    const wordCount = prompt.trim().split(/\s+/).filter(Boolean).length;
-    if (wordCount < 3) { setScore(null); return; }
-    debounceRef.current = setTimeout(() => {
-      const result = analyzePrompt(prompt);
-      setScore(result?.score ?? null);
-    }, 600);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [prompt]);
-
-  // Auto-generate when a brief angle is selected — pendingBriefPrompt set by CampaignBriefPanel
-  useEffect(() => {
-    if (pendingBriefPrompt && !isGenerating) {
-      const p = pendingBriefPrompt;
-      setPendingBriefPrompt(null);
-      runGenerate(p);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingBriefPrompt]);
-
-  const isSentinel = useAppStore.getState().currentCampaignId === '__new__';
-  if (currentStep !== 1 && !isSentinel) return null;
-  // Brief panel is showing — it has its own generate CTA; hide the prompt bar
-  if (campaignBrief) return null;
-
-  const isStrong = (score ?? 0) >= 70;
-  const isFair   = (score ?? 0) >= 45;
 
   const runGenerate = async (finalPrompt: string) => {
     setIsGenerating(true);
@@ -171,6 +142,36 @@ export default function FloatingPromptBar() {
       toast.error((err as Error).message ?? 'Generation failed');
     }
   };
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const wordCount = prompt.trim().split(/\s+/).filter(Boolean).length;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (wordCount < 3) { setScore(null); return; }
+    debounceRef.current = setTimeout(() => {
+      const result = analyzePrompt(prompt);
+      setScore(result?.score ?? null);
+    }, 600);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [prompt]);
+
+  // Auto-generate when a brief angle is selected — pendingBriefPrompt set by CampaignBriefPanel
+  useEffect(() => {
+    if (pendingBriefPrompt && !isGenerating) {
+      const p = pendingBriefPrompt;
+      setPendingBriefPrompt(null);
+      runGenerate(p);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingBriefPrompt]);
+
+  const isSentinel = useAppStore.getState().currentCampaignId === '__new__';
+  if (currentStep !== 1 && !isSentinel) return null;
+  // Brief panel is showing — it has its own generate CTA; hide the prompt bar
+  if (campaignBrief) return null;
+
+  const isStrong = (score ?? 0) >= 70;
+  const isFair   = (score ?? 0) >= 45;
 
   const handleDescribeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

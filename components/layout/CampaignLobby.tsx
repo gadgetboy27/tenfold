@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Image from 'next/image';
 import { useAppStore, type CampaignResume, type Asset } from '@/store/useAppStore';
 import { api } from '@/lib/api';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -110,7 +111,7 @@ function DeleteConfirmModal({
             {/* Campaign name chip */}
             <div className="flex items-center gap-3 p-3 rounded-xl bg-destructive/5 border border-destructive/20 mb-5">
               {campaign.thumbnailUrl ? (
-                <img src={campaign.thumbnailUrl} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0" />
+                <Image src={campaign.thumbnailUrl} alt="" width={40} height={40} className="w-10 h-10 rounded-lg object-cover shrink-0" />
               ) : (
                 <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center shrink-0">
                   <ImageIcon className="w-4 h-4 text-muted-foreground/40" />
@@ -187,6 +188,7 @@ export default function CampaignLobby() {
     }
   }, [workspaceSlug]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchCampaigns(); }, [fetchCampaigns]);
 
   const handleNew = () => {
@@ -327,6 +329,9 @@ export default function CampaignLobby() {
     }
   };
 
+  // eslint-disable-next-line react-hooks/purity
+  const now = Date.now();
+
   return (
     <>
       {/* Delete confirmation modal */}
@@ -389,7 +394,7 @@ export default function CampaignLobby() {
 
                 // How long has it been generating?
                 const generatingMs = c.generatingSince
-                  ? Date.now() - new Date(c.generatingSince).getTime()
+                  ? now - new Date(c.generatingSince).getTime()
                   : 0;
                 const generatingSecs = Math.floor(generatingMs / 1000);
                 const isStuck = isGenerating && generatingMs > 3 * 60 * 1000; // > 3 min
@@ -405,11 +410,11 @@ export default function CampaignLobby() {
                   >
                     {/* Thumbnail — always clickable */}
                     <div
-                      className="w-14 h-14 rounded-lg overflow-hidden bg-secondary border border-border shrink-0 flex items-center justify-center cursor-pointer"
+                      className="relative w-14 h-14 rounded-lg overflow-hidden bg-secondary border border-border shrink-0 flex items-center justify-center cursor-pointer"
                       onClick={() => !isLoading && handleResume(c)}
                     >
                       {c.thumbnailUrl ? (
-                        <img src={c.thumbnailUrl} alt="" className="w-full h-full object-cover" />
+                        <Image src={c.thumbnailUrl} alt="" fill className="object-cover" sizes="56px" />
                       ) : isGenerating ? (
                         <Loader2 className="w-5 h-5 text-amber-400 animate-spin" />
                       ) : (

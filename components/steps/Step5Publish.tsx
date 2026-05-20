@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useAppStore } from '@/store/useAppStore';
 import { Button } from '@/components/ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -108,6 +109,17 @@ export default function Step5Publish() {
   const [isPublishing, setIsPublishing]       = useState(false);
   const [results, setResults]                 = useState<PostResult[] | null>(null);
 
+  const confettiParticles = useMemo(() =>
+    Array.from({ length: 24 }, () => ({
+      // eslint-disable-next-line react-hooks/purity
+      x: Math.random() * 100,
+      // eslint-disable-next-line react-hooks/purity
+      y: Math.random() * 100,
+      // eslint-disable-next-line react-hooks/purity
+      delay: Math.random() * 0.3,
+    })),
+  []);
+
   const anchor = generatedAssets.find(a => a.id === selectedAnchorId);
 
   const fetchProfiles = useCallback(async () => {
@@ -124,6 +136,7 @@ export default function Step5Publish() {
     }
   }, [workspaceSlug]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchProfiles(); }, [fetchProfiles]);
 
   const togglePlatform = (id: string) =>
@@ -184,7 +197,6 @@ export default function Step5Publish() {
 
   // ── Results screen ───────────────────────────────────────────────────────
   if (results) {
-    const successes = results.filter(r => r.status === 'success' || r.status === 'sent');
     const failures  = results.filter(r => r.status !== 'success' && r.status !== 'sent');
     const allGood   = failures.length === 0;
 
@@ -194,12 +206,12 @@ export default function Step5Publish() {
         animate={{ opacity: 1, scale: 1 }}
         className="h-full flex flex-col items-center justify-center relative overflow-hidden px-8"
       >
-        {allGood && Array.from({ length: 24 }).map((_, i) => (
+        {allGood && confettiParticles.map((p, i) => (
           <motion.div
             key={i}
             initial={{ x: '50vw', y: '50vh', scale: 0, opacity: 1 }}
-            animate={{ x: `${Math.random() * 100}vw`, y: `${Math.random() * 100}vh`, scale: [0, 1, 0], opacity: [1, 1, 0] }}
-            transition={{ duration: 1.8, ease: 'easeOut', delay: Math.random() * 0.3 }}
+            animate={{ x: `${p.x}vw`, y: `${p.y}vw`, scale: [0, 1, 0], opacity: [1, 1, 0] }}
+            transition={{ duration: 1.8, ease: 'easeOut', delay: p.delay }}
             className="absolute w-2 h-2 rounded-sm z-0 pointer-events-none"
             style={{ left: 0, top: 0, backgroundColor: i % 2 === 0 ? '#7C5CFC' : '#ffffff' }}
           />
@@ -314,8 +326,8 @@ export default function Step5Publish() {
               </div>
             )}
             {anchor ? (
-              <div className="w-full aspect-square bg-secondary">
-                <img src={anchor.url} alt="Post media" className="w-full h-full object-cover" />
+              <div className="relative w-full aspect-square bg-secondary">
+                <Image src={anchor.url} alt="Post media" fill className="object-cover" sizes="100%" />
               </div>
             ) : (
               <div className="w-full aspect-square bg-secondary flex items-center justify-center">
@@ -440,7 +452,7 @@ export default function Step5Publish() {
                   <input
                     type="datetime-local"
                     value={scheduledAt}
-                    min={new Date(Date.now() + 5 * 60 * 1000).toISOString().slice(0, 16)}
+                    min={new Date(Date.now() + 5 * 60 * 1000).toISOString().slice(0, 16)} // eslint-disable-line react-hooks/purity
                     onChange={e => setScheduledAt(e.target.value)}
                     className="w-full bg-secondary/30 border border-border rounded-xl px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-primary/50 transition-colors"
                   />

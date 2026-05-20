@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import Image from 'next/image';
 import { useAppStore } from '@/store/useAppStore';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -98,7 +99,7 @@ export default function Step4Compose() {
         <div className="bg-card border border-border rounded-xl flex items-center justify-center p-4">
           {anchor ? (
             <div className="relative w-full max-w-xs aspect-square bg-background shadow-2xl rounded-xl overflow-hidden mx-auto">
-              <img src={anchor.url} alt="Preview" className="w-full h-full object-cover" />
+              <Image src={anchor.url} alt="Preview" fill className="object-cover" sizes="(max-width: 768px) 100vw, 320px" />
               {/* Caption overlay */}
               {caption && (
                 <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-5 pt-10">
@@ -112,6 +113,7 @@ export default function Step4Compose() {
                 className="absolute top-3 right-3 w-10 h-10 bg-white/90 hover:bg-white rounded-lg flex items-center justify-center shadow-md transition-all group"
               >
                 {logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img src={logoUrl} alt="Logo" className="w-8 h-8 object-contain rounded" />
                 ) : (
                   <>
@@ -182,6 +184,7 @@ export default function Step4Compose() {
             className="w-full border-2 border-dashed border-border rounded-lg p-4 flex flex-col items-center gap-2 hover:border-primary/50 hover:bg-primary/5 transition-all"
           >
             {logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img src={logoUrl} alt="Logo" className="h-10 object-contain" />
             ) : (
               <>

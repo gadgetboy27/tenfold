@@ -6,7 +6,6 @@ export async function enqueueJob(
   input: Record<string, unknown>,
   webhookUrl: string,
 ): Promise<{ requestId: string }> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const result = await (fal.queue.submit as (endpointId: string, opts: { input: unknown; webhookUrl: string }) => Promise<{ request_id: string }>)(
     FAL_MODELS[modelKey],
     { input, webhookUrl },

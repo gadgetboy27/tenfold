@@ -6,6 +6,14 @@ const ALLOWED_ORIGINS = [
 ].filter(Boolean) as string[];
 
 const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      { protocol: 'https', hostname: '**.supabase.co' },
+      { protocol: 'https', hostname: '**.fal.media' },
+      { protocol: 'https', hostname: 'fal.media' },
+      { protocol: 'https', hostname: '**.fal.ai' },
+    ],
+  },
   async headers() {
     return [
       {

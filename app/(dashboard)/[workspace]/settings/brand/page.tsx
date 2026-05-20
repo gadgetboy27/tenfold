@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 import { useParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useAppStore } from '@/store/useAppStore';
@@ -205,8 +206,8 @@ export default function BrandKitPage() {
             </h2>
             {kit.logo_url ? (
               <div className="flex items-center gap-4 p-4 rounded-xl border border-border bg-card">
-                <div className="w-20 h-20 rounded-lg border border-border bg-background flex items-center justify-center overflow-hidden shrink-0">
-                  <img src={kit.logo_url} alt="Logo" className="max-w-full max-h-full object-contain" />
+                <div className="relative w-20 h-20 rounded-lg border border-border bg-background flex items-center justify-center overflow-hidden shrink-0">
+                  <Image src={kit.logo_url} alt="Logo" fill className="object-contain" sizes="80px" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-foreground mb-1">Logo uploaded</p>
@@ -312,7 +313,7 @@ export default function BrandKitPage() {
                 style={{ background: `linear-gradient(135deg, ${kit.primary_color}cc, ${kit.secondary_color}cc)` }}
               >
                 {kit.logo_url && (
-                  <img src={kit.logo_url} alt="" className="absolute top-3 left-3 h-8 object-contain drop-shadow-lg" />
+                  <Image src={kit.logo_url} alt="" width={120} height={32} className="absolute top-3 left-3 h-8 w-auto object-contain drop-shadow-lg" />
                 )}
                 <div
                   className="absolute bottom-3 right-3 w-5 h-5 rounded-full"
@@ -327,7 +328,7 @@ export default function BrandKitPage() {
                 <div className="flex items-center gap-2">
                   <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ background: kit.primary_color }}>
                     {kit.logo_url
-                      ? <img src={kit.logo_url} alt="" className="w-5 h-5 object-contain" />
+                      ? <Image src={kit.logo_url} alt="" width={20} height={20} className="w-5 h-5 object-contain" />
                       : <span className="text-white text-[10px] font-bold">B</span>
                     }
                   </div>

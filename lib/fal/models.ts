@@ -1,5 +1,5 @@
 export const FAL_MODELS = {
-  image_generation: 'fal-ai/flux-pro/v1.1',
+  image_generation: 'fal-ai/flux-pro/v1.1-ultra',
   image_variation:  'fal-ai/flux-pro/kontext',
   upscale:          'fal-ai/clarity-upscaler',
   video_10s:        'fal-ai/kling-video/v2.1/pro/image-to-video',

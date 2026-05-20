@@ -62,7 +62,7 @@ export default function FormatCard({ type, title, subtitle, cost, icon: Icon, on
 
       {status === 'ready' && type === 'script' && expansion?.content && (
         <div className="border-t border-border/50 pt-4">
-          <p className="text-sm text-foreground bg-secondary/50 rounded-lg p-3 italic">"{expansion.content}"</p>
+          <p className="text-sm text-foreground bg-secondary/50 rounded-lg p-3 italic">&ldquo;{expansion.content}&rdquo;</p>
         </div>
       )}
 

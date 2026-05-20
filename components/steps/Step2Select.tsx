@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import Image from 'next/image';
 import { useAppStore } from '@/store/useAppStore';
 import { api } from '@/lib/api';
 import ImageCard from '@/components/shared/ImageCard';
@@ -52,7 +53,7 @@ export default function Step2Select() {
             <div className="max-w-5xl mx-auto">
               <div className="flex items-center gap-4 bg-card/95 backdrop-blur-md border border-primary/30 rounded-2xl px-5 py-4 shadow-[0_0_40px_rgba(124,92,252,0.2)]">
                 <div className="relative w-14 h-14 rounded-lg overflow-hidden border-2 border-primary shrink-0">
-                  <img src={selectedAsset.url} alt="Selected anchor" className="w-full h-full object-cover" />
+                  <Image src={selectedAsset.url} alt="Selected anchor" fill className="object-cover" sizes="56px" />
                   <div className="absolute inset-0 bg-primary/20" />
                   <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-primary flex items-center justify-center">
                     <Check className="w-2.5 h-2.5 text-white" />

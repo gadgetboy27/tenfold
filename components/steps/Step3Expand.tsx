@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { useAppStore } from '@/store/useAppStore';
 import { Film, Music, FileText, ArrowRight } from 'lucide-react';
 import FormatCard from '@/components/shared/FormatCard';
@@ -96,6 +97,7 @@ export default function Step3Expand() {
       // Music: stable-audio takes 30-90s → poll every 4s, up to 3 min
       const INTERVAL = type === 'video' ? 6000 : 4000;
       const MAX_MS   = type === 'video' ? 5 * 60 * 1000 : 3 * 60 * 1000;
+      // eslint-disable-next-line react-hooks/purity
       const startedAt = Date.now();
 
       const poll = async (): Promise<void> => {
@@ -166,8 +168,8 @@ export default function Step3Expand() {
         {/* Anchor thumbnail */}
         <div className="w-56 shrink-0 space-y-4">
           <h2 className="font-serif text-xl font-bold text-foreground">Your anchor</h2>
-          <div className="aspect-square rounded-xl overflow-hidden border border-border shadow-lg">
-            <img src={anchor.url} alt="Anchor" className="w-full h-full object-cover" />
+          <div className="relative aspect-square rounded-xl overflow-hidden border border-border shadow-lg">
+            <Image src={anchor.url} alt="Anchor" fill className="object-cover" sizes="224px" />
           </div>
           <p className="text-sm text-muted-foreground bg-secondary/50 p-3 rounded-lg border border-border/50 italic">
             &ldquo;{anchor.prompt.substring(0, 80)}{anchor.prompt.length > 80 ? '…' : ''}&rdquo;
