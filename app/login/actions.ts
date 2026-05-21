@@ -56,24 +56,3 @@ export async function signInWithPassword(formData: FormData) {
   redirect(`/${slug}`);
 }
 
-export async function sendMagicLink(formData: FormData) {
-  const email = formData.get('email') as string;
-
-  if (!email) {
-    return { error: 'Email is required' };
-  }
-
-  const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/callback`,
-    },
-  });
-
-  if (error) {
-    return { error: error.message };
-  }
-
-  return { success: true };
-}

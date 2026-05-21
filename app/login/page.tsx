@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { signInWithPassword, sendMagicLink } from './actions';
+import { signInWithPassword } from './actions';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
 export default function LoginPage() {
@@ -48,9 +48,14 @@ export default function LoginPage() {
         const result = await signInWithPassword(formData);
         if (result?.error) setError(result.error);
       } else {
-        const result = await sendMagicLink(formData);
-        if (result?.error) setError(result.error);
-        else if (result?.success) setMagicSent(true);
+        const email = formData.get('email') as string;
+        const supabase = createSupabaseBrowserClient();
+        const { error: otpError } = await supabase.auth.signInWithOtp({
+          email,
+          options: { emailRedirectTo: `${window.location.origin}/callback` },
+        });
+        if (otpError) setError(otpError.message);
+        else setMagicSent(true);
       }
     });
   };
