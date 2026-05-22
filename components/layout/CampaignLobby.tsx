@@ -8,10 +8,68 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Sparkles, Clock, ChevronRight, Loader2,
   Image as ImageIcon, Trash2, AlertTriangle, XCircle, Pen,
+  Wifi,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
+import Link from 'next/link';
+
+const PLATFORM_LABELS: Record<string, string> = {
+  instagram: 'IG',
+  facebook: 'FB',
+  twitter: 'X',
+  linkedin: 'LI',
+  youtube: 'YT',
+  tiktok: 'TT',
+  pinterest: 'PI',
+  gmb: 'GM',
+};
+
+const PLATFORM_COLORS: Record<string, string> = {
+  instagram: 'bg-pink-500/15 text-pink-400 border-pink-500/30',
+  facebook:  'bg-blue-500/15 text-blue-400 border-blue-500/30',
+  twitter:   'bg-sky-500/15 text-sky-400 border-sky-500/30',
+  linkedin:  'bg-blue-700/15 text-blue-300 border-blue-700/30',
+  youtube:   'bg-red-500/15 text-red-400 border-red-500/30',
+  tiktok:    'bg-neutral-500/15 text-neutral-300 border-neutral-500/30',
+  pinterest: 'bg-rose-600/15 text-rose-400 border-rose-600/30',
+  gmb:       'bg-green-600/15 text-green-400 border-green-600/30',
+};
+
+interface SocialProfile { platform: string; }
+
+function ConnectedPlatforms({ platforms, workspaceSlug }: { platforms: string[]; workspaceSlug: string }) {
+  if (platforms.length === 0) {
+    return (
+      <Link
+        href={`/${workspaceSlug}/settings/social`}
+        onClick={e => e.stopPropagation()}
+        className="flex items-center gap-1 text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+        title="Connect social accounts"
+      >
+        <Wifi className="w-3 h-3" />
+        No socials connected
+      </Link>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      {platforms.map(p => (
+        <span
+          key={p}
+          className={cn(
+            'text-[9px] font-bold px-1.5 py-0.5 rounded border leading-none',
+            PLATFORM_COLORS[p] ?? 'bg-muted/15 text-muted-foreground border-muted/30',
+          )}
+          title={p.charAt(0).toUpperCase() + p.slice(1)}
+        >
+          {PLATFORM_LABELS[p] ?? p.slice(0, 2).toUpperCase()}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 interface CampaignRow {
   id: string;
@@ -177,12 +235,20 @@ export default function CampaignLobby() {
   const [confirmDelete, setConfirmDelete] = useState<CampaignRow | null>(null);
   const [isDeleting, setIsDeleting]       = useState(false);
   const [renaming, setRenaming]           = useState<{ id: string; value: string } | null>(null);
+  const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([]);
 
   const fetchCampaigns = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api('/api/campaigns', { workspaceSlug });
-      if (res.ok) setCampaigns(await res.json() as CampaignRow[]);
+      const [campaignsRes, socialsRes] = await Promise.all([
+        api('/api/campaigns', { workspaceSlug }),
+        api('/api/social/profiles', { workspaceSlug }),
+      ]);
+      if (campaignsRes.ok) setCampaigns(await campaignsRes.json() as CampaignRow[]);
+      if (socialsRes.ok) {
+        const profiles = await socialsRes.json() as SocialProfile[];
+        setConnectedPlatforms(profiles.map(p => p.platform.toLowerCase()));
+      }
     } finally {
       setLoading(false);
     }
@@ -464,6 +530,9 @@ export default function CampaignLobby() {
                       >
                         &ldquo;{c.prompt.slice(0, 70)}{c.prompt.length > 70 ? '…' : ''}&rdquo;
                       </p>
+                      <div className="mt-1.5">
+                        <ConnectedPlatforms platforms={connectedPlatforms} workspaceSlug={workspaceSlug} />
+                      </div>
                       {!isGenerating && <CampaignProgress currentStep={c.current_step} />}
                       {isGenerating && generatingSecs > 0 && (
                         <p className="text-[10px] text-amber-400 mt-1">
