@@ -22,13 +22,21 @@ export async function validatePrompt(
     };
   }
 
+  const styleGuide: Record<string, string> = {
+    Photorealistic: 'needs a clear subject + setting + lighting (e.g. "founder at a tech conference, golden hour backlight, DSLR close-up"). Vague prompts produce muddy photos.',
+    Illustration:   'needs a clear subject + colour mood + art direction (e.g. "bold flat-colour vector of a coffee cup, warm pastels, minimal background"). Abstract prompts produce generic clip-art.',
+    Cinematic:      'needs a scene/moment + mood + lighting direction (e.g. "CEO walking through glass office, dramatic low-key side lighting, wide shot"). Needs enough narrative tension to feel like a movie still.',
+    '3D':           'needs a clear object or scene + surface material + lighting environment (e.g. "floating product bottle, matte white with gold accents, studio HDRI"). Abstract prompts produce shapeless geometry.',
+  };
+
   const message = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 300,
+    max_tokens: 350,
     messages: [
       {
         role: 'user',
-        content: `Rate this prompt for the FLUX Pro AI image generator (style: ${style}).
+        content: `Rate this prompt for FLUX Pro, a photorealistic AI image model. Style requested: ${style}.
+Style guidance: ${styleGuide[style] ?? 'needs a clear subject, setting, and mood.'}
 Prompt: "${prompt}"
 
 Return JSON only — no other text:
@@ -38,9 +46,9 @@ Return JSON only — no other text:
   "refinedPrompt": "<improved prompt or null>"
 }
 
-Score: 0-39 = too vague/invalid, 40-69 = acceptable, 70-100 = strong.
-Issues: list only real problems (too vague, missing subject, prohibited content).
-refinedPrompt: only when score < 70 and a better version is obvious, else null.`,
+Score: 0-39 = too vague/will fail, 40-69 = acceptable, 70-100 = strong.
+Issues: only flag real problems (missing subject, too abstract, prohibited content). Do NOT nitpick good prompts.
+refinedPrompt: rewrite only when score < 70 and improvement is obvious. Keep the user's intent. Match the ${style} style.`,
       },
     ],
   });

@@ -91,7 +91,7 @@ export default function Step1Create() {
 
   if (generatedAssets.length === 0 && !isGenerating) {
     return (
-      <div className="h-full flex flex-col items-start justify-center relative pt-0 pb-40">
+      <div className="h-full flex flex-col items-start justify-center relative">
         <CosmicBackground />
         <div className="relative text-center max-w-md mx-auto w-full" style={{ zIndex: 2, marginTop: '-8vh' }}>
           <motion.div

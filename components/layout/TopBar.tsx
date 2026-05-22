@@ -14,12 +14,13 @@ import {
 import {
   Pen, LogOut, User as UserIcon, Share2, ChevronLeft, Trash2,
   Sparkles, Crosshair, Layers, PenTool, Send, Check,
-  PanelLeft, SlidersHorizontal,
+  PanelLeft, SlidersHorizontal, Zap,
 } from 'lucide-react';
 import Link from 'next/link';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import toast from 'react-hot-toast';
 
 const STEPS = [
   { id: 1 as const, label: 'Create',  icon: Sparkles },
@@ -39,10 +40,12 @@ export default function TopBar({ user, showBack = false }: Props) {
     campaignName, setCampaignName, isGenerating, currentCampaignId, workspaceSlug,
     resetCampaign, currentStep, completedSteps, setStep,
     leftDrawerOpen, setLeftDrawerOpen, rightDrawerOpen, setRightDrawerOpen,
+    setCreditBalance,
   } = useAppStore();
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(campaignName);
   const [deleteStep, setDeleteStep] = useState<'idle' | 'confirm' | 'deleting'>('idle');
+  const [isGranting, setIsGranting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const initials = user.email ? user.email.slice(0, 2).toUpperCase() : 'TF';
@@ -71,6 +74,25 @@ export default function TopBar({ user, showBack = false }: Props) {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') handleSave();
     else if (e.key === 'Escape') setIsEditing(false);
+  };
+
+  const handleGrantCredits = async () => {
+    setIsGranting(true);
+    try {
+      const res = await api('/api/dev/grant-credits', { method: 'POST', workspaceSlug });
+      const data = await res.json() as { granted?: number; error?: string };
+      if (!res.ok) throw new Error(data.error ?? 'Grant failed');
+      toast.success(`+${data.granted} test credits added`);
+      // Refresh displayed balance
+      api('/api/credits/balance', { workspaceSlug })
+        .then(r => r.json())
+        .then((d: { balance?: number }) => { if (typeof d.balance === 'number') setCreditBalance(d.balance); })
+        .catch(() => {});
+    } catch (err) {
+      toast.error((err as Error).message ?? 'Could not grant credits');
+    } finally {
+      setIsGranting(false);
+    }
   };
 
   const handleSignOut = async () => {
@@ -288,6 +310,15 @@ export default function TopBar({ user, showBack = false }: Props) {
                 )}
               </>
             )}
+            <DropdownMenuSeparator className="bg-border" />
+            <DropdownMenuItem
+              className="gap-2 text-sm text-amber-400 focus:text-amber-400 cursor-pointer"
+              onSelect={e => { e.preventDefault(); handleGrantCredits(); }}
+              disabled={isGranting}
+            >
+              <Zap className="w-4 h-4" />
+              {isGranting ? 'Adding…' : 'Top up 500 credits (dev)'}
+            </DropdownMenuItem>
             <DropdownMenuSeparator className="bg-border" />
             <DropdownMenuItem
               className="gap-2 text-sm text-red-400 focus:text-red-400 cursor-pointer"

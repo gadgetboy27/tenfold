@@ -239,7 +239,11 @@ export default function CampaignLobby() {
     setResuming(c.id);
     try {
       const res = await api(`/api/campaigns/${c.id}`, { workspaceSlug });
-      if (!res.ok) return;
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        toast.error(body.error ?? `Failed to open campaign (${res.status})`);
+        return;
+      }
       const full = await res.json() as {
         id: string; name: string; current_step: number;
         anchor_asset_id: string | null;
@@ -307,6 +311,9 @@ export default function CampaignLobby() {
         imageAssets,
         compositionId: full.latestCompositionId ?? null,
       });
+    } catch (err) {
+      console.error('[CampaignLobby] handleResume error:', err);
+      toast.error((err as Error).message ?? 'Failed to open campaign — please try again');
     } finally {
       setResuming(null);
     }
@@ -406,12 +413,12 @@ export default function CampaignLobby() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, x: -20 }}
                     transition={{ delay: i * 0.04 }}
-                    className="group flex items-center gap-4 p-4 rounded-xl border bg-card transition-all border-border hover:border-primary/30 hover:bg-card/80"
+                    onClick={() => !isLoading && !renaming && handleResume(c)}
+                    className="group flex items-center gap-4 p-4 rounded-xl border bg-card transition-all border-border hover:border-primary/30 hover:bg-card/80 cursor-pointer"
                   >
-                    {/* Thumbnail — always clickable */}
+                    {/* Thumbnail */}
                     <div
-                      className="relative w-14 h-14 rounded-lg overflow-hidden bg-secondary border border-border shrink-0 flex items-center justify-center cursor-pointer"
-                      onClick={() => !isLoading && handleResume(c)}
+                      className="relative w-14 h-14 rounded-lg overflow-hidden bg-secondary border border-border shrink-0 flex items-center justify-center"
                     >
                       {c.thumbnailUrl ? (
                         <Image src={c.thumbnailUrl} alt="" fill className="object-cover" sizes="56px" />
@@ -439,13 +446,12 @@ export default function CampaignLobby() {
                         />
                       ) : (
                         <div
-                          className="flex items-center gap-1.5 group/name cursor-pointer"
-                          onClick={() => !isLoading && handleResume(c)}
+                          className="flex items-center gap-1.5 group/name"
                         >
                           <p className="text-sm font-semibold text-foreground truncate group-hover:text-primary transition-colors">{c.name}</p>
                           <button
                             type="button"
-                            onClick={e => handleRenameStart(e, c)}
+                            onClick={e => { e.stopPropagation(); handleRenameStart(e, c); }}
                             className="opacity-0 group-hover/name:opacity-60 hover:!opacity-100 transition-opacity shrink-0"
                             title="Rename campaign"
                           >
@@ -454,8 +460,7 @@ export default function CampaignLobby() {
                         </div>
                       )}
                       <p
-                        className="text-xs text-muted-foreground truncate mt-0.5 italic cursor-pointer"
-                        onClick={() => !isLoading && handleResume(c)}
+                        className="text-xs text-muted-foreground truncate mt-0.5 italic"
                       >
                         &ldquo;{c.prompt.slice(0, 70)}{c.prompt.length > 70 ? '…' : ''}&rdquo;
                       </p>
@@ -509,14 +514,9 @@ export default function CampaignLobby() {
                     {isLoading
                       ? <Loader2 className="w-4 h-4 text-primary animate-spin shrink-0" />
                       : (
-                        <button
-                          type="button"
-                          onClick={() => handleResume(c)}
-                          className="text-muted-foreground hover:text-primary transition-colors shrink-0"
-                          title="Open campaign"
-                        >
+                        <span className="text-muted-foreground group-hover:text-primary transition-colors shrink-0">
                           <ChevronRight className="w-4 h-4" />
-                        </button>
+                        </span>
                       )
                     }
 

@@ -49,7 +49,7 @@ export default function FloatingPromptBar() {
     isGenerating, aspectRatio, style, setAspectRatio, setStyle,
     setStep, completeStep, setCampaignId, workspaceSlug, currentStep,
     setGenerationStage, setCampaignBrief, pendingBriefPrompt, setPendingBriefPrompt,
-    campaignBrief, campaignName,
+    campaignBrief, campaignName, generatedAssets,
   } = useAppStore();
 
   const STAGES = [
@@ -173,6 +173,9 @@ export default function FloatingPromptBar() {
   const isStrong = (score ?? 0) >= 70;
   const isFair   = (score ?? 0) >= 45;
 
+  // Initial state = no assets and not generating → show bar below the heading (center of page)
+  const isInitialState = generatedAssets.length === 0 && !isGenerating;
+
   const handleDescribeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt.trim() || isGenerating) return;
@@ -206,19 +209,26 @@ export default function FloatingPromptBar() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
-      className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20 w-full max-w-2xl px-4"
+      className={`absolute left-1/2 -translate-x-1/2 z-20 w-full max-w-2xl px-4 ${
+        isInitialState ? 'top-[57%]' : 'bottom-10'
+      }`}
     >
       <div
-        className="rounded-2xl border border-white/10 mt-2"
+        className="rounded-2xl border mt-2 focus-within:border-[#7C5CFC]/70 transition-colors duration-200"
         style={{
-          background: 'rgba(17,17,17,0.82)',
-          backdropFilter: 'blur(18px)',
-          boxShadow: mode === 'describe' && isStrong
-            ? '0 0 0 1px rgba(34,197,94,0.3), 0 20px 60px rgba(0,0,0,0.6)'
+          background: 'rgba(17,17,17,0.88)',
+          backdropFilter: 'blur(20px)',
+          borderColor: mode === 'describe' && isStrong
+            ? 'rgba(34,197,94,0.5)'
             : mode === 'describe' && isFair
-            ? '0 0 0 1px rgba(245,158,11,0.2), 0 20px 60px rgba(0,0,0,0.6)'
-            : '0 20px 60px rgba(0,0,0,0.6)',
-          transition: 'box-shadow 0.4s ease',
+            ? 'rgba(245,158,11,0.4)'
+            : 'rgba(124,92,252,0.35)',
+          boxShadow: mode === 'describe' && isStrong
+            ? '0 0 0 1px rgba(34,197,94,0.15), 0 0 24px rgba(34,197,94,0.08), 0 20px 60px rgba(0,0,0,0.7)'
+            : mode === 'describe' && isFair
+            ? '0 0 0 1px rgba(245,158,11,0.12), 0 0 24px rgba(245,158,11,0.06), 0 20px 60px rgba(0,0,0,0.7)'
+            : '0 0 0 1px rgba(124,92,252,0.12), 0 0 24px rgba(124,92,252,0.06), 0 20px 60px rgba(0,0,0,0.7)',
+          transition: 'box-shadow 0.4s ease, border-color 0.2s ease',
         }}
       >
         {/* Mode tabs + controls */}
@@ -280,7 +290,7 @@ export default function FloatingPromptBar() {
               value={prompt}
               onChange={e => setPrompt(e.target.value)}
               placeholder="A confident founder presenting at a tech conference, golden hour lighting, professional, aspirational..."
-              className="flex-1 bg-transparent text-[#F0F0F0] placeholder-[#444] text-sm outline-none"
+              className="flex-1 bg-transparent text-[#F0F0F0] placeholder-[#777] text-sm outline-none"
               data-testid="input-prompt"
             />
             <button
@@ -310,7 +320,7 @@ export default function FloatingPromptBar() {
                 onChange={e => setUrlInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleAnalyzeUrl()}
                 placeholder="https://yourwebsite.com — we'll crawl it and build a campaign brief"
-                className="flex-1 bg-transparent text-[#F0F0F0] placeholder-[#444] text-sm outline-none"
+                className="flex-1 bg-transparent text-[#F0F0F0] placeholder-[#777] text-sm outline-none"
               />
               <button
                 type="button"

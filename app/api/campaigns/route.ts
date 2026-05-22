@@ -17,10 +17,10 @@ const ASPECT_TO_IMAGE_SIZE: Record<string, string> = {
 };
 
 const STYLE_SUFFIXES: Record<string, string> = {
-  Photorealistic: 'photorealistic, ultra-detailed, sharp focus, professional photography',
-  Illustration:   'digital illustration, artistic, stylized, vibrant colors',
-  Cinematic:      'cinematic, film grain, dramatic lighting, anamorphic lens, widescreen',
-  '3D':           '3D render, CGI, volumetric lighting, octane render, subsurface scattering',
+  Photorealistic: 'RAW photo, photorealistic, ultra-detailed, 8K UHD, DSLR camera, sharp focus, professional studio lighting, shallow depth of field, colour graded, hyperrealistic skin texture',
+  Illustration:   'digital illustration, vector art style, clean bold lines, vibrant flat colours, concept art, professional graphic design, ArtStation quality, smooth shading',
+  Cinematic:      'cinematic movie still, anamorphic widescreen lens, dramatic chiaroscuro lighting, film grain, ARRI Alexa footage, shallow depth of field, Hollywood colour grade, atmospheric haze',
+  '3D':           '3D render, Octane render, volumetric lighting, ray tracing, subsurface scattering, photorealistic PBR materials, cinema4d, ultra-detailed, 8K, sharp edges, studio HDRI',
 };
 
 export async function GET(req: Request) {

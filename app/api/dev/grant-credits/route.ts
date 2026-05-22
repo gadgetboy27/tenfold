@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/session';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 
-const GRANT_AMOUNT = 200;
+const GRANT_AMOUNT = 500;
 
 export async function POST(req: Request) {
   try {
