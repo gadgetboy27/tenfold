@@ -31,8 +31,8 @@ export async function signInWithPassword(formData: FormData) {
     .limit(1);
 
   if (existing?.length) {
-    const row = existing[0] as unknown as { workspaces: { slug: string }[] };
-    redirect(`/${row.workspaces[0]?.slug ?? user.id}`);
+    const row = existing[0] as unknown as { workspaces: { slug: string } };
+    redirect(`/${row.workspaces?.slug ?? user.id}`);
   }
 
   // First login — provision workspace

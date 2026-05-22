@@ -53,8 +53,8 @@ export async function GET(request: NextRequest) {
   };
 
   if (existing?.length) {
-    const row = existing[0] as unknown as { workspace_id: string; workspaces: { slug: string }[] };
-    const slug = row.workspaces[0]?.slug ?? '';
+    const row = existing[0] as unknown as { workspace_id: string; workspaces: { slug: string } };
+    const slug = row.workspaces?.slug ?? '';
     return redirectTo(`${origin}/${slug}`);
   }
 
