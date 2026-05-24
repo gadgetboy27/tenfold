@@ -34,7 +34,7 @@ export default function Step3Expand() {
 
   const handleGenerate = async (type: ExpandType) => {
     if (!anchor) return;
-    updateExpansion(type, { status: 'pending' });
+    updateExpansion(type, { status: 'pending', jobId: expansions[type]?.jobId });
 
     try {
       const campaignId = currentCampaignId ?? 'demo';
@@ -125,7 +125,7 @@ export default function Step3Expand() {
         };
 
         if (job.status === 'ready') {
-          updateExpansion(type, { status: 'ready', url: job.outputUrls?.[0] });
+          updateExpansion(type, { status: 'ready', url: job.outputUrls?.[0], jobId: postData.jobId });
           toast.success(`${type === 'video' ? 'Video' : 'Music'} ready`);
           syncBalance();
           // Persist immediately — don't wait for "Continue to Compose"
@@ -156,6 +156,32 @@ export default function Step3Expand() {
 
   const anyReady = expansions.video?.status === 'ready' || expansions.music?.status === 'ready' || expansions.script?.status === 'ready';
 
+  const handleRefresh = async (type: 'video' | 'music') => {
+    const jobId = expansions[type]?.jobId;
+    if (!jobId) return;
+    try {
+      const res = await api(`/api/jobs/${jobId}`, { workspaceSlug });
+      if (!res.ok) return;
+      const job = await res.json() as { status: string; outputUrls?: string[] };
+      if (job.status === 'ready' && job.outputUrls?.[0]) {
+        updateExpansion(type, { status: 'ready', url: job.outputUrls[0], jobId });
+        const saved = useAppStore.getState().expansions;
+        if (currentCampaignId && currentCampaignId !== '__new__') {
+          api(`/api/campaigns/${currentCampaignId}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ expansion_data: saved }),
+            workspaceSlug,
+          }).catch(() => {});
+        }
+        toast.success('Video found');
+      } else {
+        toast.error('Video not ready yet — try again in a moment');
+      }
+    } catch {
+      toast.error('Failed to check video status');
+    }
+  };
+
   if (!anchor) return (
     <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
       No anchor selected — go back to step 2.
@@ -178,7 +204,7 @@ export default function Step3Expand() {
 
         {/* Format cards — scroll container needs bottom padding for the sticky bar */}
         <div className="flex-1 grid grid-cols-3 gap-4 content-start">
-          <FormatCard type="video" title="Video" subtitle="10–60s cinematic clip" cost="15–80 cr" icon={Film} onGenerate={() => handleGenerate('video')}>
+          <FormatCard type="video" title="Video" subtitle="10–60s cinematic clip" cost="15–80 cr" icon={Film} onGenerate={() => handleGenerate('video')} onRefresh={() => handleRefresh('video')}>
             <div className="flex gap-2">
               {([10, 30, 60] as const).map(t => (
                 <button key={t} type="button" onClick={() => setVideoDuration(t)}
@@ -189,7 +215,7 @@ export default function Step3Expand() {
             </div>
           </FormatCard>
 
-          <FormatCard type="music" title="Music" subtitle="30s background track" cost="8 cr" icon={Music} onGenerate={() => handleGenerate('music')}>
+          <FormatCard type="music" title="Music" subtitle="30s background track" cost="8 cr" icon={Music} onGenerate={() => handleGenerate('music')} onRefresh={() => handleRefresh('music')}>
             <div className="grid grid-cols-2 gap-1.5">
               {['Uplifting', 'Corporate', 'Dramatic', 'Chill'].map(m => (
                 <button key={m} type="button" onClick={() => setVideoMood(m)}

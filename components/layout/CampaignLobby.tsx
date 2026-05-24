@@ -330,16 +330,18 @@ export default function CampaignLobby() {
           createdAt: a.created_at,
         }));
 
-      // Rebuild expansion data from saved DB record + any assets not yet reflected there
+      // Rebuild expansion data from saved DB record + any assets not yet reflected there.
+      // Always prefer the asset table URL over expansion_data — the asset URL is stored in Supabase
+      // (permanent), while expansion_data.*.url may point to an expired fal.ai CDN URL.
       const expansionData = { ...(full.expansion_data ?? {}) } as CampaignResume['expansion_data'];
 
       const videoAsset = (full.assets ?? []).find(a => a.type === 'video');
-      if (videoAsset && !expansionData.video?.url) {
-        expansionData.video = { status: 'ready', url: videoAsset.url };
+      if (videoAsset) {
+        expansionData.video = { ...(expansionData.video ?? {}), status: 'ready', url: videoAsset.url };
       }
       const audioAsset = (full.assets ?? []).find(a => a.type === 'audio');
-      if (audioAsset && !expansionData.music?.url) {
-        expansionData.music = { status: 'ready', url: audioAsset.url };
+      if (audioAsset) {
+        expansionData.music = { ...(expansionData.music ?? {}), status: 'ready', url: audioAsset.url };
       }
 
       // Infer anchor from first image asset when it was never saved to DB

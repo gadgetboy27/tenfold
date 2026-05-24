@@ -50,8 +50,10 @@ export async function POST(req: Request) {
   }
   const payload = parsed.data;
 
-  // fal.ai may nest results under 'payload' or 'output' depending on model/version
-  const resultData = payload.payload ?? payload.output;
+  // fal.ai may nest results under 'payload' or 'output' depending on model/version.
+  // Prefer whichever wrapper actually contains media — empty {} is truthy and would mask real output.
+  const hasMedia = (d: typeof payload.payload) => !!(d?.images?.length || d?.video || d?.audio_file);
+  const resultData = hasMedia(payload.payload) ? payload.payload : payload.output ?? payload.payload;
 
   // 3. Locate the job — prefer lookup by ?j=jobId (more secure) then fall back to fal_request_id
   const jobId = new URL(req.url).searchParams.get('j');
@@ -132,29 +134,62 @@ async function handleSuccess(
   }
 
   if (payload.video) {
-    // Store fal.ai CDN URL directly — downloading 20-100MB in serverless is unreliable
-    // fal.ai CDN URLs (v3.fal.media) are permanent and publicly accessible
+    const assetId = uuidv4();
+    const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.mp4`;
+    let publicUrl = payload.video.url;
+    let storedPath: string | null = null;
+    try {
+      const videoRes = await fetch(payload.video.url, { signal: AbortSignal.timeout(90_000) });
+      const buffer = await videoRes.arrayBuffer();
+      const { error: upErr } = await admin.storage
+        .from('assets')
+        .upload(storagePath, buffer, { contentType: payload.video.content_type ?? 'video/mp4' });
+      if (!upErr) {
+        const { data: urlData } = admin.storage.from('assets').getPublicUrl(storagePath);
+        publicUrl = urlData.publicUrl;
+        storedPath = storagePath;
+      }
+    } catch {
+      // Fallback to fal CDN URL — it may expire but is better than nothing
+    }
     assetInserts.push({
-      id: uuidv4(),
+      id: assetId,
       campaign_id: job.campaign_id,
       workspace_id: job.workspace_id,
       job_id: job.id,
       type: 'video',
-      url: payload.video.url,
-      storage_path: null,
+      url: publicUrl,
+      storage_path: storedPath,
     });
   }
 
   if (payload.audio_file) {
-    // Store fal.ai CDN URL directly — same rationale as video
+    const assetId = uuidv4();
+    const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.mp3`;
+    let publicUrl = payload.audio_file.url;
+    let storedPath: string | null = null;
+    try {
+      const audioRes = await fetch(payload.audio_file.url, { signal: AbortSignal.timeout(60_000) });
+      const buffer = await audioRes.arrayBuffer();
+      const { error: upErr } = await admin.storage
+        .from('assets')
+        .upload(storagePath, buffer, { contentType: payload.audio_file.content_type ?? 'audio/mpeg' });
+      if (!upErr) {
+        const { data: urlData } = admin.storage.from('assets').getPublicUrl(storagePath);
+        publicUrl = urlData.publicUrl;
+        storedPath = storagePath;
+      }
+    } catch {
+      // Fallback to fal CDN URL
+    }
     assetInserts.push({
-      id: uuidv4(),
+      id: assetId,
       campaign_id: job.campaign_id,
       workspace_id: job.workspace_id,
       job_id: job.id,
       type: 'audio',
-      url: payload.audio_file.url,
-      storage_path: null,
+      url: publicUrl,
+      storage_path: storedPath,
     });
   }
 

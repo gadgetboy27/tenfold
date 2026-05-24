@@ -42,17 +42,6 @@ export async function fetchAndProcessFalJob(job: StuckJob): Promise<boolean> {
     return false;
   }
 
-  // Claim the job atomically — skip if another request already completed it
-  const { data: claimed } = await admin
-    .from('creative_jobs')
-    .update({ status: 'completed', completed_at: new Date().toISOString() })
-    .eq('id', job.id)
-    .eq('status', 'processing')
-    .select('id')
-    .single();
-
-  if (!claimed) return true; // already handled
-
   try {
     const result = (await fal.queue.result(modelId as FalModelKey, {
       requestId: job.fal_request_id,
@@ -83,36 +72,79 @@ export async function fetchAndProcessFalJob(job: StuckJob): Promise<boolean> {
     }
 
     if (result.data?.video) {
-      // Store fal.ai CDN URL directly — permanent, no download needed in serverless
+      const assetId = uuidv4();
+      const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.mp4`;
+      let publicUrl = result.data.video.url;
+      let storedPath: string | null = null;
+      try {
+        const videoRes = await fetch(result.data.video.url, { signal: AbortSignal.timeout(90_000) });
+        const buffer = await videoRes.arrayBuffer();
+        const { error: upErr } = await admin.storage
+          .from('assets')
+          .upload(storagePath, buffer, { contentType: result.data.video.content_type ?? 'video/mp4' });
+        if (!upErr) {
+          const { data: urlData } = admin.storage.from('assets').getPublicUrl(storagePath);
+          publicUrl = urlData.publicUrl;
+          storedPath = storagePath;
+        }
+      } catch {
+        // Fallback to fal CDN URL
+      }
       assetInserts.push({
-        id: uuidv4(),
+        id: assetId,
         campaign_id: job.campaign_id,
         workspace_id: job.workspace_id,
         job_id: job.id,
         type: 'video',
-        url: result.data.video.url,
-        storage_path: null,
+        url: publicUrl,
+        storage_path: storedPath,
       });
     }
 
     if (result.data?.audio_file) {
-      // Store fal.ai CDN URL directly — permanent, no download needed in serverless
+      const assetId = uuidv4();
+      const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.mp3`;
+      let publicUrl = result.data.audio_file.url;
+      let storedPath: string | null = null;
+      try {
+        const audioRes = await fetch(result.data.audio_file.url, { signal: AbortSignal.timeout(60_000) });
+        const buffer = await audioRes.arrayBuffer();
+        const { error: upErr } = await admin.storage
+          .from('assets')
+          .upload(storagePath, buffer, { contentType: result.data.audio_file.content_type ?? 'audio/mpeg' });
+        if (!upErr) {
+          const { data: urlData } = admin.storage.from('assets').getPublicUrl(storagePath);
+          publicUrl = urlData.publicUrl;
+          storedPath = storagePath;
+        }
+      } catch {
+        // Fallback to fal CDN URL
+      }
       assetInserts.push({
-        id: uuidv4(),
+        id: assetId,
         campaign_id: job.campaign_id,
         workspace_id: job.workspace_id,
         job_id: job.id,
         type: 'audio',
-        url: result.data.audio_file.url,
-        storage_path: null,
+        url: publicUrl,
+        storage_path: storedPath,
       });
     }
 
+    // Insert assets FIRST, then atomically claim the job as completed.
+    // This eliminates the race window where a concurrent poll sees completed+no-assets.
     if (assetInserts.length > 0) {
       await admin.from('assets').insert(assetInserts);
     }
+
+    // If the webhook already processed this job, assets may be duplicated — that's acceptable.
+    await admin
+      .from('creative_jobs')
+      .update({ status: 'completed', completed_at: new Date().toISOString() })
+      .eq('id', job.id)
+      .eq('status', 'processing');
   } catch {
-    // If result fetch/storage fails, revert job status so it can be retried
+    // Revert job status so polling can retry
     await admin
       .from('creative_jobs')
       .update({ status: 'processing', completed_at: null })

@@ -1,6 +1,6 @@
 'use client';
 
-import { type LucideIcon, Loader2, Check, AlertCircle } from 'lucide-react';
+import { type LucideIcon, Loader2, Check, AlertCircle, ExternalLink, RefreshCw } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -12,13 +12,16 @@ interface FormatCardProps {
   cost: string;
   icon: LucideIcon;
   onGenerate: () => void;
+  onRefresh?: () => void;
   children?: React.ReactNode;
 }
 
-export default function FormatCard({ type, title, subtitle, cost, icon: Icon, onGenerate, children }: FormatCardProps) {
+export default function FormatCard({ type, title, subtitle, cost, icon: Icon, onGenerate, onRefresh, children }: FormatCardProps) {
   const { expansions } = useAppStore();
   const expansion = expansions[type];
   const status = expansion?.status ?? 'idle';
+  const hasUrl = !!(expansion?.url);
+  const canRefresh = status === 'ready' && !hasUrl && !!expansion?.jobId && !!onRefresh;
 
   return (
     <div className={cn(
@@ -49,14 +52,37 @@ export default function FormatCard({ type, title, subtitle, cost, icon: Icon, on
         </div>
       )}
 
-      {status === 'ready' && expansion?.url && type !== 'script' && (
-        <div className="border-t border-border/50 pt-4">
+      {status === 'ready' && hasUrl && type !== 'script' && (
+        <div className="border-t border-border/50 pt-4 space-y-2">
           {type === 'video' && (
-            <video src={expansion.url} controls className="w-full rounded-lg aspect-video bg-black" />
+            <>
+              <video src={expansion!.url} controls className="w-full rounded-lg aspect-video bg-black" />
+              <a
+                href={expansion!.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors"
+              >
+                <ExternalLink className="w-3 h-3" />
+                Open video in new tab
+              </a>
+            </>
           )}
           {type === 'music' && (
-            <audio src={expansion.url} controls className="w-full" />
+            <audio src={expansion!.url} controls className="w-full" />
           )}
+        </div>
+      )}
+
+      {status === 'ready' && !hasUrl && type !== 'script' && (
+        <div className="border-t border-destructive/20 pt-4">
+          <div className="flex gap-2 bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+            <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+            <p className="text-xs text-destructive leading-relaxed">
+              {title} was generated but the URL wasn&apos;t saved correctly.{' '}
+              {canRefresh ? 'Click "Check again" to retrieve it.' : 'Click "Regenerate" to create a new one.'}
+            </p>
+          </div>
         </div>
       )}
 
@@ -75,21 +101,35 @@ export default function FormatCard({ type, title, subtitle, cost, icon: Icon, on
         </div>
       )}
 
-      <Button
-        onClick={onGenerate}
-        disabled={status === 'pending' || status === 'ready'}
-        variant={status === 'ready' ? 'secondary' : 'default'}
-        className={cn('w-full gap-2', status === 'ready' && 'opacity-60')}
-        size="sm"
-      >
-        {status === 'pending' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-        {status === 'ready'
-          ? `${title} ready`
-          : status === 'pending'
-            ? expansion?.elapsed ? `Generating… ${expansion.elapsed}s` : 'Generating…'
-            : status === 'failed' ? 'Retry' : `Generate ${title}`
-        }
-      </Button>
+      {canRefresh ? (
+        <Button
+          onClick={onRefresh}
+          variant="outline"
+          className="w-full gap-2 border-primary/30 text-primary hover:bg-primary/5"
+          size="sm"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          Check again
+        </Button>
+      ) : (
+        <Button
+          onClick={status === 'ready' && hasUrl ? undefined : onGenerate}
+          disabled={status === 'pending' || (status === 'ready' && hasUrl)}
+          variant={status === 'ready' && hasUrl ? 'secondary' : 'default'}
+          className={cn('w-full gap-2', status === 'ready' && hasUrl && 'opacity-60')}
+          size="sm"
+        >
+          {status === 'pending' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+          {status === 'ready' && hasUrl
+            ? `${title} ready`
+            : status === 'ready' && !hasUrl
+              ? `Regenerate ${title}`
+              : status === 'pending'
+                ? expansion?.elapsed ? `Generating… ${expansion.elapsed}s` : 'Generating…'
+                : status === 'failed' ? 'Retry' : `Generate ${title}`
+          }
+        </Button>
+      )}
     </div>
   );
 }
