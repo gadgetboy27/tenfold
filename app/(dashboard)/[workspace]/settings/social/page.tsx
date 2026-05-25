@@ -7,8 +7,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   RefreshCw, CheckCircle2, Circle, AlertCircle, ArrowUpRight,
   ChevronDown, ChevronUp, ExternalLink, CheckSquare, Square,
+  Wand2, ArrowRight, X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 interface SocialProfile {
   id: string;
@@ -401,6 +403,258 @@ function PlatformCard({
   );
 }
 
+// ── Wizard: platform picker (step 1) ────────────────────────────────────────
+function WizardPicker({
+  selected,
+  onToggle,
+  onContinue,
+  onSkip,
+}: {
+  selected: string[];
+  onToggle: (id: string) => void;
+  onContinue: () => void;
+  onSkip: () => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-bold font-serif text-foreground mb-1">
+          Which platforms do you want to publish to?
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Pick the ones your customers use. You can add more later.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        {PLATFORMS.map(p => {
+          const isSelected = selected.includes(p.id);
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onToggle(p.id)}
+              className={cn(
+                'flex items-center gap-3 p-4 rounded-xl border text-left transition-all',
+                isSelected
+                  ? 'border-primary/60 bg-primary/5 shadow-sm'
+                  : 'border-border bg-card hover:border-border/60',
+              )}
+            >
+              <div className={`w-9 h-9 rounded-lg ${p.bg} flex items-center justify-center shrink-0`}>
+                <span className="text-xs font-bold" style={{ color: p.color }}>{platformInitials(p.label)}</span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-foreground">{p.label}</p>
+                <p className="text-xs text-muted-foreground">{p.description}</p>
+              </div>
+              {isSelected && <CheckCircle2 className="w-4 h-4 text-primary ml-auto shrink-0" />}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex items-center gap-3 pt-2">
+        <Button
+          onClick={onContinue}
+          disabled={selected.length === 0}
+          className="gap-2 bg-primary hover:bg-primary/90 text-white"
+        >
+          Set up {selected.length > 0 ? `${selected.length} platform${selected.length > 1 ? 's' : ''}` : 'platforms'}
+          <ArrowRight className="w-4 h-4" />
+        </Button>
+        <button
+          type="button"
+          onClick={onSkip}
+          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Skip setup — I&apos;ll do this myself
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Wizard: per-platform guide (step 2+) ────────────────────────────────────
+function WizardPlatformStep({
+  platform,
+  checklist,
+  platformIdx,
+  totalPlatforms,
+  isConnected,
+  isConnecting,
+  onCheckItem,
+  onConnect,
+  onNext,
+  onSkipPlatform,
+}: {
+  platform: PlatformGuide;
+  checklist: Record<string, boolean>;
+  platformIdx: number;
+  totalPlatforms: number;
+  isConnected: boolean;
+  isConnecting: boolean;
+  onCheckItem: (key: string, value: boolean) => void;
+  onConnect: () => void;
+  onNext: () => void;
+  onSkipPlatform: () => void;
+}) {
+  const requiredItems = platform.checklist.filter(i => i.required);
+  const allRequiredChecked = requiredItems.every(i => checklist[i.key]);
+  const isLast = platformIdx === totalPlatforms - 1;
+
+  return (
+    <div className="space-y-6">
+      {/* Progress indicator */}
+      <div className="flex items-center gap-2">
+        {Array.from({ length: totalPlatforms }).map((_, i) => (
+          <div
+            key={i}
+            className={cn(
+              'h-1.5 flex-1 rounded-full transition-all',
+              i < platformIdx ? 'bg-primary' : i === platformIdx ? 'bg-primary/40' : 'bg-border',
+            )}
+          />
+        ))}
+        <span className="text-xs text-muted-foreground font-mono ml-1 shrink-0">
+          {platformIdx + 1}/{totalPlatforms}
+        </span>
+      </div>
+
+      {/* Platform header */}
+      <div className="flex items-center gap-3">
+        <div className={`w-12 h-12 rounded-xl ${platform.bg} flex items-center justify-center shrink-0`}>
+          <span className="text-sm font-bold" style={{ color: platform.color }}>{platformInitials(platform.label)}</span>
+        </div>
+        <div>
+          <h2 className="text-xl font-bold font-serif text-foreground">{platform.label}</h2>
+          <p className="text-sm text-muted-foreground">{platform.description}</p>
+        </div>
+        {isConnected && <CheckCircle2 className="w-5 h-5 text-success ml-auto shrink-0" />}
+      </div>
+
+      {/* Account type requirement */}
+      <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
+        <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+        <p className="text-xs text-muted-foreground">
+          <strong className="text-foreground">Before you connect:</strong> {platform.accountType}
+        </p>
+      </div>
+
+      {/* Setup steps */}
+      <div>
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-mono mb-3">
+          Setup steps
+        </p>
+        <ol className="space-y-3">
+          {platform.steps.map((step, i) => (
+            <li key={i} className="flex gap-3 text-sm text-muted-foreground">
+              <span className="text-primary font-bold shrink-0 w-5">{i + 1}.</span>
+              <span className="leading-relaxed">
+                {step.instruction}
+                {step.link && (
+                  <a
+                    href={step.link.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="ml-1.5 inline-flex items-center gap-0.5 text-primary hover:underline"
+                  >
+                    {step.link.text}
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </span>
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      {/* Checklist */}
+      <div>
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-mono mb-3">
+          Tick these off before connecting
+        </p>
+        <div className="space-y-2.5">
+          {platform.checklist.map(item => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => onCheckItem(item.key, !checklist[item.key])}
+              className="w-full flex items-start gap-3 text-left group"
+            >
+              {checklist[item.key]
+                ? <CheckSquare className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                : <Square className="w-4 h-4 text-muted-foreground/50 shrink-0 mt-0.5 group-hover:text-muted-foreground transition-colors" />
+              }
+              <span className={`text-sm leading-relaxed ${checklist[item.key] ? 'text-foreground line-through opacity-60' : 'text-muted-foreground'}`}>
+                {item.label}
+                {item.required && !checklist[item.key] && (
+                  <span className="ml-1 text-[10px] text-destructive font-medium">required</span>
+                )}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Ayrshare handoff — this is where Tenfold hands control to Ayrshare */}
+      {isConnected ? (
+        <div className="p-4 rounded-xl bg-success/5 border border-success/20">
+          <div className="flex items-center gap-2 mb-1">
+            <CheckCircle2 className="w-4 h-4 text-success" />
+            <p className="text-sm font-semibold text-success">{platform.label} connected</p>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Tenfold will publish to this account when you hit publish on a campaign.
+          </p>
+        </div>
+      ) : allRequiredChecked ? (
+        <div className="space-y-3">
+          <div className="p-4 rounded-xl bg-primary/5 border border-primary/20">
+            <p className="text-sm font-medium text-foreground mb-1">Ready to connect</p>
+            <p className="text-xs text-muted-foreground">
+              A secure window will open where you log in to {platform.label}.
+              Tenfold never sees your password — this is handled by Ayrshare.
+            </p>
+          </div>
+          <Button
+            onClick={onConnect}
+            disabled={isConnecting}
+            className="w-full bg-primary hover:bg-primary/90 text-white gap-2"
+          >
+            <ExternalLink className="w-4 h-4" />
+            {isConnecting ? 'Opening secure window…' : `Connect ${platform.label} via Ayrshare`}
+          </Button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-secondary border border-border">
+          <Circle className="w-4 h-4 text-muted-foreground/40 shrink-0" />
+          <p className="text-xs text-muted-foreground">
+            Tick all <strong className="text-foreground">required</strong> items above, then the connect button appears.
+          </p>
+        </div>
+      )}
+
+      {/* Navigation */}
+      <div className="flex items-center justify-between pt-2 border-t border-border/50">
+        <button
+          type="button"
+          onClick={onSkipPlatform}
+          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {isConnected ? '' : 'Skip for now'}
+        </button>
+        {(isConnected || !allRequiredChecked) && (
+          <Button onClick={onNext} variant={isConnected ? 'default' : 'outline'} className="gap-2">
+            {isLast ? 'Finish setup' : 'Next platform'}
+            <ArrowRight className="w-4 h-4" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function SocialSettingsPage() {
   const params = useParams();
   const workspaceSlug = params.workspace as string;
@@ -414,11 +668,28 @@ export default function SocialSettingsPage() {
   const [expanded, setExpanded]     = useState<string | null>(null);
   const [checklist, setChecklist]   = useState<ChecklistState>({});
 
+  // Wizard state
+  const [wizardMode, setWizardMode]         = useState<'picker' | 'platform' | null>(null);
+  const [wizardPlatforms, setWizardPlatforms] = useState<string[]>([]);
+  const [wizardIdx, setWizardIdx]           = useState(0);
+
   // Load checklist from localStorage once workspaceSlug is available
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (workspaceSlug) setChecklist(loadChecklist(workspaceSlug));
   }, [workspaceSlug]);
+
+  // Auto-show wizard for first-time users (no connections + wizard never completed)
+  useEffect(() => {
+    if (loading || !workspaceSlug) return;
+    const done = localStorage.getItem(`tenfold_wizard_done_${workspaceSlug}`);
+    if (!done && profiles.length === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setWizardMode('picker');
+    }
+  // Run once after first successful load
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   const fetchProfiles = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -480,18 +751,99 @@ export default function SocialSettingsPage() {
     });
   };
 
+  const dismissWizard = (markDone = true) => {
+    if (markDone) localStorage.setItem(`tenfold_wizard_done_${workspaceSlug}`, '1');
+    setWizardMode(null);
+    setWizardPlatforms([]);
+    setWizardIdx(0);
+  };
+
+  const wizardCurrentPlatformId = wizardPlatforms[wizardIdx];
+  const wizardCurrentPlatform = PLATFORMS.find(p => p.id === wizardCurrentPlatformId);
+
+  const handleWizardNext = () => {
+    if (wizardIdx < wizardPlatforms.length - 1) {
+      setWizardIdx(i => i + 1);
+    } else {
+      dismissWizard();
+    }
+  };
+
   const connectedIds = new Set(profiles.map(p => p.platform));
   const connectedCount = PLATFORMS.filter(p => connectedIds.has(p.id)).length;
   const progressPct = Math.round((connectedCount / PLATFORMS.length) * 100);
 
   return (
     <div className="max-w-2xl">
+      {/* ── Wizard overlay ─────────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {wizardMode && (
+          <motion.div
+            key="wizard"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.2 }}
+            className="mb-10 p-6 rounded-2xl border border-primary/20 bg-card shadow-sm relative"
+          >
+            {/* Dismiss */}
+            <button
+              type="button"
+              onClick={() => dismissWizard()}
+              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors"
+              title="Close wizard"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {wizardMode === 'picker' && (
+              <WizardPicker
+                selected={wizardPlatforms}
+                onToggle={id => setWizardPlatforms(prev =>
+                  prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id],
+                )}
+                onContinue={() => { setWizardIdx(0); setWizardMode('platform'); }}
+                onSkip={() => dismissWizard()}
+              />
+            )}
+
+            {wizardMode === 'platform' && wizardCurrentPlatform && (
+              <WizardPlatformStep
+                platform={wizardCurrentPlatform}
+                checklist={checklist[wizardCurrentPlatformId] ?? {}}
+                platformIdx={wizardIdx}
+                totalPlatforms={wizardPlatforms.length}
+                isConnected={connectedIds.has(wizardCurrentPlatformId)}
+                isConnecting={connecting === wizardCurrentPlatformId}
+                onCheckItem={(key, value) => handleCheckItem(wizardCurrentPlatformId, key, value)}
+                onConnect={() => handleConnect(wizardCurrentPlatformId)}
+                onNext={handleWizardNext}
+                onSkipPlatform={handleWizardNext}
+              />
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold font-serif text-foreground mb-2">Social Connections</h1>
-        <p className="text-muted-foreground text-sm">
-          Follow each platform&apos;s setup checklist, then connect. Tenfold publishes to all connected accounts when you publish a campaign.
-        </p>
+      <div className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold font-serif text-foreground mb-2">Social Connections</h1>
+          <p className="text-muted-foreground text-sm">
+            Follow each platform&apos;s setup checklist, then connect. Tenfold publishes to all connected accounts when you publish a campaign.
+          </p>
+        </div>
+        {!wizardMode && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => { setWizardPlatforms([]); setWizardMode('picker'); }}
+            className="gap-1.5 shrink-0 text-xs"
+          >
+            <Wand2 className="w-3.5 h-3.5" />
+            Setup wizard
+          </Button>
+        )}
       </div>
 
       {/* Progress */}
