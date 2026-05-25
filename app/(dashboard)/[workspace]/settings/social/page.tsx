@@ -719,19 +719,30 @@ export default function SocialSettingsPage() {
     try {
       const res = await api('/api/social/connect', { workspaceSlug });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string };
-        const msg = body.error ?? '';
-        if (msg.includes('business plan') || msg.includes('167')) {
+        const body = await res.json().catch(() => ({})) as { error?: string; message?: string; code?: number };
+        const msg = body.error ?? body.message ?? '';
+        const code = body.code;
+        if (msg.toLowerCase().includes('business') || msg.toLowerCase().includes('plan') || code === 167 || res.status === 402 || res.status === 403) {
           setNeedsUpgrade(true);
           setConnecting(null);
           return;
         }
         throw new Error(msg || `Could not generate connect URL (${res.status})`);
       }
-      const { connectUrl } = await res.json() as { connectUrl: string };
+      const { connectUrl } = await res.json() as { connectUrl?: string };
+      if (!connectUrl) throw new Error('No connect URL returned — check your Ayrshare configuration');
+
       const popup = window.open(connectUrl, 'tenfold-social-connect', 'width=960,height=720,left=200,top=100,resizable=yes,scrollbars=yes');
+
+      if (!popup) {
+        // Browser blocked the popup
+        setError('Your browser blocked the connection popup. Please allow popups for this site, then try again.');
+        setConnecting(null);
+        return;
+      }
+
       const check = setInterval(() => {
-        if (popup?.closed) {
+        if (popup.closed) {
           clearInterval(check);
           setConnecting(null);
           fetchProfiles(true);
@@ -808,18 +819,50 @@ export default function SocialSettingsPage() {
             )}
 
             {wizardMode === 'platform' && wizardCurrentPlatform && (
-              <WizardPlatformStep
-                platform={wizardCurrentPlatform}
-                checklist={checklist[wizardCurrentPlatformId] ?? {}}
-                platformIdx={wizardIdx}
-                totalPlatforms={wizardPlatforms.length}
-                isConnected={connectedIds.has(wizardCurrentPlatformId)}
-                isConnecting={connecting === wizardCurrentPlatformId}
-                onCheckItem={(key, value) => handleCheckItem(wizardCurrentPlatformId, key, value)}
-                onConnect={() => handleConnect(wizardCurrentPlatformId)}
-                onNext={handleWizardNext}
-                onSkipPlatform={handleWizardNext}
-              />
+              <>
+                <WizardPlatformStep
+                  platform={wizardCurrentPlatform}
+                  checklist={checklist[wizardCurrentPlatformId] ?? {}}
+                  platformIdx={wizardIdx}
+                  totalPlatforms={wizardPlatforms.length}
+                  isConnected={connectedIds.has(wizardCurrentPlatformId)}
+                  isConnecting={connecting === wizardCurrentPlatformId}
+                  onCheckItem={(key, value) => handleCheckItem(wizardCurrentPlatformId, key, value)}
+                  onConnect={() => handleConnect(wizardCurrentPlatformId)}
+                  onNext={handleWizardNext}
+                  onSkipPlatform={handleWizardNext}
+                />
+
+                {/* Errors shown inside the wizard so they're not missed */}
+                {error && (
+                  <div className="mt-4 flex items-start gap-3 bg-destructive/10 border border-destructive/20 rounded-lg p-4">
+                    <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-destructive">Connection failed</p>
+                      <p className="text-xs text-destructive/80 mt-0.5">{error}</p>
+                    </div>
+                  </div>
+                )}
+                {needsUpgrade && (
+                  <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+                    <p className="text-sm font-semibold text-foreground mb-1">Ayrshare Business Plan required</p>
+                    <p className="text-sm text-muted-foreground mb-3">
+                      The in-app connection popup requires Ayrshare&apos;s Business Plan. You can either upgrade,
+                      or connect directly through Ayrshare&apos;s dashboard and hit Refresh.
+                    </p>
+                    <div className="flex gap-3">
+                      <a href="https://www.ayrshare.com/business-plan-for-multiple-users/" target="_blank" rel="noreferrer"
+                        className="text-sm text-primary underline underline-offset-2 inline-flex items-center gap-1">
+                        Upgrade Ayrshare <ArrowUpRight className="w-3 h-3" />
+                      </a>
+                      <a href="https://app.ayrshare.com" target="_blank" rel="noreferrer"
+                        className="text-sm text-primary underline underline-offset-2 inline-flex items-center gap-1">
+                        Open Ayrshare dashboard <ArrowUpRight className="w-3 h-3" />
+                      </a>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </motion.div>
         )}
