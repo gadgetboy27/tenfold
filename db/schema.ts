@@ -59,6 +59,11 @@ export const socialProfiles = pgTable(
     platform: text('platform').notNull(),
     handle: text('handle'),
     profileDisplayName: text('profile_display_name'),
+    platformPageId: text('platform_page_id'),       // FB Page ID / LinkedIn Company Page ID
+    platformAccountId: text('platform_account_id'), // IG Business Account ID
+    accessToken: text('access_token'),              // OAuth access token (never null when connected)
+    refreshToken: text('refresh_token'),            // OAuth refresh token (null for FB page tokens)
+    tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }), // null = never expires
     connectedAt: timestamp('connected_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [unique().on(t.workspaceId, t.platform)],

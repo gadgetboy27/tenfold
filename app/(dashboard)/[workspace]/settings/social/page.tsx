@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -656,7 +657,9 @@ function WizardPlatformStep({
 }
 
 export default function SocialSettingsPage() {
-  const params = useParams();
+  const params       = useParams();
+  const searchParams = useSearchParams();
+  const router       = useRouter();
   const workspaceSlug = params.workspace as string;
 
   const [profiles, setProfiles]     = useState<SocialProfile[]>([]);
@@ -713,45 +716,36 @@ export default function SocialSettingsPage() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchProfiles(); }, [fetchProfiles]);
 
-  const handleConnect = async (platformId: string) => {
-    setConnecting(platformId);
-    setError(null);
-    try {
-      const res = await api('/api/social/connect', { workspaceSlug });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string; message?: string; code?: number };
-        const msg = body.error ?? body.message ?? '';
-        const code = body.code;
-        if (msg.toLowerCase().includes('business') || msg.toLowerCase().includes('plan') || code === 167 || res.status === 402 || res.status === 403) {
-          setNeedsUpgrade(true);
-          setConnecting(null);
-          return;
-        }
-        throw new Error(msg || `Could not generate connect URL (${res.status})`);
-      }
-      const { connectUrl } = await res.json() as { connectUrl?: string };
-      if (!connectUrl) throw new Error('No connect URL returned — check your Ayrshare configuration');
+  // Handle Meta OAuth redirect params (?connected=... or ?error=...)
+  useEffect(() => {
+    const connected = searchParams.get('connected');
+    const oauthError = searchParams.get('error');
+    if (!connected && !oauthError) return;
 
-      const popup = window.open(connectUrl, 'tenfold-social-connect', 'width=960,height=720,left=200,top=100,resizable=yes,scrollbars=yes');
-
-      if (!popup) {
-        // Browser blocked the popup
-        setError('Your browser blocked the connection popup. Please allow popups for this site, then try again.');
-        setConnecting(null);
-        return;
-      }
-
-      const check = setInterval(() => {
-        if (popup.closed) {
-          clearInterval(check);
-          setConnecting(null);
-          fetchProfiles(true);
-        }
-      }, 1000);
-    } catch (err) {
-      setError((err as Error).message);
-      setConnecting(null);
+    if (connected) {
+      const platforms = connected.split(',');
+      const label = platforms.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' & ');
+      toast.success(`${label} connected successfully`);
     }
+    if (oauthError === 'facebook_denied')   toast.error('Facebook connection cancelled');
+    if (oauthError === 'facebook_no_pages') toast.error('No Facebook Pages found — create a Page first, then reconnect');
+    if (oauthError === 'facebook_failed')   toast.error('Facebook connection failed — please try again');
+
+    // Clean the URL without causing a navigation
+    router.replace(`/${workspaceSlug}/settings/social`, { scroll: false });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleConnect = (platformId: string) => {
+    // Facebook and Instagram use direct Meta OAuth — navigate to the connect route.
+    // The route redirects to Meta, which redirects back to /api/social/callback/facebook.
+    if (platformId === 'facebook' || platformId === 'instagram') {
+      window.location.href = `/api/social/connect/facebook?workspace=${workspaceSlug}`;
+      return;
+    }
+
+    // Other platforms: show a "coming soon" message for now
+    setError(`Direct ${platformId} connection coming soon. For now, connect via the platform's developer tools.`);
   };
 
   const handleCheckItem = (platformId: string, itemKey: string, value: boolean) => {
