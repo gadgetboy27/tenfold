@@ -883,6 +883,32 @@ export default function SocialSettingsPage() {
         )}
       </div>
 
+      {/* Connected platforms summary */}
+      {!loading && connectedCount > 0 && (
+        <div className="mb-6 p-4 rounded-xl border border-success/30 bg-success/5">
+          <p className="text-xs font-medium text-success uppercase tracking-wider font-mono mb-3">Connected</p>
+          <div className="flex flex-wrap gap-2">
+            {PLATFORMS.filter(p => connectedIds.has(p.id)).map(p => {
+              const profile = profiles.find(pr => pr.platform === p.id);
+              return (
+                <div key={p.id} className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-card border border-success/20">
+                  <div className={`w-4 h-4 rounded-full ${p.bg} flex items-center justify-center`}>
+                    <span className="text-[8px] font-bold" style={{ color: p.color }}>{platformInitials(p.label)}</span>
+                  </div>
+                  <span className="text-xs font-medium text-foreground">{p.label}</span>
+                  {(profile?.profile_display_name ?? profile?.handle) && (
+                    <span className="text-xs text-muted-foreground font-mono">
+                      {profile?.profile_display_name ?? profile?.handle}
+                    </span>
+                  )}
+                  <CheckCircle2 className="w-3 h-3 text-success" />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Progress */}
       <div className="mb-6 p-4 rounded-xl border border-border bg-card">
         <div className="flex items-center justify-between mb-2">

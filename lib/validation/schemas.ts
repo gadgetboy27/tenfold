@@ -58,7 +58,8 @@ export const createCompositionSchema = z.object({
 });
 
 export const publishSchema = z.object({
-  compositionId: z.string().uuid(),
+  compositionId: z.string().uuid().optional(),
+  assetId: z.string().uuid().optional(),
   platforms: z
     .array(
       z.enum([

@@ -164,21 +164,27 @@ export default function Step5Publish() {
     setIsPublishing(true);
     try {
       const body: Record<string, unknown> = {
-        compositionId: currentCompositionId,
         platforms: selectedPlatforms,
         caption,
         hashtags,
       };
+      if (currentCompositionId) body.compositionId = currentCompositionId;
+      else if (selectedAnchorId) body.assetId = selectedAnchorId;
       if (scheduleMode === 'later') body.scheduledAt = new Date(scheduledAt).toISOString();
 
-      const res = await api('/api/publish', { method: 'POST', body: JSON.stringify(body), workspaceSlug });
-      const data = await res.json() as { platform_results?: PostResult[]; error?: string };
+      const res  = await api('/api/publish', { method: 'POST', body: JSON.stringify(body), workspaceSlug });
+      const data = await res.json() as {
+        platformResults?: Record<string, string>;
+        errors?: Record<string, string>;
+        error?: string;
+      };
       if (!res.ok) throw new Error(data.error ?? `Publish failed (${res.status})`);
 
-      setResults(
-        data.platform_results ??
-        selectedPlatforms.map(p => ({ platform: p, status: 'success' })),
-      );
+      const resultList: PostResult[] = [
+        ...Object.entries(data.platformResults ?? {}).map(([platform, id]) => ({ platform, status: 'success', id })),
+        ...Object.entries(data.errors ?? {}).map(([platform, error]) => ({ platform, status: 'error', error })),
+      ];
+      setResults(resultList.length ? resultList : selectedPlatforms.map(p => ({ platform: p, status: 'success' })));
     } catch (err: unknown) {
       toast.error((err as Error).message ?? 'Publish failed');
     } finally {
@@ -264,19 +270,19 @@ export default function Step5Publish() {
     );
   }
 
-  // ── No composition guard ─────────────────────────────────────────────────
-  if (!currentCompositionId) {
+  // ── No asset guard ───────────────────────────────────────────────────────
+  if (!currentCompositionId && !selectedAnchorId) {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-4 px-8 text-center">
         <div className="w-12 h-12 rounded-xl bg-amber-500/15 flex items-center justify-center">
           <AlertTriangle className="w-6 h-6 text-amber-400" />
         </div>
-        <h3 className="text-lg font-semibold text-foreground">Composition not saved yet</h3>
+        <h3 className="text-lg font-semibold text-foreground">No content selected</h3>
         <p className="text-sm text-muted-foreground max-w-xs">
-          Finish Step 4 to lock in your composition, then come back to publish.
+          Go back and select an image to publish.
         </p>
-        <Button onClick={() => setStep(4)} className="gap-2">
-          Back to Compose <ChevronRight className="w-4 h-4" />
+        <Button onClick={() => setStep(2)} className="gap-2">
+          Back to Select <ChevronRight className="w-4 h-4" />
         </Button>
       </div>
     );
