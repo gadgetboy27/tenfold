@@ -18,7 +18,8 @@ export async function GET(req: Request) {
 
   async function workspaceSlug(): Promise<string | null> {
     if (!state) return null;
-    const { data } = await admin.from('workspaces').select('slug').eq('id', state).single();
+    const { data, error } = await admin.from('workspaces').select('slug').eq('id', state).single();
+    if (error) console.error('[Meta OAuth] workspace lookup failed:', error.message);
     return (data as { slug: string } | null)?.slug ?? null;
   }
 
