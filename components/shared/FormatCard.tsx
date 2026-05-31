@@ -13,14 +13,28 @@ interface FormatCardProps {
   icon: LucideIcon;
   onGenerate: () => void;
   onRefresh?: () => void;
+  onRegenerate?: () => void;
+  onSelect?: (url: string) => void;
   children?: React.ReactNode;
 }
 
-export default function FormatCard({ type, title, subtitle, cost, icon: Icon, onGenerate, onRefresh, children }: FormatCardProps) {
+export default function FormatCard({
+  type,
+  title,
+  subtitle,
+  cost,
+  icon: Icon,
+  onGenerate,
+  onRefresh,
+  onRegenerate,
+  onSelect,
+  children,
+}: FormatCardProps) {
   const { expansions } = useAppStore();
   const expansion = expansions[type];
   const status = expansion?.status ?? 'idle';
   const hasUrl = !!(expansion?.url);
+  const hasVariants = type === 'video' && !!(expansion?.urls?.length);
   const canRefresh = status === 'ready' && !hasUrl && !!expansion?.jobId && !!onRefresh;
 
   return (
@@ -52,25 +66,78 @@ export default function FormatCard({ type, title, subtitle, cost, icon: Icon, on
         </div>
       )}
 
-      {status === 'ready' && hasUrl && type !== 'script' && (
+      {status === 'ready' && hasUrl && type === 'music' && (
         <div className="border-t border-border/50 pt-4 space-y-2">
-          {type === 'video' && (
-            <>
-              <video src={expansion!.url} controls className="w-full rounded-lg aspect-video bg-black" />
-              <a
-                href={expansion!.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors"
+          <audio src={expansion!.url} controls className="w-full" />
+        </div>
+      )}
+
+      {hasVariants && type === 'video' && (
+        <div className="border-t border-border/50 pt-4 space-y-3">
+          <p className="text-xs font-semibold text-foreground uppercase tracking-wide">
+            {expansion!.urls!.length} variant{expansion!.urls!.length !== 1 ? 's' : ''} — click to select
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {expansion!.urls!.map((url) => (
+              <div
+                key={url}
+                onClick={() => onSelect?.(url)}
+                className={`relative rounded-lg overflow-hidden cursor-pointer ring-2 transition-all ${
+                  expansion!.url === url ? 'ring-primary' : 'ring-transparent hover:ring-primary/40'
+                }`}
               >
-                <ExternalLink className="w-3 h-3" />
-                Open video in new tab
-              </a>
-            </>
-          )}
-          {type === 'music' && (
-            <audio src={expansion!.url} controls className="w-full" />
-          )}
+                <video src={url} muted loop autoPlay className="w-full aspect-video bg-black object-cover" />
+                {expansion!.url === url && (
+                  <div className="absolute inset-0 bg-primary/10 flex items-end justify-end p-1.5">
+                    <span className="text-[10px] bg-primary text-white px-1.5 py-0.5 rounded font-medium">
+                      Selected
+                    </span>
+                  </div>
+                )}
+              </div>
+            ))}
+            {status === 'pending' && (
+              <div className="aspect-video rounded-lg bg-muted flex items-center justify-center">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+              </div>
+            )}
+          </div>
+          <div className="flex items-center justify-between">
+            <a
+              href={expansion!.url ?? expansion!.urls![0]}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors"
+            >
+              <ExternalLink className="w-3 h-3" />
+              Open selected
+            </a>
+            {onRegenerate && (
+              <button
+                type="button"
+                onClick={onRegenerate}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+              >
+                <RefreshCw className="w-3 h-3" />
+                Generate another
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {status === 'ready' && hasUrl && type === 'video' && !hasVariants && (
+        <div className="border-t border-border/50 pt-4 space-y-2">
+          <video src={expansion!.url} controls className="w-full rounded-lg aspect-video bg-black" />
+          <a
+            href={expansion!.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors"
+          >
+            <ExternalLink className="w-3 h-3" />
+            Open video in new tab
+          </a>
         </div>
       )}
 
@@ -112,23 +179,31 @@ export default function FormatCard({ type, title, subtitle, cost, icon: Icon, on
           Check again
         </Button>
       ) : (
-        <Button
-          onClick={status === 'ready' && hasUrl ? undefined : onGenerate}
-          disabled={status === 'pending' || (status === 'ready' && hasUrl)}
-          variant={status === 'ready' && hasUrl ? 'secondary' : 'default'}
-          className={cn('w-full gap-2', status === 'ready' && hasUrl && 'opacity-60')}
-          size="sm"
-        >
-          {status === 'pending' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-          {status === 'ready' && hasUrl
-            ? `${title} ready`
-            : status === 'ready' && !hasUrl
-              ? `Regenerate ${title}`
-              : status === 'pending'
-                ? expansion?.elapsed ? `Generating… ${expansion.elapsed}s` : 'Generating…'
-                : status === 'failed' ? 'Retry' : `Generate ${title}`
-          }
-        </Button>
+        <>
+          {!(type === 'video' && hasVariants) && (
+            <Button
+              onClick={status === 'ready' && hasUrl && type !== 'video' ? undefined : onGenerate}
+              disabled={status === 'pending' || (status === 'ready' && hasUrl && type !== 'video')}
+              variant={status === 'ready' && hasUrl && type !== 'video' ? 'secondary' : 'default'}
+              className={cn(
+                'w-full gap-2',
+                status === 'ready' && hasUrl && type !== 'video' && 'opacity-60',
+              )}
+              size="sm"
+            >
+              {status === 'pending' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {status === 'ready' && hasUrl && type !== 'video'
+                ? `${title} ready`
+                : status === 'ready' && !hasUrl
+                  ? `Regenerate ${title}`
+                  : status === 'pending'
+                    ? expansion?.elapsed ? `Generating… ${expansion.elapsed}s` : 'Generating…'
+                    : status === 'failed'
+                      ? 'Retry'
+                      : `Generate ${title}`}
+            </Button>
+          )}
+        </>
       )}
     </div>
   );

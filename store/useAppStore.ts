@@ -18,6 +18,7 @@ export interface Expansion {
   status: 'idle' | 'pending' | 'ready' | 'failed';
   content?: string;
   url?: string;
+  urls?: string[];
   error?: string;
   elapsed?: number;
 }
@@ -63,7 +64,7 @@ interface AppStore {
   setCampaignName: (name: string) => void;
   setAnchorId: (id: string | null) => void;
   setGeneratedAssets: (assets: Asset[]) => void;
-  updateExpansion: (type: keyof Expansions, expansion: Expansion) => void;
+  updateExpansion: (type: keyof Expansions, expansion: Partial<Expansion>) => void;
   setIsGenerating: (v: boolean) => void;
   setGenerationStage: (stage: string, elapsed: number) => void;
   setAspectRatio: (r: string) => void;
@@ -107,7 +108,12 @@ export const useAppStore = create<AppStore>()((set) => ({
   setAnchorId: (id) => set({ selectedAnchorId: id }),
   setGeneratedAssets: (assets) => set({ generatedAssets: assets }),
   updateExpansion: (type, expansion) =>
-    set((state) => ({ expansions: { ...state.expansions, [type]: expansion } })),
+    set((state) => ({
+      expansions: {
+        ...state.expansions,
+        [type]: { ...state.expansions[type], ...expansion } as Expansion,
+      },
+    })),
   setIsGenerating: (v) => set({ isGenerating: v, generationStage: '', generationElapsed: 0 }),
   setGenerationStage: (stage, elapsed) => set({ generationStage: stage, generationElapsed: elapsed }),
   setAspectRatio: (r) => set({ aspectRatio: r }),

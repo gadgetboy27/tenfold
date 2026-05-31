@@ -9,12 +9,15 @@ import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
+import { CREDIT_COSTS } from '@/lib/credits/costs';
+import type { VideoStyle } from '@/lib/fal/prompts';
 
 type ExpandType = 'video' | 'music' | 'script';
 
 export default function Step3Expand() {
   const [videoDuration, setVideoDuration] = useState<10 | 30 | 60>(10);
-  const [videoMood, setVideoMood] = useState('Uplifting');
+  const [videoStyle, setVideoStyle] = useState<VideoStyle>('Cinematic');
+  const [musicGenre, setMusicGenre] = useState('Lo-fi Chill');
   const [scriptPlatform, setScriptPlatform] = useState('IG');
   const [scriptTone, setScriptTone] = useState('Pro');
 
@@ -51,7 +54,9 @@ export default function Step3Expand() {
         prompt: anchor.prompt,
       };
       if (type === 'music') {
-        params.mood = videoMood;
+        params.genre = musicGenre;
+      } else if (type === 'video') {
+        params.videoStyle = videoStyle;
       } else if (type === 'script') {
         params.platform       = PLATFORM_MAP[scriptPlatform] ?? scriptPlatform.toLowerCase();
         params.tone           = TONE_MAP[scriptTone] ?? scriptTone.toLowerCase();
@@ -92,11 +97,8 @@ export default function Step3Expand() {
         return;
       }
 
-      // Async jobs (video, music) — adaptive polling with type-aware timeout
-      // Video: fal.ai Kling takes 2-5 min → poll every 6s, up to 5 min
-      // Music: stable-audio takes 30-90s → poll every 4s, up to 3 min
       const INTERVAL = type === 'video' ? 6000 : 4000;
-      const MAX_MS   = type === 'video' ? 5 * 60 * 1000 : 3 * 60 * 1000;
+      const MAX_MS = type === 'video' ? 5 * 60 * 1000 : 3 * 60 * 1000;
       // eslint-disable-next-line react-hooks/purity
       const startedAt = Date.now();
 
@@ -110,13 +112,13 @@ export default function Step3Expand() {
           );
         }
 
-        await new Promise(r => setTimeout(r, INTERVAL));
+        await new Promise((r) => setTimeout(r, INTERVAL));
         updateExpansion(type, { status: 'pending', elapsed });
 
         const res = await api(`/api/jobs/${postData.jobId}`, { workspaceSlug });
         if (!res.ok) throw new Error('Status check failed');
 
-        const job = await res.json() as {
+        const job = (await res.json()) as {
           status: string;
           outputUrls?: string[];
           errorMessage?: string | null;
@@ -125,10 +127,19 @@ export default function Step3Expand() {
         };
 
         if (job.status === 'ready') {
-          updateExpansion(type, { status: 'ready', url: job.outputUrls?.[0], jobId: postData.jobId });
+          if (type === 'video') {
+            const currentUrls = useAppStore.getState().expansions.video?.urls ?? [];
+            updateExpansion(type, {
+              status: 'ready',
+              url: job.outputUrls?.[0],
+              urls: [...currentUrls, job.outputUrls![0]],
+              jobId: postData.jobId,
+            });
+          } else {
+            updateExpansion(type, { status: 'ready', url: job.outputUrls?.[0], jobId: postData.jobId });
+          }
           toast.success(`${type === 'video' ? 'Video' : 'Music'} ready`);
           syncBalance();
-          // Persist immediately — don't wait for "Continue to Compose"
           const saved = useAppStore.getState().expansions;
           if (currentCampaignId && currentCampaignId !== '__new__') {
             api(`/api/campaigns/${currentCampaignId}`, {
@@ -162,7 +173,7 @@ export default function Step3Expand() {
     try {
       const res = await api(`/api/jobs/${jobId}`, { workspaceSlug });
       if (!res.ok) return;
-      const job = await res.json() as { status: string; outputUrls?: string[] };
+      const job = (await res.json()) as { status: string; outputUrls?: string[] };
       if (job.status === 'ready' && job.outputUrls?.[0]) {
         updateExpansion(type, { status: 'ready', url: job.outputUrls[0], jobId });
         const saved = useAppStore.getState().expansions;
@@ -173,12 +184,12 @@ export default function Step3Expand() {
             workspaceSlug,
           }).catch(() => {});
         }
-        toast.success('Video found');
+        toast.success(`${type === 'video' ? 'Video' : 'Music'} found`);
       } else {
-        toast.error('Video not ready yet — try again in a moment');
+        toast.error(`${type === 'video' ? 'Video' : 'Music'} not ready yet — try again in a moment`);
       }
     } catch {
-      toast.error('Failed to check video status');
+      toast.error(`Failed to check ${type} status`);
     }
   };
 
@@ -204,25 +215,79 @@ export default function Step3Expand() {
 
         {/* Format cards — scroll container needs bottom padding for the sticky bar */}
         <div className="flex-1 grid grid-cols-3 gap-4 content-start">
-          <FormatCard type="video" title="Video" subtitle="10–60s cinematic clip" cost="15–80 cr" icon={Film} onGenerate={() => handleGenerate('video')} onRefresh={() => handleRefresh('video')}>
-            <div className="flex gap-2">
-              {([10, 30, 60] as const).map(t => (
-                <button key={t} type="button" onClick={() => setVideoDuration(t)}
-                  className={`flex-1 py-1.5 text-xs rounded-full border transition-colors ${videoDuration === t ? 'border-primary/50 text-primary bg-primary/10' : 'border-border bg-background hover:border-primary/50'}`}>
-                  {t}s
-                </button>
-              ))}
+          <FormatCard
+            type="video"
+            title="Video"
+            subtitle="10–60s cinematic clip"
+            cost={`${CREDIT_COSTS[`video_${videoDuration}s` as 'video_10s' | 'video_30s' | 'video_60s']} cr`}
+            icon={Film}
+            onGenerate={() => handleGenerate('video')}
+            onRefresh={() => handleRefresh('video')}
+            onRegenerate={() => handleGenerate('video')}
+            onSelect={(url) => updateExpansion('video', { url })}
+          >
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                {([10, 30, 60] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setVideoDuration(t)}
+                    className={`flex-1 py-1.5 text-xs rounded-full border transition-colors ${
+                      videoDuration === t
+                        ? 'border-primary/50 text-primary bg-primary/10'
+                        : 'border-border bg-background hover:border-primary/50'
+                    }`}
+                  >
+                    {t}s
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-1 flex-wrap">
+                {(['Cinematic', 'Fast-cut', 'Dramatic', 'Smooth'] as const).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setVideoStyle(s)}
+                    className={`flex-1 py-1.5 text-xs rounded-full border transition-colors ${
+                      videoStyle === s
+                        ? 'border-primary/50 text-primary bg-primary/10'
+                        : 'border-border bg-background hover:border-primary/50'
+                    }`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
             </div>
           </FormatCard>
 
-          <FormatCard type="music" title="Music" subtitle="30s background track" cost="8 cr" icon={Music} onGenerate={() => handleGenerate('music')} onRefresh={() => handleRefresh('music')}>
+          <FormatCard
+            type="music"
+            title="Music"
+            subtitle="30s background track"
+            cost="8 cr"
+            icon={Music}
+            onGenerate={() => handleGenerate('music')}
+            onRefresh={() => handleRefresh('music')}
+          >
             <div className="grid grid-cols-2 gap-1.5">
-              {['Uplifting', 'Corporate', 'Dramatic', 'Chill'].map(m => (
-                <button key={m} type="button" onClick={() => setVideoMood(m)}
-                  className={`py-1.5 text-xs rounded-full border transition-colors ${videoMood === m ? 'border-primary/50 text-primary bg-primary/10' : 'border-border bg-background hover:border-primary/50'}`}>
-                  {m}
-                </button>
-              ))}
+              {['Epic Cinematic', 'Lo-fi Chill', 'Corporate Jazz', 'Electronic', 'Acoustic Folk', 'Hip-hop Beat'].map(
+                (g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => setMusicGenre(g)}
+                    className={`py-1.5 text-xs rounded-full border transition-colors ${
+                      musicGenre === g
+                        ? 'border-primary/50 text-primary bg-primary/10'
+                        : 'border-border bg-background hover:border-primary/50'
+                    }`}
+                  >
+                    {g}
+                  </button>
+                ),
+              )}
             </div>
           </FormatCard>
 

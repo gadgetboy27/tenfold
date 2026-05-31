@@ -7,18 +7,18 @@ import { refundCredits } from '@/lib/credits/refund';
 import { CREDIT_COSTS, type CreditCostKey } from '@/lib/credits/costs';
 import { enqueueJob } from '@/lib/fal/queue';
 import { generateScript } from '@/lib/claude/script';
+import {
+  IMAGE_STYLE_SUFFIXES,
+  MUSIC_GENRE_PROMPTS,
+  VIDEO_DURATION_PROMPTS,
+  VIDEO_STYLE_PROMPTS,
+  type VideoStyle,
+} from '@/lib/fal/prompts';
 import { v4 as uuidv4 } from 'uuid';
-
-const STYLE_SUFFIXES: Record<string, string> = {
-  Photorealistic: 'photorealistic, ultra-detailed, sharp focus, professional photography',
-  Illustration:   'digital illustration, artistic, stylized, vibrant colors',
-  Cinematic:      'cinematic, film grain, dramatic lighting, anamorphic lens, widescreen',
-  '3D':           '3D render, CGI, volumetric lighting, octane render, subsurface scattering',
-};
 
 function buildFalInput(type: string, params: Record<string, unknown>, prompt: string) {
   if (type === 'image_generation') {
-    const styleSuffix = STYLE_SUFFIXES[params.style as string] ?? '';
+    const styleSuffix = IMAGE_STYLE_SUFFIXES[params.style as string] ?? '';
     const fullPrompt = styleSuffix ? `${prompt}, ${styleSuffix}` : prompt;
     return {
       prompt: fullPrompt,
@@ -28,18 +28,22 @@ function buildFalInput(type: string, params: Record<string, unknown>, prompt: st
     };
   }
   if (type === 'video_10s' || type === 'video_30s' || type === 'video_60s') {
-    // Kling v2.1: duration is a number (not string), aspect_ratio inferred from image
     const durationMap: Record<string, number> = { video_10s: 5, video_30s: 10, video_60s: 10 };
+    const style = (params.videoStyle as VideoStyle) ?? 'Cinematic';
+    const durationBrief = VIDEO_DURATION_PROMPTS[type];
+    const styleBrief = VIDEO_STYLE_PROMPTS[style].prompt;
+    const composedPrompt = [durationBrief, styleBrief, prompt].filter(Boolean).join(', ');
     return {
       image_url: params.imageUrl as string,
-      prompt: prompt || (params.prompt as string) || '',
+      prompt: composedPrompt,
       duration: durationMap[type],
-      negative_prompt: 'blur, distort, low quality, watermark, text overlay',
+      negative_prompt: VIDEO_STYLE_PROMPTS[style].negativePrompt,
     };
   }
   if (type === 'music_generation') {
+    const genre = (params.genre as string) ?? 'Lo-fi Chill';
     return {
-      prompt: prompt || (params.mood as string) || 'uplifting background music',
+      prompt: MUSIC_GENRE_PROMPTS[genre] ?? MUSIC_GENRE_PROMPTS['Lo-fi Chill'],
       seconds_total: 30,
       steps: 100,
     };
