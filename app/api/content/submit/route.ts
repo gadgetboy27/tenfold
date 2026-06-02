@@ -58,8 +58,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Failed to initialize pipeline' }, { status: 500 });
     }
 
-    // Fire-and-forget background pipeline execution via Next.js after() (Vercel only)
-    // On other platforms (Railway, etc), use Supabase Edge Functions or async queue
+    // Fire-and-forget background pipeline execution
+    // Vercel: use after() (non-blocking, runs after response sent)
+    // Other platforms: use self-call via fetch (doesn't block response)
     if (typeof globalThis !== 'undefined' && 'after' in globalThis) {
       (globalThis as any).after(async () => {
         try {
@@ -76,8 +77,21 @@ export async function POST(req: Request) {
         }
       });
     } else {
-      console.warn('Content pipeline requires Vercel after() or equivalent background job support');
-      // On non-Vercel platforms, queue via Supabase Edge Functions or external queue service
+      // Non-Vercel platforms: trigger via dedicated endpoint (non-blocking fetch)
+      const pipelineUrl = `${process.env.APP_URL}/api/content/${submissionId}/run`;
+      fetch(pipelineUrl, {
+        method: 'POST',
+        headers: {
+          'x-internal-secret': process.env.CRON_SECRET || 'dev-secret',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          workspaceId: session.workspaceId,
+          userId: session.userId,
+          transcript: body.transcript,
+          profileKey: workspace.ayrshare_profile_key,
+        }),
+      }).catch((err) => console.error('Pipeline trigger failed:', err));
     }
 
     return NextResponse.json({ submissionId }, { status: 201 });

@@ -1,10 +1,5 @@
 import type { NextConfig } from "next";
 
-const ALLOWED_ORIGINS = [
-  'https://tenfold.nz',
-  process.env.REPLIT_ORIGIN, // set on Vercel: your Replit preview URL
-].filter(Boolean) as string[];
-
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
@@ -12,22 +7,10 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: '**.fal.media' },
       { protocol: 'https', hostname: 'fal.media' },
       { protocol: 'https', hostname: '**.fal.ai' },
-      { protocol: 'https', hostname: 'picsum.photos' },
-      { protocol: 'https', hostname: 'fastly.picsum.photos' },
     ],
   },
-  async headers() {
-    return [
-      {
-        source: '/api/:path*',
-        headers: [
-          { key: 'Access-Control-Allow-Origin', value: ALLOWED_ORIGINS.join(',') },
-          { key: 'Access-Control-Allow-Methods', value: 'GET,POST,PUT,DELETE,OPTIONS' },
-          { key: 'Access-Control-Allow-Headers', value: 'Content-Type,Authorization,x-workspace-slug' },
-        ],
-      },
-    ];
-  },
+  // CORS headers are handled by lib/auth/middleware.ts (more flexible, dynamic origin matching)
+  // next.config headers() cannot send comma-separated origins — only single origin or *
 };
 
 export default nextConfig;
