@@ -27,9 +27,10 @@ describe('falWebhookPayloadSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('rejects an invalid status value', () => {
+  it('accepts any status value (validation happens at handler level)', () => {
     const raw = { request_id: 'req-1', status: 'PENDING' };
     const result = falWebhookPayloadSchema.safeParse(raw);
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.status).toBe('PENDING');
   });
 });
