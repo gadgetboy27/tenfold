@@ -6,7 +6,7 @@ import Step2Select from '@/components/steps/Step2Select';
 import Step3Expand from '@/components/steps/Step3Expand';
 import Step4Compose from '@/components/steps/Step4Compose';
 import Step5Review from '@/components/steps/Step5Review';
-import Step5Publish from '@/components/steps/Step5Publish';
+import Step6Publish from '@/components/steps/Step6Publish';
 
 export default function StepView() {
   const { currentStep } = useAppStore();
@@ -18,7 +18,7 @@ export default function StepView() {
       {currentStep === 3 && <Step3Expand />}
       {currentStep === 4 && <Step4Compose />}
       {currentStep === 5 && <Step5Review />}
-      {currentStep === 6 && <Step5Publish />}
+      {currentStep === 6 && <Step6Publish />}
     </div>
   );
 }

@@ -1,25 +1,37 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type,Authorization,x-workspace-slug',
-};
+const CORS_ALLOWED_ORIGINS = process.env.NODE_ENV === 'production'
+  ? [process.env.NEXT_PUBLIC_APP_URL || 'https://tenfold.nz']
+  : ['http://localhost:3000', 'http://127.0.0.1:3000'];
+
+function getCorsHeaders(origin?: string): Record<string, string> {
+  const allowedOrigin = CORS_ALLOWED_ORIGINS.some(allowed => allowed && origin?.includes(allowed.replace(/^https?:\/\//, '')))
+    ? origin
+    : CORS_ALLOWED_ORIGINS[0];
+
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin || '*',
+    'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type,Authorization,x-workspace-slug',
+  };
+}
 
 export async function proxy(request: NextRequest) {
   const isApiRoute = request.nextUrl.pathname.startsWith('/api/');
+  const origin = request.headers.get('origin');
+  const corsHeaders = getCorsHeaders(origin || undefined);
 
   // Return CORS preflight immediately — no auth needed
   if (request.method === 'OPTIONS' && isApiRoute) {
-    return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+    return new NextResponse(null, { status: 204, headers: corsHeaders });
   }
 
   // API routes: add CORS headers and skip cookie session refresh
   // Auth is handled per-route via Bearer token in getSession()
   if (isApiRoute) {
     const response = NextResponse.next({ request });
-    Object.entries(CORS_HEADERS).forEach(([k, v]) => response.headers.set(k, v));
+    Object.entries(corsHeaders).forEach(([k, v]) => response.headers.set(k, v));
     return response;
   }
 

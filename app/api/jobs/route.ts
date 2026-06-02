@@ -23,7 +23,7 @@ function buildFalInput(type: string, params: Record<string, unknown>, prompt: st
     return {
       prompt: fullPrompt,
       image_size: (params.imageSize as string) ?? 'square_hd',
-      num_images: 1,
+      num_images: 1, // Ad-hoc single image. Initial campaigns use num_images: 4 (see campaigns/route.ts)
       seed: params.seed as number | undefined,
     };
   }
