@@ -159,7 +159,7 @@ async function handleSuccess(
       job_id: job.id,
       type: 'video',
       url: publicUrl,
-      storage_path: storedPath,
+      storage_path: storedPath ?? `fal/${assetId}.mp4`,
     });
   }
 
@@ -189,7 +189,7 @@ async function handleSuccess(
       job_id: job.id,
       type: 'audio',
       url: publicUrl,
-      storage_path: storedPath,
+      storage_path: storedPath ?? `fal/${assetId}.mp3`,
     });
   }
 
