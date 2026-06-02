@@ -9,33 +9,24 @@ export async function debitCredits(
   const admin = createSupabaseAdminClient();
   const cost = CREDIT_COSTS[type];
 
-  const { data: account } = await admin
-    .from('credit_accounts')
-    .select('cached_balance')
-    .eq('workspace_id', workspaceId)
-    .single();
-
-  const currentBalance = (account as { cached_balance: number } | null)?.cached_balance ?? 0;
-
-  if (currentBalance < cost) {
-    return { success: false, newBalance: currentBalance };
-  }
-
-  const newBalance = currentBalance - cost;
-
-  await admin.from('credit_transactions').insert({
-    workspace_id: workspaceId,
-    job_id: jobId,
-    type: 'spend',
-    amount: -cost,
-    balance_after: newBalance,
-    description: `${type} job`,
+  const { data, error } = await admin.rpc('debit_credits', {
+    p_workspace_id: workspaceId,
+    p_job_id: jobId,
+    p_cost: cost,
+    p_description: `${type} job`,
   });
 
-  await admin
-    .from('credit_accounts')
-    .update({ cached_balance: newBalance })
-    .eq('workspace_id', workspaceId);
+  if (error) {
+    console.error('Credit debit RPC error:', error);
+    return { success: false, newBalance: 0 };
+  }
 
-  return { success: true, newBalance };
+  const result = data as { success: boolean; balance: number; reason?: string };
+
+  if (!result.success) {
+    console.warn(`Credit debit failed for workspace ${workspaceId}: ${result.reason}`);
+    return { success: false, newBalance: result.balance };
+  }
+
+  return { success: true, newBalance: result.balance };
 }

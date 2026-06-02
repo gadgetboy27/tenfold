@@ -17,9 +17,9 @@ function creditGrantForPack(priceId: string): number | undefined {
 
 function creditsForSubscriptionTier(priceId: string): { tier: string; credits: number } | undefined {
   const map: Record<string, { tier: string; credits: number }> = {
-    [process.env.STRIPE_PRICE_CREATOR_MONTHLY!]: { tier: 'creator', credits: 50 },
-    [process.env.STRIPE_PRICE_BUSINESS_MONTHLY!]: { tier: 'business', credits: 200 },
-    [process.env.STRIPE_PRICE_AGENCY_MONTHLY!]: { tier: 'agency', credits: 600 },
+    [process.env.STRIPE_PRICE_CREATOR_MONTHLY!]: { tier: 'creator', credits: 350 },
+    [process.env.STRIPE_PRICE_BUSINESS_MONTHLY!]: { tier: 'business', credits: 1000 },
+    [process.env.STRIPE_PRICE_AGENCY_MONTHLY!]: { tier: 'agency', credits: 3000 },
   };
   return map[priceId];
 }

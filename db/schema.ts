@@ -126,6 +126,7 @@ export const campaigns = pgTable(
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
     createdBy: uuid('created_by').notNull(),
+    name: text('name').notNull().default('Untitled Campaign'),
     prompt: text('prompt').notNull(),
     parameters: jsonb('parameters').notNull().default('{}'),
     anchorAssetId: uuid('anchor_asset_id'), // FK added after assets table

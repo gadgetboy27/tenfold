@@ -5,6 +5,10 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 const GRANT_AMOUNT = 500;
 
 export async function POST(req: Request) {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Not available in production' }, { status: 403 });
+  }
+
   try {
     const session = await getSession(req);
     const admin = createSupabaseAdminClient();
