@@ -77,7 +77,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (raw.status !== undefined)           update.status           = raw.status;
     if (raw.prompt !== undefined)           update.prompt           = raw.prompt;
     if (raw.name !== undefined)             update.name             = String(raw.name).slice(0, 200);
-    if (raw.current_step !== undefined)     update.current_step     = Math.min(5, Math.max(1, Number(raw.current_step)));
+    if (raw.current_step !== undefined)     update.current_step     = Math.min(6, Math.max(1, Number(raw.current_step)));
     if (raw.expansion_data !== undefined)   update.expansion_data   = raw.expansion_data;
     if (raw.anchor_asset_id !== undefined)  update.anchor_asset_id  = raw.anchor_asset_id;
     const admin = createSupabaseAdminClient();

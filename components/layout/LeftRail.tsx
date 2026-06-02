@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '@/store/useAppStore';
-import { Sparkles, Crosshair, Layers, PenTool, Send, Check, Settings, X } from 'lucide-react';
+import { Sparkles, Crosshair, Layers, PenTool, Eye, Send, Check, Settings, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const STEPS = [
@@ -11,7 +11,8 @@ const STEPS = [
   { id: 2 as const, label: 'Select',  icon: Crosshair },
   { id: 3 as const, label: 'Expand',  icon: Layers },
   { id: 4 as const, label: 'Compose', icon: PenTool },
-  { id: 5 as const, label: 'Publish', icon: Send },
+  { id: 5 as const, label: 'Review',  icon: Eye },
+  { id: 6 as const, label: 'Publish', icon: Send },
 ];
 
 export default function LeftRail() {

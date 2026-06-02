@@ -22,7 +22,8 @@ const CHECKLIST = [
   { step: 2, label: 'Pick your anchor',  hint: 'Select best image' },
   { step: 3, label: 'Expand to formats', hint: 'Video, music, caption (optional)' },
   { step: 4, label: 'Compose your post', hint: 'Add text & branding' },
-  { step: 5, label: 'Publish',           hint: 'Post to your channels' },
+  { step: 5, label: 'Review your post',  hint: 'Fine-tune before publishing' },
+  { step: 6, label: 'Publish',           hint: 'Post to your channels' },
 ];
 
 export default function RightPanel() {

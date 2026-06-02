@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
   Pen, LogOut, User as UserIcon, Share2, ChevronLeft, Trash2,
-  Sparkles, Crosshair, Layers, PenTool, Send, Check,
+  Sparkles, Crosshair, Layers, PenTool, Eye, Send, Check,
   PanelLeft, SlidersHorizontal, Zap,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -27,7 +27,8 @@ const STEPS = [
   { id: 2 as const, label: 'Select',  icon: Crosshair },
   { id: 3 as const, label: 'Expand',  icon: Layers },
   { id: 4 as const, label: 'Compose', icon: PenTool },
-  { id: 5 as const, label: 'Publish', icon: Send },
+  { id: 5 as const, label: 'Review',  icon: Eye },
+  { id: 6 as const, label: 'Publish', icon: Send },
 ];
 
 interface Props {

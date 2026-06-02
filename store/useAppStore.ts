@@ -38,7 +38,7 @@ export interface CampaignResume {
 interface AppStore {
   currentCampaignId: string | null;
   currentCompositionId: string | null;
-  currentStep: 1 | 2 | 3 | 4 | 5;
+  currentStep: 1 | 2 | 3 | 4 | 5 | 6;
   completedSteps: Set<number>;
   creditBalance: number;
   workspaceSlug: string;
@@ -56,7 +56,7 @@ interface AppStore {
   leftDrawerOpen: boolean;
   rightDrawerOpen: boolean;
 
-  setStep: (step: 1 | 2 | 3 | 4 | 5) => void;
+  setStep: (step: 1 | 2 | 3 | 4 | 5 | 6) => void;
   setCampaignId: (id: string) => void;
   setCompositionId: (id: string) => void;
   setCreditBalance: (n: number) => void;
@@ -132,7 +132,7 @@ export const useAppStore = create<AppStore>()((set) => ({
     set({
       currentCampaignId: campaign.id,
       currentCompositionId: campaign.compositionId ?? null,
-      currentStep: Math.min(5, Math.max(1, campaign.current_step)) as 1 | 2 | 3 | 4 | 5,
+      currentStep: Math.min(6, Math.max(1, campaign.current_step)) as 1 | 2 | 3 | 4 | 5 | 6,
       completedSteps: new Set(
         Array.from({ length: campaign.current_step - 1 }, (_, i) => i + 1),
       ),
