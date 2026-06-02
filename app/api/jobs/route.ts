@@ -32,7 +32,10 @@ function buildFalInput(type: string, params: Record<string, unknown>, prompt: st
     const style = (params.videoStyle as VideoStyle) ?? 'Cinematic';
     const durationBrief = VIDEO_DURATION_PROMPTS[type];
     const styleBrief = VIDEO_STYLE_PROMPTS[style].prompt;
-    const composedPrompt = [durationBrief, styleBrief, prompt].filter(Boolean).join(', ');
+    const variationDir = (params.variationDirection as string) ?? '';
+    const composedParts = [durationBrief, styleBrief, prompt, variationDir ? `with ${variationDir}` : '']
+      .filter(Boolean);
+    const composedPrompt = composedParts.join(', ');
     return {
       image_url: params.imageUrl as string,
       prompt: composedPrompt,
@@ -42,8 +45,11 @@ function buildFalInput(type: string, params: Record<string, unknown>, prompt: st
   }
   if (type === 'music_generation') {
     const genre = (params.genre as string) ?? 'Lo-fi Chill';
+    const genrePrompt = MUSIC_GENRE_PROMPTS[genre] ?? MUSIC_GENRE_PROMPTS['Lo-fi Chill'];
+    const variationDir = (params.variationDirection as string) ?? '';
+    const finalPrompt = variationDir ? `${genrePrompt}, but ${variationDir}` : genrePrompt;
     return {
-      prompt: MUSIC_GENRE_PROMPTS[genre] ?? MUSIC_GENRE_PROMPTS['Lo-fi Chill'],
+      prompt: finalPrompt,
       seconds_total: 30,
       steps: 100,
     };
@@ -92,6 +98,7 @@ export async function POST(req: Request) {
           platform: (body.params.platform as string) ?? 'instagram',
           tone: (body.params.tone as 'professional' | 'casual' | 'playful') ?? 'professional',
           maxWords: (body.params.maxWords as number) ?? 50,
+          variationDirection: (body.params.variationDirection as string) ?? '',
         });
 
         await admin

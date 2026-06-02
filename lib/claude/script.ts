@@ -12,6 +12,7 @@ interface GenerateScriptParams {
   platform: string;
   tone: 'professional' | 'casual' | 'playful';
   maxWords: number;
+  variationDirection?: string;
 }
 
 export interface ScriptResult {
@@ -22,6 +23,7 @@ export interface ScriptResult {
 }
 
 export async function generateScript(params: GenerateScriptParams): Promise<ScriptResult> {
+  const directionLine = params.variationDirection ? `\nSpecial direction: ${params.variationDirection}` : '';
   const message = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 512,
@@ -31,7 +33,7 @@ export async function generateScript(params: GenerateScriptParams): Promise<Scri
         content: `Write a ${params.tone} social media caption for ${params.platform}.
 Business: ${params.businessName}
 Image: ${params.imageDescription}
-Max words: ${params.maxWords}
+Max words: ${params.maxWords}${directionLine}
 Return only the caption text, no explanation.`,
       },
     ],

@@ -20,6 +20,11 @@ export default function Step3Expand() {
   const [musicGenre, setMusicGenre] = useState('Lo-fi Chill');
   const [scriptPlatform, setScriptPlatform] = useState('IG');
   const [scriptTone, setScriptTone] = useState('Pro');
+  const [variationDirection, setVariationDirection] = useState<Record<string, string>>({
+    video: '',
+    music: '',
+    script: '',
+  });
 
   const {
     generatedAssets, selectedAnchorId, updateExpansion,
@@ -55,12 +60,21 @@ export default function Step3Expand() {
       };
       if (type === 'music') {
         params.genre = musicGenre;
+        if (variationDirection.music) {
+          params.variationDirection = variationDirection.music;
+        }
       } else if (type === 'video') {
         params.videoStyle = videoStyle;
+        if (variationDirection.video) {
+          params.variationDirection = variationDirection.video;
+        }
       } else if (type === 'script') {
-        params.platform       = PLATFORM_MAP[scriptPlatform] ?? scriptPlatform.toLowerCase();
-        params.tone           = TONE_MAP[scriptTone] ?? scriptTone.toLowerCase();
+        params.platform = PLATFORM_MAP[scriptPlatform] ?? scriptPlatform.toLowerCase();
+        params.tone = TONE_MAP[scriptTone] ?? scriptTone.toLowerCase();
         params.imageDescription = anchor.prompt;
+        if (variationDirection.script) {
+          params.variationDirection = variationDirection.script;
+        }
       }
 
       const jobRes = await api('/api/jobs', {
@@ -127,8 +141,8 @@ export default function Step3Expand() {
         };
 
         if (job.status === 'ready') {
-          if (type === 'video') {
-            const currentUrls = useAppStore.getState().expansions.video?.urls ?? [];
+          if (type === 'video' || type === 'music') {
+            const currentUrls = useAppStore.getState().expansions[type]?.urls ?? [];
             updateExpansion(type, {
               status: 'ready',
               url: job.outputUrls?.[0],
@@ -138,8 +152,9 @@ export default function Step3Expand() {
           } else {
             updateExpansion(type, { status: 'ready', url: job.outputUrls?.[0], jobId: postData.jobId });
           }
-          toast.success(`${type === 'video' ? 'Video' : 'Music'} ready`);
+          toast.success(`${type === 'video' ? 'Video' : type === 'music' ? 'Music' : 'Caption'} ready`);
           syncBalance();
+          setVariationDirection({ ...variationDirection, [type]: '' });
           const saved = useAppStore.getState().expansions;
           if (currentCampaignId && currentCampaignId !== '__new__') {
             api(`/api/campaigns/${currentCampaignId}`, {
@@ -259,6 +274,13 @@ export default function Step3Expand() {
                   </button>
                 ))}
               </div>
+              <input
+                type="text"
+                placeholder="What direction? (e.g., 'more dynamic', 'slower paced')"
+                value={variationDirection.video}
+                onChange={(e) => setVariationDirection({ ...variationDirection, video: e.target.value })}
+                className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
             </div>
           </FormatCard>
 
@@ -270,35 +292,61 @@ export default function Step3Expand() {
             icon={Music}
             onGenerate={() => handleGenerate('music')}
             onRefresh={() => handleRefresh('music')}
+            onRegenerate={() => handleGenerate('music')}
+            onSelect={(url) => updateExpansion('music', { url })}
           >
-            <div className="grid grid-cols-2 gap-1.5">
-              {['Epic Cinematic', 'Lo-fi Chill', 'Corporate Jazz', 'Electronic', 'Acoustic Folk', 'Hip-hop Beat'].map(
-                (g) => (
-                  <button
-                    key={g}
-                    type="button"
-                    onClick={() => setMusicGenre(g)}
-                    className={`py-1.5 text-xs rounded-full border transition-colors ${
-                      musicGenre === g
-                        ? 'border-primary/50 text-primary bg-primary/10'
-                        : 'border-border bg-background hover:border-primary/50'
-                    }`}
-                  >
-                    {g}
-                  </button>
-                ),
-              )}
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-1.5">
+                {['Epic Cinematic', 'Lo-fi Chill', 'Corporate Jazz', 'Electronic', 'Acoustic Folk', 'Hip-hop Beat'].map(
+                  (g) => (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => setMusicGenre(g)}
+                      className={`py-1.5 text-xs rounded-full border transition-colors ${
+                        musicGenre === g
+                          ? 'border-primary/50 text-primary bg-primary/10'
+                          : 'border-border bg-background hover:border-primary/50'
+                      }`}
+                    >
+                      {g}
+                    </button>
+                  ),
+                )}
+              </div>
+              <input
+                type="text"
+                placeholder="What direction? (e.g., 'add more energy', 'faster tempo')"
+                value={variationDirection.music}
+                onChange={(e) => setVariationDirection({ ...variationDirection, music: e.target.value })}
+                className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
             </div>
           </FormatCard>
 
-          <FormatCard type="script" title="Caption" subtitle="Platform-ready caption" cost="1 cr" icon={FileText} onGenerate={() => handleGenerate('script')}>
-            <div className="space-y-2">
+          <FormatCard
+            type="script"
+            title="Caption"
+            subtitle="Platform-ready caption"
+            cost="1 cr"
+            icon={FileText}
+            onGenerate={() => handleGenerate('script')}
+          >
+            <div className="space-y-3">
               <div className="flex gap-2 items-center">
                 <span className="text-[10px] text-muted-foreground uppercase w-12">Platform</span>
                 <div className="flex gap-1">
-                  {['IG', 'LI', 'TikTok'].map(p => (
-                    <button key={p} type="button" onClick={() => setScriptPlatform(p)}
-                      className={`px-2 py-1 text-[10px] rounded border transition-colors ${scriptPlatform === p ? 'border-primary/50 text-primary bg-primary/10' : 'border-border bg-background hover:border-primary/50'}`}>
+                  {['IG', 'LI', 'TikTok'].map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setScriptPlatform(p)}
+                      className={`px-2 py-1 text-[10px] rounded border transition-colors ${
+                        scriptPlatform === p
+                          ? 'border-primary/50 text-primary bg-primary/10'
+                          : 'border-border bg-background hover:border-primary/50'
+                      }`}
+                    >
                       {p}
                     </button>
                   ))}
@@ -307,14 +355,29 @@ export default function Step3Expand() {
               <div className="flex gap-2 items-center">
                 <span className="text-[10px] text-muted-foreground uppercase w-12">Tone</span>
                 <div className="flex gap-1">
-                  {['Pro', 'Casual', 'Playful'].map(t => (
-                    <button key={t} type="button" onClick={() => setScriptTone(t)}
-                      className={`px-2 py-1 text-[10px] rounded border transition-colors ${scriptTone === t ? 'border-primary/50 text-primary bg-primary/10' : 'border-border bg-background hover:border-primary/50'}`}>
+                  {['Pro', 'Casual', 'Playful'].map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setScriptTone(t)}
+                      className={`px-2 py-1 text-[10px] rounded border transition-colors ${
+                        scriptTone === t
+                          ? 'border-primary/50 text-primary bg-primary/10'
+                          : 'border-border bg-background hover:border-primary/50'
+                      }`}
+                    >
                       {t}
                     </button>
                   ))}
                 </div>
               </div>
+              <input
+                type="text"
+                placeholder="What direction? (e.g., 'shorter', 'add emojis', 'more persuasive')"
+                value={variationDirection.script}
+                onChange={(e) => setVariationDirection({ ...variationDirection, script: e.target.value })}
+                className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
             </div>
           </FormatCard>
         </div>
