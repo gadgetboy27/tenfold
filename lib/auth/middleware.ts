@@ -27,11 +27,16 @@ export async function proxy(request: NextRequest) {
     return new NextResponse(null, { status: 204, headers: corsHeaders });
   }
 
-  // API routes: add CORS headers and skip cookie session refresh
+  // API routes: add CORS headers and security headers, skip cookie session refresh
   // Auth is handled per-route via Bearer token in getSession()
   if (isApiRoute) {
     const response = NextResponse.next({ request });
     Object.entries(corsHeaders).forEach(([k, v]) => response.headers.set(k, v));
+    // Security headers
+    response.headers.set('X-Content-Type-Options', 'nosniff');
+    response.headers.set('X-Frame-Options', 'DENY');
+    response.headers.set('X-XSS-Protection', '1; mode=block');
+    response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     return response;
   }
 

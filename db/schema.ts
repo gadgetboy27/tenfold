@@ -18,7 +18,7 @@ import { sql } from 'drizzle-orm';
 export const workspaces = pgTable('workspaces', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
-  slug: text('slug').notNull().unique(),
+  slug: text('slug').notNull().unique('workspaces_slug_unique'),
   ownerId: uuid('owner_id').notNull(),
   brandName: text('brand_name'),
   brandLogoUrl: text('brand_logo_url'),
