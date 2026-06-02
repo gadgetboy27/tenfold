@@ -268,3 +268,52 @@ export const webhookLogs = pgTable(
   },
   (t) => [unique().on(t.source, t.eventId), index('idx_webhook_logs_event').on(t.source, t.eventId)],
 );
+
+// ─── CONTENT AGENT ───────────────────────────────────────────────────────────
+export const contentSubmissions = pgTable(
+  'content_submissions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    createdBy: uuid('created_by').notNull(),
+    rawTranscript: text('raw_transcript').notNull(),
+    status: text('status').notNull().default('queued'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_content_submissions_workspace').on(t.workspaceId),
+    index('idx_content_submissions_status').on(t.status),
+  ],
+);
+
+export const contentPipelineResults = pgTable(
+  'content_pipeline_results',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    submissionId: uuid('submission_id')
+      .notNull()
+      .references(() => contentSubmissions.id, { onDelete: 'cascade' }),
+    stage: text('stage').notNull(),
+    status: text('status').notNull().default('pending'),
+    outputJson: jsonb('output_json'),
+    error: text('error'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_content_pipeline_results_submission').on(t.submissionId),
+    index('idx_content_pipeline_results_stage').on(t.stage),
+  ],
+);
+
+export const analyticsReports = pgTable('analytics_reports', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id')
+    .notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  reportJson: jsonb('report_json').notNull(),
+  weekEnding: text('week_ending').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
