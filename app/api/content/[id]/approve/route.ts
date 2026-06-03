@@ -6,9 +6,10 @@ import { approvePublishSchema } from '@/lib/validation/content-schemas';
 
 export async function POST(
   req: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const { id } = await params;
     const session = await getSession(req);
     const body = approvePublishSchema.parse(await req.json());
     const admin = createSupabaseAdminClient();
@@ -16,7 +17,7 @@ export async function POST(
     const { data: submission } = await admin
       .from('content_submissions')
       .select('id, workspace_id, created_by')
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('workspace_id', session.workspaceId)
       .single();
 
@@ -47,7 +48,7 @@ export async function POST(
     await admin
       .from('content_submissions')
       .update({ status: 'published' })
-      .eq('id', params.id);
+      .eq('id', id);
 
     return NextResponse.json(publishResult, { status: 200 });
   } catch (error) {

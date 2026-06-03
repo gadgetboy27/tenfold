@@ -11,9 +11,10 @@ interface PipelineRequest {
 
 export async function POST(
   req: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const { id } = await params;
     // Verify internal secret (prevents unauthorized pipeline triggers)
     const secret = req.headers.get('x-internal-secret');
     if (secret !== (process.env.CRON_SECRET || 'dev-secret')) {
@@ -21,7 +22,7 @@ export async function POST(
     }
 
     const body: PipelineRequest = await req.json();
-    const submissionId = params.id;
+    const submissionId = id;
     const admin = createSupabaseAdminClient();
 
     // Start pipeline without awaiting (caller gets 201 immediately)

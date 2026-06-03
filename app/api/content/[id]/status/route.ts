@@ -4,16 +4,17 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 
 export async function GET(
   req: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const { id } = await params;
     const session = await getSession(req);
     const admin = createSupabaseAdminClient();
 
     const { data: submission } = await admin
       .from('content_submissions')
       .select('id, workspace_id, created_by')
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (!submission || submission.workspace_id !== session.workspaceId) {
@@ -37,7 +38,7 @@ export async function GET(
           const { data: results } = await admin
             .from('content_pipeline_results')
             .select('*')
-            .eq('submission_id', params.id)
+            .eq('submission_id', id)
             .order('created_at', { ascending: true });
 
           if (results) {
