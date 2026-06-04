@@ -1,4 +1,4 @@
-import { stripe } from './client';
+import { getStripe } from './client';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 
 export async function getOrCreateStripeCustomer(workspaceId: string): Promise<string> {
@@ -19,7 +19,7 @@ export async function getOrCreateStripeCustomer(workspaceId: string): Promise<st
     .eq('id', workspaceId)
     .single();
 
-  const customer = await stripe.customers.create({
+  const customer = await getStripe().customers.create({
     name: (workspace as { name: string } | null)?.name,
     metadata: { workspaceId },
   });
