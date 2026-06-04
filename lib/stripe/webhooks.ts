@@ -1,9 +1,9 @@
 import Stripe from 'stripe';
-import { stripe } from './client';
+import { getStripe } from './client';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 
 export function verifyStripeWebhook(body: string, signature: string): Stripe.Event {
-  return stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET!);
+  return getStripe().webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET!);
 }
 
 function creditGrantForPack(priceId: string): number | undefined {
@@ -97,7 +97,7 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
       const s = sub as { workspace_id: string; stripe_subscription_id: string | null };
       if (!s.stripe_subscription_id) break;
 
-      const invoiceSub = await stripe.subscriptions.retrieve(s.stripe_subscription_id);
+      const invoiceSub = await getStripe().subscriptions.retrieve(s.stripe_subscription_id);
       const priceId = invoiceSub.items.data[0]?.price?.id;
       if (!priceId) break;
 

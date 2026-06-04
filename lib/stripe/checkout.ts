@@ -1,4 +1,4 @@
-import { stripe } from './client';
+import { getStripe } from './client';
 
 function isSubscriptionPrice(priceId: string): boolean {
   return [
@@ -15,7 +15,7 @@ export async function createCheckoutSession(opts: {
   successUrl: string;
   cancelUrl: string;
 }): Promise<{ url: string; sessionId: string }> {
-  const session = await stripe.checkout.sessions.create({
+  const session = await getStripe().checkout.sessions.create({
     customer: opts.customerId,
     mode: isSubscriptionPrice(opts.priceId) ? 'subscription' : 'payment',
     line_items: [{ price: opts.priceId, quantity: 1 }],
