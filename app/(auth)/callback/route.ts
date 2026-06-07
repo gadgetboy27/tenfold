@@ -7,6 +7,8 @@ import { v4 as uuidv4 } from 'uuid';
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
+  const token = searchParams.get('token');
+  const type = searchParams.get('type');
 
   // Rate limit: 10 requests per minute per IP
   const rateLimitKey = getRateLimitKey(request);
@@ -17,7 +19,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  if (!code) {
+  if (!code && !token) {
     return NextResponse.redirect(`${origin}/login?error=missing_code`);
   }
 
@@ -40,7 +42,24 @@ export async function GET(request: NextRequest) {
     },
   );
 
-  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+  let data: any;
+  let error: any;
+
+  // Handle OAuth code
+  if (code) {
+    const result = await supabase.auth.exchangeCodeForSession(code);
+    data = result.data;
+    error = result.error;
+  }
+  // Handle magic link token
+  else if (token && type === 'magiclink') {
+    const result = await supabase.auth.verifyOtp({
+      token_hash: token,
+      type: 'magiclink',
+    });
+    data = result.data;
+    error = result.error;
+  }
 
   if (error || !data.user) {
     return response; // already points to /login?error=auth_failed
