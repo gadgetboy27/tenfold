@@ -5,10 +5,15 @@ import { getRateLimitKey, checkRateLimit } from '@/lib/security/rate-limit';
 import { v4 as uuidv4 } from 'uuid';
 
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams, origin, hash } = new URL(request.url);
   const code = searchParams.get('code');
   const token = searchParams.get('token');
   const type = searchParams.get('type');
+
+  // Check for access_token in URL hash (from magic links)
+  const hashParams = new URLSearchParams(hash.slice(1));
+  const accessToken = hashParams.get('access_token');
+  const refreshToken = hashParams.get('refresh_token');
 
   // Rate limit: 10 requests per minute per IP
   const rateLimitKey = getRateLimitKey(request);
@@ -19,7 +24,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  if (!code && !token) {
+  if (!code && !token && !accessToken) {
     return NextResponse.redirect(`${origin}/login?error=missing_code`);
   }
 
@@ -45,23 +50,43 @@ export async function GET(request: NextRequest) {
   let data: any;
   let error: any;
 
-  // Handle OAuth code
+  // Handle OAuth code (standard OAuth flow)
   if (code) {
     const result = await supabase.auth.exchangeCodeForSession(code);
     data = result.data;
     error = result.error;
   }
-  // Handle magic link token
+  // Handle magic link with access token in URL hash
+  else if (accessToken && refreshToken) {
+    try {
+      const result = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+      data = result.data;
+      error = result.error;
+    } catch (err) {
+      console.error('Magic link session error:', err);
+      error = err;
+    }
+  }
+  // Handle magic link token via query param
   else if (token && type === 'magiclink') {
-    const result = await supabase.auth.verifyOtp({
-      token_hash: token,
-      type: 'magiclink',
-    });
-    data = result.data;
-    error = result.error;
+    try {
+      const result = await supabase.auth.verifyOtp({
+        token_hash: token,
+        type: 'magiclink',
+      });
+      data = result.data;
+      error = result.error;
+    } catch (err) {
+      console.error('Magic link OTP error:', err);
+      error = err;
+    }
   }
 
-  if (error || !data.user) {
+  if (error || !data?.user) {
+    console.error('Auth callback error:', { error, code, token, type, accessToken: !!accessToken });
     return response; // already points to /login?error=auth_failed
   }
 
