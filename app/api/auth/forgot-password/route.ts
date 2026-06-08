@@ -3,7 +3,17 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let resendClient: Resend | null = null;
+
+function getResendClient(): Resend {
+  if (!resendClient) {
+    if (!process.env.RESEND_API_KEY) {
+      throw new Error('RESEND_API_KEY is not set');
+    }
+    resendClient = new Resend(process.env.RESEND_API_KEY);
+  }
+  return resendClient;
+}
 
 export async function POST(req: Request) {
   try {
@@ -46,6 +56,7 @@ export async function POST(req: Request) {
     }
 
     // Send confirmation email via Resend
+    const resend = getResendClient();
     await resend.emails.send({
       from: 'noreply@tenfold.nz',
       to: email,

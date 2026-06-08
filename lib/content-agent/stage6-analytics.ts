@@ -96,6 +96,11 @@ export async function sendAnalyticsEmail(
   userEmail: string,
 ): Promise<void> {
   try {
+    if (!process.env.RESEND_API_KEY) {
+      console.warn('RESEND_API_KEY not set, skipping analytics email');
+      return;
+    }
+
     const { Resend } = await import('resend');
     const resend = new Resend(process.env.RESEND_API_KEY);
 
