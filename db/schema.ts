@@ -11,310 +11,393 @@ import {
   unique,
   check,
   index,
-} from 'drizzle-orm/pg-core';
-import { sql } from 'drizzle-orm';
+} from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 // ─── WORKSPACES ──────────────────────────────────────────────────────────────
-export const workspaces = pgTable('workspaces', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  name: text('name').notNull(),
-  slug: text('slug').notNull().unique('workspaces_slug_unique'),
-  ownerId: uuid('owner_id').notNull(),
-  brandName: text('brand_name'),
-  brandLogoUrl: text('brand_logo_url'),
-  brandPrimary: text('brand_primary').default('#000000'),
-  brandSecondary: text('brand_secondary').default('#FFFFFF'),
-  brandFont: text('brand_font').default('Inter'),
-  ayrshareProfileKey: text('ayrshare_profile_key'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+export const workspaces = pgTable("workspaces", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique("workspaces_slug_unique"),
+  ownerId: uuid("owner_id").notNull(),
+  brandName: text("brand_name"),
+  brandLogoUrl: text("brand_logo_url"),
+  brandPrimary: text("brand_primary").default("#000000"),
+  brandSecondary: text("brand_secondary").default("#FFFFFF"),
+  brandFont: text("brand_font").default("Inter"),
+  ayrshareProfileKey: text("ayrshare_profile_key"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });
 
 // ─── WORKSPACE MEMBERS ────────────────────────────────────────────────────────
 export const workspaceMembers = pgTable(
-  'workspace_members',
+  "workspace_members",
   {
-    id: uuid('id').primaryKey().defaultRandom(),
-    workspaceId: uuid('workspace_id')
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
       .notNull()
-      .references(() => workspaces.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id').notNull(),
-    role: text('role').notNull().default('member'),
-    invitedAt: timestamp('invited_at', { withTimezone: true }).notNull().defaultNow(),
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").notNull(),
+    role: text("role").notNull().default("member"),
+    invitedAt: timestamp("invited_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => [
     unique().on(t.workspaceId, t.userId),
-    check('role_check', sql`${t.role} IN ('owner','admin','member')`),
+    check("role_check", sql`${t.role} IN ('owner','admin','member')`),
   ],
 );
 
 // ─── SOCIAL PROFILES ─────────────────────────────────────────────────────────
 export const socialProfiles = pgTable(
-  'social_profiles',
+  "social_profiles",
   {
-    id: uuid('id').primaryKey().defaultRandom(),
-    workspaceId: uuid('workspace_id')
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
       .notNull()
-      .references(() => workspaces.id, { onDelete: 'cascade' }),
-    platform: text('platform').notNull(),
-    handle: text('handle'),
-    profileDisplayName: text('profile_display_name'),
-    platformPageId: text('platform_page_id'),       // FB Page ID / LinkedIn Company Page ID
-    platformAccountId: text('platform_account_id'), // IG Business Account ID
-    accessToken: text('access_token'),              // OAuth access token (never null when connected)
-    refreshToken: text('refresh_token'),            // OAuth refresh token (null for FB page tokens)
-    tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }), // null = never expires
-    connectedAt: timestamp('connected_at', { withTimezone: true }).notNull().defaultNow(),
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    platform: text("platform").notNull(),
+    handle: text("handle"),
+    profileDisplayName: text("profile_display_name"),
+    platformPageId: text("platform_page_id"), // FB Page ID / LinkedIn Company Page ID
+    platformAccountId: text("platform_account_id"), // IG Business Account ID
+    accessToken: text("access_token"), // OAuth access token (never null when connected)
+    refreshToken: text("refresh_token"), // OAuth refresh token (null for FB page tokens)
+    tokenExpiresAt: timestamp("token_expires_at", { withTimezone: true }), // null = never expires
+    connectedAt: timestamp("connected_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => [unique().on(t.workspaceId, t.platform)],
 );
 
 // ─── SUBSCRIPTIONS ───────────────────────────────────────────────────────────
-export const subscriptions = pgTable('subscriptions', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  workspaceId: uuid('workspace_id')
+export const subscriptions = pgTable("subscriptions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id")
     .notNull()
     .unique()
-    .references(() => workspaces.id, { onDelete: 'cascade' }),
-  stripeSubscriptionId: text('stripe_subscription_id').unique(),
-  stripeCustomerId: text('stripe_customer_id').notNull(),
-  tier: text('tier').notNull().default('payg'),
-  status: text('status').notNull().default('active'),
-  creditsPerPeriod: integer('credits_per_period').notNull().default(0),
-  currentPeriodStart: timestamp('current_period_start', { withTimezone: true }),
-  currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  stripeSubscriptionId: text("stripe_subscription_id").unique(),
+  stripeCustomerId: text("stripe_customer_id").notNull(),
+  tier: text("tier").notNull().default("payg"),
+  status: text("status").notNull().default("active"),
+  creditsPerPeriod: integer("credits_per_period").notNull().default(0),
+  currentPeriodStart: timestamp("current_period_start", { withTimezone: true }),
+  currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });
 
 // ─── CREDIT ACCOUNTS ─────────────────────────────────────────────────────────
-export const creditAccounts = pgTable('credit_accounts', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  workspaceId: uuid('workspace_id')
+export const creditAccounts = pgTable("credit_accounts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id")
     .notNull()
     .unique()
-    .references(() => workspaces.id, { onDelete: 'cascade' }),
-  cachedBalance: integer('cached_balance').notNull().default(0),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  cachedBalance: integer("cached_balance").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });
 
 // ─── CREDIT TRANSACTIONS ─────────────────────────────────────────────────────
 export const creditTransactions = pgTable(
-  'credit_transactions',
+  "credit_transactions",
   {
-    id: uuid('id').primaryKey().defaultRandom(),
-    workspaceId: uuid('workspace_id')
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
       .notNull()
-      .references(() => workspaces.id, { onDelete: 'cascade' }),
-    jobId: uuid('job_id'), // FK to creative_jobs added via migration
-    type: text('type').notNull(),
-    amount: integer('amount').notNull(),
-    balanceAfter: integer('balance_after').notNull(),
-    description: text('description').notNull(),
-    stripePaymentIntentId: text('stripe_payment_intent_id'),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    jobId: uuid("job_id"), // FK to creative_jobs added via migration
+    type: text("type").notNull(),
+    amount: integer("amount").notNull(),
+    balanceAfter: integer("balance_after").notNull(),
+    description: text("description").notNull(),
+    stripePaymentIntentId: text("stripe_payment_intent_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
-  (t) => [index('idx_credit_transactions_workspace').on(t.workspaceId)],
+  (t) => [index("idx_credit_transactions_workspace").on(t.workspaceId)],
 );
 
 // ─── CAMPAIGNS ───────────────────────────────────────────────────────────────
 export const campaigns = pgTable(
-  'campaigns',
+  "campaigns",
   {
-    id: uuid('id').primaryKey().defaultRandom(),
-    workspaceId: uuid('workspace_id')
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
       .notNull()
-      .references(() => workspaces.id, { onDelete: 'cascade' }),
-    createdBy: uuid('created_by').notNull(),
-    name: text('name').notNull().default('Untitled Campaign'),
-    prompt: text('prompt').notNull(),
-    parameters: jsonb('parameters').notNull().default('{}'),
-    anchorAssetId: uuid('anchor_asset_id'), // FK added after assets table
-    status: text('status').notNull().default('generating'),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    createdBy: uuid("created_by").notNull(),
+    name: text("name").notNull().default("Untitled Campaign"),
+    prompt: text("prompt").notNull(),
+    parameters: jsonb("parameters").notNull().default("{}"),
+    anchorAssetId: uuid("anchor_asset_id"), // FK added after assets table
+    status: text("status").notNull().default("generating"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => [
-    index('idx_campaigns_workspace').on(t.workspaceId),
-    index('idx_campaigns_status').on(t.status),
+    index("idx_campaigns_workspace").on(t.workspaceId),
+    index("idx_campaigns_status").on(t.status),
   ],
 );
 
 // ─── CREATIVE JOBS ────────────────────────────────────────────────────────────
 export const creativeJobs = pgTable(
-  'creative_jobs',
+  "creative_jobs",
   {
-    id: uuid('id').primaryKey().defaultRandom(),
-    campaignId: uuid('campaign_id')
+    id: uuid("id").primaryKey().defaultRandom(),
+    campaignId: uuid("campaign_id")
       .notNull()
-      .references(() => campaigns.id, { onDelete: 'cascade' }),
-    workspaceId: uuid('workspace_id')
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
       .notNull()
-      .references(() => workspaces.id, { onDelete: 'cascade' }),
-    type: text('type').notNull(),
-    status: text('status').notNull().default('queued'),
-    falRequestId: text('fal_request_id').unique(),
-    inputParams: jsonb('input_params').notNull().default('{}'),
-    errorMessage: text('error_message'),
-    falRawError: jsonb('fal_raw_error'),
-    errorAnalysis: text('error_analysis'),
-    suggestedPrompt: text('suggested_prompt'),
-    creditsCharged: integer('credits_charged').notNull().default(0),
-    actualCostUsd: real('actual_cost_usd'),
-    providerDurationMs: integer('provider_duration_ms'),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-    completedAt: timestamp('completed_at', { withTimezone: true }),
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    status: text("status").notNull().default("queued"),
+    falRequestId: text("fal_request_id").unique(),
+    inputParams: jsonb("input_params").notNull().default("{}"),
+    errorMessage: text("error_message"),
+    falRawError: jsonb("fal_raw_error"),
+    errorAnalysis: text("error_analysis"),
+    suggestedPrompt: text("suggested_prompt"),
+    creditsCharged: integer("credits_charged").notNull().default(0),
+    actualCostUsd: real("actual_cost_usd"),
+    providerDurationMs: integer("provider_duration_ms"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
   },
   (t) => [
-    index('idx_creative_jobs_campaign').on(t.campaignId),
-    index('idx_creative_jobs_status').on(t.status),
-    index('idx_creative_jobs_fal_id').on(t.falRequestId),
+    index("idx_creative_jobs_campaign").on(t.campaignId),
+    index("idx_creative_jobs_status").on(t.status),
+    index("idx_creative_jobs_fal_id").on(t.falRequestId),
   ],
 );
 
 // ─── ASSETS ──────────────────────────────────────────────────────────────────
 export const assets = pgTable(
-  'assets',
+  "assets",
   {
-    id: uuid('id').primaryKey().defaultRandom(),
-    campaignId: uuid('campaign_id')
+    id: uuid("id").primaryKey().defaultRandom(),
+    campaignId: uuid("campaign_id")
       .notNull()
-      .references(() => campaigns.id, { onDelete: 'cascade' }),
-    workspaceId: uuid('workspace_id')
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
       .notNull()
-      .references(() => workspaces.id, { onDelete: 'cascade' }),
-    jobId: uuid('job_id')
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    jobId: uuid("job_id")
       .notNull()
-      .references(() => creativeJobs.id, { onDelete: 'cascade' }),
-    type: text('type').notNull(),
-    url: text('url').notNull(),
-    storagePath: text('storage_path').notNull(),
-    widthPx: integer('width_px'),
-    heightPx: integer('height_px'),
-    durationSec: real('duration_sec'),
-    fileSizeBytes: bigint('file_size_bytes', { mode: 'number' }),
-    metadata: jsonb('metadata').notNull().default('{}'),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+      .references(() => creativeJobs.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    url: text("url").notNull(),
+    storagePath: text("storage_path").notNull(),
+    widthPx: integer("width_px"),
+    heightPx: integer("height_px"),
+    durationSec: real("duration_sec"),
+    fileSizeBytes: bigint("file_size_bytes", { mode: "number" }),
+    metadata: jsonb("metadata").notNull().default("{}"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => [
-    index('idx_assets_campaign').on(t.campaignId),
-    index('idx_assets_job').on(t.jobId),
+    index("idx_assets_campaign").on(t.campaignId),
+    index("idx_assets_job").on(t.jobId),
   ],
 );
 
 // ─── COMPOSITIONS ─────────────────────────────────────────────────────────────
-export const compositions = pgTable('compositions', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  campaignId: uuid('campaign_id')
+export const compositions = pgTable("compositions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  campaignId: uuid("campaign_id")
     .notNull()
-    .references(() => campaigns.id, { onDelete: 'cascade' }),
-  workspaceId: uuid('workspace_id')
+    .references(() => campaigns.id, { onDelete: "cascade" }),
+  workspaceId: uuid("workspace_id")
     .notNull()
-    .references(() => workspaces.id, { onDelete: 'cascade' }),
-  anchorAssetId: uuid('anchor_asset_id')
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  anchorAssetId: uuid("anchor_asset_id")
     .notNull()
     .references(() => assets.id),
-  outputAssetId: uuid('output_asset_id').references(() => assets.id),
-  format: text('format').notNull().default('square'),
-  textOverlays: jsonb('text_overlays').notNull().default('[]'),
-  branding: jsonb('branding').notNull().default('{}'),
-  caption: text('caption'),
-  hashtags: text('hashtags').array(),
-  status: text('status').notNull().default('draft'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  outputAssetId: uuid("output_asset_id").references(() => assets.id),
+  format: text("format").notNull().default("square"),
+  textOverlays: jsonb("text_overlays").notNull().default("[]"),
+  branding: jsonb("branding").notNull().default("{}"),
+  caption: text("caption"),
+  hashtags: text("hashtags").array(),
+  status: text("status").notNull().default("draft"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });
 
 // ─── PUBLISH RECORDS ─────────────────────────────────────────────────────────
 export const publishRecords = pgTable(
-  'publish_records',
+  "publish_records",
   {
-    id: uuid('id').primaryKey().defaultRandom(),
-    compositionId: uuid('composition_id')
+    id: uuid("id").primaryKey().defaultRandom(),
+    compositionId: uuid("composition_id")
       .notNull()
-      .references(() => compositions.id, { onDelete: 'cascade' }),
-    workspaceId: uuid('workspace_id')
+      .references(() => compositions.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
       .notNull()
-      .references(() => workspaces.id, { onDelete: 'cascade' }),
-    ayrsharePostId: text('ayrshare_post_id'),
-    platforms: text('platforms').array().notNull(),
-    caption: text('caption'),
-    hashtags: text('hashtags').array(),
-    scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
-    publishedAt: timestamp('published_at', { withTimezone: true }),
-    status: text('status').notNull().default('pending'),
-    platformResults: jsonb('platform_results').notNull().default('{}'),
-    analytics: jsonb('analytics').notNull().default('{}'),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    ayrsharePostId: text("ayrshare_post_id"),
+    platforms: text("platforms").array().notNull(),
+    caption: text("caption"),
+    hashtags: text("hashtags").array(),
+    scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    status: text("status").notNull().default("pending"),
+    platformResults: jsonb("platform_results").notNull().default("{}"),
+    analytics: jsonb("analytics").notNull().default("{}"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => [
-    index('idx_publish_records_workspace').on(t.workspaceId),
-    index('idx_publish_records_status').on(t.status),
+    index("idx_publish_records_workspace").on(t.workspaceId),
+    index("idx_publish_records_status").on(t.status),
   ],
 );
 
 // ─── WEBHOOK LOGS ─────────────────────────────────────────────────────────────
 export const webhookLogs = pgTable(
-  'webhook_logs',
+  "webhook_logs",
   {
-    id: uuid('id').primaryKey().defaultRandom(),
-    source: text('source').notNull(),
-    eventId: text('event_id').notNull(),
-    payload: jsonb('payload').notNull(),
-    processed: boolean('processed').notNull().default(false),
-    error: text('error'),
-    receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+    id: uuid("id").primaryKey().defaultRandom(),
+    source: text("source").notNull(),
+    eventId: text("event_id").notNull(),
+    payload: jsonb("payload").notNull(),
+    processed: boolean("processed").notNull().default(false),
+    error: text("error"),
+    receivedAt: timestamp("received_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
-  (t) => [unique().on(t.source, t.eventId), index('idx_webhook_logs_event').on(t.source, t.eventId)],
+  (t) => [
+    unique().on(t.source, t.eventId),
+    index("idx_webhook_logs_event").on(t.source, t.eventId),
+  ],
 );
 
 // ─── CONTENT AGENT ───────────────────────────────────────────────────────────
 export const contentSubmissions = pgTable(
-  'content_submissions',
+  "content_submissions",
   {
-    id: uuid('id').primaryKey().defaultRandom(),
-    workspaceId: uuid('workspace_id')
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
       .notNull()
-      .references(() => workspaces.id, { onDelete: 'cascade' }),
-    createdBy: uuid('created_by').notNull(),
-    rawTranscript: text('raw_transcript').notNull(),
-    status: text('status').notNull().default('queued'),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    createdBy: uuid("created_by").notNull(),
+    rawTranscript: text("raw_transcript").notNull(),
+    status: text("status").notNull().default("queued"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => [
-    index('idx_content_submissions_workspace').on(t.workspaceId),
-    index('idx_content_submissions_status').on(t.status),
+    index("idx_content_submissions_workspace").on(t.workspaceId),
+    index("idx_content_submissions_status").on(t.status),
   ],
 );
 
 export const contentPipelineResults = pgTable(
-  'content_pipeline_results',
+  "content_pipeline_results",
   {
-    id: uuid('id').primaryKey().defaultRandom(),
-    submissionId: uuid('submission_id')
+    id: uuid("id").primaryKey().defaultRandom(),
+    submissionId: uuid("submission_id")
       .notNull()
-      .references(() => contentSubmissions.id, { onDelete: 'cascade' }),
-    stage: text('stage').notNull(),
-    status: text('status').notNull().default('pending'),
-    outputJson: jsonb('output_json'),
-    error: text('error'),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+      .references(() => contentSubmissions.id, { onDelete: "cascade" }),
+    stage: text("stage").notNull(),
+    status: text("status").notNull().default("pending"),
+    outputJson: jsonb("output_json"),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => [
-    index('idx_content_pipeline_results_submission').on(t.submissionId),
-    index('idx_content_pipeline_results_stage').on(t.stage),
+    index("idx_content_pipeline_results_submission").on(t.submissionId),
+    index("idx_content_pipeline_results_stage").on(t.stage),
   ],
 );
 
-export const analyticsReports = pgTable('analytics_reports', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  workspaceId: uuid('workspace_id')
+export const analyticsReports = pgTable("analytics_reports", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id")
     .notNull()
-    .references(() => workspaces.id, { onDelete: 'cascade' }),
-  reportJson: jsonb('report_json').notNull(),
-  weekEnding: text('week_ending').notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  reportJson: jsonb("report_json").notNull(),
+  weekEnding: text("week_ending").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });
+
+// ─── ASSET COMMENTS ──────────────────────────────────────────────────────────
+export const assetComments = pgTable(
+  "asset_comments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    authorId: uuid("author_id"), // null for AI suggestions
+    kind: text("kind").notNull().default("user"),
+    body: text("body").notNull(),
+    anchor: jsonb("anchor").notNull().default("{}"), // {x,y} image pin or {t} video timestamp
+    jobId: uuid("job_id"), // creative_jobs row when kind = 'ai_suggestion'
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("idx_asset_comments_asset").on(t.assetId),
+    index("idx_asset_comments_workspace").on(t.workspaceId),
+    check(
+      "asset_comment_kind_check",
+      sql`${t.kind} IN ('user','ai_suggestion')`,
+    ),
+  ],
+);

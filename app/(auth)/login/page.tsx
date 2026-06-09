@@ -1,22 +1,27 @@
-'use client';
+"use client";
 
-import { useState, useEffect, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card } from '@/components/ui/card';
-import { createBrowserClient } from '@supabase/ssr';
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import { createBrowserClient } from "@supabase/ssr";
+import {
+  signInWithOAuthProvider,
+  type OAuthProvider,
+} from "@/lib/auth/oauth-client";
+import { resolveWorkspacePath } from "@/lib/auth/workspace-redirect";
 
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
-  const [method, setMethod] = useState<'password' | 'magic-link'>('password');
+  const [method, setMethod] = useState<"password" | "magic-link">("password");
   const [checkingAuth, setCheckingAuth] = useState(true);
 
   useEffect(() => {
@@ -25,9 +30,10 @@ function LoginContent() {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     );
 
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (user) {
-        router.push('/test-workspace');
+        const slug = user.user_metadata?.workspace_slug as string | undefined;
+        router.push(await resolveWorkspacePath(slug));
       } else {
         setCheckingAuth(false);
       }
@@ -35,42 +41,16 @@ function LoginContent() {
   }, [router]);
 
   useEffect(() => {
-    const msg = searchParams.get('message');
-    const err = searchParams.get('error');
+    const msg = searchParams.get("message");
+    const err = searchParams.get("error");
     if (msg) setMessage(msg);
     if (err) setError(err);
   }, [searchParams]);
 
-  const handleGoogleLogin = async () => {
-    const supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    );
-
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`,
-      },
-    });
-
-    if (error) setError(error.message);
-  };
-
-  const handleFacebookLogin = async () => {
-    const supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    );
-
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'facebook',
-      options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`,
-      },
-    });
-
-    if (error) setError(error.message);
+  const handleOAuth = async (provider: OAuthProvider) => {
+    setError("");
+    const { error } = await signInWithOAuthProvider(provider);
+    if (error) setError(error);
   };
 
   if (checkingAuth) {
@@ -85,69 +65,69 @@ function LoginContent() {
 
   const handlePasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setError("");
     setLoading(true);
 
     if (!email || !password) {
-      setError('Email and password are required');
+      setError("Email and password are required");
       setLoading(false);
       return;
     }
 
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || 'Login failed');
+        setError(data.error || "Login failed");
         setLoading(false);
         return;
       }
 
-      // Session cookie set by API, redirect to dashboard
-      router.push('/test-workspace');
+      // Session cookie set by API; redirect to the user's real workspace.
+      router.push(await resolveWorkspacePath(data.slug));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setError(err instanceof Error ? err.message : "An error occurred");
       setLoading(false);
     }
   };
 
   const handleMagicLink = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setError("");
     setLoading(true);
 
     if (!email) {
-      setError('Email is required');
+      setError("Email is required");
       setLoading(false);
       return;
     }
 
     try {
-      const res = await fetch('/api/auth/magic-link', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/auth/magic-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || 'Failed to send magic link');
+        setError(data.error || "Failed to send magic link");
         setLoading(false);
         return;
       }
 
       setMessage(`Magic link sent to ${email}. Check your inbox!`);
-      setEmail('');
+      setEmail("");
       setLoading(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setError(err instanceof Error ? err.message : "An error occurred");
       setLoading(false);
     }
   };
@@ -156,7 +136,9 @@ function LoginContent() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 px-4">
       <Card className="w-full max-w-md p-8 bg-white shadow-2xl">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Sign in to tenfold</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            Sign in to tenfold
+          </h1>
           <p className="text-gray-600">Welcome back</p>
         </div>
 
@@ -174,7 +156,7 @@ function LoginContent() {
 
         <div className="mb-6 space-y-3">
           <Button
-            onClick={handleGoogleLogin}
+            onClick={() => handleOAuth("google")}
             disabled={loading}
             className="w-full bg-white border border-gray-300 text-gray-900 hover:bg-gray-50 flex items-center justify-center gap-2"
           >
@@ -200,7 +182,7 @@ function LoginContent() {
           </Button>
 
           <Button
-            onClick={handleFacebookLogin}
+            onClick={() => handleOAuth("facebook")}
             disabled={loading}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center gap-2"
           >
@@ -209,6 +191,17 @@ function LoginContent() {
             </svg>
             Sign in with Facebook
           </Button>
+
+          <Button
+            onClick={() => handleOAuth("linkedin_oidc")}
+            disabled={loading}
+            className="w-full bg-[#0a66c2] hover:bg-[#004182] text-white flex items-center justify-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.225 0z" />
+            </svg>
+            Sign in with LinkedIn
+          </Button>
         </div>
 
         <div className="relative mb-6">
@@ -216,34 +209,36 @@ function LoginContent() {
             <div className="w-full border-t border-gray-300"></div>
           </div>
           <div className="relative flex justify-center text-sm">
-            <span className="px-2 bg-white text-gray-500">Or continue with email</span>
+            <span className="px-2 bg-white text-gray-500">
+              Or continue with email
+            </span>
           </div>
         </div>
 
         <div className="flex gap-2 mb-6 border-b border-gray-200">
           <button
-            onClick={() => setMethod('password')}
+            onClick={() => setMethod("password")}
             className={`pb-3 px-4 text-sm font-medium ${
-              method === 'password'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 hover:text-gray-900'
+              method === "password"
+                ? "text-blue-600 border-b-2 border-blue-600"
+                : "text-gray-600 hover:text-gray-900"
             }`}
           >
             Password
           </button>
           <button
-            onClick={() => setMethod('magic-link')}
+            onClick={() => setMethod("magic-link")}
             className={`pb-3 px-4 text-sm font-medium ${
-              method === 'magic-link'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 hover:text-gray-900'
+              method === "magic-link"
+                ? "text-blue-600 border-b-2 border-blue-600"
+                : "text-gray-600 hover:text-gray-900"
             }`}
           >
             Magic Link
           </button>
         </div>
 
-        {method === 'password' ? (
+        {method === "password" ? (
           <form onSubmit={handlePasswordLogin} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-900 mb-2">
@@ -286,7 +281,7 @@ function LoginContent() {
               disabled={loading}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white"
             >
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? "Signing in..." : "Sign In"}
             </Button>
           </form>
         ) : (
@@ -310,7 +305,7 @@ function LoginContent() {
               disabled={loading}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white"
             >
-              {loading ? 'Sending...' : 'Send Magic Link'}
+              {loading ? "Sending..." : "Send Magic Link"}
             </Button>
 
             <p className="text-xs text-gray-600 text-center">
@@ -321,8 +316,11 @@ function LoginContent() {
 
         <div className="mt-6 text-center">
           <p className="text-gray-600 text-sm">
-            Don't have an account?{' '}
-            <Link href="/signup" className="text-blue-600 hover:underline font-medium">
+            Don't have an account?{" "}
+            <Link
+              href="/signup"
+              className="text-blue-600 hover:underline font-medium"
+            >
               Sign Up
             </Link>
           </p>

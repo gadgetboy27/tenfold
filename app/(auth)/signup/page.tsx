@@ -1,19 +1,24 @@
-'use client';
+"use client";
 
-import { useState, useEffect, Suspense } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card } from '@/components/ui/card';
-import { createBrowserClient } from '@supabase/ssr';
+import { useState, useEffect, Suspense } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import { createBrowserClient } from "@supabase/ssr";
+import {
+  signInWithOAuthProvider,
+  type OAuthProvider,
+} from "@/lib/auth/oauth-client";
+import { resolveWorkspacePath } from "@/lib/auth/workspace-redirect";
 
 function SignUpContent() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [isSignedIn, setIsSignedIn] = useState(false);
@@ -25,10 +30,11 @@ function SignUpContent() {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     );
 
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (user) {
         setIsSignedIn(true);
-        router.push('/test-workspace');
+        const slug = user.user_metadata?.workspace_slug as string | undefined;
+        router.push(await resolveWorkspacePath(slug));
       } else {
         setCheckingAuth(false);
       }
@@ -37,87 +43,61 @@ function SignUpContent() {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setError("");
     setLoading(true);
 
     if (!email || !password || !confirmPassword) {
-      setError('All fields are required');
+      setError("All fields are required");
       setLoading(false);
       return;
     }
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError("Passwords do not match");
       setLoading(false);
       return;
     }
 
     if (password.length < 8) {
-      setError('Password must be at least 8 characters');
+      setError("Password must be at least 8 characters");
       setLoading(false);
       return;
     }
 
     try {
-      const res = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || 'Sign up failed');
+        setError(data.error || "Sign up failed");
         setLoading(false);
         return;
       }
 
       setSuccess(true);
-      setEmail('');
-      setPassword('');
-      setConfirmPassword('');
+      setEmail("");
+      setPassword("");
+      setConfirmPassword("");
 
       // Redirect to login after 2 seconds
       setTimeout(() => {
-        router.push('/login?message=Check your email to confirm your account');
+        router.push("/login?message=Check your email to confirm your account");
       }, 2000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setError(err instanceof Error ? err.message : "An error occurred");
       setLoading(false);
     }
   };
 
-  const handleGoogleSignUp = async () => {
-    const supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    );
-
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`,
-      },
-    });
-
-    if (error) setError(error.message);
-  };
-
-  const handleFacebookSignUp = async () => {
-    const supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    );
-
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'facebook',
-      options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`,
-      },
-    });
-
-    if (error) setError(error.message);
+  const handleOAuth = async (provider: OAuthProvider) => {
+    setError("");
+    const { error } = await signInWithOAuthProvider(provider);
+    if (error) setError(error);
   };
 
   if (checkingAuth) {
@@ -134,13 +114,15 @@ function SignUpContent() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 px-4">
       <Card className="w-full max-w-md p-8 bg-white shadow-2xl">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Create Account</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            Create Account
+          </h1>
           <p className="text-gray-600">Join tenfold.nz and start creating</p>
         </div>
 
         <div className="mb-6 space-y-3">
           <Button
-            onClick={handleGoogleSignUp}
+            onClick={() => handleOAuth("google")}
             disabled={loading || success}
             className="w-full bg-white border border-gray-300 text-gray-900 hover:bg-gray-50 flex items-center justify-center gap-2"
           >
@@ -166,7 +148,7 @@ function SignUpContent() {
           </Button>
 
           <Button
-            onClick={handleFacebookSignUp}
+            onClick={() => handleOAuth("facebook")}
             disabled={loading || success}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center gap-2"
           >
@@ -175,6 +157,17 @@ function SignUpContent() {
             </svg>
             Sign up with Facebook
           </Button>
+
+          <Button
+            onClick={() => handleOAuth("linkedin_oidc")}
+            disabled={loading || success}
+            className="w-full bg-[#0a66c2] hover:bg-[#004182] text-white flex items-center justify-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.225 0z" />
+            </svg>
+            Sign up with LinkedIn
+          </Button>
         </div>
 
         <div className="relative mb-6">
@@ -182,14 +175,17 @@ function SignUpContent() {
             <div className="w-full border-t border-gray-300"></div>
           </div>
           <div className="relative flex justify-center text-sm">
-            <span className="px-2 bg-white text-gray-500">Or sign up with email</span>
+            <span className="px-2 bg-white text-gray-500">
+              Or sign up with email
+            </span>
           </div>
         </div>
 
         {success && (
           <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
             <p className="text-green-700 text-sm">
-              Account created! Check your email to confirm. Redirecting to login...
+              Account created! Check your email to confirm. Redirecting to
+              login...
             </p>
           </div>
         )}
@@ -249,14 +245,17 @@ function SignUpContent() {
             disabled={loading || success}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white"
           >
-            {loading ? 'Creating account...' : 'Sign Up'}
+            {loading ? "Creating account..." : "Sign Up"}
           </Button>
         </form>
 
         <div className="mt-6 text-center">
           <p className="text-gray-600 text-sm">
-            Already have an account?{' '}
-            <Link href="/login" className="text-blue-600 hover:underline font-medium">
+            Already have an account?{" "}
+            <Link
+              href="/login"
+              className="text-blue-600 hover:underline font-medium"
+            >
               Sign In
             </Link>
           </p>

@@ -1,15 +1,11 @@
-import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth/session';
-import { getBalanceWithHistory } from '@/lib/credits/balance';
+import { NextResponse } from "next/server";
+import { withWorkspace } from "@/lib/api/with-workspace";
+import { getBalanceWithHistory } from "@/lib/credits/balance";
 
-export async function GET(req: Request) {
-  try {
-    const session = await getSession(req);
-    const data = await getBalanceWithHistory(session.workspaceId);
-    return NextResponse.json(data);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unknown error';
-    const status = msg === 'Unauthorized' ? 401 : 500;
-    return NextResponse.json({ error: msg }, { status });
-  }
-}
+// Reference conversion to the withWorkspace routing layer: auth, rate-limiting
+// and the 401/500 mapping are handled by the wrapper, so the handler is just
+// the business logic. See lib/api/with-workspace.ts.
+export const GET = withWorkspace(async (_req, { session }) => {
+  const data = await getBalanceWithHistory(session.workspaceId);
+  return NextResponse.json(data);
+});

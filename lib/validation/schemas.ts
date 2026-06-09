@@ -1,13 +1,15 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 export const createCampaignSchema = z.object({
   prompt: z.string().min(3).max(2000),
   name: z.string().max(200).optional(),
-  aspectRatio: z.enum(['1:1', '4:5', '16:9', '9:16']).optional(),
+  aspectRatio: z.enum(["1:1", "4:5", "16:9", "9:16"]).optional(),
   style: z.string().max(100).optional(),
   parameters: z
     .object({
-      aspectRatio: z.enum(['square_hd', 'portrait_4_3', 'landscape_16_9']).optional(),
+      aspectRatio: z
+        .enum(["square_hd", "portrait_4_3", "landscape_16_9"])
+        .optional(),
       style: z.string().max(200).optional(),
       seed: z.number().int().positive().optional(),
     })
@@ -17,14 +19,14 @@ export const createCampaignSchema = z.object({
 export const createJobSchema = z.object({
   campaignId: z.string().uuid(),
   type: z.enum([
-    'image_generation',
-    'image_variation',
-    'upscale',
-    'video_10s',
-    'video_30s',
-    'video_60s',
-    'music_generation',
-    'script_generation',
+    "image_generation",
+    "image_variation",
+    "upscale",
+    "video_10s",
+    "video_30s",
+    "video_60s",
+    "music_generation",
+    "script_generation",
   ]),
   params: z.record(z.string(), z.unknown()).default({}),
 });
@@ -36,12 +38,14 @@ export const setAnchorSchema = z.object({
 export const createCompositionSchema = z.object({
   campaignId: z.string().uuid(),
   anchorAssetId: z.string().uuid(),
-  format: z.enum(['square', 'portrait', 'landscape', 'story', 'reel']).default('square'),
+  format: z
+    .enum(["square", "portrait", "landscape", "story", "reel"])
+    .default("square"),
   textOverlays: z
     .array(
       z.object({
         text: z.string().max(500),
-        position: z.enum(['top', 'center', 'bottom']).default('bottom'),
+        position: z.enum(["top", "center", "bottom"]).default("bottom"),
         style: z.record(z.string(), z.string()).default({}),
       }),
     )
@@ -63,19 +67,19 @@ export const publishSchema = z.object({
   platforms: z
     .array(
       z.enum([
-        'instagram',
-        'facebook',
-        'twitter',
-        'linkedin',
-        'tiktok',
-        'youtube',
-        'pinterest',
-        'reddit',
-        'telegram',
-        'threads',
-        'snapchat',
-        'bluesky',
-        'gmb',
+        "instagram",
+        "facebook",
+        "twitter",
+        "linkedin",
+        "tiktok",
+        "youtube",
+        "pinterest",
+        "reddit",
+        "telegram",
+        "threads",
+        "snapchat",
+        "bluesky",
+        "gmb",
       ]),
     )
     .min(1),
@@ -86,4 +90,23 @@ export const publishSchema = z.object({
 
 export const purchaseCreditsSchema = z.object({
   priceId: z.string().min(1),
+});
+
+export const createCommentSchema = z.object({
+  body: z.string().min(1).max(2000),
+  anchor: z
+    .object({
+      x: z.number().optional(), // image pin (0–1 normalized)
+      y: z.number().optional(),
+      t: z.number().optional(), // video timestamp (seconds)
+    })
+    .optional(),
+});
+
+export const suggestCommentSchema = z.object({
+  platform: z.string().max(50).optional(),
+  tone: z.enum(["professional", "casual", "playful"]).optional(),
+  maxWords: z.number().int().positive().max(200).optional(),
+  direction: z.string().max(500).optional(),
+  context: z.string().max(1000).optional(),
 });

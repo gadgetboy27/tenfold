@@ -189,9 +189,31 @@ Drizzle schema is the source of truth at `db/schema.ts`.
 
 Key tables: `workspaces`, `workspace_members`, `social_profiles`, `subscriptions`,
 `credit_accounts`, `credit_transactions`, `campaigns`, `creative_jobs`, `assets`,
-`compositions`, `publish_records`, `webhook_logs`.
+`compositions`, `publish_records`, `webhook_logs`, `asset_comments`.
 
 All tenant tables have `workspace_id`. RLS is enabled on all of them.
+
+### Routing layer — `withWorkspace` (standard for new API routes)
+
+The service-role admin client (`lib/supabase/admin.ts`) bypasses RLS, so tenant
+isolation cannot rely on RLS alone — it depends on every query filtering by
+`workspace_id`. To make that automatic, **new App Router API routes use
+`withWorkspace` (`lib/api/with-workspace.ts`)** instead of calling `getSession()`
++ admin client by hand:
+
+```typescript
+export const GET = withWorkspace<{ id: string }>(async (req, { db, session, params }) => {
+  const { data } = await db.from('campaigns').select('*').eq('id', params.id).single();
+  return NextResponse.json(data); // workspace_id filter already applied
+});
+```
+
+- `db` auto-applies `.eq('workspace_id', …)` on reads and injects it on writes for
+  every table in `WORKSPACE_SCOPED_TABLES`. Use `ctx.admin` (raw, unscoped) only
+  for webhooks / cross-table work.
+- The wrapper handles auth (401), rate-limiting (429), and the 500 fallback.
+- First-login workspace provisioning lives in one place: `getOrProvisionWorkspace`
+  (`lib/auth/provisioning.ts`). Do not re-implement it inline in auth routes.
 
 ---
 
