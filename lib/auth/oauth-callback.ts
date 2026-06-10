@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { getOrProvisionWorkspace } from "@/lib/auth/provisioning";
 import { getRateLimitKey, checkRateLimit } from "@/lib/security/rate-limit";
+import { serverPublicEnv } from "@/lib/env/public-server";
 
 type AuthUser = {
   id: string;
@@ -45,22 +46,19 @@ export async function handleAuthCallback(
   // Build the redirect up front so Supabase session cookies are written onto it.
   const response = NextResponse.redirect(`${origin}/login?error=auth_failed`);
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options),
-          );
-        },
+  const { supabaseUrl, supabaseAnonKey } = serverPublicEnv();
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value, options }) =>
+          response.cookies.set(name, value, options),
+        );
       },
     },
-  );
+  });
 
   let data: { user: AuthUser | null } | null = null;
   let error: unknown = null;

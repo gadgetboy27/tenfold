@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { serverPublicEnv } from "@/lib/env/public-server";
 
 const CORS_ALLOWED_ORIGINS =
   process.env.NODE_ENV === "production"
@@ -64,8 +65,7 @@ export async function proxy(request: NextRequest) {
     "/auth/callback",
   ]);
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const { supabaseUrl, supabaseAnonKey: supabaseKey } = serverPublicEnv();
 
   // No auth work for public paths, or if Supabase env is unavailable at runtime.
   if (PUBLIC_PATHS.has(pathname) || !supabaseUrl || !supabaseKey) {

@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getOrProvisionWorkspace } from "@/lib/auth/provisioning";
+import { serverPublicEnv } from "@/lib/env/public-server";
 
 export async function POST(req: Request) {
   let userId: string | undefined;
@@ -13,10 +14,8 @@ export async function POST(req: Request) {
     : null;
 
   if (bearerToken) {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    );
+    const { supabaseUrl, supabaseAnonKey } = serverPublicEnv();
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
     const { data } = await supabase.auth.getUser(bearerToken);
     userId = data.user?.id;
   } else {
