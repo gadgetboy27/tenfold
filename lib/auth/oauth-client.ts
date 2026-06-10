@@ -1,6 +1,7 @@
 "use client";
 
 import { createBrowserClient } from "@supabase/ssr";
+import { getPublicEnv } from "@/lib/env/public-client";
 
 /**
  * OAuth providers offered on the login/signup pages.
@@ -16,13 +17,14 @@ export type OAuthProvider = "google" | "facebook" | "linkedin_oidc";
 export async function signInWithOAuthProvider(
   provider: OAuthProvider,
 ): Promise<{ error?: string }> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const env = getPublicEnv();
+  const url = env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) return { error: "Auth is not configured" };
 
   const supabase = createBrowserClient(url, key);
   const appOrigin =
-    process.env.NEXT_PUBLIC_APP_URL ||
+    env.NEXT_PUBLIC_APP_URL ||
     (typeof window !== "undefined" ? window.location.origin : "");
 
   const { error } = await supabase.auth.signInWithOAuth({

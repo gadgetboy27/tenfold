@@ -1,8 +1,9 @@
-import { createBrowserClient } from '@supabase/ssr';
+import { createBrowserClient } from "@supabase/ssr";
+import { getPublicEnv } from "@/lib/env/public-client";
 
 function getSupabaseClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  const { NEXT_PUBLIC_SUPABASE_URL: url, NEXT_PUBLIC_SUPABASE_ANON_KEY: key } =
+    getPublicEnv();
   if (!url || !key) return null;
   return createBrowserClient(url, key);
 }
@@ -12,7 +13,10 @@ interface ApiOptions extends RequestInit {
   token?: string;
 }
 
-export async function api(path: string, options: ApiOptions = {}): Promise<Response> {
+export async function api(
+  path: string,
+  options: ApiOptions = {},
+): Promise<Response> {
   const { workspaceSlug, token: explicitToken, ...fetchOptions } = options;
 
   let token = explicitToken;
@@ -25,12 +29,12 @@ export async function api(path: string, options: ApiOptions = {}): Promise<Respo
   }
 
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
     ...(fetchOptions.headers as Record<string, string>),
   };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  if (workspaceSlug) headers['x-workspace-slug'] = workspaceSlug;
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  if (workspaceSlug) headers["x-workspace-slug"] = workspaceSlug;
 
-  const base = process.env.NEXT_PUBLIC_API_URL ?? '';
+  const base = process.env.NEXT_PUBLIC_API_URL ?? "";
   return fetch(`${base}${path}`, { ...fetchOptions, headers });
 }
