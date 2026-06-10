@@ -2,6 +2,14 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { serverPublicEnv } from "@/lib/env/public-server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getOrProvisionWorkspace } from "@/lib/auth/provisioning";
+
+// When true, new signups are confirmed immediately and signed in — no email
+// confirmation step. Set to false (or unset) to require email verification via
+// the /auth/callback flow. Controlled by AUTH_AUTOCONFIRM_SIGNUP env var,
+// defaulting to ON so signup → instant login works out of the box.
+const AUTO_CONFIRM = process.env.AUTH_AUTOCONFIRM_SIGNUP !== "false";
 
 export async function POST(req: Request) {
   try {
@@ -41,10 +49,49 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
+    // If a session already exists, email confirmation is off in Supabase and the
+    // user is signed in. Otherwise (Supabase requires confirmation) optionally
+    // auto-confirm so the user isn't stranded on "check your email".
+    let signedIn = Boolean(data.session);
+
+    if (!signedIn && data.user && AUTO_CONFIRM) {
+      const admin = createSupabaseAdminClient();
+      await admin.auth.admin.updateUserById(data.user.id, {
+        email_confirm: true,
+      });
+      // Establish a cookie session via the SSR client (writes auth cookies).
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      signedIn = !signInError;
+    }
+
+    // If we have a signed-in user, provision their workspace and hand back the
+    // slug so the client can go straight to the dashboard.
+    let slug: string | null = null;
+    if (signedIn && data.user) {
+      try {
+        const ws = await getOrProvisionWorkspace({
+          id: data.user.id,
+          email: data.user.email,
+          fullName:
+            (data.user.user_metadata?.full_name as string | undefined) ?? null,
+        });
+        slug = ws.slug;
+      } catch (wsErr) {
+        console.error("signup: workspace provisioning failed", wsErr);
+      }
+    }
+
     return NextResponse.json(
       {
-        message: "Sign up successful. Check your email to confirm.",
+        message: signedIn
+          ? "Sign up successful."
+          : "Sign up successful. Check your email to confirm.",
         user: data.user,
+        signedIn,
+        slug,
       },
       { status: 201 },
     );

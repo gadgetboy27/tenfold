@@ -88,10 +88,17 @@ function SignUpContent() {
       setPassword("");
       setConfirmPassword("");
 
-      // Redirect to login after 2 seconds
-      setTimeout(() => {
-        router.push("/login?message=Check your email to confirm your account");
-      }, 2000);
+      if (data.signedIn) {
+        // Signed in immediately — go straight to the workspace.
+        router.push(await resolveWorkspacePath(data.slug));
+      } else {
+        // Email confirmation required — send them to login with a notice.
+        setTimeout(() => {
+          router.push(
+            "/login?message=Check your email to confirm your account",
+          );
+        }, 2000);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
       setLoading(false);
