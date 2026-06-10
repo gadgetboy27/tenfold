@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { createBrowserClient } from "@supabase/ssr";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   signInWithOAuthProvider,
   type OAuthProvider,
@@ -25,10 +25,14 @@ function LoginContent() {
   const [checkingAuth, setCheckingAuth] = useState(true);
 
   useEffect(() => {
-    const supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    );
+    const supabase = createSupabaseBrowserClient();
+    if (!supabase) {
+      setError(
+        "Authentication is temporarily unavailable. Please try again later.",
+      );
+      setCheckingAuth(false);
+      return;
+    }
 
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (user) {

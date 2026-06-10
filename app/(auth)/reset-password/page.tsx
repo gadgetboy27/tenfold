@@ -1,67 +1,74 @@
-'use client';
+"use client";
 
-import { useState, useEffect, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card } from '@/components/ui/card';
-import { createBrowserClient } from '@supabase/ssr';
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 function ResetPasswordContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [userEmail, setUserEmail] = useState('');
+  const [userEmail, setUserEmail] = useState("");
 
   useEffect(() => {
     // Get current user from Supabase session
-    const supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    );
+    const supabase = createSupabaseBrowserClient();
+    if (!supabase) {
+      setError(
+        "Authentication is temporarily unavailable. Please try again later.",
+      );
+      return;
+    }
 
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user?.email) {
         setUserEmail(user.email);
       } else {
-        setError('Invalid or expired reset link. Please request a new one.');
+        setError("Invalid or expired reset link. Please request a new one.");
       }
     });
   }, []);
 
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setError("");
     setLoading(true);
 
     if (!password || !confirmPassword) {
-      setError('Please fill in all fields');
+      setError("Please fill in all fields");
       setLoading(false);
       return;
     }
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError("Passwords do not match");
       setLoading(false);
       return;
     }
 
     if (password.length < 8) {
-      setError('Password must be at least 8 characters');
+      setError("Password must be at least 8 characters");
       setLoading(false);
       return;
     }
 
     try {
-      const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      );
+      const supabase = createSupabaseBrowserClient();
+      if (!supabase) {
+        setError(
+          "Authentication is temporarily unavailable. Please try again later.",
+        );
+        setLoading(false);
+        return;
+      }
 
       const { error } = await supabase.auth.updateUser({
         password,
@@ -74,15 +81,17 @@ function ResetPasswordContent() {
       }
 
       setSuccess(true);
-      setPassword('');
-      setConfirmPassword('');
+      setPassword("");
+      setConfirmPassword("");
 
       // Redirect to login after 2 seconds
       setTimeout(() => {
-        router.push('/login?message=Password reset successful. Please sign in.');
+        router.push(
+          "/login?message=Password reset successful. Please sign in.",
+        );
       }, 2000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setError(err instanceof Error ? err.message : "An error occurred");
       setLoading(false);
     }
   };
@@ -95,7 +104,10 @@ function ResetPasswordContent() {
             <p className="text-red-600 mb-4">
               Invalid or expired reset link. Please request a new one.
             </p>
-            <Link href="/forgot-password" className="text-blue-600 hover:underline">
+            <Link
+              href="/forgot-password"
+              className="text-blue-600 hover:underline"
+            >
               Request new reset link
             </Link>
           </div>
@@ -108,7 +120,9 @@ function ResetPasswordContent() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 px-4">
       <Card className="w-full max-w-md p-8 bg-white shadow-2xl">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Set New Password</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            Set New Password
+          </h1>
           <p className="text-gray-600 text-sm">for {userEmail}</p>
         </div>
 
@@ -140,7 +154,9 @@ function ResetPasswordContent() {
                 disabled={loading}
                 className="w-full"
               />
-              <p className="text-xs text-gray-500 mt-1">At least 8 characters</p>
+              <p className="text-xs text-gray-500 mt-1">
+                At least 8 characters
+              </p>
             </div>
 
             <div>
@@ -162,15 +178,18 @@ function ResetPasswordContent() {
               disabled={loading}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white"
             >
-              {loading ? 'Resetting...' : 'Reset Password'}
+              {loading ? "Resetting..." : "Reset Password"}
             </Button>
           </form>
         )}
 
         <div className="mt-6 text-center">
           <p className="text-gray-600 text-sm">
-            Remember your password?{' '}
-            <Link href="/login" className="text-blue-600 hover:underline font-medium">
+            Remember your password?{" "}
+            <Link
+              href="/login"
+              className="text-blue-600 hover:underline font-medium"
+            >
               Sign In
             </Link>
           </p>

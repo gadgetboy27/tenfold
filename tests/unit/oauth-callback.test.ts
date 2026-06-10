@@ -19,7 +19,7 @@ vi.mock("@/lib/auth/provisioning", () => ({
 }));
 
 // Rate limiter: allow by default; one test flips it off.
-const checkRateLimit = vi.fn(() => true);
+const checkRateLimit = vi.fn((..._args: unknown[]) => true);
 vi.mock("@/lib/security/rate-limit", () => ({
   getRateLimitKey: () => "test-ip",
   checkRateLimit: (...args: unknown[]) => checkRateLimit(...args),

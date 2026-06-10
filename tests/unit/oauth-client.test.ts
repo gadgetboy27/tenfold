@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const signInWithOAuth = vi.fn(async () => ({ error: null }));
+const signInWithOAuth = vi.fn(
+  async (_opts: { provider: string; options: { redirectTo: string } }) => ({
+    error: null as { message: string } | null,
+  }),
+);
 vi.mock("@supabase/ssr", () => ({
   createBrowserClient: vi.fn(() => ({ auth: { signInWithOAuth } })),
 }));
