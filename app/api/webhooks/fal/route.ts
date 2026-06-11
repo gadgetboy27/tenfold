@@ -1,10 +1,10 @@
-import { NextResponse } from 'next/server';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { falWebhookPayloadSchema, isSuccessStatus } from '@/lib/fal/webhooks';
-import { refundCredits } from '@/lib/credits/refund';
-import { recordJobCost } from '@/lib/costs/tracker';
-import { analyzeJobFailure } from '@/lib/fal/error-analyzer';
-import { v4 as uuidv4 } from 'uuid';
+import { NextResponse } from "next/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { falWebhookPayloadSchema, isSuccessStatus } from "@/lib/fal/webhooks";
+import { refundCredits } from "@/lib/credits/refund";
+import { recordJobCost } from "@/lib/costs/tracker";
+import { analyzeJobFailure } from "@/lib/fal/error-analyzer";
+import { v4 as uuidv4 } from "uuid";
 
 interface CreativeJob {
   id: string;
@@ -22,19 +22,21 @@ export async function POST(req: Request) {
   const admin = createSupabaseAdminClient();
 
   // Extract request_id from raw payload before schema validation
-  const requestId = (rawPayload as Record<string, unknown>)?.request_id as string | undefined;
+  const requestId = (rawPayload as Record<string, unknown>)?.request_id as
+    | string
+    | undefined;
   if (!requestId) return NextResponse.json({ ok: true }); // not a fal.ai payload
 
   // 1. Log FIRST — always, even if schema validation fails below.
   //    Duplicate webhooks hit the unique constraint and return early.
-  const { error: logErr } = await admin.from('webhook_logs').insert({
-    source: 'fal',
+  const { error: logErr } = await admin.from("webhook_logs").insert({
+    source: "fal",
     event_id: requestId,
     payload: rawPayload as Record<string, unknown>,
   });
 
   if (logErr) {
-    if (logErr.code === '23505') return NextResponse.json({ ok: true }); // duplicate
+    if (logErr.code === "23505") return NextResponse.json({ ok: true }); // duplicate
     return NextResponse.json({ error: logErr.message }, { status: 500 });
   }
 
@@ -43,65 +45,131 @@ export async function POST(req: Request) {
   const parsed = falWebhookPayloadSchema.safeParse(rawPayload);
   if (!parsed.success) {
     await admin
-      .from('webhook_logs')
+      .from("webhook_logs")
       .update({ error: JSON.stringify(parsed.error.issues), processed: true })
-      .eq('event_id', requestId);
+      .eq("event_id", requestId);
     return NextResponse.json({ ok: true });
   }
   const payload = parsed.data;
 
   // fal.ai may nest results under 'payload' or 'output' depending on model/version.
   // Prefer whichever wrapper actually contains media — empty {} is truthy and would mask real output.
-  const hasMedia = (d: typeof payload.payload) => !!(d?.images?.length || d?.video || d?.audio_file);
-  const resultData = hasMedia(payload.payload) ? payload.payload : payload.output ?? payload.payload;
+  const hasMedia = (d: typeof payload.payload) =>
+    !!(d?.images?.length || d?.video || d?.audio_file);
+  const resultData = hasMedia(payload.payload)
+    ? payload.payload
+    : (payload.output ?? payload.payload);
 
   // 3. Locate the job — prefer lookup by ?j=jobId (more secure) then fall back to fal_request_id
-  const jobId = new URL(req.url).searchParams.get('j');
+  const jobId = new URL(req.url).searchParams.get("j");
   const jobQuery = admin
-    .from('creative_jobs')
-    .select('id, campaign_id, workspace_id, type, status, credits_charged, input_params, fal_request_id');
+    .from("creative_jobs")
+    .select(
+      "id, campaign_id, workspace_id, type, status, credits_charged, input_params, fal_request_id",
+    );
 
   const { data: jobRow } = jobId
-    ? await jobQuery.eq('id', jobId).single()
-    : await jobQuery.eq('fal_request_id', requestId).single();
+    ? await jobQuery.eq("id", jobId).single()
+    : await jobQuery.eq("fal_request_id", requestId).single();
 
   const job = jobRow as CreativeJob | null;
 
-  // If we looked up by jobId, verify the stored fal_request_id matches the payload — prevents spoofing
-  if (jobId && job && job.fal_request_id !== requestId) {
-    await admin.from('webhook_logs').update({ error: 'request_id mismatch', processed: true }).eq('event_id', requestId);
+  // Multi-image generation submits one fal request per creative direction, all
+  // tied to one job. Valid request ids = the stored fal_request_id plus every
+  // per-direction requestId. Verify against that set to prevent spoofing.
+  const directions =
+    (job?.input_params?.directions as
+      | Array<{
+          index: number;
+          label: string;
+          prompt?: string;
+          requestId?: string;
+        }>
+      | undefined) ?? [];
+  const validRequestIds = new Set<string>(
+    [job?.fal_request_id, ...directions.map((d) => d.requestId)].filter(
+      Boolean,
+    ) as string[],
+  );
+  if (
+    jobId &&
+    job &&
+    validRequestIds.size > 0 &&
+    !validRequestIds.has(requestId)
+  ) {
+    await admin
+      .from("webhook_logs")
+      .update({ error: "request_id mismatch", processed: true })
+      .eq("event_id", requestId);
     return NextResponse.json({ ok: true });
   }
 
+  // Which creative direction is this webhook for? (?d=index, else match by requestId)
+  const dParam = new URL(req.url).searchParams.get("d");
+  const dIndex = dParam !== null && dParam !== "" ? Number(dParam) : null;
+  const direction =
+    directions.find((d) => d.index === dIndex) ??
+    directions.find((d) => d.requestId === requestId) ??
+    null;
+
   if (!job) {
-    await admin.from('webhook_logs').update({ error: 'Unknown job', processed: true }).eq('event_id', requestId);
+    await admin
+      .from("webhook_logs")
+      .update({ error: "Unknown job", processed: true })
+      .eq("event_id", requestId);
     return NextResponse.json({ ok: true });
   }
 
   // If the job was cancelled server-side, acknowledge and ignore
-  if (job.status === 'cancelled') {
-    await admin.from('webhook_logs').update({ processed: true }).eq('event_id', requestId);
+  if (job.status === "cancelled") {
+    await admin
+      .from("webhook_logs")
+      .update({ processed: true })
+      .eq("event_id", requestId);
     return NextResponse.json({ ok: true });
   }
 
   if (isSuccessStatus(payload.status) && resultData) {
-    await handleSuccess(job, resultData as Parameters<typeof handleSuccess>[1]);
+    await handleSuccess(
+      job,
+      resultData as Parameters<typeof handleSuccess>[1],
+      direction,
+    );
   } else {
-    const errMsg = typeof payload.error === 'string' ? payload.error : 'fal.ai job failed';
+    const errMsg =
+      typeof payload.error === "string" ? payload.error : "fal.ai job failed";
     await handleFailure(job, errMsg, resultData);
   }
 
   // 4. Mark processed
-  await admin.from('webhook_logs').update({ processed: true }).eq('event_id', requestId);
+  await admin
+    .from("webhook_logs")
+    .update({ processed: true })
+    .eq("event_id", requestId);
 
   return NextResponse.json({ ok: true });
 }
 
-type ResultData = { images?: Array<{ url: string; width?: number; height?: number; content_type?: string }>; video?: { url: string; content_type?: string }; audio_file?: { url: string; content_type?: string } };
+type ResultData = {
+  images?: Array<{
+    url: string;
+    width?: number;
+    height?: number;
+    content_type?: string;
+  }>;
+  video?: { url: string; content_type?: string };
+  audio_file?: { url: string; content_type?: string };
+};
 
 async function handleSuccess(
   job: CreativeJob,
   payload: ResultData,
+  direction: {
+    index: number;
+    label: string;
+    prompt?: string;
+    requestId?: string;
+  } | null = null,
 ) {
   const admin = createSupabaseAdminClient();
   const assetInserts: Record<string, unknown>[] = [];
@@ -114,21 +182,33 @@ async function handleSuccess(
       const imgRes = await fetch(img.url);
       const buffer = await imgRes.arrayBuffer();
       await admin.storage
-        .from('assets')
-        .upload(storagePath, buffer, { contentType: img.content_type ?? 'image/jpeg' });
+        .from("assets")
+        .upload(storagePath, buffer, {
+          contentType: img.content_type ?? "image/jpeg",
+        });
 
-      const { data: urlData } = admin.storage.from('assets').getPublicUrl(storagePath);
+      const { data: urlData } = admin.storage
+        .from("assets")
+        .getPublicUrl(storagePath);
 
       assetInserts.push({
         id: assetId,
         campaign_id: job.campaign_id,
         workspace_id: job.workspace_id,
         job_id: job.id,
-        type: 'image',
+        type: "image",
         url: urlData.publicUrl,
         storage_path: storagePath,
         width_px: img.width,
         height_px: img.height,
+        metadata: direction
+          ? {
+              direction: direction.label,
+              direction_index: direction.index,
+              prompt: direction.prompt,
+              request_id: direction.requestId,
+            }
+          : {},
       });
     }
   }
@@ -139,13 +219,19 @@ async function handleSuccess(
     let publicUrl = payload.video.url;
     let storedPath: string | null = null;
     try {
-      const videoRes = await fetch(payload.video.url, { signal: AbortSignal.timeout(90_000) });
+      const videoRes = await fetch(payload.video.url, {
+        signal: AbortSignal.timeout(90_000),
+      });
       const buffer = await videoRes.arrayBuffer();
       const { error: upErr } = await admin.storage
-        .from('assets')
-        .upload(storagePath, buffer, { contentType: payload.video.content_type ?? 'video/mp4' });
+        .from("assets")
+        .upload(storagePath, buffer, {
+          contentType: payload.video.content_type ?? "video/mp4",
+        });
       if (!upErr) {
-        const { data: urlData } = admin.storage.from('assets').getPublicUrl(storagePath);
+        const { data: urlData } = admin.storage
+          .from("assets")
+          .getPublicUrl(storagePath);
         publicUrl = urlData.publicUrl;
         storedPath = storagePath;
       }
@@ -157,7 +243,7 @@ async function handleSuccess(
       campaign_id: job.campaign_id,
       workspace_id: job.workspace_id,
       job_id: job.id,
-      type: 'video',
+      type: "video",
       url: publicUrl,
       storage_path: storedPath ?? `fal/${assetId}.mp4`,
     });
@@ -169,13 +255,19 @@ async function handleSuccess(
     let publicUrl = payload.audio_file.url;
     let storedPath: string | null = null;
     try {
-      const audioRes = await fetch(payload.audio_file.url, { signal: AbortSignal.timeout(60_000) });
+      const audioRes = await fetch(payload.audio_file.url, {
+        signal: AbortSignal.timeout(60_000),
+      });
       const buffer = await audioRes.arrayBuffer();
       const { error: upErr } = await admin.storage
-        .from('assets')
-        .upload(storagePath, buffer, { contentType: payload.audio_file.content_type ?? 'audio/mpeg' });
+        .from("assets")
+        .upload(storagePath, buffer, {
+          contentType: payload.audio_file.content_type ?? "audio/mpeg",
+        });
       if (!upErr) {
-        const { data: urlData } = admin.storage.from('assets').getPublicUrl(storagePath);
+        const { data: urlData } = admin.storage
+          .from("assets")
+          .getPublicUrl(storagePath);
         publicUrl = urlData.publicUrl;
         storedPath = storagePath;
       }
@@ -187,29 +279,105 @@ async function handleSuccess(
       campaign_id: job.campaign_id,
       workspace_id: job.workspace_id,
       job_id: job.id,
-      type: 'audio',
+      type: "audio",
       url: publicUrl,
       storage_path: storedPath ?? `fal/${assetId}.mp3`,
     });
   }
 
   if (assetInserts.length > 0) {
-    await admin.from('assets').insert(assetInserts);
+    await admin.from("assets").insert(assetInserts);
+  }
+
+  // Multi-image generation (4 directions, one fal request each) completes only
+  // once all expected images have landed — not on the first webhook.
+  const expected = Number(job.input_params?.expected_images ?? 0);
+  if (expected > 1) {
+    await finalizeMultiImage(job, expected);
+    return;
   }
 
   await admin
-    .from('creative_jobs')
-    .update({ status: 'completed', completed_at: new Date().toISOString() })
-    .eq('id', job.id);
+    .from("creative_jobs")
+    .update({ status: "completed", completed_at: new Date().toISOString() })
+    .eq("id", job.id);
 
   // Propagate completion back to the campaign row so the lobby shows correct status
   await admin
-    .from('campaigns')
-    .update({ status: 'ready' })
-    .eq('id', job.campaign_id)
-    .in('status', ['generating', 'expanding']); // only advance, never revert
+    .from("campaigns")
+    .update({ status: "ready" })
+    .eq("id", job.campaign_id)
+    .in("status", ["generating", "expanding"]); // only advance, never revert
 
   await recordJobCost(job.id, job.type);
+}
+
+// Completion gate for multi-request image generation. Each direction's webhook
+// (success or failure) calls this; it inspects how many images have arrived and
+// how many sub-requests have reported, then finalizes once all are accounted for.
+async function finalizeMultiImage(job: CreativeJob, expected: number) {
+  const admin = createSupabaseAdminClient();
+
+  const { count: assetCount } = await admin
+    .from("assets")
+    .select("id", { count: "exact", head: true })
+    .eq("job_id", job.id)
+    .eq("type", "image");
+
+  const directions =
+    (job.input_params?.directions as
+      | Array<{ requestId?: string }>
+      | undefined) ?? [];
+  const reqIds = directions.map((d) => d.requestId).filter(Boolean) as string[];
+  const { count: arrivedCount } = reqIds.length
+    ? await admin
+        .from("webhook_logs")
+        .select("event_id", { count: "exact", head: true })
+        .in("event_id", reqIds)
+    : { count: 0 };
+
+  const images = assetCount ?? 0;
+  const arrived = arrivedCount ?? 0;
+
+  const complete = async () => {
+    await admin
+      .from("creative_jobs")
+      .update({ status: "completed", completed_at: new Date().toISOString() })
+      .eq("id", job.id)
+      .eq("status", "processing");
+    await admin
+      .from("campaigns")
+      .update({ status: "ready" })
+      .eq("id", job.campaign_id)
+      .in("status", ["generating", "expanding"]);
+    await recordJobCost(job.id, job.type);
+  };
+
+  if (images >= expected) {
+    // All directions delivered.
+    await complete();
+  } else if (arrived >= expected) {
+    // Every sub-request has reported; some failed. Partial success is still a
+    // usable anchor set — only fail (and refund) if nothing rendered.
+    if (images >= 1) {
+      await complete();
+    } else {
+      await admin
+        .from("creative_jobs")
+        .update({
+          status: "failed",
+          error_message: "All image variations failed on fal.ai",
+        })
+        .eq("id", job.id)
+        .eq("status", "processing");
+      await admin
+        .from("campaigns")
+        .update({ status: "failed" })
+        .eq("id", job.campaign_id);
+      await refundCredits(job.id);
+    }
+  }
+  // else: still waiting for more direction webhooks — leave processing.
 }
 
 async function handleFailure(
@@ -219,7 +387,16 @@ async function handleFailure(
 ) {
   const admin = createSupabaseAdminClient();
 
-  const prompt = (job.input_params?.prompt as string) ?? '';
+  // Multi-image generation: one direction failing must not fail the whole
+  // campaign. Defer to the completion gate, which fails+refunds only if every
+  // direction failed and zero images rendered.
+  const expected = Number(job.input_params?.expected_images ?? 0);
+  if (expected > 1) {
+    await finalizeMultiImage(job, expected);
+    return;
+  }
+
+  const prompt = (job.input_params?.prompt as string) ?? "";
 
   // Fire-and-forget Claude analysis — refund happens regardless of analysis success
   const analysisPromise = analyzeJobFailure({
@@ -231,33 +408,33 @@ async function handleFailure(
 
   // Refund credits immediately — don't wait on Claude
   await admin
-    .from('creative_jobs')
+    .from("creative_jobs")
     .update({
-      status: 'failed',
+      status: "failed",
       error_message: errorMessage,
       fal_raw_error: rawErrorPayload as Record<string, unknown>,
     })
-    .eq('id', job.id);
+    .eq("id", job.id);
 
   await refundCredits(job.id);
 
   // If the image generation itself failed, the campaign has no assets — mark it failed
-  if (job.type === 'image_generation') {
+  if (job.type === "image_generation") {
     await admin
-      .from('campaigns')
-      .update({ status: 'failed' })
-      .eq('id', job.campaign_id);
+      .from("campaigns")
+      .update({ status: "failed" })
+      .eq("id", job.campaign_id);
   }
 
   // Store analysis once Claude responds (doesn't block the webhook response)
   analysisPromise.then(async (analysis) => {
     if (!analysis) return;
     await admin
-      .from('creative_jobs')
+      .from("creative_jobs")
       .update({
         error_analysis: analysis.explanation,
         suggested_prompt: analysis.suggestedPrompt,
       })
-      .eq('id', job.id);
+      .eq("id", job.id);
   });
 }

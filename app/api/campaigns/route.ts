@@ -191,9 +191,15 @@ export async function POST(req: Request) {
     const imageSize =
       ASPECT_TO_IMAGE_SIZE[body.aspectRatio ?? "1:1"] ?? "square_hd";
     const styleSuffix = STYLE_SUFFIXES[body.style ?? ""] ?? "";
-    const fullPrompt = styleSuffix
-      ? `${effectivePrompt}, ${styleSuffix}`
-      : effectivePrompt;
+
+    // Four DISTINCT creative directions (AI-generated, hardcoded-lens fallback)
+    // so the anchor set genuinely contrasts instead of being near-duplicates.
+    // Still 4 images total, so the credit cost is unchanged.
+    const directions = validation.directions.map((d, i) => ({
+      index: i,
+      label: d.label,
+      prompt: styleSuffix ? `${d.prompt}, ${styleSuffix}` : d.prompt,
+    }));
 
     // 2. Create campaign row
     const { error: campErr } = await admin.from("campaigns").insert({
@@ -211,41 +217,64 @@ export async function POST(req: Request) {
     });
     if (campErr) throw new Error(campErr.message);
 
-    // 3. Create job row
+    // 3. Create job row (one job, four fal requests)
     const { error: jobErr } = await admin.from("creative_jobs").insert({
       id: jobId,
       campaign_id: campaignId,
       workspace_id: session.workspaceId,
       type: "image_generation",
       status: "queued",
-      input_params: { prompt: fullPrompt, imageSize, style: body.style },
+      input_params: {
+        prompt: effectivePrompt,
+        imageSize,
+        style: body.style,
+        directions,
+      },
       credits_charged: cost,
     });
     if (jobErr) throw new Error(jobErr.message);
 
-    // 4. Enqueue to fal.ai — refund credits if submission fails
-    // Unique per-job URL breaks any circuit-breaker on repeated failures
-    const webhookUrl = `${process.env.APP_URL}/api/webhooks/fal?j=${jobId}`;
-    let requestId: string;
-    try {
-      ({ requestId } = await enqueueJob(
-        "image_generation",
-        {
-          prompt: fullPrompt,
-          image_size: imageSize,
-          num_images: 4,
-        },
-        webhookUrl,
-      ));
-    } catch (falErr) {
-      await refundCredits(jobId);
-      throw falErr;
+    // 4. Enqueue one fal request per direction (num_images:1 each). The webhook
+    //    is told which direction via ?d=<index>. Refund only if ALL fail.
+    const submitted: Array<{
+      index: number;
+      label: string;
+      prompt: string;
+      requestId: string;
+    }> = [];
+    for (const d of directions) {
+      const webhookUrl = `${process.env.APP_URL}/api/webhooks/fal?j=${jobId}&d=${d.index}`;
+      try {
+        const { requestId } = await enqueueJob(
+          "image_generation",
+          { prompt: d.prompt, image_size: imageSize, num_images: 1 },
+          webhookUrl,
+        );
+        submitted.push({ ...d, requestId });
+      } catch {
+        // Skip this direction; the others can still succeed.
+      }
     }
 
-    // 5. Update job with fal request ID
+    if (submitted.length === 0) {
+      await refundCredits(jobId);
+      throw new Error("Image generation could not be submitted to fal.ai");
+    }
+
+    // 5. Persist submitted requests + expected count, mark processing.
     await admin
       .from("creative_jobs")
-      .update({ fal_request_id: requestId, status: "processing" })
+      .update({
+        fal_request_id: submitted[0].requestId,
+        status: "processing",
+        input_params: {
+          prompt: effectivePrompt,
+          imageSize,
+          style: body.style,
+          expected_images: submitted.length,
+          directions: submitted,
+        },
+      })
       .eq("id", jobId);
 
     return NextResponse.json(
@@ -255,6 +284,7 @@ export async function POST(req: Request) {
         status: "generating",
         promptRefined,
         effectivePrompt,
+        directions: submitted.map((s) => s.label),
       },
       { status: 201 },
     );

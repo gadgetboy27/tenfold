@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { create } from 'zustand';
-import type { CampaignBrief } from '@/lib/claude/campaign-brief';
-import { generateCampaignName } from '@/lib/names/generator';
+import { create } from "zustand";
+import type { CampaignBrief } from "@/lib/claude/campaign-brief";
+import { generateCampaignName } from "@/lib/names/generator";
 
 export interface Asset {
   id: string;
@@ -11,11 +11,13 @@ export interface Asset {
   aspectRatio: string;
   style: string;
   createdAt: string;
+  /** Creative-direction label for the anchor set, e.g. "Wide", "Close-up". */
+  direction?: string;
 }
 
 export interface Expansion {
   jobId?: string;
-  status: 'idle' | 'pending' | 'ready' | 'failed';
+  status: "idle" | "pending" | "ready" | "failed";
   content?: string;
   url?: string;
   urls?: string[];
@@ -64,7 +66,10 @@ interface AppStore {
   setCampaignName: (name: string) => void;
   setAnchorId: (id: string | null) => void;
   setGeneratedAssets: (assets: Asset[]) => void;
-  updateExpansion: (type: keyof Expansions, expansion: Partial<Expansion>) => void;
+  updateExpansion: (
+    type: keyof Expansions,
+    expansion: Partial<Expansion>,
+  ) => void;
   setIsGenerating: (v: boolean) => void;
   setGenerationStage: (stage: string, elapsed: number) => void;
   setAspectRatio: (r: string) => void;
@@ -84,16 +89,16 @@ export const useAppStore = create<AppStore>()((set) => ({
   currentStep: 1,
   completedSteps: new Set<number>(),
   creditBalance: 0,
-  workspaceSlug: '',
+  workspaceSlug: "",
   campaignName: generateCampaignName(),
   selectedAnchorId: null,
   generatedAssets: [],
   expansions: {},
   isGenerating: false,
-  generationStage: '',
+  generationStage: "",
   generationElapsed: 0,
-  aspectRatio: '1:1',
-  style: 'Photorealistic',
+  aspectRatio: "1:1",
+  style: "Photorealistic",
   campaignBrief: null,
   pendingBriefPrompt: null,
   leftDrawerOpen: false,
@@ -114,8 +119,10 @@ export const useAppStore = create<AppStore>()((set) => ({
         [type]: { ...state.expansions[type], ...expansion } as Expansion,
       },
     })),
-  setIsGenerating: (v) => set({ isGenerating: v, generationStage: '', generationElapsed: 0 }),
-  setGenerationStage: (stage, elapsed) => set({ generationStage: stage, generationElapsed: elapsed }),
+  setIsGenerating: (v) =>
+    set({ isGenerating: v, generationStage: "", generationElapsed: 0 }),
+  setGenerationStage: (stage, elapsed) =>
+    set({ generationStage: stage, generationElapsed: elapsed }),
   setAspectRatio: (r) => set({ aspectRatio: r }),
   setStyle: (s) => set({ style: s }),
   completeStep: (step) =>
@@ -132,7 +139,13 @@ export const useAppStore = create<AppStore>()((set) => ({
     set({
       currentCampaignId: campaign.id,
       currentCompositionId: campaign.compositionId ?? null,
-      currentStep: Math.min(6, Math.max(1, campaign.current_step)) as 1 | 2 | 3 | 4 | 5 | 6,
+      currentStep: Math.min(6, Math.max(1, campaign.current_step)) as
+        | 1
+        | 2
+        | 3
+        | 4
+        | 5
+        | 6,
       completedSteps: new Set(
         Array.from({ length: campaign.current_step - 1 }, (_, i) => i + 1),
       ),
@@ -141,7 +154,7 @@ export const useAppStore = create<AppStore>()((set) => ({
       generatedAssets: campaign.imageAssets,
       expansions: campaign.expansion_data ?? {},
       isGenerating: false,
-      generationStage: '',
+      generationStage: "",
       generationElapsed: 0,
     }),
   resetCampaign: () =>
@@ -155,7 +168,7 @@ export const useAppStore = create<AppStore>()((set) => ({
       generatedAssets: [],
       expansions: {},
       isGenerating: false,
-      generationStage: '',
+      generationStage: "",
       generationElapsed: 0,
       campaignBrief: null,
       pendingBriefPrompt: null,
