@@ -1,26 +1,29 @@
-import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth/session';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { createCampaignSchema } from '@/lib/validation/schemas';
-import { debitCredits } from '@/lib/credits/debit';
-import { refundCredits } from '@/lib/credits/refund';
-import { CREDIT_COSTS } from '@/lib/credits/costs';
-import { enqueueJob } from '@/lib/fal/queue';
-import { validatePrompt } from '@/lib/fal/prompt-validator';
-import { v4 as uuidv4 } from 'uuid';
+import { NextResponse } from "next/server";
+import { getSession } from "@/lib/auth/session";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { createCampaignSchema } from "@/lib/validation/schemas";
+import { debitCredits } from "@/lib/credits/debit";
+import { refundCredits } from "@/lib/credits/refund";
+import { CREDIT_COSTS } from "@/lib/credits/costs";
+import { enqueueJob } from "@/lib/fal/queue";
+import { validatePrompt } from "@/lib/fal/prompt-validator";
+import { v4 as uuidv4 } from "uuid";
 
 const ASPECT_TO_IMAGE_SIZE: Record<string, string> = {
-  '1:1':  'square_hd',
-  '4:5':  'portrait_4_3',
-  '16:9': 'landscape_16_9',
-  '9:16': 'portrait_16_9',
+  "1:1": "square_hd",
+  "4:5": "portrait_4_3",
+  "16:9": "landscape_16_9",
+  "9:16": "portrait_16_9",
 };
 
 const STYLE_SUFFIXES: Record<string, string> = {
-  Photorealistic: 'RAW photo, photorealistic, ultra-detailed, 8K UHD, DSLR camera, sharp focus, professional studio lighting, shallow depth of field, colour graded, hyperrealistic skin texture',
-  Illustration:   'digital illustration, vector art style, clean bold lines, vibrant flat colours, concept art, professional graphic design, ArtStation quality, smooth shading',
-  Cinematic:      'cinematic movie still, anamorphic widescreen lens, dramatic chiaroscuro lighting, film grain, ARRI Alexa footage, shallow depth of field, Hollywood colour grade, atmospheric haze',
-  '3D':           '3D render, Octane render, volumetric lighting, ray tracing, subsurface scattering, photorealistic PBR materials, cinema4d, ultra-detailed, 8K, sharp edges, studio HDRI',
+  Photorealistic:
+    "RAW photo, photorealistic, ultra-detailed, 8K UHD, DSLR camera, sharp focus, professional studio lighting, shallow depth of field, colour graded, hyperrealistic skin texture",
+  Illustration:
+    "digital illustration, vector art style, clean bold lines, vibrant flat colours, concept art, professional graphic design, ArtStation quality, smooth shading",
+  Cinematic:
+    "cinematic movie still, anamorphic widescreen lens, dramatic chiaroscuro lighting, film grain, ARRI Alexa footage, shallow depth of field, Hollywood colour grade, atmospheric haze",
+  "3D": "3D render, Octane render, volumetric lighting, ray tracing, subsurface scattering, photorealistic PBR materials, cinema4d, ultra-detailed, 8K, sharp edges, studio HDRI",
 };
 
 export async function GET(req: Request) {
@@ -28,48 +31,53 @@ export async function GET(req: Request) {
     const session = await getSession(req);
     const admin = createSupabaseAdminClient();
     const { data: campaigns, error } = await admin
-      .from('campaigns')
-      .select('*')
-      .eq('workspace_id', session.workspaceId)
-      .order('created_at', { ascending: false })
+      .from("campaigns")
+      .select("*")
+      .eq("workspace_id", session.workspaceId)
+      .order("created_at", { ascending: false })
       .limit(50);
     if (error) throw new Error(error.message);
     if (!campaigns?.length) return NextResponse.json([]);
 
     // Fetch first image asset per campaign for thumbnails
-    const ids = campaigns.map(c => c.id as string);
+    const ids = campaigns.map((c) => c.id as string);
     const { data: thumbAssets } = await admin
-      .from('assets')
-      .select('id, url, campaign_id')
-      .in('campaign_id', ids)
-      .eq('type', 'image')
-      .order('created_at', { ascending: true });
+      .from("assets")
+      .select("id, url, campaign_id")
+      .in("campaign_id", ids)
+      .eq("type", "image")
+      .order("created_at", { ascending: true });
 
     const thumbMap: Record<string, string> = {};
     for (const a of thumbAssets ?? []) {
-      if (!thumbMap[a.campaign_id as string]) thumbMap[a.campaign_id as string] = a.url as string;
+      if (!thumbMap[a.campaign_id as string])
+        thumbMap[a.campaign_id as string] = a.url as string;
     }
     // Prefer anchor asset URL when available
-    const anchorIds = campaigns.map(c => c.anchor_asset_id).filter(Boolean) as string[];
+    const anchorIds = campaigns
+      .map((c) => c.anchor_asset_id)
+      .filter(Boolean) as string[];
     if (anchorIds.length) {
       const { data: anchorAssets } = await admin
-        .from('assets').select('id, url').in('id', anchorIds);
+        .from("assets")
+        .select("id, url")
+        .in("id", anchorIds);
       for (const c of campaigns) {
         if (c.anchor_asset_id) {
-          const a = anchorAssets?.find(x => x.id === c.anchor_asset_id);
+          const a = anchorAssets?.find((x) => x.id === c.anchor_asset_id);
           if (a) thumbMap[c.id as string] = a.url as string;
         }
       }
     }
 
     // Auto-recover campaigns still stuck in 'generating' (webhook may have been missed)
-    const stale = campaigns.filter(c => c.status === 'generating');
+    const stale = campaigns.filter((c) => c.status === "generating");
     if (stale.length > 0) {
-      const staleIds = stale.map(c => c.id as string);
+      const staleIds = stale.map((c) => c.id as string);
       const { data: jobRows } = await admin
-        .from('creative_jobs')
-        .select('campaign_id, status')
-        .in('campaign_id', staleIds);
+        .from("creative_jobs")
+        .select("campaign_id, status")
+        .in("campaign_id", staleIds);
 
       const jobsByCampaign = new Map<string, string[]>();
       for (const j of jobRows ?? []) {
@@ -83,30 +91,47 @@ export async function GET(req: Request) {
       for (const c of stale) {
         const statuses = jobsByCampaign.get(c.id as string) ?? [];
         if (statuses.length === 0) continue;
-        if (statuses.every(s => s === 'completed')) toReady.push(c.id as string);
-        else if (statuses.every(s => s === 'failed' || s === 'cancelled')) toFailed.push(c.id as string);
+        if (statuses.every((s) => s === "completed"))
+          toReady.push(c.id as string);
+        else if (statuses.every((s) => s === "failed" || s === "cancelled"))
+          toFailed.push(c.id as string);
       }
 
       if (toReady.length) {
-        await admin.from('campaigns').update({ status: 'ready' }).in('id', toReady);
-        for (const c of campaigns) { if (toReady.includes(c.id as string)) c.status = 'ready'; }
+        await admin
+          .from("campaigns")
+          .update({ status: "ready" })
+          .in("id", toReady);
+        for (const c of campaigns) {
+          if (toReady.includes(c.id as string)) c.status = "ready";
+        }
       }
       if (toFailed.length) {
-        await admin.from('campaigns').update({ status: 'failed' }).in('id', toFailed);
-        for (const c of campaigns) { if (toFailed.includes(c.id as string)) c.status = 'failed'; }
+        await admin
+          .from("campaigns")
+          .update({ status: "failed" })
+          .in("id", toFailed);
+        for (const c of campaigns) {
+          if (toFailed.includes(c.id as string)) c.status = "failed";
+        }
       }
     }
 
-    const enriched = campaigns.map(c => ({
+    const enriched = campaigns.map((c) => ({
       ...c,
       thumbnailUrl: thumbMap[c.id as string] ?? null,
       // Tell the client how old the 'generating' state is so it can show a stale indicator
-      generatingSince: c.status === 'generating' ? c.created_at : null,
+      generatingSince: c.status === "generating" ? c.created_at : null,
     }));
     return NextResponse.json(enriched);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unknown error';
-    const status = msg === 'Unauthorized' ? 401 : msg === 'Not a workspace member' ? 403 : 500;
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    const status =
+      msg === "Unauthorized"
+        ? 401
+        : msg === "Not a workspace member"
+          ? 403
+          : 500;
     return NextResponse.json({ error: msg }, { status });
   }
 }
@@ -117,13 +142,33 @@ export async function POST(req: Request) {
     const body = createCampaignSchema.parse(await req.json());
     const admin = createSupabaseAdminClient();
 
-    // 0. Validate prompt quality before touching credits
-    const validation = await validatePrompt(body.prompt, body.style ?? 'Photorealistic');
+    // 0. Validate prompt quality before touching credits. The validator assists
+    //    rather than blocks: a weak prompt is auto-upgraded to the AI-refined
+    //    version and generation proceeds. We only hard-reject when there is
+    //    nothing usable to generate from (e.g. prohibited/empty content).
+    const validation = await validatePrompt(
+      body.prompt,
+      body.style ?? "Photorealistic",
+    );
+    let effectivePrompt = body.prompt;
+    let promptRefined = false;
     if (!validation.isValid) {
-      return NextResponse.json(
-        { error: 'Prompt rejected', issues: validation.issues, refinedPrompt: validation.refinedPrompt },
-        { status: 422 },
-      );
+      if (
+        validation.refinedPrompt &&
+        validation.refinedPrompt.trim().length >= 5
+      ) {
+        effectivePrompt = validation.refinedPrompt.trim();
+        promptRefined = true;
+      } else {
+        return NextResponse.json(
+          {
+            error: "Prompt rejected",
+            issues: validation.issues,
+            refinedPrompt: validation.refinedPrompt,
+          },
+          { status: 422 },
+        );
+      }
     }
 
     const campaignId = uuidv4();
@@ -131,34 +176,48 @@ export async function POST(req: Request) {
     const cost = CREDIT_COSTS.image_generation;
 
     // 1. Debit credits before anything else
-    const debit = await debitCredits(session.workspaceId, jobId, 'image_generation');
+    const debit = await debitCredits(
+      session.workspaceId,
+      jobId,
+      "image_generation",
+    );
     if (!debit.success) {
-      return NextResponse.json({ error: 'Insufficient credits' }, { status: 402 });
+      return NextResponse.json(
+        { error: "Insufficient credits" },
+        { status: 402 },
+      );
     }
 
-    const imageSize = ASPECT_TO_IMAGE_SIZE[body.aspectRatio ?? '1:1'] ?? 'square_hd';
-    const styleSuffix = STYLE_SUFFIXES[body.style ?? ''] ?? '';
-    const fullPrompt = styleSuffix ? `${body.prompt}, ${styleSuffix}` : body.prompt;
+    const imageSize =
+      ASPECT_TO_IMAGE_SIZE[body.aspectRatio ?? "1:1"] ?? "square_hd";
+    const styleSuffix = STYLE_SUFFIXES[body.style ?? ""] ?? "";
+    const fullPrompt = styleSuffix
+      ? `${effectivePrompt}, ${styleSuffix}`
+      : effectivePrompt;
 
     // 2. Create campaign row
-    const { error: campErr } = await admin.from('campaigns').insert({
+    const { error: campErr } = await admin.from("campaigns").insert({
       id: campaignId,
       workspace_id: session.workspaceId,
       created_by: session.userId,
-      name: body.name ?? 'Untitled Campaign',
-      prompt: body.prompt,
-      parameters: { aspectRatio: body.aspectRatio, style: body.style },
-      status: 'generating',
+      name: body.name ?? "Untitled Campaign",
+      prompt: effectivePrompt,
+      parameters: {
+        aspectRatio: body.aspectRatio,
+        style: body.style,
+        originalPrompt: promptRefined ? body.prompt : undefined,
+      },
+      status: "generating",
     });
     if (campErr) throw new Error(campErr.message);
 
     // 3. Create job row
-    const { error: jobErr } = await admin.from('creative_jobs').insert({
+    const { error: jobErr } = await admin.from("creative_jobs").insert({
       id: jobId,
       campaign_id: campaignId,
       workspace_id: session.workspaceId,
-      type: 'image_generation',
-      status: 'queued',
+      type: "image_generation",
+      status: "queued",
       input_params: { prompt: fullPrompt, imageSize, style: body.style },
       credits_charged: cost,
     });
@@ -169,11 +228,15 @@ export async function POST(req: Request) {
     const webhookUrl = `${process.env.APP_URL}/api/webhooks/fal?j=${jobId}`;
     let requestId: string;
     try {
-      ({ requestId } = await enqueueJob('image_generation', {
-        prompt: fullPrompt,
-        image_size: imageSize,
-        num_images: 4,
-      }, webhookUrl));
+      ({ requestId } = await enqueueJob(
+        "image_generation",
+        {
+          prompt: fullPrompt,
+          image_size: imageSize,
+          num_images: 4,
+        },
+        webhookUrl,
+      ));
     } catch (falErr) {
       await refundCredits(jobId);
       throw falErr;
@@ -181,14 +244,24 @@ export async function POST(req: Request) {
 
     // 5. Update job with fal request ID
     await admin
-      .from('creative_jobs')
-      .update({ fal_request_id: requestId, status: 'processing' })
-      .eq('id', jobId);
+      .from("creative_jobs")
+      .update({ fal_request_id: requestId, status: "processing" })
+      .eq("id", jobId);
 
-    return NextResponse.json({ campaignId, jobId, status: 'generating' }, { status: 201 });
+    return NextResponse.json(
+      {
+        campaignId,
+        jobId,
+        status: "generating",
+        promptRefined,
+        effectivePrompt,
+      },
+      { status: 201 },
+    );
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unknown error';
-    const status = msg === 'Unauthorized' ? 401 : msg === 'Insufficient credits' ? 402 : 500;
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    const status =
+      msg === "Unauthorized" ? 401 : msg === "Insufficient credits" ? 402 : 500;
     return NextResponse.json({ error: msg }, { status });
   }
 }
