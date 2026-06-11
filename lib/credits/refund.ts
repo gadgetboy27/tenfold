@@ -13,7 +13,9 @@ export async function refundCredits(jobId: string): Promise<{ success: boolean; 
     return { success: false };
   }
 
-  const result = data as { success: boolean; balance?: number; reason?: string };
+  // PostgREST array-wraps jsonb function results (`[{...}]`); unwrap the row.
+  const row = Array.isArray(data) ? data[0] : data;
+  const result = row as { success: boolean; balance?: number; reason?: string };
 
   if (!result.success) {
     console.warn(`Credit refund skipped for job ${jobId}: ${result.reason}`);

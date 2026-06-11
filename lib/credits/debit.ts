@@ -21,7 +21,12 @@ export async function debitCredits(
     return { success: false, newBalance: 0 };
   }
 
-  const result = data as { success: boolean; balance: number; reason?: string };
+  // PostgREST returns a jsonb-returning function's result array-wrapped
+  // (`[{...}]`). Unwrap to the row before reading fields, otherwise
+  // `result.success` is undefined and a successful debit is misread as a
+  // failure — charging credits but reporting "insufficient" (HTTP 402).
+  const row = Array.isArray(data) ? data[0] : data;
+  const result = row as { success: boolean; balance: number; reason?: string };
 
   if (!result.success) {
     console.warn(`Credit debit failed for workspace ${workspaceId}: ${result.reason}`);
