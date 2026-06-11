@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
+import Anthropic from "@anthropic-ai/sdk";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -10,9 +10,11 @@ interface GenerateScriptParams {
   imageDescription: string;
   businessName: string;
   platform: string;
-  tone: 'professional' | 'casual' | 'playful';
+  tone: "professional" | "casual" | "playful";
   maxWords: number;
   variationDirection?: string;
+  /** Workspace brand-voice style guide; when present the caption must match it. */
+  brandVoice?: string;
 }
 
 export interface ScriptResult {
@@ -22,25 +24,34 @@ export interface ScriptResult {
   outputTokens: number;
 }
 
-export async function generateScript(params: GenerateScriptParams): Promise<ScriptResult> {
-  const directionLine = params.variationDirection ? `\nSpecial direction: ${params.variationDirection}` : '';
+export async function generateScript(
+  params: GenerateScriptParams,
+): Promise<ScriptResult> {
+  const directionLine = params.variationDirection
+    ? `\nSpecial direction: ${params.variationDirection}`
+    : "";
+  // Brand voice takes precedence over the generic tone — it's what stops every
+  // caption sounding the same.
+  const voiceBlock = params.brandVoice
+    ? `\n\nMATCH THIS BRAND VOICE EXACTLY (overrides the generic tone above):\n${params.brandVoice}`
+    : "";
   const message = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: "claude-sonnet-4-6",
     max_tokens: 512,
     messages: [
       {
-        role: 'user',
+        role: "user",
         content: `Write a ${params.tone} social media caption for ${params.platform}.
 Business: ${params.businessName}
 Image: ${params.imageDescription}
-Max words: ${params.maxWords}${directionLine}
+Max words: ${params.maxWords}${directionLine}${voiceBlock}
 Return only the caption text, no explanation.`,
       },
     ],
   });
 
   const block = message.content[0];
-  if (block.type !== 'text') throw new Error('Unexpected response from Claude');
+  if (block.type !== "text") throw new Error("Unexpected response from Claude");
 
   const inputTokens = message.usage.input_tokens;
   const outputTokens = message.usage.output_tokens;

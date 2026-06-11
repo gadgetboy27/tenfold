@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import toast from "react-hot-toast";
 import { cn } from "@/lib/utils";
+import BrandVoice from "@/components/settings/BrandVoice";
 
 const FONTS = [
   "Inter",
@@ -399,6 +400,8 @@ export default function BrandKitPage() {
               {saving ? "Saving…" : "Save changes"}
             </Button>
           )}
+
+          <BrandVoice />
         </div>
 
         {/* Right — preview */}

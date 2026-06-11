@@ -103,6 +103,10 @@ export const createCommentSchema = z.object({
     .optional(),
 });
 
+export const brandVoiceSchema = z.object({
+  samples: z.array(z.string().min(1).max(4000)).min(1).max(8),
+});
+
 export const suggestCommentSchema = z.object({
   platform: z.string().max(50).optional(),
   tone: z.enum(["professional", "casual", "playful"]).optional(),

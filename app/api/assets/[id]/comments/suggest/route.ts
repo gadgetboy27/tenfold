@@ -6,6 +6,7 @@ import { debitCredits } from "@/lib/credits/debit";
 import { refundCredits } from "@/lib/credits/refund";
 import { CREDIT_COSTS } from "@/lib/credits/costs";
 import { generateScript } from "@/lib/claude/script";
+import { getWorkspaceBrandVoice } from "@/lib/claude/brand-voice";
 
 // POST /api/assets/:id/comments/suggest — AI-draft a caption/comment for an asset.
 // Mirrors the synchronous script_generation path in app/api/jobs/route.ts:
@@ -59,6 +60,7 @@ export const POST = withWorkspace<{ id: string }>(
     }
 
     try {
+      const brandVoice = await getWorkspaceBrandVoice(session.workspaceId);
       const result = await generateScript({
         imageDescription:
           (a.metadata?.prompt as string) ?? body.context ?? `a ${a.type}`,
@@ -67,6 +69,7 @@ export const POST = withWorkspace<{ id: string }>(
         tone: body.tone ?? "professional",
         maxWords: body.maxWords ?? 40,
         variationDirection: body.direction,
+        brandVoice,
       });
 
       await admin
