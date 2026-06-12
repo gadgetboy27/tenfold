@@ -8,6 +8,7 @@ import { CREDIT_COSTS, type CreditCostKey } from "@/lib/credits/costs";
 import { enqueueJob } from "@/lib/fal/queue";
 import { generateScript } from "@/lib/claude/script";
 import { getWorkspaceBrandVoice } from "@/lib/claude/brand-voice";
+import { getEntitlements } from "@/lib/billing/entitlements";
 import {
   IMAGE_STYLE_SUFFIXES,
   MUSIC_GENRE_PROMPTS,
@@ -81,6 +82,21 @@ export async function POST(req: Request) {
 
     if (!(body.type in CREDIT_COSTS)) {
       return NextResponse.json({ error: "Unknown job type" }, { status: 400 });
+    }
+
+    // Gate Pro-only video durations by plan entitlement — before charging.
+    if (body.type === "video_30s" || body.type === "video_60s") {
+      const ent = await getEntitlements(session.workspaceId);
+      const seconds = body.type === "video_30s" ? 30 : 60;
+      if (!ent.videoDurations.includes(seconds)) {
+        return NextResponse.json(
+          {
+            error: `${seconds}-second video is a Pro feature — upgrade to generate it.`,
+            upgrade: true,
+          },
+          { status: 403 },
+        );
+      }
     }
 
     const jobId = uuidv4();

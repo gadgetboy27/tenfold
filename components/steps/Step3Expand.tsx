@@ -3,7 +3,9 @@
 import { useState } from "react";
 import Image from "next/image";
 import { useAppStore } from "@/store/useAppStore";
-import { Film, Music, FileText, ArrowRight } from "lucide-react";
+import { Film, Music, FileText, ArrowRight, Lock } from "lucide-react";
+import { useEntitlements } from "@/lib/billing/useEntitlements";
+import UpgradeModal from "@/components/billing/UpgradeModal";
 import FormatCard from "@/components/shared/FormatCard";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
@@ -15,6 +17,8 @@ import type { VideoStyle } from "@/lib/fal/prompts";
 type ExpandType = "video" | "music" | "script";
 
 export default function Step3Expand() {
+  const ent = useEntitlements();
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [videoDuration, setVideoDuration] = useState<10 | 30 | 60>(10);
   const [videoStyle, setVideoStyle] = useState<VideoStyle>("Cinematic");
   const [musicGenre, setMusicGenre] = useState("Lo-fi Chill");
@@ -317,20 +321,30 @@ export default function Step3Expand() {
           >
             <div className="space-y-3">
               <div className="flex gap-2">
-                {([10, 30, 60] as const).map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setVideoDuration(t)}
-                    className={`flex-1 py-1.5 text-xs rounded-full border transition-colors ${
-                      videoDuration === t
-                        ? "border-primary/50 text-primary bg-primary/10"
-                        : "border-border bg-background hover:border-primary/50"
-                    }`}
-                  >
-                    {t}s
-                  </button>
-                ))}
+                {([10, 30, 60] as const).map((t) => {
+                  const locked = ent ? !ent.videoDurations.includes(t) : false;
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() =>
+                        locked ? setUpgradeOpen(true) : setVideoDuration(t)
+                      }
+                      className={`relative flex-1 py-1.5 text-xs rounded-full border transition-colors ${
+                        videoDuration === t && !locked
+                          ? "border-primary/50 text-primary bg-primary/10"
+                          : locked
+                            ? "border-border bg-background text-muted-foreground/60 hover:border-primary/50"
+                            : "border-border bg-background hover:border-primary/50"
+                      }`}
+                    >
+                      {t}s
+                      {locked && (
+                        <Lock className="inline-block w-2.5 h-2.5 ml-1 -mt-0.5" />
+                      )}
+                    </button>
+                  );
+                })}
               </div>
               <div className="flex gap-1 flex-wrap">
                 {(["Cinematic", "Fast-cut", "Dramatic", "Smooth"] as const).map(
@@ -520,6 +534,13 @@ export default function Step3Expand() {
           </div>
         </div>
       </motion.div>
+
+      <UpgradeModal
+        open={upgradeOpen}
+        onClose={() => setUpgradeOpen(false)}
+        feature="Longer video"
+        blurb="30-second and 60-second clips are available on Creator and Business plans."
+      />
     </div>
   );
 }

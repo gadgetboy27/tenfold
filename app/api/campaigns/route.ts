@@ -236,25 +236,32 @@ export async function POST(req: Request) {
 
     // 4. Enqueue one fal request per direction (num_images:1 each). The webhook
     //    is told which direction via ?d=<index>. Refund only if ALL fail.
-    const submitted: Array<{
+    type Submitted = {
       index: number;
       label: string;
       prompt: string;
       requestId: string;
-    }> = [];
-    for (const d of directions) {
-      const webhookUrl = `${process.env.APP_URL}/api/webhooks/fal?j=${jobId}&d=${d.index}`;
-      try {
-        const { requestId } = await enqueueJob(
-          "image_generation",
-          { prompt: d.prompt, image_size: imageSize, num_images: 1 },
-          webhookUrl,
-        );
-        submitted.push({ ...d, requestId });
-      } catch {
-        // Skip this direction; the others can still succeed.
-      }
-    }
+    };
+    // Fire all four fal submits in parallel (not sequentially) so campaign start
+    // is ~4x faster. A direction that fails is dropped; the rest still run.
+    const results = await Promise.all(
+      directions.map(async (d): Promise<Submitted | null> => {
+        const webhookUrl = `${process.env.APP_URL}/api/webhooks/fal?j=${jobId}&d=${d.index}`;
+        try {
+          const { requestId } = await enqueueJob(
+            "image_generation",
+            { prompt: d.prompt, image_size: imageSize, num_images: 1 },
+            webhookUrl,
+          );
+          return { ...d, requestId };
+        } catch {
+          return null; // others can still succeed
+        }
+      }),
+    );
+    const submitted: Submitted[] = results.filter(
+      (r): r is Submitted => r !== null,
+    );
 
     if (submitted.length === 0) {
       await refundCredits(jobId);
