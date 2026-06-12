@@ -363,7 +363,7 @@ export default function FloatingPromptBar() {
         }}
       >
         {/* Mode tabs + controls */}
-        <div className="flex items-center gap-2 px-4 pt-3 pb-2 border-b border-white/[0.06]">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-3 sm:px-4 pt-3 pb-2 border-b border-white/[0.06]">
           {/* Mode tabs */}
           <button
             type="button"

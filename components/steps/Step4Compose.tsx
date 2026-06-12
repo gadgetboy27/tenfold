@@ -123,7 +123,7 @@ export default function Step4Compose() {
   };
 
   return (
-    <div className="h-full flex flex-col md:flex-row gap-6 p-6 overflow-y-auto">
+    <div className="h-full flex flex-col md:flex-row gap-5 md:gap-6 p-4 sm:p-6 overflow-y-auto">
       {/* ── Left: image + video + music ── */}
       <div className="flex-1 flex flex-col gap-4 min-w-0">
         {/* Static image preview */}
@@ -216,10 +216,7 @@ export default function Step4Compose() {
       </div>
 
       {/* ── Right: controls ── */}
-      <div
-        className="w-full md:w-88 flex flex-col gap-4 shrink-0"
-        style={{ width: "22rem" }}
-      >
+      <div className="w-full md:w-[22rem] md:shrink-0 flex flex-col gap-4">
         {/* Caption */}
         <div className="bg-card border border-border rounded-xl p-4">
           <div className="flex items-center gap-2 mb-3 text-sm font-semibold text-foreground">
