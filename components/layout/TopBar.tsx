@@ -4,6 +4,7 @@ import { Fragment, useState, useRef } from "react";
 import type { User } from "@supabase/supabase-js";
 import { useAppStore } from "@/store/useAppStore";
 import CreditMeter from "@/components/shared/CreditMeter";
+import ProBadge from "@/components/billing/ProBadge";
 import JobStatusIndicator from "@/components/shared/JobStatusIndicator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
@@ -302,6 +303,7 @@ export default function TopBar({ user, showBack = false }: Props) {
           </button>
         )}
 
+        <ProBadge />
         <CreditMeter />
 
         <DropdownMenu>

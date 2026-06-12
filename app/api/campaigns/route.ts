@@ -7,6 +7,7 @@ import { refundCredits } from "@/lib/credits/refund";
 import { CREDIT_COSTS } from "@/lib/credits/costs";
 import { enqueueJob } from "@/lib/fal/queue";
 import { validatePrompt } from "@/lib/fal/prompt-validator";
+import { getEntitlements } from "@/lib/billing/entitlements";
 import { v4 as uuidv4 } from "uuid";
 
 const ASPECT_TO_IMAGE_SIZE: Record<string, string> = {
@@ -142,6 +143,10 @@ export async function POST(req: Request) {
     const body = createCampaignSchema.parse(await req.json());
     const admin = createSupabaseAdminClient();
 
+    // Pro perk: paid tiers get more distinct anchor directions (6–8) than the
+    // free 4 — same base credit cost, a deliberately premium commercial-tier feel.
+    const ent = await getEntitlements(session.workspaceId);
+
     // 0. Validate prompt quality before touching credits. The validator assists
     //    rather than blocks: a weak prompt is auto-upgraded to the AI-refined
     //    version and generation proceeds. We only hard-reject when there is
@@ -149,6 +154,7 @@ export async function POST(req: Request) {
     const validation = await validatePrompt(
       body.prompt,
       body.style ?? "Photorealistic",
+      ent.maxVariations,
     );
     let effectivePrompt = body.prompt;
     let promptRefined = false;
