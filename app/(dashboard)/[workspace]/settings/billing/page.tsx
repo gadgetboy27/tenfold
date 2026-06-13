@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { useParams, usePathname, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAppStore } from "@/store/useAppStore";
 import {
@@ -87,8 +87,10 @@ function fmt(iso: string) {
 export default function BillingPage() {
   const params = useParams<{ workspace: string }>();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const workspaceSlug = params.workspace;
   const storeSlug = useAppStore((s) => s.workspaceSlug);
+  const setCreditBalance = useAppStore((s) => s.setCreditBalance);
   const slug = storeSlug || workspaceSlug;
 
   const [data, setData] = useState<BillingData | null>(null);
@@ -97,18 +99,68 @@ export default function BillingPage() {
   const [portalLoading, setPortalLoading] = useState(false);
   const success = searchParams.get("success") === "1";
 
-  useEffect(() => {
-    api("/api/billing", { workspaceSlug: slug })
-      .then((r) => r.json())
-      .then((d: BillingData) => setData(d))
-      .catch(() => toast.error("Failed to load billing info"))
-      .finally(() => setLoading(false));
-  }, [slug]);
+  // Fetch billing data AND push the authoritative DB balance into the global
+  // store, so the TopBar credit pill / rails stay in sync with this page.
+  const loadBilling = useCallback(async (): Promise<BillingData | null> => {
+    try {
+      const r = await api("/api/billing", { workspaceSlug: slug });
+      if (!r.ok) return null;
+      const d = (await r.json()) as BillingData;
+      setData(d);
+      setCreditBalance(d.balance);
+      return d;
+    } catch {
+      return null;
+    }
+  }, [slug, setCreditBalance]);
 
   useEffect(() => {
-    if (success)
-      toast.success("Payment successful — credits added to your account!");
-  }, [success]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadBilling()
+      .then((d) => {
+        if (!d) toast.error("Failed to load billing info");
+      })
+      .finally(() => setLoading(false));
+  }, [loadBilling]);
+
+  // After a Stripe checkout redirect (?success=1) the credit-granting webhook
+  // is async — the balance may not have updated yet. Poll until the new
+  // purchase transaction lands, then reflect it everywhere. Strip the param so
+  // a refresh doesn't re-trigger.
+  useEffect(() => {
+    if (!success) return;
+    let cancelled = false;
+    let tries = 0;
+    window.history.replaceState({}, "", pathname);
+
+    const recentPurchase = (d: BillingData | null) =>
+      !!d?.transactions?.some(
+        (t) =>
+          t.type === "purchase" &&
+          Date.now() - new Date(t.created_at).getTime() < 5 * 60 * 1000,
+      );
+
+    const tick = async () => {
+      if (cancelled) return;
+      const d = await loadBilling();
+      tries += 1;
+      if (recentPurchase(d)) {
+        toast.success("Payment successful — credits added to your account!");
+        return;
+      }
+      if (tries >= 8) {
+        toast.success(
+          "Payment received — your credits will appear here in a moment.",
+        );
+        return;
+      }
+      setTimeout(tick, 1500);
+    };
+    tick();
+    return () => {
+      cancelled = true;
+    };
+  }, [success, loadBilling, pathname]);
 
   const handlePurchase = async (priceId: string | null, label: string) => {
     if (!priceId) {
