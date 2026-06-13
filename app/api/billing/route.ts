@@ -19,7 +19,7 @@ const PLANS = [
   {
     id: "business",
     name: "Business",
-    priceNzd: 89,
+    priceNzd: 79,
     creditsPerMonth: 1000,
     priceId: process.env.STRIPE_PRICE_BUSINESS_MONTHLY ?? null,
     features: [
@@ -45,18 +45,15 @@ const PLANS = [
   },
 ];
 
+// Two top-ups only — a low-commitment trial and a value pack. Kept deliberately
+// minimal so the billing area isn't cluttered; subscriptions are the main path.
 const PACKS = [
   { credits: 25, priceNzd: 15, priceId: process.env.STRIPE_PRICE_25CR ?? null },
-  {
-    credits: 100,
-    priceNzd: 49,
-    priceId: process.env.STRIPE_PRICE_100CR ?? null,
-    popular: true,
-  },
   {
     credits: 300,
     priceNzd: 119,
     priceId: process.env.STRIPE_PRICE_300CR ?? null,
+    popular: true,
   },
 ];
 

@@ -37,6 +37,7 @@ import Link from "next/link";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { Logo } from "@/components/brand/Logo";
 import toast from "react-hot-toast";
 
 const STEPS = [
@@ -161,10 +162,7 @@ export default function TopBar({ user, showBack = false }: Props) {
               className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors group shrink-0"
             >
               <ChevronLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-              <span className="font-serif font-bold text-lg text-foreground">
-                Tenfold
-              </span>
-              <span className="w-1.5 h-1.5 rounded-full bg-primary mb-0.5 inline-block" />
+              <Logo size={20} withWordmark />
             </button>
 
             <span className="text-border text-sm select-none">/</span>
@@ -207,10 +205,7 @@ export default function TopBar({ user, showBack = false }: Props) {
             </button>
           </>
         ) : (
-          <span className="font-serif font-bold text-xl text-foreground flex items-center gap-1 shrink-0">
-            Tenfold
-            <span className="w-1.5 h-1.5 rounded-full bg-primary mb-0.5 inline-block" />
-          </span>
+          <Logo size={24} withWordmark className="shrink-0" />
         )}
       </div>
 
