@@ -511,13 +511,21 @@ export default function CampaignLobby() {
       <div className="h-full overflow-y-auto">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
           {/* Header */}
-          <div className="mb-10">
-            <h1 className="font-serif text-3xl font-bold text-foreground mb-2">
-              Campaigns
-            </h1>
-            <p className="text-muted-foreground text-sm">
-              Pick up where you left off, or start something new.
-            </p>
+          <div className="mb-10 flex items-start justify-between gap-4">
+            <div>
+              <h1 className="font-serif text-3xl font-bold text-foreground mb-2">
+                Campaigns
+              </h1>
+              <p className="text-muted-foreground text-sm">
+                Pick up where you left off, or start something new.
+              </p>
+            </div>
+            <Link
+              href={`/${workspaceSlug}/gallery`}
+              className="shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card hover:border-primary/50 hover:bg-primary/5 text-sm text-foreground transition-colors"
+            >
+              <ImageIcon className="w-4 h-4 text-primary" /> Gallery
+            </Link>
           </div>
 
           {/* New campaign CTA */}
