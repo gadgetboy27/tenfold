@@ -62,6 +62,18 @@ export const createCompositionSchema = z.object({
   hashtags: z.array(z.string().max(100)).max(30).default([]),
 });
 
+// Cinema composition: layer existing assets (video + music + caption) into one
+// MP4. Composes assets the workspace already owns — never generates — so it's
+// always free and fully reversible (re-render with different layers anytime).
+export const composeVideoSchema = z.object({
+  campaignId: z.string().uuid(),
+  caption: z.string().max(500).optional(),
+  captionStyle: z
+    .enum(["none", "fade", "lower_third", "crawl"])
+    .default("fade"),
+  useMusic: z.boolean().default(true),
+});
+
 export const publishSchema = z.object({
   compositionId: z.string().uuid().optional(),
   assetId: z.string().uuid().optional(),

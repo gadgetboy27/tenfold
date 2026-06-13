@@ -20,7 +20,12 @@ export interface CaptionPreset {
 }
 
 export const CAPTION_PRESETS: CaptionPreset[] = [
-  { id: "none", label: "No caption", blurb: "Video + music only.", proOnly: false },
+  {
+    id: "none",
+    label: "No caption",
+    blurb: "Video + music only.",
+    proOnly: false,
+  },
   {
     id: "fade",
     label: "Fade",
@@ -44,7 +49,11 @@ export const CAPTION_PRESETS: CaptionPreset[] = [
 // drawtext filter for each style. `dur` is the clip length in seconds; commas
 // inside expressions are wrapped in single quotes so the filtergraph parser
 // doesn't treat them as filter separators.
-function captionFilter(style: CaptionStyle, dur: number, capFile: string): string | null {
+function captionFilter(
+  style: CaptionStyle,
+  dur: number,
+  capFile: string,
+): string | null {
   const base = `drawtext=fontfile=${FONT}:textfile=${capFile}:fontcolor=white`;
   switch (style) {
     case "none":
@@ -71,18 +80,38 @@ function captionFilter(style: CaptionStyle, dur: number, capFile: string): strin
   }
 }
 
-function run(cmd: string, args: string[]): Promise<void> {
+function run(cmd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     const p = spawn(cmd, args);
     let stderr = "";
+    let stdout = "";
+    p.stdout.on("data", (d) => (stdout += d.toString()));
     p.stderr.on("data", (d) => (stderr += d.toString()));
     p.on("error", reject);
     p.on("close", (code) =>
       code === 0
-        ? resolve()
+        ? resolve(stdout)
         : reject(new Error(`${cmd} exited ${code}: ${stderr.slice(-500)}`)),
     );
   });
+}
+
+async function probeDuration(path: string): Promise<number> {
+  try {
+    const out = await run("ffprobe", [
+      "-v",
+      "error",
+      "-show_entries",
+      "format=duration",
+      "-of",
+      "default=noprint_wrappers=1:nokey=1",
+      path,
+    ]);
+    const d = parseFloat(out.trim());
+    return Number.isFinite(d) && d > 0 ? d : 10;
+  } catch {
+    return 10; // sensible default for a standard clip
+  }
 }
 
 async function download(url: string, path: string): Promise<void> {
@@ -96,7 +125,7 @@ export interface ComposeVideoInput {
   audioUrl?: string | null;
   caption?: string | null;
   captionStyle: CaptionStyle;
-  durationSec: number;
+  durationSec?: number;
   workspaceId: string;
   campaignId: string;
 }
@@ -120,16 +149,17 @@ export async function composeVideo(
     await download(input.videoUrl, videoPath);
     if (input.audioUrl) await download(input.audioUrl, audioPath);
 
+    const dur = input.durationSec ?? (await probeDuration(videoPath));
+
     const args: string[] = ["-y", "-i", videoPath];
     if (input.audioUrl) args.push("-i", audioPath);
 
-    const hasCaption =
-      input.captionStyle !== "none" && !!input.caption?.trim();
+    const hasCaption = input.captionStyle !== "none" && !!input.caption?.trim();
     if (hasCaption) {
       await writeFile(capPath, input.caption!.trim());
     }
     const vf = hasCaption
-      ? captionFilter(input.captionStyle, input.durationSec, capPath)
+      ? captionFilter(input.captionStyle, dur, capPath)
       : null;
 
     if (vf) args.push("-vf", vf);

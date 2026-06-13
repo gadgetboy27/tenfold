@@ -13,10 +13,25 @@ import {
   Upload,
   X,
   Music,
+  Film,
+  Lock,
+  Loader2,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { api } from "@/lib/api";
 import AssetComments from "@/components/shared/AssetComments";
+import { useEntitlements } from "@/lib/billing/useEntitlements";
+import UpgradeModal from "@/components/billing/UpgradeModal";
+
+// Mirror of the server CAPTION_PRESETS (kept inline — the composition lib imports
+// node:child_process and can't be pulled into a client component).
+const CINEMA_PRESETS = [
+  { id: "none", label: "None", proOnly: false },
+  { id: "fade", label: "Fade", proOnly: false },
+  { id: "lower_third", label: "Lower third", proOnly: true },
+  { id: "crawl", label: "Cinematic crawl", proOnly: true },
+] as const;
+type CinemaStyle = (typeof CINEMA_PRESETS)[number]["id"];
 
 function RedoRow({
   label,
@@ -61,11 +76,51 @@ export default function Step4Compose() {
     workspaceSlug,
   } = useAppStore();
 
+  const ent = useEntitlements();
   const [caption, setCaption] = useState(expansions.script?.content || "");
   const [isSaving, setIsSaving] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
+
+  // Cinema mix (non-destructive: re-render with different layers anytime)
+  const [captionStyle, setCaptionStyle] = useState<CinemaStyle>("fade");
+  const [useMusic, setUseMusic] = useState(true);
+  const [rendering, setRendering] = useState(false);
+  const [filmUrl, setFilmUrl] = useState<string | null>(null);
+  const [showUpgrade, setShowUpgrade] = useState(false);
+
+  const handleRenderFilm = async () => {
+    setRendering(true);
+    try {
+      const res = await api("/api/compositions/video", {
+        method: "POST",
+        body: JSON.stringify({
+          campaignId: currentCampaignId,
+          caption,
+          captionStyle,
+          useMusic,
+        }),
+        workspaceSlug,
+      });
+      if (res.status === 403) {
+        setShowUpgrade(true);
+        return;
+      }
+      const data = (await res.json().catch(() => ({}))) as {
+        url?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.url)
+        throw new Error(data.error ?? "Could not render your film");
+      setFilmUrl(data.url);
+      toast.success("Film rendered — your layers are mixed into one video.");
+    } catch (err: unknown) {
+      toast.error((err as Error).message ?? "Could not render your film");
+    } finally {
+      setRendering(false);
+    }
+  };
 
   const anchor = generatedAssets.find((a) => a.id === selectedAnchorId);
   const video =
@@ -230,6 +285,96 @@ export default function Step4Compose() {
           />
         </div>
 
+        {/* Cinema mix — layer existing video + music + caption into one film */}
+        <div className="bg-card border border-border rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-1 text-sm font-semibold text-foreground">
+            <Film className="w-4 h-4 text-primary" /> Cinema mix
+          </div>
+          {video ? (
+            <>
+              <p className="text-[11px] text-green-400/90 mb-3">
+                ✓ Mixes your existing video, music & caption — no extra credits.
+                New generations (Steps 2–3) are what cost credits.
+              </p>
+
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
+                Caption style
+              </p>
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {CINEMA_PRESETS.map((p) => {
+                  const locked = p.proOnly && !ent?.isPro;
+                  const active = captionStyle === p.id && !locked;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() =>
+                        locked ? setShowUpgrade(true) : setCaptionStyle(p.id)
+                      }
+                      className={`px-2.5 py-1 rounded-md text-xs transition-all flex items-center gap-1 border ${active ? "bg-primary/20 text-primary border-primary/40" : "text-muted-foreground hover:text-foreground border-transparent"} ${locked ? "opacity-70" : ""}`}
+                    >
+                      {locked && <Lock className="w-3 h-3" />}
+                      {p.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {music && (
+                <label className="flex items-center gap-2 mb-3 text-xs text-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={useMusic}
+                    onChange={(e) => setUseMusic(e.target.checked)}
+                    className="accent-primary"
+                  />
+                  Add background music layer
+                </label>
+              )}
+
+              <Button
+                onClick={handleRenderFilm}
+                disabled={rendering}
+                variant="outline"
+                className="w-full gap-2"
+              >
+                {rendering ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" /> Rendering film…
+                  </>
+                ) : (
+                  <>
+                    <Film className="w-4 h-4" /> Render film
+                  </>
+                )}
+              </Button>
+
+              {filmUrl && (
+                <div className="mt-3">
+                  <video
+                    src={filmUrl}
+                    controls
+                    className="w-full rounded-lg bg-black"
+                  />
+                  <a
+                    href={filmUrl}
+                    target="_blank"
+                    rel="noopener"
+                    className="mt-1.5 inline-block text-xs text-primary hover:underline"
+                  >
+                    Download film
+                  </a>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Generate a video in Step 3 to mix it with music and a caption
+              here.
+            </p>
+          )}
+        </div>
+
         {/* Comments + AI suggestions on the anchor asset */}
         {anchor && workspaceSlug && (
           <div className="bg-card border border-border rounded-xl p-4">
@@ -319,6 +464,13 @@ export default function Step4Compose() {
           </button>
         </div>
       )}
+
+      <UpgradeModal
+        open={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
+        feature="Cinematic caption styles"
+        blurb="Lower-third and Star-Wars-style crawl captions are available on Business and Agency plans."
+      />
     </div>
   );
 }
