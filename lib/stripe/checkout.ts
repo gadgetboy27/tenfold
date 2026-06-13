@@ -1,4 +1,4 @@
-import { stripe } from './client';
+import { stripe } from "./client";
 
 function isSubscriptionPrice(priceId: string): boolean {
   return [
@@ -15,14 +15,19 @@ export async function createCheckoutSession(opts: {
   successUrl: string;
   cancelUrl: string;
 }): Promise<{ url: string; sessionId: string }> {
+  const mode = isSubscriptionPrice(opts.priceId) ? "subscription" : "payment";
   const session = await stripe.checkout.sessions.create({
     customer: opts.customerId,
-    mode: isSubscriptionPrice(opts.priceId) ? 'subscription' : 'payment',
+    mode,
     line_items: [{ price: opts.priceId, quantity: 1 }],
     success_url: opts.successUrl,
     cancel_url: opts.cancelUrl,
     // priceId in metadata so the webhook can map payment → credit grant
     metadata: { workspaceId: opts.workspaceId, priceId: opts.priceId },
+    // One-off credit packs: generate a proper (branded) invoice so customers
+    // get a downloadable PDF. Subscriptions invoice automatically, and Stripe
+    // rejects invoice_creation for subscription mode.
+    ...(mode === "payment" ? { invoice_creation: { enabled: true } } : {}),
   });
 
   return { url: session.url!, sessionId: session.id };

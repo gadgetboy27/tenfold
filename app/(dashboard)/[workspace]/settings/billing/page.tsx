@@ -16,6 +16,7 @@ import {
   Crown,
   Sparkles,
   ExternalLink,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -53,6 +54,7 @@ interface Transaction {
   balance_after: number;
   description: string;
   created_at: string;
+  stripe_payment_intent_id?: string | null;
 }
 
 interface BillingData {
@@ -77,10 +79,12 @@ const TX_ICONS: Record<string, React.ReactNode> = {
 };
 
 function fmt(iso: string) {
-  return new Date(iso).toLocaleDateString("en-NZ", {
+  return new Date(iso).toLocaleString("en-NZ", {
     day: "numeric",
     month: "short",
     year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
@@ -97,6 +101,7 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [receiptLoading, setReceiptLoading] = useState<string | null>(null);
   const success = searchParams.get("success") === "1";
 
   // Fetch billing data AND push the authoritative DB balance into the global
@@ -184,6 +189,24 @@ export default function BillingPage() {
       );
     } finally {
       setPurchasing(null);
+    }
+  };
+
+  // Open the Stripe-hosted receipt for a purchase (printable / saveable as PDF).
+  const handleReceipt = async (txId: string) => {
+    setReceiptLoading(txId);
+    try {
+      const res = await api(`/api/billing/invoice?txId=${txId}`, {
+        workspaceSlug: slug,
+      });
+      const body = (await res.json()) as { url?: string; error?: string };
+      if (!res.ok || !body.url)
+        throw new Error(body.error ?? "Receipt not available");
+      window.open(body.url, "_blank", "noopener");
+    } catch (err) {
+      toast.error((err as Error).message ?? "Could not open the receipt");
+    } finally {
+      setReceiptLoading(null);
     }
   };
 
@@ -517,6 +540,9 @@ export default function BillingPage() {
                   <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Balance
                   </th>
+                  <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Receipt
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -552,6 +578,25 @@ export default function BillingPage() {
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-sm text-muted-foreground tabular-nums">
                       {tx.balance_after}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {tx.type === "purchase" && tx.stripe_payment_intent_id ? (
+                        <button
+                          onClick={() => handleReceipt(tx.id)}
+                          disabled={receiptLoading === tx.id}
+                          className="inline-flex items-center gap-1 text-xs text-primary hover:underline disabled:opacity-50"
+                          title="View / download receipt"
+                        >
+                          {receiptLoading === tx.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <FileText className="w-3.5 h-3.5" />
+                          )}
+                          Receipt
+                        </button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </td>
                   </tr>
                 ))}
