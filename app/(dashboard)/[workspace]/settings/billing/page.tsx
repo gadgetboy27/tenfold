@@ -15,6 +15,7 @@ import {
   RotateCcw,
   Crown,
   Sparkles,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -93,6 +94,7 @@ export default function BillingPage() {
   const [data, setData] = useState<BillingData | null>(null);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState<string | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
   const success = searchParams.get("success") === "1";
 
   useEffect(() => {
@@ -130,6 +132,26 @@ export default function BillingPage() {
       );
     } finally {
       setPurchasing(null);
+    }
+  };
+
+  const handleManageSubscription = async () => {
+    setPortalLoading(true);
+    try {
+      const res = await api("/api/billing/portal", {
+        method: "POST",
+        workspaceSlug: slug,
+      });
+      const body = (await res.json()) as { url?: string; error?: string };
+      if (!res.ok || !body.url)
+        throw new Error(body.error ?? "Could not open the billing portal");
+      window.location.href = body.url;
+    } catch (err) {
+      toast.error(
+        (err as Error).message ?? "Could not open the billing portal",
+      );
+    } finally {
+      setPortalLoading(false);
     }
   };
 
@@ -210,8 +232,25 @@ export default function BillingPage() {
             )}
             {tier !== "payg" && data.subscription && (
               <p className="text-xs text-muted-foreground mt-0.5">
-                +{data.subscription.credits_per_period} credits / month
+                +{data.subscription.credits_per_period.toLocaleString()} credits
+                / month
               </p>
+            )}
+            {tier !== "payg" && (
+              <Button
+                onClick={handleManageSubscription}
+                disabled={portalLoading}
+                variant="outline"
+                size="sm"
+                className="mt-3 gap-2"
+              >
+                {portalLoading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <ExternalLink className="w-3.5 h-3.5" />
+                )}
+                Manage subscription
+              </Button>
             )}
           </div>
         </div>
