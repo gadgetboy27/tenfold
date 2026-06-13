@@ -2,11 +2,20 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useAppStore } from "@/store/useAppStore";
-import { Sparkles, Globe, Loader2, AlertCircle } from "lucide-react";
+import { Sparkles, Globe, Loader2, AlertCircle, Lock } from "lucide-react";
 import { motion } from "framer-motion";
 import toast from "react-hot-toast";
 import { api } from "@/lib/api";
+import UpgradeModal from "@/components/billing/UpgradeModal";
 import type { CampaignBrief } from "@/lib/claude/campaign-brief";
+
+interface ModelOption {
+  id: string;
+  label: string;
+  blurb: string;
+  proOnly: boolean;
+  locked: boolean;
+}
 
 const ASPECT_RATIOS = [
   { label: "1:1", value: "1:1" },
@@ -97,6 +106,9 @@ export default function FloatingPromptBar() {
   const [score, setScore] = useState<number | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  const [model, setModel] = useState("flux-pro");
+  const [models, setModels] = useState<ModelOption[]>([]);
+  const [showUpgrade, setShowUpgrade] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const {
@@ -122,6 +134,15 @@ export default function FloatingPromptBar() {
     generatedAssets,
   } = useAppStore();
 
+  useEffect(() => {
+    api("/api/models", { workspaceSlug })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { models?: ModelOption[] } | null) => {
+        if (d?.models) setModels(d.models);
+      })
+      .catch(() => {});
+  }, [workspaceSlug]);
+
   const STAGES = [
     { after: 0, label: "Submitting your prompt…" },
     { after: 3, label: "Waiting for GPU…" },
@@ -140,6 +161,7 @@ export default function FloatingPromptBar() {
           prompt: finalPrompt,
           aspectRatio,
           style,
+          model,
           name: campaignName,
         }),
         workspaceSlug,
@@ -423,6 +445,29 @@ export default function FloatingPromptBar() {
                   {s}
                 </button>
               ))}
+              {models.length > 0 && (
+                <>
+                  <div className="w-px h-4 bg-white/10 mx-1" />
+                  <span className="text-xs text-[#444] font-mono uppercase tracking-wider mr-1">
+                    Model
+                  </span>
+                  {models.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      title={m.blurb}
+                      onClick={() =>
+                        m.locked ? setShowUpgrade(true) : setModel(m.id)
+                      }
+                      className={`px-2.5 py-1 rounded-md text-xs transition-all flex items-center gap-1 ${model === m.id && !m.locked ? "bg-[#7C5CFC]/20 text-[#7C5CFC] border border-[#7C5CFC]/40" : "text-[#888] hover:text-[#F0F0F0] border border-transparent"} ${m.locked ? "opacity-70" : ""}`}
+                      data-testid={`button-model-${m.id}`}
+                    >
+                      {m.locked && <Lock className="w-3 h-3" />}
+                      {m.label}
+                    </button>
+                  ))}
+                </>
+              )}
               {score !== null && (
                 <div className="ml-auto flex items-center gap-1.5">
                   <div
@@ -531,6 +576,13 @@ export default function FloatingPromptBar() {
           </div>
         )}
       </div>
+
+      <UpgradeModal
+        open={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
+        feature="Premium AI models"
+        blurb="Ideogram and Recraft (best-in-class text & design models) are available on Business and Agency plans."
+      />
     </motion.div>
   );
 }

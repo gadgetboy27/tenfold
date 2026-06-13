@@ -5,6 +5,7 @@ export const createCampaignSchema = z.object({
   name: z.string().max(200).optional(),
   aspectRatio: z.enum(["1:1", "4:5", "16:9", "9:16"]).optional(),
   style: z.string().max(100).optional(),
+  model: z.string().max(40).optional(),
   parameters: z
     .object({
       aspectRatio: z

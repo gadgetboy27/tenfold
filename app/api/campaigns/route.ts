@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createCampaignSchema } from "@/lib/validation/schemas";
-import { debitCredits } from "@/lib/credits/debit";
+import { debitCreditsAmount } from "@/lib/credits/debit";
 import { refundCredits } from "@/lib/credits/refund";
-import { CREDIT_COSTS } from "@/lib/credits/costs";
-import { enqueueJob } from "@/lib/fal/queue";
+import { enqueueWithFallback } from "@/lib/fal/queue";
+import { getImageModel, imageFallbackEndpoints } from "@/lib/fal/models";
 import { validatePrompt } from "@/lib/fal/prompt-validator";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { v4 as uuidv4 } from "uuid";
@@ -147,6 +147,19 @@ export async function POST(req: Request) {
     // free 4 — same base credit cost, a deliberately premium commercial-tier feel.
     const ent = await getEntitlements(session.workspaceId);
 
+    // Resolve the chosen image model (fal gateway). Premium models are gated to
+    // paid tiers — reject before touching credits.
+    const imageModel = getImageModel(body.model);
+    if (imageModel.proOnly && !ent.isPro) {
+      return NextResponse.json(
+        {
+          error: `${imageModel.label} is a Pro model — upgrade to use it.`,
+          upgrade: true,
+        },
+        { status: 403 },
+      );
+    }
+
     // 0. Validate prompt quality before touching credits. The validator assists
     //    rather than blocks: a weak prompt is auto-upgraded to the AI-refined
     //    version and generation proceeds. We only hard-reject when there is
@@ -179,13 +192,14 @@ export async function POST(req: Request) {
 
     const campaignId = uuidv4();
     const jobId = uuidv4();
-    const cost = CREDIT_COSTS.image_generation;
+    const cost = imageModel.creditCost;
 
-    // 1. Debit credits before anything else
-    const debit = await debitCredits(
+    // 1. Debit credits before anything else (per-model cost)
+    const debit = await debitCreditsAmount(
       session.workspaceId,
       jobId,
-      "image_generation",
+      cost,
+      `image generation (${imageModel.label})`,
     );
     if (!debit.success) {
       return NextResponse.json(
@@ -217,6 +231,7 @@ export async function POST(req: Request) {
       parameters: {
         aspectRatio: body.aspectRatio,
         style: body.style,
+        model: imageModel.id,
         originalPrompt: promptRefined ? body.prompt : undefined,
       },
       status: "generating",
@@ -234,6 +249,7 @@ export async function POST(req: Request) {
         prompt: effectivePrompt,
         imageSize,
         style: body.style,
+        model: imageModel.id,
         directions,
       },
       credits_charged: cost,
@@ -250,12 +266,15 @@ export async function POST(req: Request) {
     };
     // Fire all four fal submits in parallel (not sequentially) so campaign start
     // is ~4x faster. A direction that fails is dropped; the rest still run.
+    // Strategic fallback: try the chosen model, then fall through to more
+    // reliable fal endpoints if it hard-fails at submit (fal stumbles / bad call).
+    const fallbackEndpoints = imageFallbackEndpoints(imageModel.id);
     const results = await Promise.all(
       directions.map(async (d): Promise<Submitted | null> => {
         const webhookUrl = `${process.env.APP_URL}/api/webhooks/fal?j=${jobId}&d=${d.index}`;
         try {
-          const { requestId } = await enqueueJob(
-            "image_generation",
+          const { requestId } = await enqueueWithFallback(
+            fallbackEndpoints,
             { prompt: d.prompt, image_size: imageSize, num_images: 1 },
             webhookUrl,
           );
@@ -284,6 +303,7 @@ export async function POST(req: Request) {
           prompt: effectivePrompt,
           imageSize,
           style: body.style,
+          model: imageModel.id,
           expected_images: submitted.length,
           directions: submitted,
         },

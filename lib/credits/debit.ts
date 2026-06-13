@@ -1,23 +1,41 @@
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { CREDIT_COSTS, type CreditCostKey } from './costs';
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { CREDIT_COSTS, type CreditCostKey } from "./costs";
 
 export async function debitCredits(
   workspaceId: string,
   jobId: string,
   type: CreditCostKey,
 ): Promise<{ success: boolean; newBalance: number }> {
-  const admin = createSupabaseAdminClient();
-  const cost = CREDIT_COSTS[type];
+  return debitCreditsAmount(
+    workspaceId,
+    jobId,
+    CREDIT_COSTS[type],
+    `${type} job`,
+  );
+}
 
-  const { data, error } = await admin.rpc('debit_credits', {
+/**
+ * Debit an explicit credit amount — for per-model image pricing where the cost
+ * depends on the chosen model rather than a fixed action type. Same atomic
+ * ledger RPC as debitCredits.
+ */
+export async function debitCreditsAmount(
+  workspaceId: string,
+  jobId: string,
+  cost: number,
+  description: string,
+): Promise<{ success: boolean; newBalance: number }> {
+  const admin = createSupabaseAdminClient();
+
+  const { data, error } = await admin.rpc("debit_credits", {
     p_workspace_id: workspaceId,
     p_job_id: jobId,
     p_cost: cost,
-    p_description: `${type} job`,
+    p_description: description,
   });
 
   if (error) {
-    console.error('Credit debit RPC error:', error);
+    console.error("Credit debit RPC error:", error);
     return { success: false, newBalance: 0 };
   }
 
@@ -29,7 +47,9 @@ export async function debitCredits(
   const result = row as { success: boolean; balance: number; reason?: string };
 
   if (!result.success) {
-    console.warn(`Credit debit failed for workspace ${workspaceId}: ${result.reason}`);
+    console.warn(
+      `Credit debit failed for workspace ${workspaceId}: ${result.reason}`,
+    );
     return { success: false, newBalance: result.balance };
   }
 
