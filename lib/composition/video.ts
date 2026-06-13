@@ -71,8 +71,9 @@ function captionFilter(
       );
     case "crawl":
       // Scroll the text from the bottom edge up past the top over the clip.
+      // 0x (not #) colour — # can be misread in a filtergraph string.
       return (
-        `drawtext=fontfile=${FONT}:textfile=${capFile}:fontcolor=#FFE81F` +
+        `drawtext=fontfile=${FONT}:textfile=${capFile}:fontcolor=0xFFE81F` +
         `:fontsize=h/15:x=(w-text_w)/2:y=h-(h+th)*t/${dur}`
       );
     default:
@@ -162,10 +163,23 @@ export async function composeVideo(
       ? captionFilter(input.captionStyle, dur, capPath)
       : null;
 
-    if (vf) args.push("-vf", vf);
-    if (input.audioUrl) {
-      // Replace the clip's audio with the chosen music track.
-      args.push("-map", "0:v:0", "-map", "1:a:0", "-shortest");
+    // Map carefully: a simple -vf is dropped if we also -map the raw video, so
+    // when there's BOTH a caption and music we must filter via filter_complex
+    // and map the labelled output.
+    if (vf && input.audioUrl) {
+      args.push(
+        "-filter_complex",
+        `[0:v]${vf}[v]`,
+        "-map",
+        "[v]",
+        "-map",
+        "1:a:0",
+        "-shortest",
+      );
+    } else if (vf) {
+      args.push("-vf", vf); // caption only — keeps the clip's own audio
+    } else if (input.audioUrl) {
+      args.push("-map", "0:v:0", "-map", "1:a:0", "-shortest"); // music only
     }
     args.push(
       "-c:v",
