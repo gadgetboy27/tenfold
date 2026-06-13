@@ -20,6 +20,10 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# FFmpeg (+ DejaVu fonts for drawtext captions) powers the cinema composition
+# pipeline: muxing music onto video and burning animated captions into one MP4.
+RUN apk add --no-cache ffmpeg ttf-dejavu fontconfig
+
 # Copy package files
 COPY package.json package-lock.json ./
 
