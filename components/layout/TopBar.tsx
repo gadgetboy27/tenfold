@@ -384,18 +384,22 @@ export default function TopBar({ user, showBack = false }: Props) {
                   )}
                 </>
               )}
-            <DropdownMenuSeparator className="bg-border" />
-            <DropdownMenuItem
-              className="gap-2 text-sm text-amber-400 focus:text-amber-400 cursor-pointer"
-              onSelect={(e) => {
-                e.preventDefault();
-                handleGrantCredits();
-              }}
-              disabled={isGranting}
-            >
-              <Zap className="w-4 h-4" />
-              {isGranting ? "Adding…" : "Top up 500 credits (dev)"}
-            </DropdownMenuItem>
+            {process.env.NODE_ENV !== "production" && (
+              <>
+                <DropdownMenuSeparator className="bg-border" />
+                <DropdownMenuItem
+                  className="gap-2 text-sm text-amber-400 focus:text-amber-400 cursor-pointer"
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    handleGrantCredits();
+                  }}
+                  disabled={isGranting}
+                >
+                  <Zap className="w-4 h-4" />
+                  {isGranting ? "Adding…" : "Top up 500 credits (dev)"}
+                </DropdownMenuItem>
+              </>
+            )}
             <DropdownMenuSeparator className="bg-border" />
             <DropdownMenuItem
               className="gap-2 text-sm text-red-400 focus:text-red-400 cursor-pointer"
