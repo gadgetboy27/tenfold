@@ -388,7 +388,7 @@ export default function CampaignLobby() {
           url: string;
           type: string;
           created_at: string;
-          metadata?: { direction?: string };
+          metadata?: { direction?: string; hd?: boolean };
         }>;
         parameters?: { aspectRatio?: string; style?: string };
         prompt: string;
@@ -396,7 +396,7 @@ export default function CampaignLobby() {
       };
 
       const imageAssets: Asset[] = (full.assets ?? [])
-        .filter((a) => a.type === "image")
+        .filter((a) => a.type === "image" && !a.metadata?.hd)
         .map((a) => ({
           id: a.id,
           url: a.url,

@@ -181,11 +181,9 @@ async function handleSuccess(
 
       const imgRes = await fetch(img.url);
       const buffer = await imgRes.arrayBuffer();
-      await admin.storage
-        .from("assets")
-        .upload(storagePath, buffer, {
-          contentType: img.content_type ?? "image/jpeg",
-        });
+      await admin.storage.from("assets").upload(storagePath, buffer, {
+        contentType: img.content_type ?? "image/jpeg",
+      });
 
       const { data: urlData } = admin.storage
         .from("assets")
@@ -208,7 +206,13 @@ async function handleSuccess(
               prompt: direction.prompt,
               request_id: direction.requestId,
             }
-          : {},
+          : job.type === "upscale"
+            ? {
+                hd: true,
+                source_asset_id: job.input_params?.source_asset_id ?? null,
+                upscale_factor: 2,
+              }
+            : {},
       });
     }
   }

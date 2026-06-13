@@ -211,7 +211,7 @@ export default function FloatingPromptBar() {
             style: string;
             createdAt: string;
             status: string;
-            metadata?: { direction?: string };
+            metadata?: { direction?: string; hd?: boolean };
           }>;
           jobs?: Array<{
             status: string;
@@ -221,7 +221,10 @@ export default function FloatingPromptBar() {
         };
 
         if (campaign.status === "ready") {
-          const readyAssets = campaign.assets.filter((a) => a.url);
+          // HD upscales are derived exports, not anchor candidates — keep them out of the picker.
+          const readyAssets = campaign.assets.filter(
+            (a) => a.url && !a.metadata?.hd,
+          );
           if (readyAssets.length === 0)
             throw new Error(
               "Generation completed but no images returned. Please try again.",

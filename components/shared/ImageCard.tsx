@@ -1,12 +1,17 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import type { Asset } from "@/store/useAppStore";
 import { useAppStore } from "@/store/useAppStore";
-import { Maximize2, Shuffle, ArrowUp, Download } from "lucide-react";
+import { Maximize2, Shuffle, ArrowUp, Download, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useEntitlements } from "@/lib/billing/useEntitlements";
+import UpgradeModal from "@/components/billing/UpgradeModal";
+import { api } from "@/lib/api";
+import toast from "react-hot-toast";
 
 interface ImageCardProps {
   asset: Asset;
@@ -35,9 +40,62 @@ const STYLE_LABEL_COLORS: Record<string, string> = {
 };
 
 export default function ImageCard({ asset, index }: ImageCardProps) {
-  const { selectedAnchorId, setAnchorId } = useAppStore();
+  const { selectedAnchorId, setAnchorId, workspaceSlug } = useAppStore();
+  const ent = useEntitlements();
+  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [hdLoading, setHdLoading] = useState(false);
   const isSelected = selectedAnchorId === asset.id;
   const isDimmed = selectedAnchorId !== null && !isSelected;
+
+  // HD / print-ready export — Pro only. Non-Pro users get the upgrade prompt.
+  async function handleUpscale() {
+    if (!ent?.hdExport) {
+      setShowUpgrade(true);
+      return;
+    }
+    if (hdLoading) return;
+    setHdLoading(true);
+    try {
+      const res = await api(`/api/assets/${asset.id}/upscale`, {
+        method: "POST",
+        workspaceSlug,
+      });
+      if (res.status === 403) {
+        setShowUpgrade(true);
+        return;
+      }
+      if (res.status === 402) {
+        toast.error("Not enough credits for an HD export.");
+        return;
+      }
+      if (!res.ok) {
+        toast.error("Couldn't start the HD export. Try again.");
+        return;
+      }
+      toast.success(
+        "HD export started — your print-ready image is on the way.",
+      );
+    } catch {
+      toast.error("Couldn't start the HD export. Try again.");
+    } finally {
+      setHdLoading(false);
+    }
+  }
+
+  async function handleDownload() {
+    try {
+      const res = await fetch(asset.url);
+      const blob = await res.blob();
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = `tenfold-${asset.id}.jpg`;
+      a.click();
+      URL.revokeObjectURL(href);
+    } catch {
+      window.open(asset.url, "_blank", "noopener");
+    }
+  }
 
   const ratio = asset.aspectRatio ?? "1:1";
   const style = asset.style ?? "Photorealistic";
@@ -95,23 +153,50 @@ export default function ImageCard({ asset, index }: ImageCardProps) {
         )}
       >
         {[
-          { icon: Maximize2, label: "Expand" },
-          { icon: Shuffle, label: "Vary" },
-          { icon: ArrowUp, label: "Upscale" },
-          { icon: Download, label: "Download" },
-        ].map(({ icon: Icon, label }) => (
+          {
+            icon: Maximize2,
+            label: "View full size",
+            onClick: () => window.open(asset.url, "_blank", "noopener"),
+          },
+          {
+            icon: Shuffle,
+            label: "Use as anchor",
+            onClick: () => setAnchorId(asset.id),
+          },
+          {
+            icon: hdLoading ? Loader2 : ArrowUp,
+            label: ent?.hdExport ? "HD export" : "HD export (Pro)",
+            onClick: handleUpscale,
+            spin: hdLoading,
+          },
+          {
+            icon: Download,
+            label: "Download",
+            onClick: handleDownload,
+          },
+        ].map(({ icon: Icon, label, onClick, spin }) => (
           <Button
             key={label}
             size="icon"
             variant="secondary"
             className="w-8 h-8 rounded-full bg-black/50 hover:bg-primary hover:text-white border border-white/10"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onClick();
+            }}
             title={label}
           >
-            <Icon className="w-4 h-4" />
+            <Icon className={cn("w-4 h-4", spin && "animate-spin")} />
           </Button>
         ))}
       </div>
+
+      <UpgradeModal
+        open={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
+        feature="HD export"
+        blurb="Upscale any anchor to a crisp, print-ready 2× resolution — perfect for billboards, packaging, and large-format ads."
+      />
     </motion.div>
   );
 }
