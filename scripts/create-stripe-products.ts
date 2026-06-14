@@ -32,26 +32,26 @@ const PRODUCTS = [
   // ── Subscriptions (monthly recurring) ──────────────────────────
   {
     name: 'Creator',
-    description: '50 credits/month — solo operator, ~2 full campaigns',
+    description: '350 credits/month — solo operator',
     mode: 'subscription' as const,
-    unit_amount: 1900,  // NZD $19.00/month
-    metadata: { credits: '50', type: 'subscription' },
+    unit_amount: 2900,  // NZD $29.00/month
+    metadata: { credits: '350', type: 'subscription' },
     envKey: 'STRIPE_PRICE_CREATOR_MONTHLY',
   },
   {
     name: 'Business',
-    description: '200 credits/month — SMB, ~11 full campaigns',
+    description: '1,000 credits/month — SMB',
     mode: 'subscription' as const,
-    unit_amount: 5900,  // NZD $59.00/month
-    metadata: { credits: '200', type: 'subscription' },
+    unit_amount: 7900,  // NZD $79.00/month
+    metadata: { credits: '1000', type: 'subscription' },
     envKey: 'STRIPE_PRICE_BUSINESS_MONTHLY',
   },
   {
     name: 'Agency',
-    description: '600 credits/month — multi-brand, ~33 full campaigns',
+    description: '3,000 credits/month — multi-brand',
     mode: 'subscription' as const,
-    unit_amount: 14900, // NZD $149.00/month
-    metadata: { credits: '600', type: 'subscription' },
+    unit_amount: 24900, // NZD $249.00/month
+    metadata: { credits: '3000', type: 'subscription' },
     envKey: 'STRIPE_PRICE_AGENCY_MONTHLY',
   },
 ];

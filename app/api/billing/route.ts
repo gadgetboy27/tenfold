@@ -48,10 +48,10 @@ const PLANS = [
 // Two top-ups only — a low-commitment trial and a value pack. Kept deliberately
 // minimal so the billing area isn't cluttered; subscriptions are the main path.
 const PACKS = [
-  { credits: 25, priceNzd: 15, priceId: process.env.STRIPE_PRICE_25CR ?? null },
+  { credits: 25, priceNzd: 5, priceId: process.env.STRIPE_PRICE_25CR ?? null },
   {
     credits: 300,
-    priceNzd: 119,
+    priceNzd: 35,
     priceId: process.env.STRIPE_PRICE_300CR ?? null,
     popular: true,
   },

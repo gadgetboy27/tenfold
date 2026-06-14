@@ -11,8 +11,11 @@ import UpgradeModal from "@/components/billing/UpgradeModal";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, Anchor, Sparkles, Shuffle, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
+import { getImageModel } from "@/lib/fal/models";
 
 const VARIATION_COST = 3;
+// Default while we load the campaign's model. Premium models (Typeset/Studio)
+// cost more, so the real figure comes from the campaign's chosen model below.
 const BATCH_COST = 12;
 
 export default function Step2Select() {
@@ -31,10 +34,28 @@ export default function Step2Select() {
 
   const [busy, setBusy] = useState<"variation" | "batch" | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [batchCost, setBatchCost] = useState(BATCH_COST);
 
   useEffect(() => {
     if (generatedAssets.length > 0) completeStep(1);
   }, [generatedAssets, completeStep]);
+
+  // A fresh batch costs the campaign's chosen model's credits — match what the
+  // /regenerate route actually charges so the button never under-discloses.
+  useEffect(() => {
+    if (!currentCampaignId || currentCampaignId === "__new__") return;
+    let cancelled = false;
+    api(`/api/campaigns/${currentCampaignId}`, { workspaceSlug })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((camp: { parameters?: { model?: string } } | null) => {
+        if (!cancelled && camp)
+          setBatchCost(getImageModel(camp.parameters?.model).creditCost);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [currentCampaignId, workspaceSlug]);
 
   const selectedAsset = generatedAssets.find((a) => a.id === selectedAnchorId);
 
@@ -129,7 +150,7 @@ export default function Step2Select() {
   };
 
   const handleFreshBatch = async () => {
-    if (creditBalance < BATCH_COST) {
+    if (creditBalance < batchCost) {
       toast.error("Not enough credits for a fresh batch.");
       return;
     }
@@ -232,7 +253,7 @@ export default function Step2Select() {
                 )}
                 Fresh batch
                 <span className="ml-auto text-xs font-mono text-muted-foreground">
-                  {BATCH_COST} cr
+                  {batchCost} cr
                 </span>
               </Button>
             </div>

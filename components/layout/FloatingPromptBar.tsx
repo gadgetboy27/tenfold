@@ -569,7 +569,7 @@ export default function FloatingPromptBar() {
             )}
             {analyzing && (
               <p className="text-[11px] text-[#555] px-1">
-                Crawling website and asking Claude to build your marketing brief
+                Crawling website and asking our AI to build your marketing brief
                 — usually 15–25 seconds…
               </p>
             )}

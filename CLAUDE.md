@@ -222,7 +222,7 @@ export const GET = withWorkspace<{ id: string }>(async (req, { db, session, para
 ```typescript
 // lib/credits/costs.ts — single source of truth, never hardcode elsewhere
 export const CREDIT_COSTS = {
-  image_generation:  18,
+  image_generation:  12,
   image_variation:    3,
   upscale:            2,
   video_10s:         15,
