@@ -469,7 +469,7 @@ export default function Step4Compose() {
         open={showUpgrade}
         onClose={() => setShowUpgrade(false)}
         feature="Cinematic caption styles"
-        blurb="Lower-third and Star-Wars-style crawl captions are available on Business and Agency plans."
+        blurb="Lower-third and cinematic crawl captions are available on Business and Agency plans."
       />
     </div>
   );

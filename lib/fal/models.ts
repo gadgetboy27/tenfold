@@ -35,17 +35,18 @@ export interface ImageModel {
 export const DEFAULT_IMAGE_MODEL = "flux-pro";
 
 export const IMAGE_MODELS: ImageModel[] = [
+  // Customer-facing names are Tenfold-styled; the `endpoint` is the real engine.
   {
     id: "flux-pro",
-    label: "FLUX Pro",
+    label: "Sharp",
     endpoint: "fal-ai/flux-pro/v1.1-ultra",
     creditCost: 12,
     proOnly: false,
-    blurb: "Best all-round photorealism. The reliable default.",
+    blurb: "Crisp, true-to-life photography. The reliable default.",
   },
   {
     id: "nano-banana",
-    label: "Nano Banana",
+    label: "Fusion",
     endpoint: "fal-ai/nano-banana",
     creditCost: 12,
     proOnly: false,
@@ -53,7 +54,7 @@ export const IMAGE_MODELS: ImageModel[] = [
   },
   {
     id: "ideogram",
-    label: "Ideogram v3",
+    label: "Typeset",
     endpoint: "fal-ai/ideogram/v3",
     creditCost: 14,
     proOnly: true,
@@ -61,7 +62,7 @@ export const IMAGE_MODELS: ImageModel[] = [
   },
   {
     id: "recraft",
-    label: "Recraft v3",
+    label: "Studio",
     endpoint: "fal-ai/recraft-v3",
     creditCost: 16,
     proOnly: true,

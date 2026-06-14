@@ -581,7 +581,7 @@ export default function FloatingPromptBar() {
         open={showUpgrade}
         onClose={() => setShowUpgrade(false)}
         feature="Premium AI models"
-        blurb="Ideogram and Recraft (best-in-class text & design models) are available on Business and Agency plans."
+        blurb="Typeset and Studio — our premium models for best-in-class text & design — are available on Business and Agency plans."
       />
     </motion.div>
   );

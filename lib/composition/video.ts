@@ -41,7 +41,7 @@ export const CAPTION_PRESETS: CaptionPreset[] = [
   {
     id: "crawl",
     label: "Cinematic crawl",
-    blurb: "Star-Wars-style text scrolling up the frame.",
+    blurb: "Epic text scrolling up the frame, cinema-title style.",
     proOnly: true,
   },
 ];
