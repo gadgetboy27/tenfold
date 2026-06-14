@@ -1,13 +1,19 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import { useAppStore } from "@/store/useAppStore";
+import type { Asset } from "@/store/useAppStore";
 import { api } from "@/lib/api";
 import ImageCard from "@/components/shared/ImageCard";
 import { Button } from "@/components/ui/button";
+import UpgradeModal from "@/components/billing/UpgradeModal";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, Anchor } from "lucide-react";
+import { Check, Anchor, Sparkles, Shuffle, Loader2 } from "lucide-react";
+import toast from "react-hot-toast";
+
+const VARIATION_COST = 3;
+const BATCH_COST = 12;
 
 export default function Step2Select() {
   const {
@@ -18,13 +24,141 @@ export default function Step2Select() {
     aspectRatio,
     currentCampaignId,
     workspaceSlug,
+    setGeneratedAssets,
+    setCreditBalance,
+    creditBalance,
   } = useAppStore();
+
+  const [busy, setBusy] = useState<"variation" | "batch" | null>(null);
+  const [showUpgrade, setShowUpgrade] = useState(false);
 
   useEffect(() => {
     if (generatedAssets.length > 0) completeStep(1);
   }, [generatedAssets, completeStep]);
 
   const selectedAsset = generatedAssets.find((a) => a.id === selectedAnchorId);
+
+  // Poll the campaign until newly-generated images land, refreshing the grid as
+  // they arrive. Returns once at least one new image shows up (or it times out).
+  const pollForNewImages = async (baseline: number) => {
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r) => setTimeout(r, 2500));
+      const res = await api(`/api/campaigns/${currentCampaignId}`, {
+        workspaceSlug,
+      });
+      if (!res.ok) continue;
+      const camp = (await res.json()) as {
+        parameters?: { style?: string };
+        assets?: Array<{
+          id: string;
+          url: string;
+          prompt: string;
+          type: string;
+          created_at: string;
+          metadata?: { direction?: string; hd?: boolean };
+        }>;
+      };
+      const imgs = (camp.assets ?? []).filter(
+        (a) => a.type === "image" && a.url && !a.metadata?.hd,
+      );
+      if (imgs.length > baseline) {
+        const mapped: Asset[] = imgs.map((a) => ({
+          id: a.id,
+          url: a.url,
+          prompt: a.prompt ?? "",
+          aspectRatio,
+          style: camp.parameters?.style ?? "Photorealistic",
+          createdAt: a.created_at,
+          direction: a.metadata?.direction,
+        }));
+        setGeneratedAssets(mapped);
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const refreshBalance = () => {
+    api("/api/credits/balance", { workspaceSlug })
+      .then((r) => r.json())
+      .then((d: { balance?: number }) => {
+        if (typeof d.balance === "number") setCreditBalance(d.balance);
+      })
+      .catch(() => {});
+  };
+
+  const handleVariation = async () => {
+    if (!selectedAsset) {
+      toast("Tap an image first — the variation is based on it.", {
+        icon: "👆",
+      });
+      return;
+    }
+    if (creditBalance < VARIATION_COST) {
+      toast.error("Not enough credits for a variation.");
+      return;
+    }
+    setBusy("variation");
+    const baseline = generatedAssets.length;
+    try {
+      const res = await api("/api/jobs", {
+        method: "POST",
+        body: JSON.stringify({
+          campaignId: currentCampaignId,
+          type: "image_variation",
+          params: {
+            image_url: selectedAsset.url,
+            prompt: `${selectedAsset.prompt} — fresh variation: new composition and angle, same subject, brand and mood`,
+          },
+        }),
+        workspaceSlug,
+      });
+      if (!res.ok) {
+        const e = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(e.error ?? "Couldn't start the variation");
+      }
+      refreshBalance();
+      toast.success("Generating a variation…");
+      const ok = await pollForNewImages(baseline);
+      if (!ok) toast("Still rendering — it'll appear shortly.", { icon: "⏳" });
+    } catch (err) {
+      toast.error((err as Error).message ?? "Variation failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleFreshBatch = async () => {
+    if (creditBalance < BATCH_COST) {
+      toast.error("Not enough credits for a fresh batch.");
+      return;
+    }
+    setBusy("batch");
+    const baseline = generatedAssets.length;
+    try {
+      const res = await api(`/api/campaigns/${currentCampaignId}/regenerate`, {
+        method: "POST",
+        workspaceSlug,
+      });
+      if (res.status === 403) {
+        setShowUpgrade(true);
+        return;
+      }
+      if (!res.ok) {
+        const e = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(e.error ?? "Couldn't start a fresh batch");
+      }
+      refreshBalance();
+      toast.success("Generating a fresh batch…");
+      const ok = await pollForNewImages(baseline);
+      if (!ok)
+        toast("Still rendering — they'll appear shortly.", { icon: "⏳" });
+    } catch (err) {
+      toast.error((err as Error).message ?? "Fresh batch failed");
+    } finally {
+      setBusy(null);
+    }
+  };
 
   // Responsive: never crush below 1–2 columns on phones, scale up with the viewport.
   const gridCols =
@@ -52,8 +186,70 @@ export default function Step2Select() {
               <ImageCard key={asset.id} asset={asset} index={i} />
             ))}
           </div>
+
+          {/* Want more options? Reuse is free; generating new costs credits. */}
+          <div className="mt-6 rounded-2xl border border-border bg-card/60 p-4">
+            <p className="text-sm text-foreground font-medium mb-0.5">
+              Need another option?
+            </p>
+            <p className="text-xs text-muted-foreground mb-3">
+              These are yours — pick any above (free), or browse your{" "}
+              <a
+                href={`/${workspaceSlug}/gallery`}
+                className="text-primary hover:underline"
+              >
+                Gallery
+              </a>
+              . Generating new images uses credits:
+            </p>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Button
+                variant="outline"
+                onClick={handleVariation}
+                disabled={busy !== null}
+                className="gap-2 justify-start"
+              >
+                {busy === "variation" ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Sparkles className="w-4 h-4 text-primary" />
+                )}
+                New variation
+                <span className="ml-auto text-xs font-mono text-muted-foreground">
+                  {VARIATION_COST} cr
+                </span>
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleFreshBatch}
+                disabled={busy !== null}
+                className="gap-2 justify-start"
+              >
+                {busy === "batch" ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Shuffle className="w-4 h-4 text-primary" />
+                )}
+                Fresh batch
+                <span className="ml-auto text-xs font-mono text-muted-foreground">
+                  {BATCH_COST} cr
+                </span>
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-2">
+              Variation is based on your selected image (same subject, new
+              look). Fresh batch creates a brand-new set.
+            </p>
+          </div>
         </div>
       </div>
+
+      <UpgradeModal
+        open={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
+        feature="This model"
+        blurb="This campaign uses a Pro model — upgrade to regenerate with it."
+      />
 
       <AnimatePresence>
         {selectedAsset && (
