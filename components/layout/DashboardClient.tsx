@@ -1,15 +1,16 @@
-'use client';
+"use client";
 
-import { useEffect } from 'react';
-import type { User } from '@supabase/supabase-js';
-import { useAppStore } from '@/store/useAppStore';
-import { api } from '@/lib/api';
-import TopBar from './TopBar';
-import LeftRail from './LeftRail';
-import RightPanel from './RightPanel';
-import FloatingPromptBar from './FloatingPromptBar';
-import StepView from './StepView';
-import CampaignLobby from './CampaignLobby';
+import { useEffect } from "react";
+import type { User } from "@supabase/supabase-js";
+import { useAppStore } from "@/store/useAppStore";
+import { api } from "@/lib/api";
+import TopBar from "./TopBar";
+import LeftRail from "./LeftRail";
+import RightPanel from "./RightPanel";
+import FloatingPromptBar from "./FloatingPromptBar";
+import StepView from "./StepView";
+import CampaignLobby from "./CampaignLobby";
+import FeedbackWidget from "@/components/feedback/FeedbackWidget";
 
 interface Props {
   workspaceSlug: string;
@@ -17,17 +18,18 @@ interface Props {
 }
 
 export default function DashboardClient({ workspaceSlug, user }: Props) {
-  const { setWorkspaceSlug, setCreditBalance, currentCampaignId } = useAppStore();
+  const { setWorkspaceSlug, setCreditBalance, currentCampaignId } =
+    useAppStore();
 
   useEffect(() => {
     setWorkspaceSlug(workspaceSlug);
   }, [workspaceSlug, setWorkspaceSlug]);
 
   useEffect(() => {
-    api('/api/credits/balance', { workspaceSlug })
+    api("/api/credits/balance", { workspaceSlug })
       .then((r) => r.json())
       .then((d: { balance?: number }) => {
-        if (typeof d.balance === 'number') setCreditBalance(d.balance);
+        if (typeof d.balance === "number") setCreditBalance(d.balance);
       })
       .catch(() => {});
   }, [workspaceSlug, setCreditBalance]);
@@ -40,6 +42,7 @@ export default function DashboardClient({ workspaceSlug, user }: Props) {
         <div className="flex-1 overflow-hidden">
           <CampaignLobby />
         </div>
+        <FeedbackWidget />
       </div>
     );
   }
@@ -55,6 +58,7 @@ export default function DashboardClient({ workspaceSlug, user }: Props) {
       {/* Overlay drawers — position:fixed, don't affect flex layout */}
       <LeftRail />
       <RightPanel />
+      <FeedbackWidget />
     </div>
   );
 }
