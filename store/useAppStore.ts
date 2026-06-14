@@ -48,6 +48,8 @@ interface AppStore {
   selectedAnchorId: string | null;
   generatedAssets: Asset[];
   expansions: Expansions;
+  /** AI-tailored caption per platform (e.g. { instagram, tiktok, linkedin }). */
+  platformCaptions: Record<string, string>;
   isGenerating: boolean;
   generationStage: string;
   generationElapsed: number;
@@ -66,6 +68,7 @@ interface AppStore {
   setCampaignName: (name: string) => void;
   setAnchorId: (id: string | null) => void;
   setGeneratedAssets: (assets: Asset[]) => void;
+  setPlatformCaptions: (captions: Record<string, string>) => void;
   updateExpansion: (
     type: keyof Expansions,
     expansion: Partial<Expansion>,
@@ -94,6 +97,7 @@ export const useAppStore = create<AppStore>()((set) => ({
   selectedAnchorId: null,
   generatedAssets: [],
   expansions: {},
+  platformCaptions: {},
   isGenerating: false,
   generationStage: "",
   generationElapsed: 0,
@@ -112,6 +116,7 @@ export const useAppStore = create<AppStore>()((set) => ({
   setCampaignName: (name) => set({ campaignName: name }),
   setAnchorId: (id) => set({ selectedAnchorId: id }),
   setGeneratedAssets: (assets) => set({ generatedAssets: assets }),
+  setPlatformCaptions: (captions) => set({ platformCaptions: captions }),
   updateExpansion: (type, expansion) =>
     set((state) => ({
       expansions: {
@@ -167,6 +172,7 @@ export const useAppStore = create<AppStore>()((set) => ({
       selectedAnchorId: null,
       generatedAssets: [],
       expansions: {},
+      platformCaptions: {},
       isGenerating: false,
       generationStage: "",
       generationElapsed: 0,

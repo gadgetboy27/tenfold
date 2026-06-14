@@ -56,6 +56,8 @@ export default function Step5Review() {
     currentCampaignId,
     workspaceSlug,
     updateExpansion,
+    platformCaptions,
+    setPlatformCaptions,
   } = useAppStore();
 
   const [caption, setCaption] = useState(expansions.script?.content ?? "");
@@ -64,9 +66,6 @@ export default function Step5Review() {
     "video" | "music" | null
   >(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [platformCaptions, setPlatformCaptions] = useState<
-    Record<string, string>
-  >({});
   const [adapting, setAdapting] = useState(false);
 
   const captionFor = (id: string) => platformCaptions[id] ?? caption;

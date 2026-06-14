@@ -97,6 +97,8 @@ export const publishSchema = z.object({
     )
     .min(1),
   caption: z.string().max(2200),
+  // Optional AI-tailored caption per platform; falls back to `caption`.
+  platformCaptions: z.record(z.string(), z.string().max(5000)).optional(),
   hashtags: z.array(z.string()).max(30).default([]),
   scheduledAt: z.string().datetime().optional(),
 });
