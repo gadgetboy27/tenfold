@@ -81,6 +81,26 @@ export async function GET() {
     if (e.detail) checks.dbDetail = e.detail;
   }
 
+  // Ayrshare config: is the API key set, and how many workspace profiles are
+  // linked? Linked profiles = the slots that count toward the Ayrshare plan
+  // (Launch: 10, Business: 30 + per-profile), so this is a quick cost gauge.
+  checks.AYRSHARE_API_KEY = process.env.AYRSHARE_API_KEY ? "set" : "MISSING";
+  try {
+    const supabase = createClient(
+      supabaseUrl,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    );
+    const { count, error } = await supabase
+      .from("workspaces")
+      .select("id", { count: "exact", head: true })
+      .not("ayrshare_profile_key", "is", null);
+    checks.ayrshareLinkedProfiles = error
+      ? `error: ${error.message}`
+      : String(count ?? 0);
+  } catch (err) {
+    checks.ayrshareLinkedProfiles = `exception: ${(err as Error).message}`;
+  }
+
   const ok = checks.db === "ok";
   return NextResponse.json(checks, { status: ok ? 200 : 500 });
 }
