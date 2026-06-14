@@ -6,24 +6,27 @@ import {
   getUserPages,
   getInstagramAccount,
 } from '@/lib/social/meta';
+import { verifyOAuthState } from '@/lib/social/oauth-state';
 
 export async function GET(req: Request) {
   const url         = new URL(req.url);
   const code        = url.searchParams.get('code');
-  const state       = url.searchParams.get('state');  // workspaceId
+  // Verify the signed state and recover the workspaceId — a forged/expired state
+  // resolves to null and is treated as a denied connection (CSRF protection).
+  const workspaceId = verifyOAuthState(url.searchParams.get('state'));
   const metaError   = url.searchParams.get('error');
 
   // Resolve workspace slug for redirect URL — needed before we can redirect anywhere
   const admin = createSupabaseAdminClient();
 
   async function workspaceSlug(): Promise<string | null> {
-    if (!state) return null;
-    const { data, error } = await admin.from('workspaces').select('slug').eq('id', state).single();
+    if (!workspaceId) return null;
+    const { data, error } = await admin.from('workspaces').select('slug').eq('id', workspaceId).single();
     if (error) console.error('[Meta OAuth] workspace lookup failed:', error.message);
     return (data as { slug: string } | null)?.slug ?? null;
   }
 
-  if (metaError || !code || !state) {
+  if (metaError || !code || !workspaceId) {
     const slug = await workspaceSlug();
     const base = slug ? `${process.env.APP_URL}/${slug}` : process.env.APP_URL!;
     return NextResponse.redirect(`${base}/settings/social?error=facebook_denied`);
@@ -55,7 +58,7 @@ export async function GET(req: Request) {
     // 4. Upsert Facebook profile with permanent page access token
     await admin.from('social_profiles').upsert(
       {
-        workspace_id:         state,
+        workspace_id:         workspaceId,
         platform:             'facebook',
         handle:               page.id,
         profile_display_name: page.name,
@@ -72,7 +75,7 @@ export async function GET(req: Request) {
       // Instagram uses the Facebook page's access token for all publishing calls
       await admin.from('social_profiles').upsert(
         {
-          workspace_id:         state,
+          workspace_id:         workspaceId,
           platform:             'instagram',
           handle:               igAccount.username,
           profile_display_name: igAccount.name ?? igAccount.username,

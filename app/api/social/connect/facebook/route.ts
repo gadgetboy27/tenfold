@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/session';
 import { getMetaOAuthUrl } from '@/lib/social/meta';
+import { signOAuthState } from '@/lib/social/oauth-state';
 
 export async function GET(req: Request) {
   try {
     const session = await getSession(req);
-    // Use workspaceId as OAuth state so the callback knows which workspace to update.
-    // For production, sign this value to prevent CSRF.
-    const url = getMetaOAuthUrl(session.workspaceId);
+    // Signed OAuth state carries the workspaceId through the round-trip so the
+    // callback can trust which workspace to attach pages to (CSRF protection).
+    const url = getMetaOAuthUrl(signOAuthState(session.workspaceId));
     return NextResponse.redirect(url);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unauthorized';
