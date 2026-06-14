@@ -22,6 +22,7 @@ export default function Step3Expand() {
   const [videoDuration, setVideoDuration] = useState<10 | 30 | 60>(10);
   const [videoStyle, setVideoStyle] = useState<VideoStyle>("Cinematic");
   const [musicGenre, setMusicGenre] = useState("Lo-fi Chill");
+  const [musicModel, setMusicModel] = useState("stable-audio");
   const [scriptPlatform, setScriptPlatform] = useState("IG");
   const [scriptTone, setScriptTone] = useState("Pro");
   const [variationDirection, setVariationDirection] = useState<
@@ -93,6 +94,7 @@ export default function Step3Expand() {
         params.genre = musicGenre;
         // Match the music length to the chosen video duration.
         params.durationSec = videoDuration;
+        params.musicModel = musicModel;
         if (variationDirection.music) {
           params.variationDirection = variationDirection.music;
         }
@@ -384,7 +386,7 @@ export default function Step3Expand() {
           <FormatCard
             type="music"
             title="Music"
-            subtitle="30s background track"
+            subtitle="track matches your video length"
             cost="8 cr"
             icon={Music}
             onGenerate={() => handleGenerate("music")}
@@ -413,6 +415,29 @@ export default function Step3Expand() {
                     }`}
                   >
                     {g}
+                  </button>
+                ))}
+              </div>
+              {/* Sound engine — Balanced (Stable Audio) vs Natural (Lyria 2) */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider mr-1">
+                  Engine
+                </span>
+                {[
+                  { id: "stable-audio", label: "Balanced" },
+                  { id: "lyria2", label: "Natural" },
+                ].map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setMusicModel(m.id)}
+                    className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                      musicModel === m.id
+                        ? "border-primary/50 text-primary bg-primary/10"
+                        : "border-border bg-background hover:border-primary/50"
+                    }`}
+                  >
+                    {m.label}
                   </button>
                 ))}
               </div>

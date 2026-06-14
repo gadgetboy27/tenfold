@@ -88,3 +88,39 @@ export function imageFallbackEndpoints(chosenId: string): string[] {
     .filter((ep) => ep !== chosen.endpoint);
   return [...new Set([chosen.endpoint, ...reliable])];
 }
+
+/**
+ * Music models. Stable Audio is the default (fast, length-controllable). Lyria 2
+ * is offered as a richer, more natural instrumental option. If the chosen model
+ * fails at submit, the job route falls back to Stable Audio.
+ */
+export interface MusicModel {
+  id: string;
+  label: string;
+  endpoint: string;
+  blurb: string;
+}
+
+export const DEFAULT_MUSIC_MODEL = "stable-audio";
+
+export const MUSIC_MODELS: MusicModel[] = [
+  {
+    id: "stable-audio",
+    label: "Balanced",
+    endpoint: "fal-ai/stable-audio",
+    blurb: "Fast and flexible — matched to your video length.",
+  },
+  {
+    id: "lyria2",
+    label: "Natural",
+    endpoint: "fal-ai/lyria2",
+    blurb: "Google Lyria 2 — richer, more natural instrumental.",
+  },
+];
+
+export function getMusicModel(id: string | undefined | null): MusicModel {
+  return (
+    MUSIC_MODELS.find((m) => m.id === id) ??
+    MUSIC_MODELS.find((m) => m.id === DEFAULT_MUSIC_MODEL)!
+  );
+}

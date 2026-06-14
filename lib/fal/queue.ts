@@ -49,3 +49,27 @@ export async function enqueueWithFallback(
   }
   throw lastErr ?? new Error("All fal endpoints failed to accept the job");
 }
+
+/**
+ * Like enqueueWithFallback, but each attempt carries its OWN input — needed when
+ * falling back across models with different input schemas (e.g. music models).
+ */
+export async function enqueueFirstOf(
+  attempts: { endpoint: string; input: Record<string, unknown> }[],
+  webhookUrl: string,
+): Promise<{ requestId: string; endpoint: string }> {
+  let lastErr: unknown;
+  for (const a of attempts) {
+    try {
+      const { requestId } = await submitToEndpoint(
+        a.endpoint,
+        a.input,
+        webhookUrl,
+      );
+      return { requestId, endpoint: a.endpoint };
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr ?? new Error("All fal endpoints failed to accept the job");
+}

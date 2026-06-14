@@ -5,7 +5,8 @@ import { createJobSchema } from "@/lib/validation/schemas";
 import { debitCredits } from "@/lib/credits/debit";
 import { refundCredits } from "@/lib/credits/refund";
 import { CREDIT_COSTS, type CreditCostKey } from "@/lib/credits/costs";
-import { enqueueJob } from "@/lib/fal/queue";
+import { enqueueJob, enqueueFirstOf } from "@/lib/fal/queue";
+import { getMusicModel } from "@/lib/fal/models";
 import { generateScript } from "@/lib/claude/script";
 import { getWorkspaceBrandVoice } from "@/lib/claude/brand-voice";
 import { getEntitlements } from "@/lib/billing/entitlements";
@@ -176,11 +177,38 @@ export async function POST(req: Request) {
     // All other types go through fal.ai async queue
     const webhookUrl = `${process.env.APP_URL}/api/webhooks/fal?j=${jobId}`;
     const falInput = buildFalInput(body.type, body.params, prompt);
-    const { requestId } = await enqueueJob(
-      body.type as import("@/lib/fal/models").FalModelKey,
-      falInput,
-      webhookUrl,
-    );
+
+    let requestId: string;
+    if (body.type === "music_generation") {
+      // Per-model input + fallback: try the chosen music model, then fall back
+      // to Stable Audio (different input schema, so each attempt carries its own).
+      const chosen = getMusicModel(
+        body.params.musicModel as string | undefined,
+      );
+      const stableAudio = getMusicModel("stable-audio");
+      const musicPrompt = (falInput as { prompt?: string }).prompt ?? prompt;
+      const inputFor = (endpoint: string): Record<string, unknown> =>
+        endpoint.includes("lyria")
+          ? { prompt: musicPrompt }
+          : (falInput as Record<string, unknown>);
+      const attempts =
+        chosen.id === stableAudio.id
+          ? [{ endpoint: chosen.endpoint, input: inputFor(chosen.endpoint) }]
+          : [
+              { endpoint: chosen.endpoint, input: inputFor(chosen.endpoint) },
+              {
+                endpoint: stableAudio.endpoint,
+                input: inputFor(stableAudio.endpoint),
+              },
+            ];
+      ({ requestId } = await enqueueFirstOf(attempts, webhookUrl));
+    } else {
+      ({ requestId } = await enqueueJob(
+        body.type as import("@/lib/fal/models").FalModelKey,
+        falInput,
+        webhookUrl,
+      ));
+    }
 
     await admin
       .from("creative_jobs")
