@@ -8,6 +8,8 @@ import {
   publishPhotoToInstagram,
   publishVideoToInstagram,
 } from "@/lib/social/meta";
+import { ayrsharePost } from "@/lib/ayrshare/client";
+import { getEntitlements } from "@/lib/billing/entitlements";
 import { v4 as uuidv4 } from "uuid";
 
 interface SocialProfile {
@@ -119,15 +121,27 @@ export async function POST(req: Request) {
       .eq("workspace_id", session.workspaceId)
       .in("platform", body.platforms);
 
-    if (!profiles || profiles.length === 0) {
-      return NextResponse.json(
-        {
-          error:
-            "No connected accounts for the selected platforms. Go to Settings → Social to connect.",
-        },
-        { status: 422 },
-      );
-    }
+    // Two publishing backends:
+    //  • Facebook + Instagram → Meta Graph directly (free, all tiers) when the
+    //    workspace has connected that account here.
+    //  • Every other network → Ayrshare (Pro feature; uses the workspace's
+    //    Ayrshare profile key + its linked socials).
+    const metaByPlatform = new Map<string, SocialProfile>(
+      (profiles ?? []).map((p) => [
+        (p as SocialProfile).platform,
+        p as SocialProfile,
+      ]),
+    );
+
+    const { data: ws } = await admin
+      .from("workspaces")
+      .select("ayrshare_profile_key")
+      .eq("id", session.workspaceId)
+      .single();
+    const ayrshareKey =
+      (ws as { ayrshare_profile_key: string | null } | null)
+        ?.ayrshare_profile_key ?? null;
+    const ent = await getEntitlements(session.workspaceId);
 
     const hashtags = body.hashtags.map((h) =>
       h.startsWith("#") ? h : `#${h}`,
@@ -136,29 +150,43 @@ export async function POST(req: Request) {
       ? `${body.caption}\n\n${hashtags.join(" ")}`
       : body.caption;
 
-    // Publish to each connected platform
     const platformResults: Record<string, string> = {};
     const errors: Record<string, string> = {};
 
-    for (const profile of profiles as SocialProfile[]) {
+    for (const platform of body.platforms) {
+      // Per-platform AI caption when supplied (its hashtags are already tailored);
+      // otherwise the base caption + shared hashtags.
+      const platformCaption = body.platformCaptions?.[platform] ?? fullCaption;
       try {
-        // Use the AI-tailored caption for this platform when provided (it already
-        // carries platform-appropriate hashtags); otherwise the base + hashtags.
-        const platformCaption =
-          body.platformCaptions?.[profile.platform] ?? fullCaption;
+        const meta = metaByPlatform.get(platform);
         let postId: string;
-        if (profile.platform === "facebook")
-          postId = await publishToFacebook(profile, asset, platformCaption);
-        else if (profile.platform === "instagram")
-          postId = await publishToInstagram(profile, asset, platformCaption);
-        else {
-          errors[profile.platform] = "Platform publishing not yet supported";
-          continue;
+        if (platform === "facebook" && meta) {
+          postId = await publishToFacebook(meta, asset, platformCaption);
+        } else if (platform === "instagram" && meta) {
+          postId = await publishToInstagram(meta, asset, platformCaption);
+        } else {
+          // Everything else goes through Ayrshare (Pro).
+          if (!ent.isPro) {
+            errors[platform] =
+              "Publishing beyond Facebook & Instagram is a Pro feature — upgrade to reach this network.";
+            continue;
+          }
+          if (!ayrshareKey) {
+            errors[platform] =
+              "Connect your accounts in Settings → Social first.";
+            continue;
+          }
+          const result = await ayrsharePost(ayrshareKey, {
+            post: platformCaption,
+            platforms: [platform],
+            mediaUrls: [asset.url],
+            ...(body.scheduledAt ? { scheduleDate: body.scheduledAt } : {}),
+          });
+          postId = result.postIds?.[0]?.id ?? result.id ?? "posted";
         }
-        platformResults[profile.platform] = postId;
+        platformResults[platform] = postId;
       } catch (err) {
-        errors[profile.platform] =
-          err instanceof Error ? err.message : "Unknown error";
+        errors[platform] = err instanceof Error ? err.message : "Unknown error";
       }
     }
 
