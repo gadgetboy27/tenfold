@@ -12,6 +12,7 @@ import { getEntitlements } from "@/lib/billing/entitlements";
 import {
   IMAGE_STYLE_SUFFIXES,
   MUSIC_GENRE_PROMPTS,
+  MUSIC_NATURAL_SUFFIX,
   VIDEO_DURATION_PROMPTS,
   VIDEO_STYLE_PROMPTS,
   type VideoStyle,
@@ -62,12 +63,18 @@ function buildFalInput(
     const genrePrompt =
       MUSIC_GENRE_PROMPTS[genre] ?? MUSIC_GENRE_PROMPTS["Lo-fi Chill"];
     const variationDir = (params.variationDirection as string) ?? "";
-    const finalPrompt = variationDir
+    const base = variationDir
       ? `${genrePrompt}, but ${variationDir}`
       : genrePrompt;
+    const finalPrompt = `${base}. ${MUSIC_NATURAL_SUFFIX}`;
+    // Match the track length to the chosen video duration (stable-audio caps
+    // around 47s, so clamp). Falls back to 30s when no video length is given.
+    const requested = Number(params.durationSec);
+    const seconds =
+      Number.isFinite(requested) && requested > 0 ? requested : 30;
     return {
       prompt: finalPrompt,
-      seconds_total: 30,
+      seconds_total: Math.min(seconds, 47),
       steps: 100,
     };
   }

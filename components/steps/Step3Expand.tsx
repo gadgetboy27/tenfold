@@ -91,6 +91,8 @@ export default function Step3Expand() {
       };
       if (type === "music") {
         params.genre = musicGenre;
+        // Match the music length to the chosen video duration.
+        params.durationSec = videoDuration;
         if (variationDirection.music) {
           params.variationDirection = variationDirection.music;
         }
@@ -398,7 +400,7 @@ export default function Step3Expand() {
                   "Corporate Jazz",
                   "Electronic",
                   "Acoustic Folk",
-                  "Hip-hop Beat",
+                  "Soulful Boom-bap",
                 ].map((g) => (
                   <button
                     key={g}

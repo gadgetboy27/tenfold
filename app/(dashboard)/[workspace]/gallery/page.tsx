@@ -29,6 +29,7 @@ export default function GalleryPage() {
   const router = useRouter();
   const storeSlug = useAppStore((s) => s.workspaceSlug);
   const setCampaignId = useAppStore((s) => s.setCampaignId);
+  const setCampaignName = useAppStore((s) => s.setCampaignName);
   const setGeneratedAssets = useAppStore((s) => s.setGeneratedAssets);
   const setAnchorId = useAppStore((s) => s.setAnchorId);
   const completeStep = useAppStore((s) => s.completeStep);
@@ -51,6 +52,7 @@ export default function GalleryPage() {
       });
       const data = (await res.json().catch(() => ({}))) as {
         campaignId?: string;
+        campaignName?: string;
         asset?: {
           id: string;
           url: string;
@@ -66,13 +68,14 @@ export default function GalleryPage() {
         throw new Error(data.error ?? "Couldn't reuse this image");
 
       setCampaignId(data.campaignId);
+      if (data.campaignName) setCampaignName(data.campaignName);
       setGeneratedAssets([data.asset]);
       setAnchorId(data.asset.id);
       completeStep(1);
       completeStep(2);
       setStep(3);
       toast.success(
-        "Image set as anchor — build your campaign (no credits used).",
+        `New project “${data.campaignName ?? "campaign"}” started from this image — no credits used. New video, music & captions here cost credits.`,
       );
       router.push(`/${slug}`);
     } catch (err: unknown) {

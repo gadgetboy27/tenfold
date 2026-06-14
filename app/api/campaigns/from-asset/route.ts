@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import { withWorkspace } from "@/lib/api/with-workspace";
+import { randomCampaignName } from "@/lib/util/campaign-name";
 import { z } from "zod";
 
 const schema = z.object({ assetId: z.string().uuid() });
@@ -43,12 +44,13 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
 
   const campaignId = uuidv4();
   const newAssetId = uuidv4();
+  const campaignName = randomCampaignName();
 
   const { error: campErr } = await admin.from("campaigns").insert({
     id: campaignId,
     workspace_id: session.workspaceId,
     created_by: session.userId,
-    name: "Reused image",
+    name: campaignName,
     prompt,
     parameters: sc?.parameters ?? {},
     status: "ready",
@@ -78,6 +80,7 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
   return NextResponse.json(
     {
       campaignId,
+      campaignName,
       asset: {
         id: newAssetId,
         url: source.url,
