@@ -936,7 +936,7 @@ function WizardPlatformStep({
             </p>
             <p className="text-xs text-muted-foreground">
               A secure window will open where you log in to {platform.label}.
-              Tenfold never sees your password — this is handled by Ayrshare.
+              Tenfold never sees your password — it&apos;s handled securely.
             </p>
           </div>
           <Button
@@ -947,7 +947,7 @@ function WizardPlatformStep({
             <ExternalLink className="w-4 h-4" />
             {isConnecting
               ? "Opening secure window…"
-              : `Connect ${platform.label} via Ayrshare`}
+              : `Connect ${platform.label}`}
           </Button>
         </div>
       ) : (
@@ -1104,12 +1104,12 @@ export default function SocialSettingsPage() {
         error?: string;
       };
       if (!res.ok || !data.connectUrl)
-        throw new Error(
-          data.error ?? "Could not start the Ayrshare connection",
-        );
+        throw new Error(data.error ?? "Could not start the connection");
       window.location.href = data.connectUrl;
     } catch (err) {
-      toast.error((err as Error).message ?? "Could not connect via Ayrshare");
+      toast.error(
+        (err as Error).message ?? "Could not connect your socials — try again",
+      );
     } finally {
       setAyrshareLoading(false);
     }
@@ -1230,32 +1230,12 @@ export default function SocialSettingsPage() {
                 {needsUpgrade && (
                   <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
                     <p className="text-sm font-semibold text-foreground mb-1">
-                      Ayrshare Business Plan required
+                      This network isn&apos;t available yet
                     </p>
-                    <p className="text-sm text-muted-foreground mb-3">
-                      The in-app connection popup requires Ayrshare&apos;s
-                      Business Plan. You can either upgrade, or connect directly
-                      through Ayrshare&apos;s dashboard and hit Refresh.
+                    <p className="text-sm text-muted-foreground">
+                      Facebook &amp; Instagram are ready to connect now — the
+                      other networks are rolling out shortly. Hang tight!
                     </p>
-                    <div className="flex gap-3">
-                      <a
-                        href="https://www.ayrshare.com/business-plan-for-multiple-users/"
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-sm text-primary underline underline-offset-2 inline-flex items-center gap-1"
-                      >
-                        Upgrade Ayrshare <ArrowUpRight className="w-3 h-3" />
-                      </a>
-                      <a
-                        href="https://app.ayrshare.com"
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-sm text-primary underline underline-offset-2 inline-flex items-center gap-1"
-                      >
-                        Open Ayrshare dashboard{" "}
-                        <ArrowUpRight className="w-3 h-3" />
-                      </a>
-                    </div>
                   </div>
                 )}
               </>
@@ -1291,15 +1271,15 @@ export default function SocialSettingsPage() {
         )}
       </div>
 
-      {/* Connect more networks via Ayrshare (everything beyond Facebook & Instagram) */}
+      {/* Connect the remaining networks (everything beyond Facebook & Instagram) */}
       <div className="mb-6 p-4 rounded-xl border border-primary/30 bg-primary/5 flex items-start justify-between gap-4">
         <div>
           <p className="text-sm font-semibold text-foreground mb-0.5">
             More networks — X, LinkedIn, TikTok, YouTube, Pinterest & more
           </p>
           <p className="text-xs text-muted-foreground">
-            Facebook &amp; Instagram connect above (free). Everything else links
-            in one place through Ayrshare — a Pro feature.
+            Facebook &amp; Instagram connect above (free). Connect everything
+            else through Tenfold in one place — a Pro feature.
           </p>
         </div>
         <Button
@@ -1313,7 +1293,7 @@ export default function SocialSettingsPage() {
           ) : (
             <ExternalLink className="w-3.5 h-3.5" />
           )}
-          Connect via Ayrshare
+          Connect your socials
         </Button>
       </div>
 
@@ -1405,55 +1385,21 @@ export default function SocialSettingsPage() {
         </div>
       )}
 
-      {/* Ayrshare upgrade notice */}
+      {/* Multi-network availability notice (shown when the broader networks
+          aren't enabled on the account yet) */}
       {needsUpgrade && (
         <div className="mb-4 p-5 bg-amber-500/10 border border-amber-500/30 rounded-xl">
           <div className="flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-sm font-semibold text-foreground mb-1">
-                Ayrshare Business Plan required
+                More networks are rolling out
               </p>
-              <p className="text-sm text-muted-foreground mb-3">
-                The in-app connection popup requires Ayrshare&apos;s Business
-                Plan. You have two options:
+              <p className="text-sm text-muted-foreground">
+                Facebook &amp; Instagram are ready to connect now. The other
+                networks (X, LinkedIn, TikTok, YouTube, Pinterest &amp; more)
+                are coming to your plan shortly — check back soon.
               </p>
-              <div className="space-y-2 text-sm text-muted-foreground">
-                <div className="flex items-start gap-2">
-                  <span className="text-amber-400 font-bold mt-0.5">1.</span>
-                  <span>
-                    <strong className="text-foreground">
-                      Upgrade Ayrshare
-                    </strong>{" "}
-                    — unlocks the in-app connection flow.{" "}
-                    <a
-                      href="https://www.ayrshare.com/business-plan-for-multiple-users/"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-primary underline underline-offset-2 inline-flex items-center gap-1"
-                    >
-                      View pricing <ArrowUpRight className="w-3 h-3" />
-                    </a>
-                  </span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="text-amber-400 font-bold mt-0.5">2.</span>
-                  <span>
-                    <strong className="text-foreground">
-                      Connect via Ayrshare dashboard
-                    </strong>{" "}
-                    directly, then hit Refresh above.{" "}
-                    <a
-                      href="https://app.ayrshare.com"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-primary underline underline-offset-2 inline-flex items-center gap-1"
-                    >
-                      Open Ayrshare <ArrowUpRight className="w-3 h-3" />
-                    </a>
-                  </span>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -1501,7 +1447,7 @@ export default function SocialSettingsPage() {
           <li>
             Click{" "}
             <strong className="text-foreground">Connect [Platform]</strong> — a
-            secure window opens via Ayrshare
+            secure window opens
           </li>
           <li>Log in to the platform inside that window, then close it</li>
           <li>
@@ -1510,8 +1456,8 @@ export default function SocialSettingsPage() {
           </li>
         </ol>
         <p className="text-xs text-muted-foreground/60 mt-3">
-          Connections are managed securely via Ayrshare. Tenfold never stores
-          your social passwords.
+          Connections are managed securely by Tenfold. We never store your
+          social passwords.
         </p>
       </div>
     </div>

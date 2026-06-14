@@ -48,3 +48,23 @@ jargon. Credits are always called **credits** (never "tokens").
 Stripe → **Settings → Branding**: upload `app/icon.svg` (or a 512px PNG export of
 it) as the icon/logo, set the **accent colour to `#7C5CFC`**. This brands the
 hosted checkout, the Customer Portal, and every invoice/receipt PDF automatically.
+
+## Applying to Ayrshare (white-label the social-connect page) — IMPORTANT
+
+Customers must **never see the word "Ayrshare."** The in-app copy is already
+neutral ("Connect your socials", handled by Tenfold), but the **hosted account-
+linking page** Ayrshare opens (via the SSO/JWT flow) shows Ayrshare branding by
+default. To make it look like Tenfold:
+
+1. Ayrshare dashboard → **Settings → White Label** (Business plan feature).
+2. Upload the Tenfold logo (`public/brand/tenfold-icon-512.png`), set the
+   **brand colour to `#7C5CFC`**, and configure a **custom domain** (e.g.
+   `connect.tenfold.nz`) for the linking page.
+3. Optionally set the redirect/return URL back to
+   `https://tenfold.nz/<workspace>/settings/social`.
+
+Result: the customer clicks **Connect your socials** in Tenfold, lands on a page
+that looks like Tenfold, authorises their own social accounts, and returns — with
+no third-party branding anywhere in the journey. Same principle elsewhere: never
+surface the underlying providers (fal.ai, the model vendors, Ayrshare) in
+customer-facing copy — promote **Tenfold**.

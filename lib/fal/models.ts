@@ -49,7 +49,7 @@ export const IMAGE_MODELS: ImageModel[] = [
     endpoint: "fal-ai/nano-banana",
     creditCost: 12,
     proOnly: false,
-    blurb: "Google Gemini image — great at composites, products & text.",
+    blurb: "Great at composites, product shots & in-image text.",
   },
   {
     id: "ideogram",
@@ -114,7 +114,7 @@ export const MUSIC_MODELS: MusicModel[] = [
     id: "lyria2",
     label: "Natural",
     endpoint: "fal-ai/lyria2",
-    blurb: "Google Lyria 2 — richer, more natural instrumental.",
+    blurb: "Richer, more natural instrumental sound.",
   },
 ];
 

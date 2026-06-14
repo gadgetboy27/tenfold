@@ -166,7 +166,7 @@ export default function Step3Expand() {
         if (Date.now() - startedAt > MAX_MS) {
           throw new Error(
             type === "video"
-              ? "Video generation timed out after 5 minutes — fal.ai may be under load. Your credits have not been charged. Please retry."
+              ? "Video generation timed out after 5 minutes — the generator may be under load. Your credits have not been charged. Please retry."
               : "Music generation timed out after 3 minutes. Please retry.",
           );
         }
