@@ -196,6 +196,9 @@ function LoginContent() {
             Sign in with Facebook
           </Button>
 
+          {/* LinkedIn sign-in temporarily hidden — needs a LinkedIn Company Page +
+              dev app before the Supabase linkedin_oidc provider works. Re-enable by
+              deleting this comment wrapper (and confirm linkedin_oidc is on in Supabase).
           <Button
             onClick={() => handleOAuth("linkedin_oidc")}
             disabled={loading}
@@ -206,6 +209,7 @@ function LoginContent() {
             </svg>
             Sign in with LinkedIn
           </Button>
+          */}
         </div>
 
         <div className="relative mb-6">
