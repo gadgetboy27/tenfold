@@ -15,6 +15,18 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: '**.fal.ai' },
     ],
   },
+  async redirects() {
+    return [
+      // Canonical host: redirect www.tenfold.nz → apex so OAuth redirect URIs and
+      // the app's base URL only ever need to match one host (https://tenfold.nz).
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "www.tenfold.nz" }],
+        destination: "https://tenfold.nz/:path*",
+        permanent: true,
+      },
+    ];
+  },
   // CORS headers are handled by lib/auth/middleware.ts (more flexible, dynamic origin matching)
   // next.config headers() cannot send comma-separated origins — only single origin or *
 };
