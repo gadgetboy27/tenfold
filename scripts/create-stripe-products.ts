@@ -9,7 +9,7 @@ const PRODUCTS = [
     name: 'Starter Pack',
     description: '25 credits — enough for one full image campaign',
     mode: 'payment' as const,
-    unit_amount: 500,   // NZD $5.00
+    unit_amount: 1500,  // NZD $15.00
     metadata: { credits: '25', type: 'pack' },
     envKey: 'STRIPE_PRICE_25CR',
   },
@@ -17,7 +17,7 @@ const PRODUCTS = [
     name: 'Standard Pack',
     description: '100 credits — approx. 5 full campaigns',
     mode: 'payment' as const,
-    unit_amount: 1500,  // NZD $15.00
+    unit_amount: 4900,  // NZD $49.00
     metadata: { credits: '100', type: 'pack' },
     envKey: 'STRIPE_PRICE_100CR',
   },
@@ -25,7 +25,7 @@ const PRODUCTS = [
     name: 'Pro Pack',
     description: '300 credits — approx. 16 full campaigns',
     mode: 'payment' as const,
-    unit_amount: 3500,  // NZD $35.00
+    unit_amount: 11900, // NZD $119.00
     metadata: { credits: '300', type: 'pack' },
     envKey: 'STRIPE_PRICE_300CR',
   },
