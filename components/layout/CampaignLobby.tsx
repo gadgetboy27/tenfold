@@ -307,8 +307,9 @@ export default function CampaignLobby() {
     }
   }, [workspaceSlug]);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
+    // fetchCampaigns sets loading/list state on mount — intentional, not a derived-state smell.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchCampaigns();
   }, [fetchCampaigns]);
 
@@ -668,75 +669,82 @@ export default function CampaignLobby() {
                       )}
                     </div>
 
-                    {/* Step / status badge */}
-                    <div
-                      className={`text-xs font-medium px-2.5 py-1 rounded-full border shrink-0 ${statusColor}`}
-                    >
-                      {isGenerating ? (
-                        <span className="flex items-center gap-1">
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                          Generating
-                        </span>
-                      ) : (
-                        `Step ${c.current_step} · ${stepLabel}`
-                      )}
-                    </div>
-
-                    {/* Time */}
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
-                      <Clock className="w-3 h-3" />
-                      {timeAgo(c.created_at)}
-                    </div>
-
-                    {/* Cancel button — shown for generating campaigns */}
-                    {isGenerating && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleCancel(c);
-                        }}
-                        disabled={isCancelling}
-                        className={cn(
-                          "shrink-0 flex items-center gap-1 text-xs px-2 py-1 rounded-lg border transition-colors",
-                          isStuck
-                            ? "border-destructive/40 text-destructive hover:bg-destructive/10"
-                            : "opacity-0 group-hover:opacity-100 border-border text-muted-foreground hover:text-destructive hover:border-destructive/40",
-                        )}
-                        title="Cancel generation and refund credits"
+                    {/* Right side: metadata + actions, grouped into two clusters so
+                        the spacing reads intentionally instead of as one loose strip. */}
+                    <div className="flex items-center gap-3 shrink-0">
+                      {/* Step / status badge */}
+                      <div
+                        className={`text-xs font-medium px-2.5 py-1 rounded-full border whitespace-nowrap ${statusColor}`}
                       >
-                        {isCancelling ? (
-                          <Loader2 className="w-3 h-3 animate-spin" />
+                        {isGenerating ? (
+                          <span className="flex items-center gap-1">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            Generating
+                          </span>
                         ) : (
-                          <XCircle className="w-3 h-3" />
+                          `Step ${c.current_step} · ${stepLabel}`
                         )}
-                        {isStuck ? "Cancel" : ""}
-                      </button>
-                    )}
+                      </div>
 
-                    {/* Resume arrow / loading */}
-                    {isLoading ? (
-                      <Loader2 className="w-4 h-4 text-primary animate-spin shrink-0" />
-                    ) : (
-                      <span className="text-muted-foreground group-hover:text-primary transition-colors shrink-0">
-                        <ChevronRight className="w-4 h-4" />
-                      </span>
-                    )}
+                      {/* Time — dropped on narrow screens to keep the row uncrowded */}
+                      <div className="hidden sm:flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
+                        <Clock className="w-3 h-3" />
+                        {timeAgo(c.created_at)}
+                      </div>
 
-                    {/* Delete button — visible on hover */}
-                    {!isLoading && !isCancelling && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setConfirmDelete(c);
-                        }}
-                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all shrink-0"
-                        title="Delete campaign"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
+                      {/* Action icons — tight cluster, separated from the metadata above */}
+                      <div className="flex items-center gap-1.5">
+                        {/* Cancel button — shown for generating campaigns */}
+                        {isGenerating && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCancel(c);
+                            }}
+                            disabled={isCancelling}
+                            className={cn(
+                              "flex items-center gap-1 text-xs px-2 py-1 rounded-lg border transition-colors",
+                              isStuck
+                                ? "border-destructive/40 text-destructive hover:bg-destructive/10"
+                                : "opacity-0 group-hover:opacity-100 border-border text-muted-foreground hover:text-destructive hover:border-destructive/40",
+                            )}
+                            title="Cancel generation and refund credits"
+                          >
+                            {isCancelling ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <XCircle className="w-3 h-3" />
+                            )}
+                            {isStuck ? "Cancel" : ""}
+                          </button>
+                        )}
+
+                        {/* Resume arrow / loading */}
+                        {isLoading ? (
+                          <Loader2 className="w-4 h-4 text-primary animate-spin" />
+                        ) : (
+                          <span className="text-muted-foreground group-hover:text-primary transition-colors">
+                            <ChevronRight className="w-4 h-4" />
+                          </span>
+                        )}
+
+                        {/* Delete button — visible on hover */}
+                        {!isLoading && !isCancelling && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmDelete(c);
+                            }}
+                            className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all"
+                            title="Delete campaign"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </motion.div>
                 );
               })}
