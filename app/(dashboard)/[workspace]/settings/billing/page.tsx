@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import RedeemCode from "@/components/billing/RedeemCode";
 import toast from "react-hot-toast";
 
 interface Plan {
@@ -430,6 +431,11 @@ export default function BillingPage() {
             );
           })}
         </div>
+      </section>
+
+      {/* Redeem a promo / friends-and-family code */}
+      <section>
+        <RedeemCode workspaceSlug={slug} onRedeemed={loadBilling} />
       </section>
 
       {/* Credit packs */}

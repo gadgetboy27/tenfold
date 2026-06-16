@@ -133,6 +133,38 @@ export const creditTransactions = pgTable(
   (t) => [index("idx_credit_transactions_workspace").on(t.workspaceId)],
 );
 
+// ─── PROMO CODES ─────────────────────────────────────────────────────────────
+export const promoCodes = pgTable("promo_codes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  code: text("code").notNull().unique(),
+  credits: integer("credits").notNull(),
+  active: boolean("active").notNull().default(false),
+  maxRedemptions: integer("max_redemptions"),
+  redemptionCount: integer("redemption_count").notNull().default(0),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const promoRedemptions = pgTable(
+  "promo_redemptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    promoCodeId: uuid("promo_code_id")
+      .notNull()
+      .references(() => promoCodes.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    creditsGranted: integer("credits_granted").notNull(),
+    redeemedAt: timestamp("redeemed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [unique().on(t.promoCodeId, t.workspaceId)],
+);
+
 // ─── CAMPAIGNS ───────────────────────────────────────────────────────────────
 export const campaigns = pgTable(
   "campaigns",
