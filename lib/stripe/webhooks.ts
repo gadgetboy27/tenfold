@@ -46,45 +46,28 @@ async function grantCredits(
   workspaceId: string,
   amount: number,
   description: string,
-  stripePaymentIntentId?: string,
+  idempotencyKey?: string,
 ): Promise<void> {
   const admin = createSupabaseAdminClient();
 
-  // Idempotency by payment: if we've already granted for this payment intent,
-  // do nothing. Protects against webhook retries AND any manual backfill from
-  // ever double-crediting the same purchase.
-  if (stripePaymentIntentId) {
-    const { data: existing } = await admin
-      .from("credit_transactions")
-      .select("id")
-      .eq("stripe_payment_intent_id", stripePaymentIntentId)
-      .limit(1);
-    if (existing && existing.length > 0) return;
-  }
-
-  const { data: account } = await admin
-    .from("credit_accounts")
-    .select("cached_balance")
-    .eq("workspace_id", workspaceId)
-    .single();
-
-  if (!account) return;
-  const newBalance =
-    (account as { cached_balance: number }).cached_balance + amount;
-
-  await admin.from("credit_transactions").insert({
-    workspace_id: workspaceId,
-    type: "purchase",
-    amount,
-    balance_after: newBalance,
-    description,
-    stripe_payment_intent_id: stripePaymentIntentId ?? null,
+  // Atomic + idempotent in one DB statement (lock account row → dedup on the
+  // Stripe payment/invoice id → ledger insert + balance bump). Replaces the old
+  // read-modify-write, which lost concurrent grants and wrote the balance
+  // directly (CLAUDE.md §2). Idempotency protects against webhook retries and
+  // any manual backfill ever double-crediting the same purchase.
+  const { error } = await admin.rpc("grant_credits", {
+    p_workspace_id: workspaceId,
+    p_amount: amount,
+    p_description: description,
+    p_idempotency_key: idempotencyKey ?? null,
   });
 
-  await admin
-    .from("credit_accounts")
-    .update({ cached_balance: newBalance })
-    .eq("workspace_id", workspaceId);
+  if (error) {
+    // Throw so the webhook returns non-200 and Stripe retries — the grant is
+    // idempotent, so a retry can't double-credit.
+    console.error("grant_credits RPC error:", error);
+    throw new Error(`grant_credits failed: ${error.message}`);
+  }
 }
 
 export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
@@ -144,10 +127,13 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
 
       const result = creditsForSubscriptionTier(priceId);
       if (result) {
+        // One grant per invoice — guards against the same renewal being credited
+        // twice (Stripe replays, or both invoice + subscription events firing).
         await grantCredits(
           s.workspace_id,
           result.credits,
           "Monthly subscription credits",
+          invoice.id,
         );
       }
       break;
