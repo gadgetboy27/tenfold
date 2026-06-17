@@ -21,6 +21,12 @@ export default function DashboardClient({ workspaceSlug, user }: Props) {
   const { setWorkspaceSlug, setCreditBalance, currentCampaignId } =
     useAppStore();
 
+  // First name for the lobby greeting — full_name if set, else the email handle.
+  const displayName =
+    (user.user_metadata?.full_name as string | undefined)?.split(" ")[0] ??
+    user.email?.split("@")[0] ??
+    undefined;
+
   useEffect(() => {
     setWorkspaceSlug(workspaceSlug);
   }, [workspaceSlug, setWorkspaceSlug]);
@@ -40,7 +46,7 @@ export default function DashboardClient({ workspaceSlug, user }: Props) {
       <div className="h-screen flex flex-col overflow-hidden bg-background">
         <TopBar user={user} showBack={false} />
         <div className="flex-1 overflow-hidden">
-          <CampaignLobby />
+          <CampaignLobby userName={displayName} />
         </div>
         <FeedbackWidget />
       </div>

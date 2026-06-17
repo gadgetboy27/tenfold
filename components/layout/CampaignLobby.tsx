@@ -275,7 +275,7 @@ function DeleteConfirmModal({
 }
 
 // ── Main lobby ───────────────────────────────────────────────────────────────
-export default function CampaignLobby() {
+export default function CampaignLobby({ userName }: { userName?: string }) {
   const { workspaceSlug, loadCampaign } = useAppStore();
   const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -497,6 +497,12 @@ export default function CampaignLobby() {
   // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
 
+  // Welcome-hub copy: greeting by time of day, and new-vs-returning framing.
+  const hour = new Date(now).getHours();
+  const greeting =
+    hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const isNewUser = !loading && campaigns.length === 0;
+
   return (
     <>
       {/* Delete confirmation modal */}
@@ -511,22 +517,36 @@ export default function CampaignLobby() {
 
       <div className="h-full overflow-y-auto">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-          {/* Header */}
-          <div className="mb-10 flex items-start justify-between gap-4">
-            <div>
-              <h1 className="font-serif text-3xl font-bold text-foreground mb-2">
-                Campaigns
-              </h1>
-              <p className="text-muted-foreground text-sm">
-                Pick up where you left off, or start something new.
-              </p>
+          {/* Welcome hub header — adapts to new vs returning, with a warm greeting */}
+          <div className="relative mb-10">
+            {/* subtle violet glow to tie into the brand */}
+            <div className="pointer-events-none absolute -top-10 left-0 -z-10 h-40 w-80 rounded-full bg-primary/10 blur-[90px]" />
+            <div className="flex items-start justify-between gap-4">
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                <p className="mb-2 inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.18em] text-primary">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  {greeting}
+                  {userName ? `, ${userName}` : ""}
+                </p>
+                <h1 className="font-serif text-3xl sm:text-4xl font-bold text-foreground mb-2">
+                  {isNewUser ? "Start your marketing journey" : "Welcome back"}
+                </h1>
+                <p className="text-muted-foreground text-sm max-w-md">
+                  {isNewUser
+                    ? "Turn your first idea into a full campaign — one prompt is all it takes."
+                    : "Pick up where you left off, or spin up something new."}
+                </p>
+              </motion.div>
+              <Link
+                href={`/${workspaceSlug}/gallery`}
+                className="shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card hover:border-primary/50 hover:bg-primary/5 text-sm text-foreground transition-colors"
+              >
+                <ImageIcon className="w-4 h-4 text-primary" /> Gallery
+              </Link>
             </div>
-            <Link
-              href={`/${workspaceSlug}/gallery`}
-              className="shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card hover:border-primary/50 hover:bg-primary/5 text-sm text-foreground transition-colors"
-            >
-              <ImageIcon className="w-4 h-4 text-primary" /> Gallery
-            </Link>
           </div>
 
           {/* New campaign CTA */}
@@ -541,7 +561,7 @@ export default function CampaignLobby() {
             </div>
             <div className="text-left">
               <p className="font-semibold text-foreground">
-                Start new campaign
+                {isNewUser ? "Create your first campaign" : "Start new campaign"}
               </p>
               <p className="text-sm text-muted-foreground mt-0.5">
                 Generate images from a prompt or analyze your website to build a
@@ -561,8 +581,8 @@ export default function CampaignLobby() {
             <div className="text-center py-16">
               <Sparkles className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
               <p className="text-muted-foreground text-sm">
-                No campaigns yet — hit the button above to create your first
-                one.
+                Your campaigns will appear here. Hit the button above to create
+                your first one.
               </p>
             </div>
           ) : (
