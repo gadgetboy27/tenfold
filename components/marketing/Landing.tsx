@@ -15,8 +15,8 @@ export function Landing() {
       <MarketingNav />
       <main>
         <Hero />
-        <PromptDemo />
         <PipelineSection />
+        <PromptDemo />
         <ShowcaseSection />
         <ValueProps />
         <CTASection />
