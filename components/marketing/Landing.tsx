@@ -1,6 +1,7 @@
 import { Starfield } from "./Starfield";
 import { MarketingNav } from "./MarketingNav";
 import { Hero } from "./Hero";
+import { PromptDemo } from "./PromptDemo";
 import { PipelineSection } from "./PipelineSection";
 import { ShowcaseSection } from "./ShowcaseSection";
 import { ValueProps } from "./ValueProps";
@@ -14,6 +15,7 @@ export function Landing() {
       <MarketingNav />
       <main>
         <Hero />
+        <PromptDemo />
         <PipelineSection />
         <ShowcaseSection />
         <ValueProps />
