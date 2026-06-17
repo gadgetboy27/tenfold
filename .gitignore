@@ -57,3 +57,6 @@ node_modules/.cache/
 
 # OS
 Thumbs.db
+
+# graphify knowledge-graph output (local artifact)
+graphify-out/
