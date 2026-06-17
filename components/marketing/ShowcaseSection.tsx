@@ -2,41 +2,128 @@
 
 import Image from "next/image";
 import { motion, useScroll, useTransform } from "framer-motion";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
-const TILES = [
-  { src: "/landing/interior.jpg", tag: "Real estate", depth: -50, span: "sm:col-span-2 sm:row-span-2 aspect-[16/10]" },
-  { src: "/landing/product-skincare.jpg", tag: "Product", depth: 40, span: "aspect-[3/4]" },
-  { src: "/landing/food.jpg", tag: "Hospitality", depth: -30, span: "aspect-[3/4]" },
-  { src: "/landing/fashion-flatlay.jpg", tag: "Fashion", depth: 50, span: "aspect-square" },
-  { src: "/landing/cafe.jpg", tag: "Café", depth: -40, span: "aspect-square" },
-];
+interface Shot {
+  src: string;
+  tag: string;
+}
 
-function Tile({ src, tag, depth, span }: (typeof TILES)[number]) {
+/** A tile that crossfades through a pool of images on a staggered timer, while
+ *  drifting with scroll (parallax). Respects prefers-reduced-motion. */
+function RotatingTile({
+  pool,
+  depth,
+  span,
+  order,
+}: {
+  pool: Shot[];
+  depth: number;
+  span: string;
+  order: number;
+}) {
   const ref = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "end start"] });
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ["start end", "end start"],
+  });
   const y = useTransform(scrollYProgress, [0, 1], [depth, -depth]);
+  const [active, setActive] = useState(0);
+
+  useEffect(() => {
+    if (pool.length < 2) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    // stagger each tile's first flip so they don't all change at once
+    const startDelay = order * 1300;
+    let interval: ReturnType<typeof setInterval>;
+    const timeout = setTimeout(() => {
+      setActive((a) => (a + 1) % pool.length);
+      interval = setInterval(
+        () => setActive((a) => (a + 1) % pool.length),
+        4800,
+      );
+    }, startDelay + 4800);
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(interval);
+    };
+  }, [pool.length, order]);
 
   return (
     <motion.div
       ref={ref}
       style={{ y }}
-      className={`group relative overflow-hidden rounded-2xl border border-white/10 ${span}`}
+      className={`group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02] ${span}`}
     >
-      <Image
-        src={src}
-        alt={`${tag} — made with tenfold`}
-        fill
-        className="object-cover transition-transform duration-700 group-hover:scale-105"
-        sizes="(max-width: 640px) 100vw, 33vw"
-      />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-      <span className="absolute bottom-3 left-3 rounded-full border border-white/15 bg-black/40 px-3 py-1 text-xs font-medium backdrop-blur">
-        {tag}
-      </span>
+      {pool.map((shot, i) => (
+        <motion.div
+          key={shot.src}
+          initial={false}
+          animate={{ opacity: i === active ? 1 : 0 }}
+          transition={{ duration: 1.2, ease: "easeInOut" }}
+          className="absolute inset-0"
+        >
+          <Image
+            src={shot.src}
+            alt={`${shot.tag} — made with tenfold`}
+            fill
+            className="object-cover transition-transform duration-700 group-hover:scale-105"
+            sizes="(max-width: 640px) 50vw, 33vw"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+          <span className="absolute bottom-3 left-3 rounded-full border border-white/15 bg-black/40 px-3 py-1 text-xs font-medium backdrop-blur">
+            {shot.tag}
+          </span>
+        </motion.div>
+      ))}
     </motion.div>
   );
 }
+
+// Each tile cycles its own pool — across the tiles, every generated asset shows.
+const TILES: { pool: Shot[]; depth: number; span: string }[] = [
+  {
+    depth: -50,
+    span: "sm:col-span-2 sm:row-span-2",
+    pool: [
+      { src: "/landing/interior.jpg", tag: "Real estate" },
+      { src: "/landing/sports-car.jpg", tag: "Automotive" },
+    ],
+  },
+  {
+    depth: 45,
+    span: "",
+    pool: [
+      { src: "/landing/product-skincare.jpg", tag: "Product" },
+      { src: "/landing/cosmetics.jpg", tag: "Beauty" },
+    ],
+  },
+  {
+    depth: -35,
+    span: "",
+    pool: [
+      { src: "/landing/food.jpg", tag: "Hospitality" },
+      { src: "/landing/burger.jpg", tag: "Food" },
+    ],
+  },
+  {
+    depth: 50,
+    span: "",
+    pool: [
+      { src: "/landing/fashion-flatlay.jpg", tag: "Fashion" },
+      { src: "/landing/smartwatch.jpg", tag: "Tech" },
+    ],
+  },
+  {
+    depth: -45,
+    span: "",
+    pool: [
+      { src: "/landing/cafe.jpg", tag: "Café" },
+      { src: "/landing/shoe-3d.jpg", tag: "Footwear" },
+      { src: "/landing/headphones.jpg", tag: "Audio" },
+    ],
+  },
+];
 
 export function ShowcaseSection() {
   return (
@@ -51,13 +138,14 @@ export function ShowcaseSection() {
             Every image here was generated by the product
           </h2>
           <p className="mt-4 text-muted-foreground">
-            No stock photos. This is the actual output — from one prompt each.
+            No stock photos — shoes, cars, food, beauty and more. This is the
+            actual output, from one prompt each.
           </p>
         </div>
 
         <div className="grid auto-rows-[180px] grid-cols-2 gap-4 sm:auto-rows-[200px] lg:grid-cols-4">
-          {TILES.map((t) => (
-            <Tile key={t.src} {...t} />
+          {TILES.map((t, i) => (
+            <RotatingTile key={i} {...t} order={i} />
           ))}
         </div>
       </div>
