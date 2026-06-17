@@ -24,7 +24,7 @@ export function CTASection() {
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: "-80px" }}
         transition={{ duration: 0.6 }}
-        className="relative mx-auto max-w-4xl overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-primary/15 to-white/[0.02] px-8 py-16 text-center backdrop-blur"
+        className="relative mx-auto max-w-6xl overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-primary/15 to-white/[0.02] px-8 py-16 text-center backdrop-blur"
       >
         <div className="pointer-events-none absolute left-1/2 top-0 -z-10 h-72 w-[600px] -translate-x-1/2 rounded-full bg-primary/25 blur-[120px]" />
 
