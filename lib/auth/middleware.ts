@@ -116,5 +116,9 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/webhooks).*)"],
+  // Keep in sync with proxy.ts (the active config). Static asset extensions are
+  // excluded so public files (/landing/*.jpg, /brand/*.svg) aren't auth-gated.
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|api/webhooks|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|mp4|webm|mp3|woff|woff2|ttf)).*)",
+  ],
 };
