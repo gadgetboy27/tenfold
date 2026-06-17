@@ -3,8 +3,26 @@ import { Toaster } from "react-hot-toast";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Tenfold",
-  description: "B2B AI Creative Platform",
+  metadataBase: new URL("https://tenfold.nz"),
+  title: "tenfold — one prompt, a whole campaign",
+  description:
+    "tenfold turns a single prompt into images, video, music and copy — then publishes it to up to 13 social platforms. The AI creative pipeline for modern brands.",
+  openGraph: {
+    title: "tenfold — one prompt, a whole campaign",
+    description:
+      "Turn one idea into a full campaign — images, video, music, copy — published everywhere. Start free with 50 credits.",
+    url: "https://tenfold.nz",
+    siteName: "tenfold",
+    images: ["/landing/hero-founder.jpg"],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "tenfold — one prompt, a whole campaign",
+    description:
+      "Turn one idea into a full campaign — images, video, music, copy — published everywhere.",
+    images: ["/landing/hero-founder.jpg"],
+  },
 };
 
 export default function RootLayout({

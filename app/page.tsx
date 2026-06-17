@@ -2,13 +2,16 @@ import { redirect } from 'next/navigation';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { v4 as uuidv4 } from 'uuid';
+import { Landing } from '@/components/marketing/Landing';
 
 export default async function RootPage() {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
 
+  // Logged-out visitors get the public marketing landing — the front door.
+  // Logged-in users fall through to workspace resolution + redirect below.
   if (!user) {
-    redirect('/login');
+    return <Landing />;
   }
 
   // Fast path: slug already cached in user_metadata from a previous provision
