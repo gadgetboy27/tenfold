@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import type { ScheduleItem } from '@/lib/content-agent/types';
 
 interface PipelineResult {
   stage: string;
@@ -17,7 +18,7 @@ interface PipelineResult {
 
 interface ContentReviewProps {
   submissionId: string;
-  onScheduleChange?: (schedule: any[]) => void;
+  onScheduleChange?: (schedule: ScheduleItem[]) => void;
 }
 
 export function ContentReview({ submissionId, onScheduleChange }: ContentReviewProps) {
@@ -34,7 +35,7 @@ export function ContentReview({ submissionId, onScheduleChange }: ContentReviewP
           setResults(data.pipelineResults || []);
 
           if (onScheduleChange) {
-            const scheduleStage = data.pipelineResults?.find((r: any) => r.stage === 'schedule');
+            const scheduleStage = data.pipelineResults?.find((r: PipelineResult) => r.stage === 'schedule');
             if (scheduleStage?.output_json) {
               onScheduleChange(scheduleStage.output_json);
             }

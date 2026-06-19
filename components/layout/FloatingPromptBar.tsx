@@ -294,8 +294,8 @@ export default function FloatingPromptBar() {
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     const wordCount = prompt.trim().split(/\s+/).filter(Boolean).length;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (wordCount < 3) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clearing score below the analysis threshold
       setScore(null);
       return;
     }

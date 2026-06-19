@@ -94,7 +94,7 @@ export default function ForgotPasswordPage() {
             </Button>
 
             <p className="text-xs text-gray-600 text-center">
-              We'll email you a secure link to reset your password
+              We&apos;ll email you a secure link to reset your password
             </p>
           </form>
         ) : null}

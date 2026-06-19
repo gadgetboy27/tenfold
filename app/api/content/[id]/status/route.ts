@@ -29,7 +29,6 @@ export async function GET(
           controller.enqueue(encoder.encode(`data: ${json}\n\n`));
         };
 
-        let lastCheck = 0;
         const pollInterval = 2000;
         const timeout = 5 * 60 * 1000;
         const startTime = Date.now();
@@ -48,7 +47,7 @@ export async function GET(
             });
 
             const allDone = results.every((r) =>
-              ['completed', 'failed'].includes((r as any).status),
+              ['completed', 'failed'].includes((r as { status: string }).status),
             );
 
             if (allDone) {

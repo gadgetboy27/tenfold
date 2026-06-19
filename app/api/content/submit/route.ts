@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/session';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { submitContentSchema } from '@/lib/validation/content-schemas';
 import { runContentPipeline } from '@/lib/content-agent';
@@ -62,7 +61,9 @@ export async function POST(req: Request) {
     // Vercel: use after() (non-blocking, runs after response sent)
     // Other platforms: use self-call via fetch (doesn't block response)
     if (typeof globalThis !== 'undefined' && 'after' in globalThis) {
-      (globalThis as any).after(async () => {
+      (
+        globalThis as unknown as { after: (cb: () => Promise<void>) => void }
+      ).after(async () => {
         try {
           await runContentPipeline({
             submissionId,

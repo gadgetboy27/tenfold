@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import type { AnalysisOutput } from '@/lib/content-agent/types';
 
 describe('Stage 1: Analyse', () => {
   it('validates that analysis output has 5 insights and 10 hooks', async () => {
-    const validOutput: any = {
+    const validOutput: AnalysisOutput = {
       mainTopic: 'AI in content creation',
       keyInsights: [
         'AI speeds up content creation',

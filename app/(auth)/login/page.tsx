@@ -27,6 +27,7 @@ function LoginContent() {
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
     if (!supabase) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time mount guard when env is missing
       setError(
         "Authentication is temporarily unavailable. Please try again later.",
       );
@@ -47,6 +48,7 @@ function LoginContent() {
   useEffect(() => {
     const msg = searchParams.get("message");
     const err = searchParams.get("error");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- surfacing URL flash messages on mount
     if (msg) setMessage(msg);
     if (err) setError(err);
   }, [searchParams]);
@@ -317,14 +319,14 @@ function LoginContent() {
             </Button>
 
             <p className="text-xs text-gray-600 text-center">
-              We'll email you a link to sign in instantly
+              We&apos;ll email you a link to sign in instantly
             </p>
           </form>
         )}
 
         <div className="mt-6 text-center">
           <p className="text-gray-600 text-sm">
-            Don't have an account?{" "}
+            Don&apos;t have an account?{" "}
             <Link
               href="/signup"
               className="text-blue-600 hover:underline font-medium"

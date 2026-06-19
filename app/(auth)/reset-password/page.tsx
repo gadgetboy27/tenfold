@@ -22,6 +22,7 @@ function ResetPasswordContent() {
     // Get current user from Supabase session
     const supabase = createSupabaseBrowserClient();
     if (!supabase) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time mount guard when env is missing
       setError(
         "Authentication is temporarily unavailable. Please try again later.",
       );

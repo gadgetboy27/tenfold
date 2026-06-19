@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Toaster } from "react-hot-toast";
+import Script from "next/script";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -36,7 +37,7 @@ export default function RootLayout({
         {/* Runtime public env (Supabase URL/anon key) — set before hydration so
             the browser Supabase client works even if the values weren't inlined
             at build time. See app/api/public-env/route.ts. */}
-        <script src="/api/public-env" />
+        <Script src="/api/public-env" strategy="beforeInteractive" />
       </head>
       <body className="h-full bg-background text-foreground antialiased">
         {children}

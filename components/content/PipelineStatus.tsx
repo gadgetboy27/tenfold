@@ -47,7 +47,11 @@ export function PipelineStatus({ submissionId }: PipelineStatusProps) {
           filter: `submission_id=eq.${submissionId}`,
         },
         (payload) => {
-          const data = payload.new as any;
+          const data = payload.new as {
+            stage: string;
+            status: StageResult["status"];
+            error?: string;
+          };
           setStages((prev) => {
             const next = new Map(prev);
             next.set(data.stage, {
@@ -92,13 +96,14 @@ export function PipelineStatus({ submissionId }: PipelineStatusProps) {
                 setStages(newStages);
 
                 const allDone = data.stages.every(
-                  (s: any) => s.status === "completed" || s.status === "failed",
+                  (s: { status: string }) =>
+                    s.status === "completed" || s.status === "failed",
                 );
                 if (allDone) {
                   setIsComplete(true);
                 }
               }
-            } catch (e) {
+            } catch {
               // Ignore parse errors
             }
           }

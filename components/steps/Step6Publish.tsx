@@ -245,8 +245,8 @@ export default function Step5Publish() {
     }
   }, [workspaceSlug]);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial load of connected profiles
     fetchProfiles();
   }, [fetchProfiles]);
 
@@ -735,9 +735,12 @@ export default function Step5Publish() {
                   <input
                     type="datetime-local"
                     value={scheduledAt}
-                    min={new Date(Date.now() + 5 * 60 * 1000)
-                      .toISOString()
-                      .slice(0, 16)} // eslint-disable-line react-hooks/purity
+                    min={
+                      // eslint-disable-next-line react-hooks/purity -- min datetime floor; impurity is harmless here
+                      new Date(Date.now() + 5 * 60 * 1000)
+                        .toISOString()
+                        .slice(0, 16)
+                    }
                     onChange={(e) => setScheduledAt(e.target.value)}
                     className="w-full bg-secondary/30 border border-border rounded-xl px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-primary/50 transition-colors"
                   />

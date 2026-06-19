@@ -1049,8 +1049,8 @@ export default function SocialSettingsPage() {
     [workspaceSlug],
   );
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial load of connected profiles
     fetchProfiles();
   }, [fetchProfiles]);
 
@@ -1085,6 +1085,7 @@ export default function SocialSettingsPage() {
     // Facebook and Instagram use direct Meta OAuth — navigate to the connect route.
     // The route redirects to Meta, which redirects back to /api/social/callback/facebook.
     if (platformId === "facebook" || platformId === "instagram") {
+      // eslint-disable-next-line react-hooks/immutability -- intentional full-page navigation to start Meta OAuth
       window.location.href = `/api/social/connect/facebook?workspace=${workspaceSlug}`;
       return;
     }

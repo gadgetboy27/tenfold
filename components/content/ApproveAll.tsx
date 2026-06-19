@@ -14,9 +14,14 @@ interface ApproveAllProps {
   schedule: ScheduleItem[];
 }
 
+interface ApproveResult {
+  published?: unknown[];
+  failed?: { platform: string; error: string }[];
+}
+
 export function ApproveAll({ submissionId, schedule }: ApproveAllProps) {
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<ApproveResult | null>(null);
   const [error, setError] = useState('');
 
   const handleApprove = async () => {
@@ -54,11 +59,11 @@ export function ApproveAll({ submissionId, schedule }: ApproveAllProps) {
           </p>
         </div>
 
-        {result.failed?.length > 0 && (
+        {result.failed && result.failed.length > 0 && (
           <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
             <h3 className="font-semibold text-yellow-900">⚠ Some posts failed</h3>
             <ul className="text-yellow-800 text-sm mt-2 space-y-1">
-              {result.failed.map((item: any, idx: number) => (
+              {result.failed.map((item, idx) => (
                 <li key={idx}>{item.platform}: {item.error}</li>
               ))}
             </ul>
