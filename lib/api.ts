@@ -29,9 +29,13 @@ export async function api(
   }
 
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
     ...(fetchOptions.headers as Record<string, string>),
   };
+  // Let the browser set the multipart boundary for FormData (file uploads);
+  // only default to JSON for everything else.
+  if (!(fetchOptions.body instanceof FormData)) {
+    headers["Content-Type"] = "application/json";
+  }
   if (token) headers["Authorization"] = `Bearer ${token}`;
   if (workspaceSlug) headers["x-workspace-slug"] = workspaceSlug;
 

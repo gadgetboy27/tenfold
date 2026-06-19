@@ -7,6 +7,7 @@ import { Film, Music, FileText, ArrowRight, Lock } from "lucide-react";
 import { useEntitlements } from "@/lib/billing/useEntitlements";
 import UpgradeModal from "@/components/billing/UpgradeModal";
 import FormatCard from "@/components/shared/FormatCard";
+import TalkingVideoPanel from "@/components/talking/TalkingVideoPanel";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import toast from "react-hot-toast";
@@ -522,6 +523,12 @@ export default function Step3Expand() {
             </div>
           </FormatCard>
         </div>
+      </div>
+
+      {/* Product / Founder Spoken Video — a separate talking-spokesperson ad flow.
+          Choose this when advertising a physical product or featuring a founder. */}
+      <div className="max-w-5xl mx-auto mt-6">
+        <TalkingVideoPanel />
       </div>
 
       {/* Sticky continue bar — always visible, Expand is optional */}
