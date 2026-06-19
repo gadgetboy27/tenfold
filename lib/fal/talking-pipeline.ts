@@ -23,6 +23,8 @@ export interface TalkingJobParams {
   resolution: TalkingResolution;
   tone: string;
   targetSeconds: number;
+  /** ISO 639-1 code for the spoken language (multi-language dubbing). */
+  language: string;
   product: {
     name: string;
     description: string;
@@ -57,7 +59,11 @@ export async function enqueueTtsStage(
 ): Promise<string> {
   const { requestId } = await enqueueWithFallback(
     [TTS_MODEL],
-    ttsInput({ script: params.script, voice: params.voice }),
+    ttsInput({
+      script: params.script,
+      voice: params.voice,
+      languageCode: params.language,
+    }),
     stageWebhookUrl(jobId, "tts"),
   );
   const admin = createSupabaseAdminClient();

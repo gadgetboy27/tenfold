@@ -46,6 +46,40 @@ export function getVoice(id: string | undefined | null): VoiceOption {
   );
 }
 
+// --- languages (multi-language dubbing) --------------------------------------
+
+export interface LanguageOption {
+  /** ISO 639-1 code passed to ElevenLabs `language_code` + used to instruct Claude. */
+  code: string;
+  label: string;
+}
+
+export const DEFAULT_LANGUAGE = "en";
+
+// Curated to the major ad markets. ElevenLabs v3 supports 70+ languages, so this
+// list can grow freely — every entry reuses the exact same pipeline.
+export const LANGUAGES: LanguageOption[] = [
+  { code: "en", label: "English" },
+  { code: "es", label: "Spanish" },
+  { code: "fr", label: "French" },
+  { code: "de", label: "German" },
+  { code: "pt", label: "Portuguese" },
+  { code: "it", label: "Italian" },
+  { code: "nl", label: "Dutch" },
+  { code: "ja", label: "Japanese" },
+  { code: "ko", label: "Korean" },
+  { code: "zh", label: "Chinese (Mandarin)" },
+  { code: "hi", label: "Hindi" },
+  { code: "ar", label: "Arabic" },
+];
+
+export function getLanguage(code: string | undefined | null): LanguageOption {
+  return (
+    LANGUAGES.find((l) => l.code === code) ??
+    LANGUAGES.find((l) => l.code === DEFAULT_LANGUAGE)!
+  );
+}
+
 // --- presenter sources -------------------------------------------------------
 
 /** How the on-screen presenter image is obtained. All three resolve to one
@@ -88,14 +122,21 @@ export interface TalkingVideoParams {
   resolution: TalkingResolution;
 }
 
-/** Stage 2 — text → speech. Returns the fal input for {@link TTS_MODEL}. */
-export function ttsInput(p: { script: string; voice: string }): Record<string, unknown> {
-  return {
+/** Stage 2 — text → speech. Returns the fal input for {@link TTS_MODEL}.
+ *  `languageCode` (ISO 639-1) enforces pronunciation for non-English dubs. */
+export function ttsInput(p: {
+  script: string;
+  voice: string;
+  languageCode?: string;
+}): Record<string, unknown> {
+  const input: Record<string, unknown> = {
     text: p.script,
     voice: getVoice(p.voice).id,
     stability: 0.5,
     similarity_boost: 0.75,
   };
+  if (p.languageCode) input.language_code = p.languageCode;
+  return input;
 }
 
 /** Stage 3 — image + audio → talking video. Returns the fal input for

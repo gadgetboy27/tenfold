@@ -14,6 +14,8 @@ export const createTalkingVideoSchema = z.object({
   voice: z.string().max(40).default("Rachel"),
   resolution: z.enum(["480p", "720p"]).default("480p"),
   tone: z.enum(["professional", "casual", "playful"]).default("professional"),
+  // ISO 639-1 language code for the spoken ad (multi-language dubbing).
+  language: z.string().max(8).default("en"),
   // Clip length — bounds the script length and drives cost.
   targetSeconds: z.number().int().min(5).max(30).default(15),
   product: z.object({

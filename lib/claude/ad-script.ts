@@ -19,6 +19,8 @@ export interface AdScriptParams {
   targetSeconds: number;
   /** Workspace brand-voice style guide; when present the script must match it. */
   brandVoice?: string;
+  /** Target language name (e.g. "Spanish"). Defaults to English when omitted. */
+  language?: string;
 }
 
 export interface AdScriptResult {
@@ -47,6 +49,10 @@ export async function generateAdScript(
   const voiceBlock = params.brandVoice
     ? `\n\nMATCH THIS BRAND VOICE EXACTLY (overrides the generic tone):\n${params.brandVoice}`
     : "";
+  const languageBlock =
+    params.language && params.language.toLowerCase() !== "english"
+      ? `\n\nWrite the ENTIRE script in ${params.language} — natural, native-sounding ${params.language}, not a literal translation.`
+      : "";
 
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
@@ -64,7 +70,7 @@ ${params.callToAction ? `End with this call to action: ${params.callToAction}` :
 Constraints:
 - About ${maxWords} words (must fit ~${params.targetSeconds} seconds when spoken aloud).
 - Open with a hook in the first sentence.
-- Natural, conversational, easy to say out loud.${voiceBlock}
+- Natural, conversational, easy to say out loud.${voiceBlock}${languageBlock}
 
 Return only the spoken script text.`,
       },

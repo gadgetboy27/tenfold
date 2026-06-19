@@ -22,6 +22,8 @@ import {
   VOICE_OPTIONS,
   STOCK_PRESENTERS,
   DEFAULT_VOICE,
+  LANGUAGES,
+  DEFAULT_LANGUAGE,
   type PresenterSource,
 } from "@/lib/fal/talking-video";
 
@@ -49,6 +51,7 @@ export default function TalkingVideoPanel() {
   const [resolution, setResolution] = useState<Resolution>("480p");
   const [tone, setTone] = useState<Tone>("professional");
   const [seconds, setSeconds] = useState(15);
+  const [language, setLanguage] = useState(DEFAULT_LANGUAGE);
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -109,6 +112,7 @@ export default function TalkingVideoPanel() {
         body: JSON.stringify({
           tone,
           targetSeconds: seconds,
+          language,
           product: {
             name,
             description,
@@ -182,6 +186,7 @@ export default function TalkingVideoPanel() {
           resolution,
           tone,
           targetSeconds: seconds,
+          language,
           product: {
             name,
             description,
@@ -432,8 +437,27 @@ export default function TalkingVideoPanel() {
       {/* 4. Options */}
       <section className="space-y-3">
         <p className="text-xs font-semibold text-foreground uppercase tracking-wide">
-          4 · Voice &amp; format
+          4 · Language, voice &amp; format
         </p>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-muted-foreground uppercase tracking-wider">
+            Language
+          </span>
+          <select
+            value={language}
+            onChange={(e) => setLanguage(e.target.value)}
+            className="text-xs rounded-lg border border-border bg-background px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/50"
+          >
+            {LANGUAGES.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+          <span className="text-[10px] text-muted-foreground">
+            AI writes &amp; speaks the ad in this language
+          </span>
+        </div>
         <div className="flex flex-wrap gap-1.5">
           {VOICE_OPTIONS.map((v) => (
             <button

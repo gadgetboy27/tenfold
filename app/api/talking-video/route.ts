@@ -6,7 +6,11 @@ import { createTalkingVideoSchema } from "@/lib/validation/talking-video-schemas
 import { debitCredits } from "@/lib/credits/debit";
 import { refundCredits } from "@/lib/credits/refund";
 import { CREDIT_COSTS } from "@/lib/credits/costs";
-import { getVoice, type TalkingResolution } from "@/lib/fal/talking-video";
+import {
+  getVoice,
+  getLanguage,
+  type TalkingResolution,
+} from "@/lib/fal/talking-video";
 import {
   enqueueTtsStage,
   type TalkingJobParams,
@@ -57,6 +61,7 @@ export async function POST(req: Request) {
       resolution: body.resolution as TalkingResolution,
       tone: body.tone,
       targetSeconds: body.targetSeconds,
+      language: body.language,
       product: body.product,
       script: body.scriptOverride?.trim() ?? "",
       stage: "tts",
@@ -85,6 +90,7 @@ export async function POST(req: Request) {
           callToAction: body.product.callToAction,
           tone: body.tone,
           targetSeconds: body.targetSeconds,
+          language: getLanguage(body.language).label,
           brandVoice: brandVoice ?? undefined,
         });
         params.script = result.text;
