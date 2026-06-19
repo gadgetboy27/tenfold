@@ -8,6 +8,7 @@ import { useEntitlements } from "@/lib/billing/useEntitlements";
 import UpgradeModal from "@/components/billing/UpgradeModal";
 import FormatCard from "@/components/shared/FormatCard";
 import TalkingVideoPanel from "@/components/talking/TalkingVideoPanel";
+import VirtualTryOnPanel from "@/components/tryon/VirtualTryOnPanel";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import toast from "react-hot-toast";
@@ -529,6 +530,11 @@ export default function Step3Expand() {
           Choose this when advertising a physical product or featuring a founder. */}
       <div className="max-w-5xl mx-auto mt-6">
         <TalkingVideoPanel />
+      </div>
+
+      {/* Virtual Try-On — put a product garment onto a model photo. */}
+      <div className="max-w-5xl mx-auto mt-6">
+        <VirtualTryOnPanel />
       </div>
 
       {/* Sticky continue bar — always visible, Expand is optional */}

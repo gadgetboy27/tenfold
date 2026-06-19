@@ -16,6 +16,8 @@ export const PROVIDER_COST_USD: Record<string, number> = {
   // Talking video pipeline: ElevenLabs TTS (~$0.05) + VEED Fabric lip-sync
   // (~$1.20 for ~15s @ 480p) + Claude script (~$0.002). Tune with resolution/length.
   talking_video: 1.25,
+  // fal.ai — FASHN Virtual Try-On v1.6 ($0.075/generation)
+  virtual_tryon: 0.075,
   // fal.ai — Stable Audio
   music_generation: 0.02,
   // Anthropic — claude-sonnet-4-6 (~200 in + 100 out tokens typical)
