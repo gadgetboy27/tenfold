@@ -31,11 +31,20 @@ be in the allowlist above or Supabase rejects the redirect.
 For each provider you create an app in that provider's developer console, then paste
 its **Client ID** and **Client Secret** into Supabase. The single most important
 value: the provider's own **Authorized redirect URI is always Supabase's callback**,
-NOT the app's `/auth/callback`. For this project it is:
+NOT the app's `/auth/callback`. This project now uses a **custom domain**
+(`auth.tenfold.nz`, Supabase Custom Domain add-on) so the canonical callback is:
 
 ```
-https://gbccfqpmoteicpumhkuj.supabase.co/auth/v1/callback
+https://auth.tenfold.nz/auth/v1/callback
 ```
+
+> The legacy callback `https://gbccfqpmoteicpumhkuj.supabase.co/auth/v1/callback`
+> may remain in each provider console during transition, but since the custom
+> domain is **activated**, Supabase Auth advertises only `auth.tenfold.nz` and
+> OAuth no longer functions on the raw `*.supabase.co` host. `NEXT_PUBLIC_SUPABASE_URL`
+> must point at `https://auth.tenfold.nz` (local `.env` + Railway).
+> The direct Postgres `DATABASE_URL` is **not** covered by the custom domain — it
+> stays on the `*.pooler.supabase.com` host, unchanged.
 
 Same pattern for every provider: **create app → copy Client ID + Secret → enable the
 provider in Supabase and paste them → add the Supabase callback above as the app's
