@@ -87,10 +87,45 @@ export function entitlementsForTier(
   return TIERS[(tier as Tier) ?? "payg"] ?? TIERS.payg;
 }
 
+/**
+ * Admin override for live testing: if a workspace owner's email is in the
+ * ADMIN_EMAILS allowlist (comma-separated env var), unlock the full toolset
+ * regardless of subscription. Guarded by the env var, so there is ZERO extra
+ * work when it isn't configured (normal users / dev). Returns the top "agency"
+ * tier for matches.
+ */
+async function adminOverride(
+  workspaceId: string,
+): Promise<Entitlements | null> {
+  const allow = (process.env.ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  if (allow.length === 0) return null;
+
+  const admin = createSupabaseAdminClient();
+  const { data: owner } = await admin
+    .from("workspace_members")
+    .select("user_id")
+    .eq("workspace_id", workspaceId)
+    .eq("role", "owner")
+    .limit(1)
+    .single();
+  const ownerId = (owner as { user_id: string } | null)?.user_id;
+  if (!ownerId) return null;
+
+  const { data: u } = await admin.auth.admin.getUserById(ownerId);
+  const email = u?.user?.email?.toLowerCase();
+  return email && allow.includes(email) ? TIERS.agency : null;
+}
+
 /** Resolve a workspace's entitlements from its (active) subscription tier. */
 export async function getEntitlements(
   workspaceId: string,
 ): Promise<Entitlements> {
+  const override = await adminOverride(workspaceId);
+  if (override) return override;
+
   const admin = createSupabaseAdminClient();
   const { data } = await admin
     .from("subscriptions")
