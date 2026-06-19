@@ -52,30 +52,21 @@ export async function proxy(request: NextRequest) {
   // Non-API routes.
   const { pathname } = request.nextUrl;
 
-  // Public routes (auth pages, marketing, OAuth callback) must always load and
-  // never depend on a session lookup. Serve them immediately — this guarantees
-  // /login renders even if Supabase is unreachable.
-  const PUBLIC_PATHS = new Set([
-    "/",
-    "/login",
-    "/signup",
-    "/forgot-password",
-    "/reset-password",
-    "/callback",
-    "/auth/callback",
-  ]);
-
   const { supabaseUrl, supabaseAnonKey: supabaseKey } = serverPublicEnv();
 
-  // No auth work for public paths, or if Supabase env is unavailable at runtime.
-  if (PUBLIC_PATHS.has(pathname) || !supabaseUrl || !supabaseKey) {
+  // Always-public, no session work needed: the marketing home, the OAuth/email
+  // callback (which establishes the session itself), or when Supabase env is
+  // unavailable at runtime — so these always render.
+  const ALWAYS_PUBLIC = new Set(["/", "/callback", "/auth/callback"]);
+  if (ALWAYS_PUBLIC.has(pathname) || !supabaseUrl || !supabaseKey) {
     return NextResponse.next({ request });
   }
 
-  // Protected routes: refresh the Supabase cookie session and gate access.
-  // Any failure here (network, Supabase down) must NOT crash the request —
-  // fall through and serve the page; client-side guards re-check auth.
+  // For everything else (auth pages + protected routes) refresh the Supabase
+  // cookie session. Any failure here (network, Supabase down) must NOT crash the
+  // request — serve the page so /login still renders and client guards re-check.
   let supabaseResponse = NextResponse.next({ request });
+  let user = null;
   try {
     const supabase = createServerClient(supabaseUrl, supabaseKey, {
       cookies: {
@@ -94,22 +85,44 @@ export async function proxy(request: NextRequest) {
       },
     });
 
-    const {
+    ({
       data: { user },
-    } = await supabase.auth.getUser();
-
-    const isDashboard =
-      pathname.startsWith("/dashboard") || !!pathname.match(/^\/[a-z0-9-]+\//);
-
-    if (!user && isDashboard) {
-      return NextResponse.redirect(new URL("/login", request.url));
-    }
+    } = await supabase.auth.getUser());
   } catch (err) {
     console.error(
       "proxy: session refresh failed, serving page without redirect",
       err,
     );
     return NextResponse.next({ request });
+  }
+
+  // Already signed in on this browser? Don't make returning users re-authenticate
+  // — send them straight to their workspace from the login/signup pages.
+  const isAuthPage = pathname === "/login" || pathname === "/signup";
+  if (user && isAuthPage) {
+    const slug = user.user_metadata?.workspace_slug as string | undefined;
+    if (slug) {
+      return NextResponse.redirect(new URL(`/${slug}`, request.url));
+    }
+  }
+
+  // Other public auth pages (login/signup without a workspace yet, password
+  // reset) render normally — with the session cookie refreshed above.
+  const PUBLIC_PATHS = new Set([
+    "/login",
+    "/signup",
+    "/forgot-password",
+    "/reset-password",
+  ]);
+  if (PUBLIC_PATHS.has(pathname)) {
+    return supabaseResponse;
+  }
+
+  // Protected routes: gate unauthenticated visitors to /login.
+  const isDashboard =
+    pathname.startsWith("/dashboard") || !!pathname.match(/^\/[a-z0-9-]+\//);
+  if (!user && isDashboard) {
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
   return supabaseResponse;
