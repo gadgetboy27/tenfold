@@ -22,6 +22,8 @@ export const PROVIDER_COST_USD: Record<string, number> = {
   auto_caption: 0.05,
   // Anthropic — claude-sonnet-4-6, one call for N hook variants
   hook_variants: 0.005,
+  // fal.ai — Bria Product Shot (~estimate, tune when billed)
+  product_shot: 0.06,
   // fal.ai — Stable Audio
   music_generation: 0.02,
   // Anthropic — claude-sonnet-4-6 (~200 in + 100 out tokens typical)

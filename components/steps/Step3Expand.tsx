@@ -11,6 +11,7 @@ import TalkingVideoPanel from "@/components/talking/TalkingVideoPanel";
 import VirtualTryOnPanel from "@/components/tryon/VirtualTryOnPanel";
 import AutoCaptionPanel from "@/components/captions/AutoCaptionPanel";
 import ABVariantsPanel from "@/components/hooks/ABVariantsPanel";
+import ProductShotPanel from "@/components/scene/ProductShotPanel";
 import { TipsToggle, InfoHint } from "@/components/ui/info-hint";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
@@ -557,6 +558,11 @@ export default function Step3Expand() {
       {/* A/B Hooks — distinct hook variants to test. */}
       <div className="max-w-5xl mx-auto mt-6">
         <ABVariantsPanel />
+      </div>
+
+      {/* Product in Scene — drop a product into a generated lifestyle background. */}
+      <div className="max-w-5xl mx-auto mt-6">
+        <ProductShotPanel />
       </div>
 
       {/* Sticky continue bar — always visible, Expand is optional */}
