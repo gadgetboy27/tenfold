@@ -10,6 +10,7 @@ import FormatCard from "@/components/shared/FormatCard";
 import TalkingVideoPanel from "@/components/talking/TalkingVideoPanel";
 import VirtualTryOnPanel from "@/components/tryon/VirtualTryOnPanel";
 import AutoCaptionPanel from "@/components/captions/AutoCaptionPanel";
+import ABVariantsPanel from "@/components/hooks/ABVariantsPanel";
 import { TipsToggle, InfoHint } from "@/components/ui/info-hint";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
@@ -551,6 +552,11 @@ export default function Step3Expand() {
       {/* Auto-Captions — burn subtitles into a talking video. */}
       <div className="max-w-5xl mx-auto mt-6">
         <AutoCaptionPanel />
+      </div>
+
+      {/* A/B Hooks — distinct hook variants to test. */}
+      <div className="max-w-5xl mx-auto mt-6">
+        <ABVariantsPanel />
       </div>
 
       {/* Sticky continue bar — always visible, Expand is optional */}

@@ -103,6 +103,18 @@ const DEFAULT_AUTO_CAPTION_DRAFT: AutoCaptionDraft = {
   position: "bottom",
   upper: false,
 };
+export interface ABVariantsDraft {
+  topic: string;
+  platform: string;
+  tone: "professional" | "casual" | "playful";
+  count: number;
+}
+const DEFAULT_AB_VARIANTS_DRAFT: ABVariantsDraft = {
+  topic: "",
+  platform: "instagram",
+  tone: "professional",
+  count: 5,
+};
 
 export interface CampaignResume {
   id: string;
@@ -130,6 +142,7 @@ interface AppStore {
   talkingDraft: TalkingDraft;
   tryonDraft: TryonDraft;
   autoCaptionDraft: AutoCaptionDraft;
+  abVariantsDraft: ABVariantsDraft;
   /** Last spoken-video result URL — offered as a source for auto-captions. */
   lastSpokenVideoUrl: string;
   /** Global UI preference: show inline help tooltips. */
@@ -163,6 +176,7 @@ interface AppStore {
   patchTalkingDraft: (patch: Partial<TalkingDraft>) => void;
   patchTryonDraft: (patch: Partial<TryonDraft>) => void;
   patchAutoCaptionDraft: (patch: Partial<AutoCaptionDraft>) => void;
+  patchABVariantsDraft: (patch: Partial<ABVariantsDraft>) => void;
   setLastSpokenVideoUrl: (url: string) => void;
   setTooltipsEnabled: (v: boolean) => void;
   setIsGenerating: (v: boolean) => void;
@@ -193,6 +207,7 @@ export const useAppStore = create<AppStore>()((set) => ({
   talkingDraft: DEFAULT_TALKING_DRAFT,
   tryonDraft: DEFAULT_TRYON_DRAFT,
   autoCaptionDraft: DEFAULT_AUTO_CAPTION_DRAFT,
+  abVariantsDraft: DEFAULT_AB_VARIANTS_DRAFT,
   lastSpokenVideoUrl: "",
   tooltipsEnabled: true,
   platformCaptions: {},
@@ -231,6 +246,10 @@ export const useAppStore = create<AppStore>()((set) => ({
   patchAutoCaptionDraft: (patch) =>
     set((state) => ({
       autoCaptionDraft: { ...state.autoCaptionDraft, ...patch },
+    })),
+  patchABVariantsDraft: (patch) =>
+    set((state) => ({
+      abVariantsDraft: { ...state.abVariantsDraft, ...patch },
     })),
   setLastSpokenVideoUrl: (url) => set({ lastSpokenVideoUrl: url }),
   setTooltipsEnabled: (v) => {
@@ -277,6 +296,7 @@ export const useAppStore = create<AppStore>()((set) => ({
       talkingDraft: DEFAULT_TALKING_DRAFT,
       tryonDraft: DEFAULT_TRYON_DRAFT,
       autoCaptionDraft: DEFAULT_AUTO_CAPTION_DRAFT,
+      abVariantsDraft: DEFAULT_AB_VARIANTS_DRAFT,
       lastSpokenVideoUrl: "",
       isGenerating: false,
       generationStage: "",
@@ -296,6 +316,7 @@ export const useAppStore = create<AppStore>()((set) => ({
       talkingDraft: DEFAULT_TALKING_DRAFT,
       tryonDraft: DEFAULT_TRYON_DRAFT,
       autoCaptionDraft: DEFAULT_AUTO_CAPTION_DRAFT,
+      abVariantsDraft: DEFAULT_AB_VARIANTS_DRAFT,
       lastSpokenVideoUrl: "",
       platformCaptions: {},
       isGenerating: false,
