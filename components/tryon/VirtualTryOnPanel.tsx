@@ -140,7 +140,7 @@ export default function VirtualTryOnPanel() {
   }
 
   const uploader = (which: "model" | "garment", url: string, label: string) => (
-    <div className="flex-1 space-y-1.5">
+    <div className="w-28 sm:w-32 space-y-1.5">
       <p className="text-[11px] text-muted-foreground">{label}</p>
       <label className="block cursor-pointer">
         <div
@@ -180,7 +180,7 @@ export default function VirtualTryOnPanel() {
   );
 
   return (
-    <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 space-y-5">
+    <div className="bg-card border border-border rounded-2xl p-4 sm:p-5 space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
@@ -209,11 +209,11 @@ export default function VirtualTryOnPanel() {
         </div>
       )}
 
-      <div className="flex gap-3">
+      <div className="flex flex-wrap items-start gap-3">
         {uploader("model", modelUrl, "Model photo (a person)")}
         {uploader("garment", garmentUrl, "Garment / product")}
         {status === "ready" && resultUrl && (
-          <div className="flex-1 space-y-1.5">
+          <div className="w-28 sm:w-32 space-y-1.5">
             <p className="text-[11px] text-success flex items-center gap-1">
               <Check className="w-3 h-3" /> Result
             </p>
