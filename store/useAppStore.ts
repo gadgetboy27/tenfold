@@ -233,7 +233,12 @@ export const useAppStore = create<AppStore>()((set) => ({
       autoCaptionDraft: { ...state.autoCaptionDraft, ...patch },
     })),
   setLastSpokenVideoUrl: (url) => set({ lastSpokenVideoUrl: url }),
-  setTooltipsEnabled: (v) => set({ tooltipsEnabled: v }),
+  setTooltipsEnabled: (v) => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("tf_tooltips", v ? "on" : "off");
+    }
+    set({ tooltipsEnabled: v });
+  },
   setIsGenerating: (v) =>
     set({ isGenerating: v, generationStage: "", generationElapsed: 0 }),
   setGenerationStage: (stage, elapsed) =>

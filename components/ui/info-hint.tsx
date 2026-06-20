@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Info } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { cn } from "@/lib/utils";
@@ -47,6 +47,16 @@ export function InfoHint({ text }: { text: string }) {
 export function TipsToggle() {
   const enabled = useAppStore((s) => s.tooltipsEnabled);
   const setEnabled = useAppStore((s) => s.setTooltipsEnabled);
+
+  // Restore the saved preference after mount. The store default is `true`, so
+  // SSR and the first client render match (no hydration mismatch); this syncs
+  // the persisted choice a tick later.
+  useEffect(() => {
+    if (window.localStorage.getItem("tf_tooltips") === "off") {
+      setEnabled(false);
+    }
+  }, [setEnabled]);
+
   return (
     <button
       type="button"
