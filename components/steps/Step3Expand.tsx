@@ -9,6 +9,8 @@ import UpgradeModal from "@/components/billing/UpgradeModal";
 import FormatCard from "@/components/shared/FormatCard";
 import TalkingVideoPanel from "@/components/talking/TalkingVideoPanel";
 import VirtualTryOnPanel from "@/components/tryon/VirtualTryOnPanel";
+import AutoCaptionPanel from "@/components/captions/AutoCaptionPanel";
+import { TipsToggle, InfoHint } from "@/components/ui/info-hint";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import toast from "react-hot-toast";
@@ -293,6 +295,9 @@ export default function Step3Expand() {
 
   return (
     <div className="h-full overflow-y-auto pb-32 p-4 sm:p-6 lg:p-8 relative">
+      <div className="max-w-5xl mx-auto mb-4 flex justify-end">
+        <TipsToggle />
+      </div>
       <div className="max-w-5xl mx-auto flex flex-col lg:flex-row gap-5 lg:gap-8">
         {/* Anchor thumbnail — compact horizontal row on mobile, sidebar on desktop */}
         <div className="w-full lg:w-56 shrink-0">
@@ -426,8 +431,9 @@ export default function Step3Expand() {
               </div>
               {/* Sound engine — Balanced (Stable Audio) vs Natural (Lyria 2) */}
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-muted-foreground uppercase tracking-wider mr-1">
+                <span className="flex items-center gap-1 text-[10px] text-muted-foreground uppercase tracking-wider mr-1">
                   Engine
+                  <InfoHint text="Balanced = fast & flexible (Stable Audio). Natural = richer, more organic instrumental (Lyria 2)." />
                 </span>
                 {[
                   { id: "stable-audio", label: "Balanced" },
@@ -472,8 +478,9 @@ export default function Step3Expand() {
           >
             <div className="space-y-3">
               <div className="flex gap-2 items-center">
-                <span className="text-[10px] text-muted-foreground uppercase w-12">
+                <span className="flex items-center gap-1 text-[10px] text-muted-foreground uppercase w-14">
                   Platform
+                  <InfoHint text="Tailors the caption's length, tone and hashtag style to this platform." />
                 </span>
                 <div className="flex gap-1">
                   {["IG", "LI", "TikTok"].map((p) => (
@@ -539,6 +546,11 @@ export default function Step3Expand() {
       {/* Virtual Try-On — put a product garment onto a model photo. */}
       <div className="max-w-5xl mx-auto mt-6">
         <VirtualTryOnPanel />
+      </div>
+
+      {/* Auto-Captions — burn subtitles into a talking video. */}
+      <div className="max-w-5xl mx-auto mt-6">
+        <AutoCaptionPanel />
       </div>
 
       {/* Sticky continue bar — always visible, Expand is optional */}

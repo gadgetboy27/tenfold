@@ -18,6 +18,8 @@ export const PROVIDER_COST_USD: Record<string, number> = {
   talking_video: 1.25,
   // fal.ai — FASHN Virtual Try-On v1.6 ($0.075/generation)
   virtual_tryon: 0.075,
+  // fal.ai — auto-caption (video→video; ~estimate, tune when billed)
+  auto_caption: 0.05,
   // fal.ai — Stable Audio
   music_generation: 0.02,
   // Anthropic — claude-sonnet-4-6 (~200 in + 100 out tokens typical)

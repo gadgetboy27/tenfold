@@ -87,6 +87,22 @@ const DEFAULT_TRYON_DRAFT: TryonDraft = {
   garmentUrl: "",
   category: "auto",
 };
+export interface AutoCaptionDraft {
+  source: "spoken" | "url";
+  videoUrl: string;
+  color: "white" | "yellow" | "black";
+  fontSize: number;
+  position: "bottom" | "middle";
+  upper: boolean;
+}
+const DEFAULT_AUTO_CAPTION_DRAFT: AutoCaptionDraft = {
+  source: "spoken",
+  videoUrl: "",
+  color: "white",
+  fontSize: 28,
+  position: "bottom",
+  upper: false,
+};
 
 export interface CampaignResume {
   id: string;
@@ -113,6 +129,11 @@ interface AppStore {
   expandDrafts: ExpandDrafts;
   talkingDraft: TalkingDraft;
   tryonDraft: TryonDraft;
+  autoCaptionDraft: AutoCaptionDraft;
+  /** Last spoken-video result URL — offered as a source for auto-captions. */
+  lastSpokenVideoUrl: string;
+  /** Global UI preference: show inline help tooltips. */
+  tooltipsEnabled: boolean;
   /** AI-tailored caption per platform (e.g. { instagram, tiktok, linkedin }). */
   platformCaptions: Record<string, string>;
   isGenerating: boolean;
@@ -141,6 +162,9 @@ interface AppStore {
   patchExpandDrafts: (patch: Partial<ExpandDrafts>) => void;
   patchTalkingDraft: (patch: Partial<TalkingDraft>) => void;
   patchTryonDraft: (patch: Partial<TryonDraft>) => void;
+  patchAutoCaptionDraft: (patch: Partial<AutoCaptionDraft>) => void;
+  setLastSpokenVideoUrl: (url: string) => void;
+  setTooltipsEnabled: (v: boolean) => void;
   setIsGenerating: (v: boolean) => void;
   setGenerationStage: (stage: string, elapsed: number) => void;
   setAspectRatio: (r: string) => void;
@@ -168,6 +192,9 @@ export const useAppStore = create<AppStore>()((set) => ({
   expandDrafts: DEFAULT_EXPAND_DRAFTS,
   talkingDraft: DEFAULT_TALKING_DRAFT,
   tryonDraft: DEFAULT_TRYON_DRAFT,
+  autoCaptionDraft: DEFAULT_AUTO_CAPTION_DRAFT,
+  lastSpokenVideoUrl: "",
+  tooltipsEnabled: true,
   platformCaptions: {},
   isGenerating: false,
   generationStage: "",
@@ -201,6 +228,12 @@ export const useAppStore = create<AppStore>()((set) => ({
     set((state) => ({ talkingDraft: { ...state.talkingDraft, ...patch } })),
   patchTryonDraft: (patch) =>
     set((state) => ({ tryonDraft: { ...state.tryonDraft, ...patch } })),
+  patchAutoCaptionDraft: (patch) =>
+    set((state) => ({
+      autoCaptionDraft: { ...state.autoCaptionDraft, ...patch },
+    })),
+  setLastSpokenVideoUrl: (url) => set({ lastSpokenVideoUrl: url }),
+  setTooltipsEnabled: (v) => set({ tooltipsEnabled: v }),
   setIsGenerating: (v) =>
     set({ isGenerating: v, generationStage: "", generationElapsed: 0 }),
   setGenerationStage: (stage, elapsed) =>
@@ -238,6 +271,8 @@ export const useAppStore = create<AppStore>()((set) => ({
       expandDrafts: DEFAULT_EXPAND_DRAFTS,
       talkingDraft: DEFAULT_TALKING_DRAFT,
       tryonDraft: DEFAULT_TRYON_DRAFT,
+      autoCaptionDraft: DEFAULT_AUTO_CAPTION_DRAFT,
+      lastSpokenVideoUrl: "",
       isGenerating: false,
       generationStage: "",
       generationElapsed: 0,
@@ -255,6 +290,8 @@ export const useAppStore = create<AppStore>()((set) => ({
       expandDrafts: DEFAULT_EXPAND_DRAFTS,
       talkingDraft: DEFAULT_TALKING_DRAFT,
       tryonDraft: DEFAULT_TRYON_DRAFT,
+      autoCaptionDraft: DEFAULT_AUTO_CAPTION_DRAFT,
+      lastSpokenVideoUrl: "",
       platformCaptions: {},
       isGenerating: false,
       generationStage: "",

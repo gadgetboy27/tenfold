@@ -13,6 +13,7 @@ import {
 import { useAppStore } from "@/store/useAppStore";
 import { useEntitlements } from "@/lib/billing/useEntitlements";
 import { Button } from "@/components/ui/button";
+import { InfoHint } from "@/components/ui/info-hint";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import toast from "react-hot-toast";
@@ -186,8 +187,9 @@ export default function VirtualTryOnPanel() {
             <Shirt className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-foreground">
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
               Virtual Try-On
+              <InfoHint text="Upload a photo of a person (model) and a photo of the garment/product. The model is rendered wearing the garment." />
             </h3>
             <p className="text-xs text-muted-foreground">
               Put your product on a model. Upload a person photo and a garment —
@@ -229,8 +231,9 @@ export default function VirtualTryOnPanel() {
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="text-[11px] text-muted-foreground uppercase tracking-wider">
+        <span className="flex items-center gap-1 text-[11px] text-muted-foreground uppercase tracking-wider">
           Garment type
+          <InfoHint text="Tells the model what kind of clothing it is. Auto-detect works for most — pick Top/Bottom/Dress if results look off." />
         </span>
         {TRYON_CATEGORIES.map((c) => (
           <button

@@ -7,6 +7,7 @@ export const CREDIT_COSTS = {
   video_60s: 80,
   talking_video: 130,
   virtual_tryon: 8,
+  auto_caption: 5,
   music_generation: 8,
   script_generation: 1,
 } as const satisfies Record<string, number>;

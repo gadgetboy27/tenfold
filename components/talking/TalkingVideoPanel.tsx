@@ -14,6 +14,7 @@ import {
 import { useAppStore } from "@/store/useAppStore";
 import { useEntitlements } from "@/lib/billing/useEntitlements";
 import { Button } from "@/components/ui/button";
+import { InfoHint } from "@/components/ui/info-hint";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import toast from "react-hot-toast";
@@ -38,8 +39,14 @@ const LENGTHS = [10, 15, 20, 30];
 // /api/talking-video pipeline and polls for the finished clip.
 export default function TalkingVideoPanel() {
   const ent = useEntitlements();
-  const { generatedAssets, currentCampaignId, workspaceSlug, creditBalance, setCreditBalance } =
-    useAppStore();
+  const {
+    generatedAssets,
+    currentCampaignId,
+    workspaceSlug,
+    creditBalance,
+    setCreditBalance,
+    setLastSpokenVideoUrl,
+  } = useAppStore();
 
   // Persisted inputs — survive navigating to Compose and back.
   const talkingDraft = useAppStore((s) => s.talkingDraft);
@@ -164,6 +171,7 @@ export default function TalkingVideoPanel() {
       };
       if (job.status === "ready" && job.outputUrls?.[0]) {
         setVideoUrl(job.outputUrls[0]);
+        setLastSpokenVideoUrl(job.outputUrls[0]); // offer it to auto-captions
         setStatus("ready");
         toast.success("Spoken video ready");
         return;
@@ -262,8 +270,9 @@ export default function TalkingVideoPanel() {
 
       {/* 1. Presenter */}
       <section className="space-y-2">
-        <p className="text-xs font-semibold text-foreground uppercase tracking-wide">
+        <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground uppercase tracking-wide">
           1 · Presenter
+          <InfoHint text="The person who appears on camera and speaks. Use a clear, front-facing photo — upload one, reuse a generated image, or pick a stock avatar." />
         </p>
         <div className="flex gap-1.5">
           {(["upload", "generate", "stock"] as PresenterSource[]).map((s) => (
@@ -417,8 +426,9 @@ export default function TalkingVideoPanel() {
       {/* 3. The spoken script — draft + EDIT (this is how you control speech) */}
       <section className="space-y-2">
         <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-foreground uppercase tracking-wide">
+          <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground uppercase tracking-wide">
             3 · What they say
+            <InfoHint text="The exact spoken words. Draft with AI then edit, or type your own. Leave blank to auto-write from the details above." />
           </p>
           <button
             type="button"
@@ -449,8 +459,9 @@ export default function TalkingVideoPanel() {
 
       {/* 4. Options */}
       <section className="space-y-3">
-        <p className="text-xs font-semibold text-foreground uppercase tracking-wide">
+        <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground uppercase tracking-wide">
           4 · Language, voice &amp; format
+          <InfoHint text="Language dubs the whole ad into that tongue. Voice picks the speaker; 480p is faster/cheaper, 720p is sharper." />
         </p>
         <div className="flex items-center gap-2">
           <span className="text-[11px] text-muted-foreground uppercase tracking-wider">
