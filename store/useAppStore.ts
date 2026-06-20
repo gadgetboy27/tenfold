@@ -27,6 +27,67 @@ export interface Expansion {
 
 type Expansions = { video?: Expansion; music?: Expansion; script?: Expansion };
 
+// Draft inputs for the Expand step + its panels. Held in the store (not local
+// component state) so they SURVIVE navigating away to Compose and back — users
+// must not lose prompts they typed.
+export interface ExpandDrafts {
+  videoDuration: 10 | 30 | 60;
+  videoStyle: string;
+  musicGenre: string;
+  musicModel: string;
+  scriptPlatform: string;
+  scriptTone: string;
+  variationDirection: Record<string, string>;
+}
+export interface TalkingDraft {
+  source: "upload" | "generate" | "stock";
+  presenterUrl: string;
+  voice: string;
+  resolution: "480p" | "720p";
+  tone: "professional" | "casual" | "playful";
+  seconds: number;
+  language: string;
+  name: string;
+  description: string;
+  featuresText: string;
+  cta: string;
+  script: string;
+}
+export interface TryonDraft {
+  modelUrl: string;
+  garmentUrl: string;
+  category: "auto" | "tops" | "bottoms" | "one-pieces";
+}
+
+const DEFAULT_EXPAND_DRAFTS: ExpandDrafts = {
+  videoDuration: 10,
+  videoStyle: "Cinematic",
+  musicGenre: "Lo-fi Chill",
+  musicModel: "stable-audio",
+  scriptPlatform: "IG",
+  scriptTone: "Pro",
+  variationDirection: { video: "", music: "", script: "" },
+};
+const DEFAULT_TALKING_DRAFT: TalkingDraft = {
+  source: "upload",
+  presenterUrl: "",
+  voice: "Rachel",
+  resolution: "480p",
+  tone: "professional",
+  seconds: 15,
+  language: "en",
+  name: "",
+  description: "",
+  featuresText: "",
+  cta: "",
+  script: "",
+};
+const DEFAULT_TRYON_DRAFT: TryonDraft = {
+  modelUrl: "",
+  garmentUrl: "",
+  category: "auto",
+};
+
 export interface CampaignResume {
   id: string;
   name: string;
@@ -48,6 +109,10 @@ interface AppStore {
   selectedAnchorId: string | null;
   generatedAssets: Asset[];
   expansions: Expansions;
+  /** Draft inputs that persist across step navigation (Compose ↔ Expand). */
+  expandDrafts: ExpandDrafts;
+  talkingDraft: TalkingDraft;
+  tryonDraft: TryonDraft;
   /** AI-tailored caption per platform (e.g. { instagram, tiktok, linkedin }). */
   platformCaptions: Record<string, string>;
   isGenerating: boolean;
@@ -73,6 +138,9 @@ interface AppStore {
     type: keyof Expansions,
     expansion: Partial<Expansion>,
   ) => void;
+  patchExpandDrafts: (patch: Partial<ExpandDrafts>) => void;
+  patchTalkingDraft: (patch: Partial<TalkingDraft>) => void;
+  patchTryonDraft: (patch: Partial<TryonDraft>) => void;
   setIsGenerating: (v: boolean) => void;
   setGenerationStage: (stage: string, elapsed: number) => void;
   setAspectRatio: (r: string) => void;
@@ -97,6 +165,9 @@ export const useAppStore = create<AppStore>()((set) => ({
   selectedAnchorId: null,
   generatedAssets: [],
   expansions: {},
+  expandDrafts: DEFAULT_EXPAND_DRAFTS,
+  talkingDraft: DEFAULT_TALKING_DRAFT,
+  tryonDraft: DEFAULT_TRYON_DRAFT,
   platformCaptions: {},
   isGenerating: false,
   generationStage: "",
@@ -124,6 +195,12 @@ export const useAppStore = create<AppStore>()((set) => ({
         [type]: { ...state.expansions[type], ...expansion } as Expansion,
       },
     })),
+  patchExpandDrafts: (patch) =>
+    set((state) => ({ expandDrafts: { ...state.expandDrafts, ...patch } })),
+  patchTalkingDraft: (patch) =>
+    set((state) => ({ talkingDraft: { ...state.talkingDraft, ...patch } })),
+  patchTryonDraft: (patch) =>
+    set((state) => ({ tryonDraft: { ...state.tryonDraft, ...patch } })),
   setIsGenerating: (v) =>
     set({ isGenerating: v, generationStage: "", generationElapsed: 0 }),
   setGenerationStage: (stage, elapsed) =>
@@ -158,6 +235,9 @@ export const useAppStore = create<AppStore>()((set) => ({
       selectedAnchorId: campaign.anchor_asset_id,
       generatedAssets: campaign.imageAssets,
       expansions: campaign.expansion_data ?? {},
+      expandDrafts: DEFAULT_EXPAND_DRAFTS,
+      talkingDraft: DEFAULT_TALKING_DRAFT,
+      tryonDraft: DEFAULT_TRYON_DRAFT,
       isGenerating: false,
       generationStage: "",
       generationElapsed: 0,
@@ -172,6 +252,9 @@ export const useAppStore = create<AppStore>()((set) => ({
       selectedAnchorId: null,
       generatedAssets: [],
       expansions: {},
+      expandDrafts: DEFAULT_EXPAND_DRAFTS,
+      talkingDraft: DEFAULT_TALKING_DRAFT,
+      tryonDraft: DEFAULT_TRYON_DRAFT,
       platformCaptions: {},
       isGenerating: false,
       generationStage: "",

@@ -21,9 +21,7 @@ import { CREDIT_COSTS } from "@/lib/credits/costs";
 import {
   VOICE_OPTIONS,
   STOCK_PRESENTERS,
-  DEFAULT_VOICE,
   LANGUAGES,
-  DEFAULT_LANGUAGE,
   type PresenterSource,
 } from "@/lib/fal/talking-video";
 
@@ -43,24 +41,39 @@ export default function TalkingVideoPanel() {
   const { generatedAssets, currentCampaignId, workspaceSlug, creditBalance, setCreditBalance } =
     useAppStore();
 
-  const [source, setSource] = useState<PresenterSource>("upload");
-  const [presenterUrl, setPresenterUrl] = useState("");
+  // Persisted inputs — survive navigating to Compose and back.
+  const talkingDraft = useAppStore((s) => s.talkingDraft);
+  const patchTalking = useAppStore((s) => s.patchTalkingDraft);
+  const {
+    source,
+    presenterUrl,
+    voice,
+    resolution,
+    tone,
+    seconds,
+    language,
+    name,
+    description,
+    featuresText,
+    cta,
+    script,
+  } = talkingDraft;
+  const setSource = (v: PresenterSource) => patchTalking({ source: v });
+  const setPresenterUrl = (v: string) => patchTalking({ presenterUrl: v });
+  const setVoice = (v: string) => patchTalking({ voice: v });
+  const setResolution = (v: Resolution) => patchTalking({ resolution: v });
+  const setTone = (v: Tone) => patchTalking({ tone: v });
+  const setSeconds = (v: number) => patchTalking({ seconds: v });
+  const setLanguage = (v: string) => patchTalking({ language: v });
+  const setName = (v: string) => patchTalking({ name: v });
+  const setDescription = (v: string) => patchTalking({ description: v });
+  const setFeaturesText = (v: string) => patchTalking({ featuresText: v });
+  const setCta = (v: string) => patchTalking({ cta: v });
+  const setScript = (v: string) => patchTalking({ script: v });
+
+  // Transient UI state — fine to reset on navigation.
   const [uploading, setUploading] = useState(false);
-
-  const [voice, setVoice] = useState(DEFAULT_VOICE);
-  const [resolution, setResolution] = useState<Resolution>("480p");
-  const [tone, setTone] = useState<Tone>("professional");
-  const [seconds, setSeconds] = useState(15);
-  const [language, setLanguage] = useState(DEFAULT_LANGUAGE);
-
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [featuresText, setFeaturesText] = useState("");
-  const [cta, setCta] = useState("");
-
-  const [script, setScript] = useState("");
   const [drafting, setDrafting] = useState(false);
-
   const [status, setStatus] = useState<Status>("idle");
   const [videoUrl, setVideoUrl] = useState("");
   const [error, setError] = useState("");

@@ -21,19 +21,23 @@ type ExpandType = "video" | "music" | "script";
 export default function Step3Expand() {
   const ent = useEntitlements();
   const [upgradeOpen, setUpgradeOpen] = useState(false);
-  const [videoDuration, setVideoDuration] = useState<10 | 30 | 60>(10);
-  const [videoStyle, setVideoStyle] = useState<VideoStyle>("Cinematic");
-  const [musicGenre, setMusicGenre] = useState("Lo-fi Chill");
-  const [musicModel, setMusicModel] = useState("stable-audio");
-  const [scriptPlatform, setScriptPlatform] = useState("IG");
-  const [scriptTone, setScriptTone] = useState("Pro");
-  const [variationDirection, setVariationDirection] = useState<
-    Record<string, string>
-  >({
-    video: "",
-    music: "",
-    script: "",
-  });
+  // Inputs live in the store so they survive navigating to Compose and back.
+  const expandDrafts = useAppStore((s) => s.expandDrafts);
+  const patchExpandDrafts = useAppStore((s) => s.patchExpandDrafts);
+  const videoDuration = expandDrafts.videoDuration;
+  const videoStyle = expandDrafts.videoStyle as VideoStyle;
+  const { musicGenre, musicModel, scriptPlatform, scriptTone, variationDirection } =
+    expandDrafts;
+  const setVideoDuration = (v: 10 | 30 | 60) =>
+    patchExpandDrafts({ videoDuration: v });
+  const setVideoStyle = (v: VideoStyle) => patchExpandDrafts({ videoStyle: v });
+  const setMusicGenre = (v: string) => patchExpandDrafts({ musicGenre: v });
+  const setMusicModel = (v: string) => patchExpandDrafts({ musicModel: v });
+  const setScriptPlatform = (v: string) =>
+    patchExpandDrafts({ scriptPlatform: v });
+  const setScriptTone = (v: string) => patchExpandDrafts({ scriptTone: v });
+  const setVariationDirection = (v: Record<string, string>) =>
+    patchExpandDrafts({ variationDirection: v });
 
   const {
     generatedAssets,

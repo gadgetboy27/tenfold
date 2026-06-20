@@ -28,11 +28,16 @@ export default function VirtualTryOnPanel() {
   const { currentCampaignId, workspaceSlug, creditBalance, setCreditBalance } =
     useAppStore();
 
-  const [modelUrl, setModelUrl] = useState("");
-  const [garmentUrl, setGarmentUrl] = useState("");
-  const [uploading, setUploading] = useState<"model" | "garment" | null>(null);
-  const [category, setCategory] = useState<TryonCategory>("auto");
+  // Persisted inputs — survive navigating to Compose and back.
+  const tryonDraft = useAppStore((s) => s.tryonDraft);
+  const patchTryon = useAppStore((s) => s.patchTryonDraft);
+  const { modelUrl, garmentUrl, category } = tryonDraft;
+  const setModelUrl = (v: string) => patchTryon({ modelUrl: v });
+  const setGarmentUrl = (v: string) => patchTryon({ garmentUrl: v });
+  const setCategory = (v: TryonCategory) => patchTryon({ category: v });
 
+  // Transient UI state.
+  const [uploading, setUploading] = useState<"model" | "garment" | null>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [resultUrl, setResultUrl] = useState("");
   const [error, setError] = useState("");
