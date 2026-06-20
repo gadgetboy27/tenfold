@@ -11,9 +11,16 @@ export async function createSupabaseServerClient() {
         return cookieStore.getAll();
       },
       setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value, options }) =>
-          cookieStore.set(name, value, options),
-        );
+        try {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options),
+          );
+        } catch {
+          // Called from a Server Component, where cookies can't be written
+          // during render. Safe to ignore — the middleware (proxy.ts) refreshes
+          // the session cookie on the response instead. Without this catch the
+          // throw becomes an unhandledRejection and blanks the page.
+        }
       },
     },
   });
