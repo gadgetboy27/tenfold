@@ -15,6 +15,9 @@ interface FormatCardProps {
   onRefresh?: () => void;
   onRegenerate?: () => void;
   onSelect?: (url: string) => void;
+  /** When true, the generate button is disabled and `lockedHint` is shown. */
+  locked?: boolean;
+  lockedHint?: string;
   children?: React.ReactNode;
 }
 
@@ -28,6 +31,8 @@ export default function FormatCard({
   onRefresh,
   onRegenerate,
   onSelect,
+  locked,
+  lockedHint,
   children,
 }: FormatCardProps) {
   const { expansions } = useAppStore();
@@ -181,23 +186,30 @@ export default function FormatCard({
       ) : (
         <>
           {!(type === 'video' && hasVariants) && (
-            <Button
-              onClick={onGenerate}
-              disabled={status === 'pending'}
-              className="w-full gap-2"
-              size="sm"
-            >
-              {status === 'pending' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              {status === 'pending'
-                ? expansion?.elapsed
-                  ? `Generating… ${expansion.elapsed}s`
-                  : 'Generating…'
-                : status === 'failed'
-                  ? 'Retry'
-                  : status === 'ready'
-                    ? `Regenerate ${title}`
-                    : `Generate ${title}`}
-            </Button>
+            <>
+              {locked && lockedHint && (
+                <p className="text-[11px] text-muted-foreground text-center mb-2">
+                  {lockedHint}
+                </p>
+              )}
+              <Button
+                onClick={onGenerate}
+                disabled={status === 'pending' || locked}
+                className="w-full gap-2"
+                size="sm"
+              >
+                {status === 'pending' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {status === 'pending'
+                  ? expansion?.elapsed
+                    ? `Generating… ${expansion.elapsed}s`
+                    : 'Generating…'
+                  : status === 'failed'
+                    ? 'Retry'
+                    : status === 'ready'
+                      ? `Regenerate ${title}`
+                      : `Generate ${title}`}
+              </Button>
+            </>
           )}
         </>
       )}

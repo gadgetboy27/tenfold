@@ -102,8 +102,11 @@ export default function Step3Expand() {
       };
       if (type === "music") {
         params.genre = musicGenre;
-        // Match the music length to the chosen video duration.
-        params.durationSec = videoDuration;
+        // Match the music length to the ACTUAL generated video length (the model
+        // caps clips at ~5–10s), not the 10/30/60 label, so they line up when composed.
+        params.durationSec =
+          ({ 10: 5, 30: 10, 60: 10 } as Record<number, number>)[videoDuration] ??
+          videoDuration;
         params.musicModel = musicModel;
         if (variationDirection.music) {
           params.variationDirection = variationDirection.music;
@@ -252,6 +255,10 @@ export default function Step3Expand() {
     expansions.video?.status === "ready" ||
     expansions.music?.status === "ready" ||
     expansions.script?.status === "ready";
+
+  // Music & caption are gated behind the video so their length lines up with the
+  // actual clip when composed (the "matched ad" workflow).
+  const videoReady = expansions.video?.status === "ready";
 
   const handleRefresh = async (type: "video" | "music") => {
     const jobId = expansions[type]?.jobId;
@@ -402,6 +409,8 @@ export default function Step3Expand() {
             subtitle="track matches your video length"
             cost="8 cr"
             icon={Music}
+            locked={!videoReady}
+            lockedHint="Generate your video first — music is sized to its length."
             onGenerate={() => handleGenerate("music")}
             onRefresh={() => handleRefresh("music")}
             onRegenerate={() => handleGenerate("music")}
@@ -476,6 +485,8 @@ export default function Step3Expand() {
             subtitle="Platform-ready caption"
             cost="1 cr"
             icon={FileText}
+            locked={!videoReady}
+            lockedHint="Generate your video first — your comment is timed to it."
             onGenerate={() => handleGenerate("script")}
           >
             <div className="space-y-3">
