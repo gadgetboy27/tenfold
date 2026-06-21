@@ -17,6 +17,7 @@ export function GET() {
     NEXT_PUBLIC_SUPABASE_ANON_KEY:
       process.env["NEXT_PUBLIC_SUPABASE_ANON_KEY"] ?? "",
     NEXT_PUBLIC_APP_URL: process.env["NEXT_PUBLIC_APP_URL"] ?? "",
+    NEXT_PUBLIC_SENTRY_DSN: process.env["NEXT_PUBLIC_SENTRY_DSN"] ?? "",
   };
 
   return new NextResponse(`window.__PUBLIC_ENV__=${JSON.stringify(env)};`, {

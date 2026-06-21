@@ -4,7 +4,9 @@ import * as Sentry from "@sentry/nextjs";
 // so this is safe to ship before a Sentry project exists. Add the DSN in Railway
 // and redeploy to switch it on.
 export async function register() {
-  const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
+  // Bracket access stays a RUNTIME lookup — dot-access NEXT_PUBLIC_* is inlined
+  // at build (which went stale on Railway), bracket access reads the live env.
+  const dsn = process.env["NEXT_PUBLIC_SENTRY_DSN"];
   if (!dsn) return;
 
   if (
