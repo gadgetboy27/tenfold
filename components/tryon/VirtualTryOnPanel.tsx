@@ -8,12 +8,13 @@ import {
   Loader2,
   Check,
   ExternalLink,
-  Lock,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useEntitlements } from "@/lib/billing/useEntitlements";
 import { Button } from "@/components/ui/button";
 import { InfoHint } from "@/components/ui/info-hint";
+import ProUpsell from "@/components/billing/ProUpsell";
+import { UPSELLS } from "@/lib/billing/upsell";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import toast from "react-hot-toast";
@@ -202,12 +203,7 @@ export default function VirtualTryOnPanel() {
         </span>
       </div>
 
-      {!isPro && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-secondary/50 border border-border rounded-lg px-3 py-2">
-          <Lock className="w-3.5 h-3.5" />
-          Virtual try-on is a Pro feature — upgrade to use it.
-        </div>
-      )}
+      {!isPro && <ProUpsell {...UPSELLS.virtual_tryon} />}
 
       <div className="flex flex-wrap items-start gap-3">
         {uploader("model", modelUrl, "Model photo (a person)")}

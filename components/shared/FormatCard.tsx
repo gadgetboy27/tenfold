@@ -174,15 +174,26 @@ export default function FormatCard({
       )}
 
       {canRefresh ? (
-        <Button
-          onClick={onRefresh}
-          variant="outline"
-          className="w-full gap-2 border-primary/30 text-primary hover:bg-primary/5"
-          size="sm"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          Check again
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={onRefresh}
+            variant="outline"
+            className="flex-1 gap-2 border-primary/30 text-primary hover:bg-primary/5"
+            size="sm"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Check again
+          </Button>
+          <Button
+            onClick={onGenerate}
+            variant="outline"
+            className="flex-1 gap-2"
+            size="sm"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Regenerate
+          </Button>
+        </div>
       ) : (
         <>
           {!(type === 'video' && hasVariants) && (
