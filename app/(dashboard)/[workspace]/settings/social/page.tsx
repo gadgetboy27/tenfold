@@ -29,6 +29,9 @@ interface SocialProfile {
   handle: string | null;
   profile_display_name: string | null;
   connected_at: string | null;
+  /** Facebook only: which Page is active + all managed Pages for the picker. */
+  activePageId?: string | null;
+  availablePages?: { id: string; name: string }[];
 }
 
 interface ChecklistItem {
@@ -1123,6 +1126,29 @@ export default function SocialSettingsPage() {
     }
   };
 
+  // Switch which Facebook Page tenfold publishes to (no re-auth — pages were
+  // stored at connect time).
+  const switchFbPage = async (pageId: string) => {
+    try {
+      const res = await api("/api/social/facebook/page", {
+        method: "POST",
+        body: JSON.stringify({ pageId }),
+        workspaceSlug,
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        page?: { name: string };
+        error?: string;
+      };
+      if (!res.ok || !data.ok)
+        throw new Error(data.error ?? "Could not switch Page");
+      toast.success(`Now publishing to ${data.page?.name ?? "the selected Page"}`);
+      fetchProfiles(true);
+    } catch (err) {
+      toast.error((err as Error).message ?? "Could not switch Page");
+    }
+  };
+
   const handleCheckItem = (
     platformId: string,
     itemKey: string,
@@ -1162,6 +1188,7 @@ export default function SocialSettingsPage() {
   const connectedIds = new Set(profiles.map((p) => p.platform));
   const connectedCount = PLATFORMS.filter((p) => connectedIds.has(p.id)).length;
   const progressPct = Math.round((connectedCount / PLATFORMS.length) * 100);
+  const fbProfile = profiles.find((p) => p.platform === "facebook");
 
   return (
     <div className="max-w-2xl">
@@ -1342,6 +1369,24 @@ export default function SocialSettingsPage() {
               );
             })}
           </div>
+          {fbProfile?.availablePages && fbProfile.availablePages.length > 1 && (
+            <div className="mt-3 flex items-center gap-2 border-t border-success/20 pt-3">
+              <span className="text-xs text-muted-foreground shrink-0">
+                Facebook Page:
+              </span>
+              <select
+                value={fbProfile.activePageId ?? ""}
+                onChange={(e) => switchFbPage(e.target.value)}
+                className="text-xs rounded-lg border border-border bg-background px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/50"
+              >
+                {fbProfile.availablePages.map((pg) => (
+                  <option key={pg.id} value={pg.id}>
+                    {pg.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-success/20 pt-3">
             <p className="text-xs text-muted-foreground">
               ✓ You&apos;re ready to publish to your connected{" "}

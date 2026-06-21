@@ -70,6 +70,7 @@ export const socialProfiles = pgTable(
     accessToken: text("access_token"), // OAuth access token (never null when connected)
     refreshToken: text("refresh_token"), // OAuth refresh token (null for FB page tokens)
     tokenExpiresAt: timestamp("token_expires_at", { withTimezone: true }), // null = never expires
+    metadata: jsonb("metadata"), // e.g. { facebook_pages: [{ id, name, access_token }] } for the Page picker
     connectedAt: timestamp("connected_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

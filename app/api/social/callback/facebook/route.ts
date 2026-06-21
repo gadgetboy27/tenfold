@@ -52,8 +52,15 @@ export async function GET(req: Request) {
       );
     }
 
-    // Use the first page (MVP — we'll add a picker if users have multiple pages)
+    // Default to the first page; the user can switch via the Page picker. Store
+    // every managed page (with its permanent token) in metadata so switching
+    // needs no re-auth.
     const page = pages[0];
+    const facebook_pages = pages.map((p) => ({
+      id: p.id,
+      name: p.name,
+      access_token: p.access_token,
+    }));
 
     // 4. Upsert Facebook profile with permanent page access token
     await admin.from('social_profiles').upsert(
@@ -64,6 +71,7 @@ export async function GET(req: Request) {
         profile_display_name: page.name,
         platform_page_id:     page.id,
         access_token:         page.access_token,
+        metadata:             { facebook_pages },
         connected_at:         new Date().toISOString(),
       },
       { onConflict: 'workspace_id,platform' },
