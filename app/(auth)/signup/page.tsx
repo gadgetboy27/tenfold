@@ -223,7 +223,7 @@ function SignUpContent() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@company.com"
               disabled={loading || success}
-              className="w-full"
+              className="w-full text-gray-900 placeholder:text-gray-500"
             />
           </div>
 
@@ -237,7 +237,7 @@ function SignUpContent() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               disabled={loading || success}
-              className="w-full"
+              className="w-full text-gray-900 placeholder:text-gray-500"
             />
             <p className="text-xs text-gray-500 mt-1">At least 8 characters</p>
           </div>
@@ -252,7 +252,7 @@ function SignUpContent() {
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="••••••••"
               disabled={loading || success}
-              className="w-full"
+              className="w-full text-gray-900 placeholder:text-gray-500"
             />
           </div>
 

@@ -260,7 +260,7 @@ function LoginContent() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@company.com"
                 disabled={loading}
-                className="w-full"
+                className="w-full text-gray-900 placeholder:text-gray-500"
               />
             </div>
 
@@ -282,7 +282,7 @@ function LoginContent() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 disabled={loading}
-                className="w-full"
+                className="w-full text-gray-900 placeholder:text-gray-500"
               />
             </div>
 
@@ -306,7 +306,7 @@ function LoginContent() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@company.com"
                 disabled={loading}
-                className="w-full"
+                className="w-full text-gray-900 placeholder:text-gray-500"
               />
             </div>
 

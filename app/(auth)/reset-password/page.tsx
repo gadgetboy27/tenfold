@@ -153,7 +153,7 @@ function ResetPasswordContent() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 disabled={loading}
-                className="w-full"
+                className="w-full text-gray-900 placeholder:text-gray-500"
               />
               <p className="text-xs text-gray-500 mt-1">
                 At least 8 characters
@@ -170,7 +170,7 @@ function ResetPasswordContent() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="••••••••"
                 disabled={loading}
-                className="w-full"
+                className="w-full text-gray-900 placeholder:text-gray-500"
               />
             </div>
 

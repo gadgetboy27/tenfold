@@ -1,47 +1,47 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card } from '@/components/ui/card';
+import { useState } from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
 
 export default function ForgotPasswordPage() {
-  const [email, setEmail] = useState('');
-  const [error, setError] = useState('');
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setError("");
     setLoading(true);
 
     if (!email) {
-      setError('Email is required');
+      setError("Email is required");
       setLoading(false);
       return;
     }
 
     try {
-      const res = await fetch('/api/auth/forgot-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || 'Failed to send reset link');
+        setError(data.error || "Failed to send reset link");
         setLoading(false);
         return;
       }
 
       setSent(true);
-      setEmail('');
+      setEmail("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
       setLoading(false);
     }
@@ -51,14 +51,19 @@ export default function ForgotPasswordPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 px-4">
       <Card className="w-full max-w-md p-8 bg-white shadow-2xl">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Reset Password</h1>
-          <p className="text-gray-600">Enter your email to receive a reset link</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            Reset Password
+          </h1>
+          <p className="text-gray-600">
+            Enter your email to receive a reset link
+          </p>
         </div>
 
         {sent && (
           <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
             <p className="text-green-700 text-sm">
-              Check your email for password reset instructions. The link expires in 1 hour.
+              Check your email for password reset instructions. The link expires
+              in 1 hour.
             </p>
           </div>
         )}
@@ -81,7 +86,7 @@ export default function ForgotPasswordPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@company.com"
                 disabled={loading}
-                className="w-full"
+                className="w-full text-gray-900 placeholder:text-gray-500"
               />
             </div>
 
@@ -90,7 +95,7 @@ export default function ForgotPasswordPage() {
               disabled={loading}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white"
             >
-              {loading ? 'Sending...' : 'Send Reset Link'}
+              {loading ? "Sending..." : "Send Reset Link"}
             </Button>
 
             <p className="text-xs text-gray-600 text-center">
@@ -101,8 +106,11 @@ export default function ForgotPasswordPage() {
 
         <div className="mt-6 text-center">
           <p className="text-gray-600 text-sm">
-            Remember your password?{' '}
-            <Link href="/login" className="text-blue-600 hover:underline font-medium">
+            Remember your password?{" "}
+            <Link
+              href="/login"
+              className="text-blue-600 hover:underline font-medium"
+            >
               Sign In
             </Link>
           </p>
