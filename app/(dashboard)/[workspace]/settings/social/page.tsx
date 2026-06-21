@@ -1108,9 +1108,16 @@ export default function SocialSettingsPage() {
         throw new Error(data.error ?? "Could not start the connection");
       window.location.href = data.connectUrl;
     } catch (err) {
-      toast.error(
-        (err as Error).message ?? "Could not connect your socials — try again",
-      );
+      const msg = (err as Error).message ?? "";
+      // Ayrshare returns 403 code 167 when the account isn't on the Business Plan.
+      if (/business plan|\b167\b/i.test(msg)) {
+        setNeedsUpgrade(true);
+        toast.error(
+          "Connecting more networks needs the Ayrshare Business Plan — Facebook & Instagram are free and ready.",
+        );
+      } else {
+        toast.error(msg || "Could not connect your socials — try again");
+      }
     } finally {
       setAyrshareLoading(false);
     }
@@ -1334,6 +1341,20 @@ export default function SocialSettingsPage() {
                 </div>
               );
             })}
+          </div>
+          <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-success/20 pt-3">
+            <p className="text-xs text-muted-foreground">
+              ✓ You&apos;re ready to publish to your connected{" "}
+              {connectedCount === 1 ? "account" : "accounts"}. Create a campaign
+              and it&apos;ll be a publish target.
+            </p>
+            <Button
+              size="sm"
+              onClick={() => router.push(`/${workspaceSlug}`)}
+              className="shrink-0"
+            >
+              Create a campaign
+            </Button>
           </div>
         </div>
       )}
