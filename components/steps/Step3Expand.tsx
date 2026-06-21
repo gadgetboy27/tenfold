@@ -335,7 +335,7 @@ export default function Step3Expand() {
           <FormatCard
             type="video"
             title="Video"
-            subtitle="10–60s cinematic clip"
+            subtitle="5 or 10-second clip"
             cost={`${CREDIT_COSTS[`video_${videoDuration}s` as "video_10s" | "video_30s" | "video_60s"]} cr`}
             icon={Film}
             onGenerate={() => handleGenerate("video")}
@@ -345,7 +345,7 @@ export default function Step3Expand() {
           >
             <div className="space-y-3">
               <div className="flex gap-2">
-                {([10, 30, 60] as const).map((t) => {
+                {([10, 30] as const).map((t) => {
                   const locked = ent ? !ent.videoDurations.includes(t) : false;
                   return (
                     <button
@@ -362,7 +362,7 @@ export default function Step3Expand() {
                             : "border-border bg-background hover:border-primary/50"
                       }`}
                     >
-                      {t}s
+                      {({ 10: "5s", 30: "10s" } as Record<number, string>)[t]}
                       {locked && (
                         <Lock className="inline-block w-2.5 h-2.5 ml-1 -mt-0.5" />
                       )}
