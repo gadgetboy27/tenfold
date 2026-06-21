@@ -47,13 +47,21 @@ export async function getConnectedPlatforms(profileKey: string): Promise<string[
 }
 
 export async function generateSocialConnectUrl(profileKey: string): Promise<string> {
+  const domain = process.env.AYRSHARE_DOMAIN;
+  // PEM stored in env with literal \n — restore real newlines.
+  const privateKey = process.env.AYRSHARE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  if (!domain || !privateKey) {
+    throw new Error(
+      'Ayrshare hosted connect is not set up yet. In the Ayrshare dashboard (Business Plan) → User Profiles, generate a JWT key pair + domain, then set AYRSHARE_DOMAIN and AYRSHARE_PRIVATE_KEY.',
+    );
+  }
   const res = await fetch(`${AYRSHARE_BASE}/profiles/generateJWT`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${process.env.AYRSHARE_API_KEY}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ profileKey }),
+    body: JSON.stringify({ domain, privateKey, profileKey }),
   });
 
   if (!res.ok) {
