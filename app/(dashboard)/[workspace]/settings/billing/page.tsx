@@ -340,7 +340,7 @@ export default function BillingPage() {
         <p className="text-sm text-muted-foreground mb-5">
           Credits reset each billing period. All prices in NZD.
         </p>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {data.plans.map((plan) => {
             const isCurrent = tier === plan.id;
             const isConfigured = plan.priceId !== null;
@@ -446,7 +446,7 @@ export default function BillingPage() {
         <p className="text-sm text-muted-foreground mb-5">
           One-off top-ups. Credits never expire.
         </p>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {data.packs.map((pack) => {
             const isConfigured = pack.priceId !== null;
             const isLoading =

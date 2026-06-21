@@ -230,7 +230,7 @@ export default function BrandKitPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-5 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
         {/* Left — form */}
         <div className="col-span-3 space-y-8">
           {/* Logo */}

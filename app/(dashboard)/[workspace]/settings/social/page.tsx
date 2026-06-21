@@ -713,7 +713,7 @@ function WizardPicker({
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {PLATFORMS.map((p) => {
           const isSelected = selected.includes(p.id);
           return (
@@ -1142,7 +1142,9 @@ export default function SocialSettingsPage() {
       };
       if (!res.ok || !data.ok)
         throw new Error(data.error ?? "Could not switch Page");
-      toast.success(`Now publishing to ${data.page?.name ?? "the selected Page"}`);
+      toast.success(
+        `Now publishing to ${data.page?.name ?? "the selected Page"}`,
+      );
       fetchProfiles(true);
     } catch (err) {
       toast.error((err as Error).message ?? "Could not switch Page");
