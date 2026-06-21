@@ -14,6 +14,7 @@ import {
   X,
   Music,
   Film,
+  ImageIcon,
   Lock,
   Loader2,
 } from "lucide-react";
@@ -88,9 +89,20 @@ export default function Step4Compose() {
   const [useMusic, setUseMusic] = useState(true);
   const [rendering, setRendering] = useState(false);
   const [filmUrl, setFilmUrl] = useState<string | null>(null);
+  const [filmCompositionId, setFilmCompositionId] = useState<string | null>(
+    null,
+  );
   const [showUpgrade, setShowUpgrade] = useState(false);
+  // What actually gets published: the mixed video film, or the still image.
+  // Default to the film whenever a video exists, so the bare still image never
+  // goes out when you meant the video.
+  const [outputKind, setOutputKind] = useState<"image" | "video">(() =>
+    useAppStore.getState().expansions.video?.status === "ready"
+      ? "video"
+      : "image",
+  );
 
-  const handleRenderFilm = async () => {
+  const handleRenderFilm = async (): Promise<string | null> => {
     setRendering(true);
     try {
       const res = await api("/api/compositions/video", {
@@ -105,18 +117,23 @@ export default function Step4Compose() {
       });
       if (res.status === 403) {
         setShowUpgrade(true);
-        return;
+        return null;
       }
       const data = (await res.json().catch(() => ({}))) as {
         url?: string;
+        compositionId?: string;
         error?: string;
       };
       if (!res.ok || !data.url)
         throw new Error(data.error ?? "Could not render your film");
       setFilmUrl(data.url);
+      setFilmCompositionId(data.compositionId ?? null);
+      setOutputKind("video");
       toast.success("Film rendered — your layers are mixed into one video.");
+      return data.compositionId ?? null;
     } catch (err: unknown) {
       toast.error((err as Error).message ?? "Could not render your film");
+      return null;
     } finally {
       setRendering(false);
     }
@@ -134,6 +151,19 @@ export default function Step4Compose() {
     if (!file) return;
     setLogoUrl(URL.createObjectURL(file));
     toast.success("Logo added");
+  };
+
+  // Advance to the Publish step (shared by both the image + film paths).
+  const proceedToPublish = () => {
+    completeStep(4);
+    setStep(5);
+    if (currentCampaignId && currentCampaignId !== "__new__") {
+      api(`/api/campaigns/${currentCampaignId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ current_step: 5 }),
+        workspaceSlug,
+      }).catch(() => {});
+    }
   };
 
   const handleSave = async () => {
@@ -161,19 +191,32 @@ export default function Step4Compose() {
       const composition = (await res.json()) as { id: string };
       setCompositionId(composition.id);
       toast.success("Composition ready");
-      completeStep(4);
-      setStep(5);
-      if (currentCampaignId && currentCampaignId !== "__new__") {
-        api(`/api/campaigns/${currentCampaignId}`, {
-          method: "PATCH",
-          body: JSON.stringify({ current_step: 5 }),
-          workspaceSlug,
-        }).catch(() => {});
-      }
+      proceedToPublish();
     } catch (err: unknown) {
       toast.error((err as Error).message ?? "Could not save composition");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Editing the caption/style/music invalidates a previously rendered film, so
+  // the published film always matches what's on screen.
+  const invalidateFilm = () => {
+    setFilmUrl(null);
+    setFilmCompositionId(null);
+  };
+
+  // Publish the chosen output. For a film, ensure it's rendered and carry THAT
+  // composition forward — never silently fall back to the image.
+  const handleContinue = async () => {
+    if (outputKind === "video") {
+      let compId = filmCompositionId;
+      if (!compId) compId = await handleRenderFilm();
+      if (!compId) return;
+      setCompositionId(compId);
+      proceedToPublish();
+    } else {
+      await handleSave();
     }
   };
 
@@ -279,7 +322,10 @@ export default function Step4Compose() {
           </div>
           <Textarea
             value={caption}
-            onChange={(e) => setCaption(e.target.value)}
+            onChange={(e) => {
+              setCaption(e.target.value);
+              invalidateFilm();
+            }}
             className="min-h-[100px] bg-background border-border text-sm resize-none"
             placeholder="Write a caption or generate one in Step 3…"
           />
@@ -309,7 +355,9 @@ export default function Step4Compose() {
                       key={p.id}
                       type="button"
                       onClick={() =>
-                        locked ? setShowUpgrade(true) : setCaptionStyle(p.id)
+                        locked
+                          ? setShowUpgrade(true)
+                          : (setCaptionStyle(p.id), invalidateFilm())
                       }
                       className={`px-2.5 py-1 rounded-md text-xs transition-all flex items-center gap-1 border ${active ? "bg-primary/20 text-primary border-primary/40" : "text-muted-foreground hover:text-foreground border-transparent"} ${locked ? "opacity-70" : ""}`}
                     >
@@ -325,7 +373,10 @@ export default function Step4Compose() {
                   <input
                     type="checkbox"
                     checked={useMusic}
-                    onChange={(e) => setUseMusic(e.target.checked)}
+                    onChange={(e) => {
+                      setUseMusic(e.target.checked);
+                      invalidateFilm();
+                    }}
                     className="accent-primary"
                   />
                   Add background music layer
@@ -434,12 +485,58 @@ export default function Step4Compose() {
           </div>
         </div>
 
+        {/* What you're about to publish — only a choice when a video exists */}
+        {video && (
+          <div className="bg-card border border-border rounded-xl p-3">
+            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
+              You&apos;re publishing
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setOutputKind("video")}
+                className={`flex items-center justify-center gap-1.5 py-2 text-xs rounded-lg border transition-colors ${
+                  outputKind === "video"
+                    ? "border-primary/50 text-primary bg-primary/10"
+                    : "border-border hover:border-primary/50"
+                }`}
+              >
+                <Film className="w-3.5 h-3.5" /> Video film
+              </button>
+              <button
+                type="button"
+                onClick={() => setOutputKind("image")}
+                className={`flex items-center justify-center gap-1.5 py-2 text-xs rounded-lg border transition-colors ${
+                  outputKind === "image"
+                    ? "border-primary/50 text-primary bg-primary/10"
+                    : "border-border hover:border-primary/50"
+                }`}
+              >
+                <ImageIcon className="w-3.5 h-3.5" /> Image only
+              </button>
+            </div>
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              {outputKind === "video"
+                ? "Your video + music + caption, mixed into one film."
+                : "Just the still image with your caption — no video or music."}
+            </p>
+          </div>
+        )}
+
         <Button
-          onClick={handleSave}
-          disabled={isSaving}
+          onClick={handleContinue}
+          disabled={isSaving || rendering}
           className="w-full h-12 bg-primary text-white font-semibold text-base rounded-xl"
         >
-          {isSaving ? "Saving…" : "Save & Continue to Publish"}
+          {rendering
+            ? "Rendering film…"
+            : isSaving
+              ? "Saving…"
+              : outputKind === "video"
+                ? "Continue to Publish · 🎬 Video film"
+                : video
+                  ? "Continue to Publish · 📷 Image only"
+                  : "Save & Continue to Publish"}
         </Button>
       </div>
 

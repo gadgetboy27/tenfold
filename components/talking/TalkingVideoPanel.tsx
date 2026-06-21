@@ -93,6 +93,10 @@ export default function TalkingVideoPanel() {
     currentCampaignId !== "__new__" &&
     currentCampaignId !== "demo";
   const busy = status === "submitting" || status === "pending";
+  // Progressive disclosure — reveal each section as the prior is filled, so the
+  // form opens calm instead of as one dense wall.
+  const hasPresenter = !!presenterUrl;
+  const hasProduct = hasPresenter && name.trim().length > 0;
   const featuresArray = () =>
     featuresText
       .split("\n")
@@ -386,170 +390,190 @@ export default function TalkingVideoPanel() {
         )}
       </section>
 
-      {/* 2. Product */}
-      <section className="space-y-2">
-        <p className="text-xs font-semibold text-foreground uppercase tracking-wide">
-          2 · What are you advertising?
+      {/* Gate: pick a presenter before the rest appears */}
+      {!hasPresenter && (
+        <p className="text-[11px] text-muted-foreground/70 italic">
+          Pick a presenter above to continue…
         </p>
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Product or offer name (required)"
-          className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
-        />
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="One or two lines on what it is and who it is for"
-          className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background resize-none h-16 focus:outline-none focus:ring-2 focus:ring-primary/50"
-        />
-        <textarea
-          value={featuresText}
-          onChange={(e) => setFeaturesText(e.target.value)}
-          placeholder="Key selling points — one per line"
-          className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background resize-none h-16 focus:outline-none focus:ring-2 focus:ring-primary/50"
-        />
-        <input
-          type="text"
-          value={cta}
-          onChange={(e) => setCta(e.target.value)}
-          placeholder="Call to action (e.g. Shop now at example.com)"
-          className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
-        />
-      </section>
+      )}
+
+      {/* 2. Product */}
+      {hasPresenter && (
+        <section className="space-y-2">
+          <p className="text-xs font-semibold text-foreground uppercase tracking-wide">
+            2 · What are you advertising?
+          </p>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Product or offer name (required)"
+            className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
+          />
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="One or two lines on what it is and who it is for"
+            className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background resize-none h-16 focus:outline-none focus:ring-2 focus:ring-primary/50"
+          />
+          <textarea
+            value={featuresText}
+            onChange={(e) => setFeaturesText(e.target.value)}
+            placeholder="Key selling points — one per line"
+            className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background resize-none h-16 focus:outline-none focus:ring-2 focus:ring-primary/50"
+          />
+          <input
+            type="text"
+            value={cta}
+            onChange={(e) => setCta(e.target.value)}
+            placeholder="Call to action (e.g. Shop now at example.com)"
+            className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
+          />
+        </section>
+      )}
+
+      {/* Gate: name the product before script + options appear */}
+      {hasPresenter && !name.trim() && (
+        <p className="text-[11px] text-muted-foreground/70 italic">
+          Name your product to unlock the script &amp; options…
+        </p>
+      )}
 
       {/* 3. The spoken script — draft + EDIT (this is how you control speech) */}
-      <section className="space-y-2">
-        <div className="flex items-center justify-between">
-          <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground uppercase tracking-wide">
-            3 · What they say
-            <InfoHint text="The exact spoken words. Draft with AI then edit, or type your own. Leave blank to auto-write from the details above." />
+      {hasProduct && (
+        <section className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground uppercase tracking-wide">
+              3 · What they say
+              <InfoHint text="The exact spoken words. Draft with AI then edit, or type your own. Leave blank to auto-write from the details above." />
+            </p>
+            <button
+              type="button"
+              onClick={handleDraft}
+              disabled={drafting}
+              className="inline-flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 disabled:opacity-50"
+            >
+              {drafting ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="w-3.5 h-3.5" />
+              )}
+              {script ? "Re-draft with AI" : "Draft with AI"}
+            </button>
+          </div>
+          <textarea
+            value={script}
+            onChange={(e) => setScript(e.target.value)}
+            placeholder="The exact words your presenter will speak. Draft with AI, then edit — or just type your own."
+            className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background resize-none h-28 focus:outline-none focus:ring-2 focus:ring-primary/50"
+          />
+          <p className="text-[11px] text-muted-foreground">
+            This is exactly what gets spoken. Edit it freely — leave blank to
+            let AI write it from the details above. ~{Math.round(seconds * 2.5)}{" "}
+            words fits {seconds}s.
           </p>
-          <button
-            type="button"
-            onClick={handleDraft}
-            disabled={drafting}
-            className="inline-flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 disabled:opacity-50"
-          >
-            {drafting ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Sparkles className="w-3.5 h-3.5" />
-            )}
-            {script ? "Re-draft with AI" : "Draft with AI"}
-          </button>
-        </div>
-        <textarea
-          value={script}
-          onChange={(e) => setScript(e.target.value)}
-          placeholder="The exact words your presenter will speak. Draft with AI, then edit — or just type your own."
-          className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background resize-none h-28 focus:outline-none focus:ring-2 focus:ring-primary/50"
-        />
-        <p className="text-[11px] text-muted-foreground">
-          This is exactly what gets spoken. Edit it freely — leave blank to let
-          AI write it from the details above. ~{Math.round(seconds * 2.5)} words
-          fits {seconds}s.
-        </p>
-      </section>
+        </section>
+      )}
 
       {/* 4. Options */}
-      <section className="space-y-3">
-        <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground uppercase tracking-wide">
-          4 · Language, voice &amp; format
-          <InfoHint text="Language dubs the whole ad into that tongue. Voice picks the speaker; 480p is faster/cheaper, 720p is sharper." />
-        </p>
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] text-muted-foreground uppercase tracking-wider">
-            Language
-          </span>
-          <select
-            value={language}
-            onChange={(e) => setLanguage(e.target.value)}
-            className="text-xs rounded-lg border border-border bg-background px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/50"
-          >
-            {LANGUAGES.map((l) => (
-              <option key={l.code} value={l.code}>
-                {l.label}
-              </option>
-            ))}
-          </select>
-          <span className="text-[10px] text-muted-foreground">
-            AI writes &amp; speaks the ad in this language
-          </span>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {VOICE_OPTIONS.map((v) => (
-            <button
-              key={v.id}
-              type="button"
-              onClick={() => setVoice(v.id)}
-              title={v.blurb}
-              className={cn(
-                "px-2.5 py-1 text-xs rounded-full border transition-colors",
-                voice === v.id
-                  ? "border-primary/50 text-primary bg-primary/10"
-                  : "border-border bg-background hover:border-primary/50",
-              )}
+      {hasProduct && (
+        <section className="space-y-3">
+          <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground uppercase tracking-wide">
+            4 · Language, voice &amp; format
+            <InfoHint text="Language dubs the whole ad into that tongue. Voice picks the speaker; 480p is faster/cheaper, 720p is sharper." />
+          </p>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-muted-foreground uppercase tracking-wider">
+              Language
+            </span>
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              className="text-xs rounded-lg border border-border bg-background px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/50"
             >
-              {v.label}
-            </button>
-          ))}
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex gap-1.5">
-            {TONES.map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setTone(t)}
-                className={cn(
-                  "px-2.5 py-1 text-xs rounded-full border capitalize transition-colors",
-                  tone === t
-                    ? "border-primary/50 text-primary bg-primary/10"
-                    : "border-border bg-background hover:border-primary/50",
-                )}
-              >
-                {t}
-              </button>
-            ))}
+              {LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+            <span className="text-[10px] text-muted-foreground">
+              AI writes &amp; speaks the ad in this language
+            </span>
           </div>
-          <div className="flex gap-1.5">
-            {LENGTHS.map((s) => (
+          <div className="flex flex-wrap gap-1.5">
+            {VOICE_OPTIONS.map((v) => (
               <button
-                key={s}
+                key={v.id}
                 type="button"
-                onClick={() => setSeconds(s)}
+                onClick={() => setVoice(v.id)}
+                title={v.blurb}
                 className={cn(
                   "px-2.5 py-1 text-xs rounded-full border transition-colors",
-                  seconds === s
+                  voice === v.id
                     ? "border-primary/50 text-primary bg-primary/10"
                     : "border-border bg-background hover:border-primary/50",
                 )}
               >
-                {s}s
+                {v.label}
               </button>
             ))}
           </div>
-          <div className="flex gap-1.5">
-            {(["480p", "720p"] as Resolution[]).map((r) => (
-              <button
-                key={r}
-                type="button"
-                onClick={() => setResolution(r)}
-                className={cn(
-                  "px-2.5 py-1 text-xs rounded-full border transition-colors",
-                  resolution === r
-                    ? "border-primary/50 text-primary bg-primary/10"
-                    : "border-border bg-background hover:border-primary/50",
-                )}
-              >
-                {r}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex gap-1.5">
+              {TONES.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setTone(t)}
+                  className={cn(
+                    "px-2.5 py-1 text-xs rounded-full border capitalize transition-colors",
+                    tone === t
+                      ? "border-primary/50 text-primary bg-primary/10"
+                      : "border-border bg-background hover:border-primary/50",
+                  )}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-1.5">
+              {LENGTHS.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setSeconds(s)}
+                  className={cn(
+                    "px-2.5 py-1 text-xs rounded-full border transition-colors",
+                    seconds === s
+                      ? "border-primary/50 text-primary bg-primary/10"
+                      : "border-border bg-background hover:border-primary/50",
+                  )}
+                >
+                  {s}s
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-1.5">
+              {(["480p", "720p"] as Resolution[]).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setResolution(r)}
+                  className={cn(
+                    "px-2.5 py-1 text-xs rounded-full border transition-colors",
+                    resolution === r
+                      ? "border-primary/50 text-primary bg-primary/10"
+                      : "border-border bg-background hover:border-primary/50",
+                  )}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* Result / errors */}
       {status === "ready" && videoUrl && (
