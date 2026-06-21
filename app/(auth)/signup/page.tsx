@@ -265,6 +265,18 @@ function SignUpContent() {
           </Button>
         </form>
 
+        <p className="mt-6 text-center text-xs text-gray-500">
+          By creating an account, you agree to our{" "}
+          <Link href="/terms" className="text-blue-600 hover:underline">
+            Terms
+          </Link>{" "}
+          and{" "}
+          <Link href="/privacy" className="text-blue-600 hover:underline">
+            Privacy Policy
+          </Link>
+          .
+        </p>
+
         <div className="mt-6 text-center">
           <p className="text-gray-600 text-sm">
             Already have an account?{" "}
