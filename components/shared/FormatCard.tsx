@@ -182,25 +182,21 @@ export default function FormatCard({
         <>
           {!(type === 'video' && hasVariants) && (
             <Button
-              onClick={status === 'ready' && hasUrl && type !== 'video' ? undefined : onGenerate}
-              disabled={status === 'pending' || (status === 'ready' && hasUrl && type !== 'video')}
-              variant={status === 'ready' && hasUrl && type !== 'video' ? 'secondary' : 'default'}
-              className={cn(
-                'w-full gap-2',
-                status === 'ready' && hasUrl && type !== 'video' && 'opacity-60',
-              )}
+              onClick={onGenerate}
+              disabled={status === 'pending'}
+              className="w-full gap-2"
               size="sm"
             >
               {status === 'pending' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              {status === 'ready' && hasUrl && type !== 'video'
-                ? `${title} ready`
-                : status === 'ready' && !hasUrl
-                  ? `Regenerate ${title}`
-                  : status === 'pending'
-                    ? expansion?.elapsed ? `Generating… ${expansion.elapsed}s` : 'Generating…'
-                    : status === 'failed'
-                      ? 'Retry'
-                      : `Generate ${title}`}
+              {status === 'pending'
+                ? expansion?.elapsed
+                  ? `Generating… ${expansion.elapsed}s`
+                  : 'Generating…'
+                : status === 'failed'
+                  ? 'Retry'
+                  : status === 'ready'
+                    ? `Regenerate ${title}`
+                    : `Generate ${title}`}
             </Button>
           )}
         </>
