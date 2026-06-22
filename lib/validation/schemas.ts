@@ -101,6 +101,8 @@ export const publishSchema = z.object({
   platformCaptions: z.record(z.string(), z.string().max(5000)).optional(),
   hashtags: z.array(z.string()).max(30).default([]),
   scheduledAt: z.string().datetime().optional(),
+  // Optional per-publish Facebook Page override (defaults to the active page).
+  facebookPageId: z.string().optional(),
 });
 
 export const purchaseCreditsSchema = z.object({

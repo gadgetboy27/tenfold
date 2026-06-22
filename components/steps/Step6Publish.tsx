@@ -28,6 +28,9 @@ interface SocialProfile {
   platform: string;
   handle: string | null;
   profile_display_name: string | null;
+  /** Facebook only: the active Page + all managed Pages for the picker. */
+  activePageId?: string | null;
+  availablePages?: { id: string; name: string }[];
 }
 
 interface PlatformMeta {
@@ -176,6 +179,7 @@ export default function Step5Publish() {
   const [profiles, setProfiles] = useState<SocialProfile[]>([]);
   const [loadingProfiles, setLoadingProfiles] = useState(true);
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
+  const [facebookPageId, setFacebookPageId] = useState<string>("");
   const [caption, setCaption] = useState(expansions.script?.content ?? "");
   const [hashtags, setHashtags] = useState<string[]>([]);
   const [hashtagInput, setHashtagInput] = useState("");
@@ -239,6 +243,9 @@ export default function Step5Publish() {
         const data = (await res.json()) as SocialProfile[];
         setProfiles(data);
         setSelectedPlatforms(data.map((p) => p.platform));
+        // Default the FB Page picker to the workspace's active Page.
+        const fb = data.find((p) => p.platform === "facebook");
+        if (fb?.activePageId) setFacebookPageId(fb.activePageId);
       }
     } finally {
       setLoadingProfiles(false);
@@ -297,6 +304,8 @@ export default function Step5Publish() {
       if (Object.keys(tailored).length) body.platformCaptions = tailored;
       if (currentCompositionId) body.compositionId = currentCompositionId;
       else if (selectedAnchorId) body.assetId = selectedAnchorId;
+      if (selectedPlatforms.includes("facebook") && facebookPageId)
+        body.facebookPageId = facebookPageId;
       if (scheduleMode === "later")
         body.scheduledAt = new Date(scheduledAt).toISOString();
 
@@ -594,6 +603,36 @@ export default function Step5Publish() {
                   <ExternalLink className="w-3 h-3" /> Add more platforms in
                   Settings
                 </Link>
+                {(() => {
+                  const fb = profiles.find((p) => p.platform === "facebook");
+                  const pages = fb?.availablePages ?? [];
+                  if (
+                    pages.length <= 1 ||
+                    !selectedPlatforms.includes("facebook")
+                  )
+                    return null;
+                  return (
+                    <div className="pt-2">
+                      <label className="block text-[11px] text-muted-foreground mb-1">
+                        Facebook Page — publishing to:
+                      </label>
+                      <select
+                        value={facebookPageId}
+                        onChange={(e) => setFacebookPageId(e.target.value)}
+                        className="w-full text-sm rounded-lg border border-border bg-background text-foreground px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      >
+                        {pages.map((pg) => (
+                          <option key={pg.id} value={pg.id}>
+                            {pg.name}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Choose which Page this campaign posts to.
+                      </p>
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>

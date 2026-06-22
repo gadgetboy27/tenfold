@@ -17,6 +17,9 @@ interface SocialProfile {
   platform_page_id: string | null;
   platform_account_id: string | null;
   access_token: string;
+  metadata?: {
+    facebook_pages?: { id: string; name: string; access_token: string }[];
+  } | null;
 }
 
 interface Asset {
@@ -117,7 +120,9 @@ export async function POST(req: Request) {
     // Load connected profiles for requested platforms
     const { data: profiles } = await admin
       .from("social_profiles")
-      .select("platform, platform_page_id, platform_account_id, access_token")
+      .select(
+        "platform, platform_page_id, platform_account_id, access_token, metadata",
+      )
       .eq("workspace_id", session.workspaceId)
       .in("platform", body.platforms);
 
@@ -161,7 +166,25 @@ export async function POST(req: Request) {
         const meta = metaByPlatform.get(platform);
         let postId: string;
         if (platform === "facebook" && meta) {
-          postId = await publishToFacebook(meta, asset, platformCaption);
+          // Per-publish Page override: resolve the chosen Page's id + token from
+          // the stored managed-pages list. Falls back to the active page when no
+          // facebookPageId is sent (backward compatible).
+          let fbProfile = meta;
+          if (body.facebookPageId) {
+            const pages = meta.metadata?.facebook_pages ?? [];
+            const chosen = pages.find((p) => p.id === body.facebookPageId);
+            if (!chosen) {
+              errors.facebook =
+                "Selected Facebook Page not found — reconnect Facebook in Settings.";
+              continue;
+            }
+            fbProfile = {
+              ...meta,
+              platform_page_id: chosen.id,
+              access_token: chosen.access_token,
+            };
+          }
+          postId = await publishToFacebook(fbProfile, asset, platformCaption);
         } else if (platform === "instagram" && meta) {
           postId = await publishToInstagram(meta, asset, platformCaption);
         } else {
