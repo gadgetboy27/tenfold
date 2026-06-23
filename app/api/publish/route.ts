@@ -28,13 +28,23 @@ interface Asset {
   type: string;
 }
 
+// Recognise a video by type OR extension — the cinema mix saves as
+// "composed_video" (not "video"), which was being posted as a photo (a still).
+function isVideoAsset(asset: Asset): boolean {
+  return (
+    asset.type === "video" ||
+    asset.type === "composed_video" ||
+    asset.url.toLowerCase().split("?")[0].endsWith(".mp4")
+  );
+}
+
 async function publishToFacebook(
   profile: SocialProfile,
   asset: Asset,
   caption: string,
 ): Promise<string> {
   if (!profile.platform_page_id) throw new Error("Facebook Page ID not found");
-  if (asset.type === "video") {
+  if (isVideoAsset(asset)) {
     return publishVideoToFacebook(
       profile.platform_page_id,
       profile.access_token,
@@ -57,7 +67,7 @@ async function publishToInstagram(
 ): Promise<string> {
   const igUserId = profile.platform_account_id;
   if (!igUserId) throw new Error("Instagram account ID not found");
-  if (asset.type === "video") {
+  if (isVideoAsset(asset)) {
     return publishVideoToInstagram(
       igUserId,
       profile.access_token,
@@ -85,7 +95,23 @@ export async function POST(req: Request) {
     let asset: Asset | null = null;
     let resolvedCompositionId: string | null = null;
 
-    if (body.compositionId) {
+    // "Publish the video": grab the campaign's most recent video clip directly
+    // (composed_video preferred, else the raw video). Reliable — no FFmpeg mix
+    // needed — and it takes priority when the user chose Video in Step 6.
+    if (body.preferVideo && body.campaignId) {
+      const { data: v } = await admin
+        .from("assets")
+        .select("id, url, type")
+        .eq("campaign_id", body.campaignId)
+        .eq("workspace_id", session.workspaceId)
+        .in("type", ["composed_video", "video"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      asset = v as Asset | null;
+    }
+
+    if (!asset && body.compositionId) {
       const { data: composition } = await admin
         .from("compositions")
         .select("output_asset_id, anchor_asset_id")

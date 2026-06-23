@@ -184,11 +184,12 @@ export default function Step5Publish() {
   const [loadingProfiles, setLoadingProfiles] = useState(true);
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [facebookPageId, setFacebookPageId] = useState<string>("");
-  const [publishKind, setPublishKind] = useState<"video" | "image">(() =>
-    useAppStore.getState().expansions.video?.status === "ready"
-      ? "video"
-      : "image",
-  );
+  // Default to Video whenever a clip exists — reactive (no mount-time race with
+  // expansions loading); the user can override via the toggle.
+  const [publishKindOverride, setPublishKindOverride] = useState<
+    "video" | "image" | null
+  >(null);
+  const publishKind = publishKindOverride ?? (hasVideo ? "video" : "image");
   const [caption, setCaption] = useState(expansions.script?.content ?? "");
   const [hashtags, setHashtags] = useState<string[]>([]);
   const [hashtagInput, setHashtagInput] = useState("");
@@ -299,40 +300,18 @@ export default function Step5Publish() {
 
     setIsPublishing(true);
     try {
-      // Publishing the video: render (or re-use) the Cinema mix so an actual
-      // MP4 — video + music + caption — goes out, not a still image.
-      let compositionId = currentCompositionId;
-      if (publishKind === "video" && hasVideo) {
-        toast("Preparing your video — this takes a few seconds…");
-        const res = await api("/api/compositions/video", {
-          method: "POST",
-          body: JSON.stringify({
-            campaignId: currentCampaignId,
-            caption,
-            captionStyle: "fade",
-            useMusic: true,
-          }),
-          workspaceSlug,
-        });
-        const data = (await res.json().catch(() => ({}))) as {
-          compositionId?: string;
-          error?: string;
-        };
-        if (!res.ok || !data.compositionId) {
-          toast.error(
-            data.error ?? "Couldn't prepare your video — try the Compose step.",
-          );
-          setIsPublishing(false);
-          return;
-        }
-        compositionId = data.compositionId;
-      }
-
       const body: Record<string, unknown> = {
         platforms: selectedPlatforms,
         caption,
         hashtags,
       };
+      // "Publish the video": let the server grab the campaign's actual video clip
+      // and post it AS a video (reliable — no FFmpeg mix step that can silently
+      // fall back to a still image).
+      if (publishKind === "video" && hasVideo) {
+        body.preferVideo = true;
+        body.campaignId = currentCampaignId;
+      }
       // Send only the tailored captions for the platforms being published.
       const tailored = Object.fromEntries(
         selectedPlatforms
@@ -340,9 +319,9 @@ export default function Step5Publish() {
           .map((p) => [p, platformCaptions[p]]),
       );
       if (Object.keys(tailored).length) body.platformCaptions = tailored;
-      // Send the composition AND the anchor as a fallback, so a stale
-      // compositionId can never block the publish.
-      if (compositionId) body.compositionId = compositionId;
+      // Composition + anchor as fallbacks (used when NOT publishing the video),
+      // so a stale compositionId can never block the publish.
+      if (currentCompositionId) body.compositionId = currentCompositionId;
       if (selectedAnchorId) body.assetId = selectedAnchorId;
       if (selectedPlatforms.includes("facebook") && facebookPageId)
         body.facebookPageId = facebookPageId;
@@ -686,7 +665,7 @@ export default function Step5Publish() {
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() => setPublishKind("video")}
+                  onClick={() => setPublishKindOverride("video")}
                   className={`py-2 text-xs rounded-lg border transition-colors ${
                     publishKind === "video"
                       ? "border-primary/50 text-primary bg-primary/10"
@@ -697,7 +676,7 @@ export default function Step5Publish() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setPublishKind("image")}
+                  onClick={() => setPublishKindOverride("image")}
                   className={`py-2 text-xs rounded-lg border transition-colors ${
                     publishKind === "image"
                       ? "border-primary/50 text-primary bg-primary/10"

@@ -103,6 +103,9 @@ export const publishSchema = z.object({
   scheduledAt: z.string().datetime().optional(),
   // Optional per-publish Facebook Page override (defaults to the active page).
   facebookPageId: z.string().optional(),
+  // "Publish the video": resolve the campaign's video clip directly server-side.
+  campaignId: z.string().optional(),
+  preferVideo: z.boolean().optional(),
 });
 
 export const purchaseCreditsSchema = z.object({
