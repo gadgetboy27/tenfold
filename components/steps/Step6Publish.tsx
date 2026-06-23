@@ -169,6 +169,7 @@ export default function Step5Publish() {
     selectedAnchorId,
     expansions,
     currentCompositionId,
+    currentCampaignId,
     workspaceSlug,
     resetCampaign,
     setStep,
@@ -176,10 +177,18 @@ export default function Step5Publish() {
     setPlatformCaptions,
   } = useAppStore();
 
+  // A generated video exists for this campaign → offer to publish it (not a still).
+  const hasVideo = expansions.video?.status === "ready";
+
   const [profiles, setProfiles] = useState<SocialProfile[]>([]);
   const [loadingProfiles, setLoadingProfiles] = useState(true);
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [facebookPageId, setFacebookPageId] = useState<string>("");
+  const [publishKind, setPublishKind] = useState<"video" | "image">(() =>
+    useAppStore.getState().expansions.video?.status === "ready"
+      ? "video"
+      : "image",
+  );
   const [caption, setCaption] = useState(expansions.script?.content ?? "");
   const [hashtags, setHashtags] = useState<string[]>([]);
   const [hashtagInput, setHashtagInput] = useState("");
@@ -290,6 +299,35 @@ export default function Step5Publish() {
 
     setIsPublishing(true);
     try {
+      // Publishing the video: render (or re-use) the Cinema mix so an actual
+      // MP4 — video + music + caption — goes out, not a still image.
+      let compositionId = currentCompositionId;
+      if (publishKind === "video" && hasVideo) {
+        toast("Preparing your video — this takes a few seconds…");
+        const res = await api("/api/compositions/video", {
+          method: "POST",
+          body: JSON.stringify({
+            campaignId: currentCampaignId,
+            caption,
+            captionStyle: "fade",
+            useMusic: true,
+          }),
+          workspaceSlug,
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          compositionId?: string;
+          error?: string;
+        };
+        if (!res.ok || !data.compositionId) {
+          toast.error(
+            data.error ?? "Couldn't prepare your video — try the Compose step.",
+          );
+          setIsPublishing(false);
+          return;
+        }
+        compositionId = data.compositionId;
+      }
+
       const body: Record<string, unknown> = {
         platforms: selectedPlatforms,
         caption,
@@ -302,8 +340,10 @@ export default function Step5Publish() {
           .map((p) => [p, platformCaptions[p]]),
       );
       if (Object.keys(tailored).length) body.platformCaptions = tailored;
-      if (currentCompositionId) body.compositionId = currentCompositionId;
-      else if (selectedAnchorId) body.assetId = selectedAnchorId;
+      // Send the composition AND the anchor as a fallback, so a stale
+      // compositionId can never block the publish.
+      if (compositionId) body.compositionId = compositionId;
+      if (selectedAnchorId) body.assetId = selectedAnchorId;
       if (selectedPlatforms.includes("facebook") && facebookPageId)
         body.facebookPageId = facebookPageId;
       if (scheduleMode === "later")
@@ -636,6 +676,44 @@ export default function Step5Publish() {
               </div>
             )}
           </div>
+
+          {/* What you're publishing — video vs still (only when a video exists) */}
+          {hasVideo && (
+            <div className="p-4">
+              <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-3">
+                Publishing
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPublishKind("video")}
+                  className={`py-2 text-xs rounded-lg border transition-colors ${
+                    publishKind === "video"
+                      ? "border-primary/50 text-primary bg-primary/10"
+                      : "border-border hover:border-primary/50"
+                  }`}
+                >
+                  🎬 Video
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPublishKind("image")}
+                  className={`py-2 text-xs rounded-lg border transition-colors ${
+                    publishKind === "image"
+                      ? "border-primary/50 text-primary bg-primary/10"
+                      : "border-border hover:border-primary/50"
+                  }`}
+                >
+                  📷 Image
+                </button>
+              </div>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                {publishKind === "video"
+                  ? "Your video + music + caption, posted as a video."
+                  : "Just the still image with your caption — no video."}
+              </p>
+            </div>
+          )}
 
           {/* Caption */}
           <div className="p-4">

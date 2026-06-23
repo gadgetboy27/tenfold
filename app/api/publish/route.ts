@@ -79,8 +79,11 @@ export async function POST(req: Request) {
     const body = publishSchema.parse(await req.json());
     const admin = createSupabaseAdminClient();
 
-    // Resolve asset — from composition, or direct assetId
+    // Resolve asset — prefer the composition's output, but fall back to the
+    // direct assetId (the anchor) when the compositionId is stale/missing, so a
+    // leftover compositionId never hard-blocks publishing.
     let asset: Asset | null = null;
+    let resolvedCompositionId: string | null = null;
 
     if (body.compositionId) {
       const { data: composition } = await admin
@@ -89,22 +92,22 @@ export async function POST(req: Request) {
         .eq("id", body.compositionId)
         .eq("workspace_id", session.workspaceId)
         .single();
-      if (!composition)
-        return NextResponse.json(
-          { error: "Composition not found" },
-          { status: 404 },
-        );
-      const comp = composition as {
-        output_asset_id: string | null;
-        anchor_asset_id: string;
-      };
-      const { data: a } = await admin
-        .from("assets")
-        .select("id, url, type")
-        .eq("id", comp.output_asset_id ?? comp.anchor_asset_id)
-        .single();
-      asset = a as Asset | null;
-    } else if (body.assetId) {
+      if (composition) {
+        resolvedCompositionId = body.compositionId;
+        const comp = composition as {
+          output_asset_id: string | null;
+          anchor_asset_id: string;
+        };
+        const { data: a } = await admin
+          .from("assets")
+          .select("id, url, type")
+          .eq("id", comp.output_asset_id ?? comp.anchor_asset_id)
+          .single();
+        asset = a as Asset | null;
+      }
+    }
+
+    if (!asset && body.assetId) {
       const { data: a } = await admin
         .from("assets")
         .select("id, url, type")
@@ -225,7 +228,7 @@ export async function POST(req: Request) {
       .from("publish_records")
       .insert({
         id: uuidv4(),
-        composition_id: body.compositionId,
+        composition_id: resolvedCompositionId,
         workspace_id: session.workspaceId,
         platforms: body.platforms,
         caption: body.caption,
@@ -238,11 +241,11 @@ export async function POST(req: Request) {
       .select()
       .single();
 
-    if (body.compositionId) {
+    if (resolvedCompositionId) {
       await admin
         .from("compositions")
         .update({ status: "published" })
-        .eq("id", body.compositionId);
+        .eq("id", resolvedCompositionId);
     }
 
     return NextResponse.json(
