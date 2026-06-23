@@ -10,7 +10,6 @@ import RightPanel from "./RightPanel";
 import FloatingPromptBar from "./FloatingPromptBar";
 import StepView from "./StepView";
 import CampaignLobby from "./CampaignLobby";
-import FeedbackWidget from "@/components/feedback/FeedbackWidget";
 
 interface Props {
   workspaceSlug: string;
@@ -48,7 +47,6 @@ export default function DashboardClient({ workspaceSlug, user }: Props) {
         <div className="flex-1 overflow-hidden">
           <CampaignLobby userName={displayName} />
         </div>
-        <FeedbackWidget />
       </div>
     );
   }
@@ -64,7 +62,6 @@ export default function DashboardClient({ workspaceSlug, user }: Props) {
       {/* Overlay drawers — position:fixed, don't affect flex layout */}
       <LeftRail />
       <RightPanel />
-      <FeedbackWidget />
     </div>
   );
 }

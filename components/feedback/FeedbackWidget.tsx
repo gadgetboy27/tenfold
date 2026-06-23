@@ -56,7 +56,7 @@ export default function FeedbackWidget() {
         <button
           onClick={() => setOpen(true)}
           title="Send feedback"
-          className="fixed bottom-4 right-4 z-40 inline-flex items-center gap-2 px-3.5 py-2.5 rounded-full bg-primary text-white shadow-lg hover:bg-primary/90 transition-colors text-sm font-medium"
+          className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors text-xs"
         >
           <MessageSquarePlus className="w-4 h-4" />
           <span className="hidden sm:inline">Feedback</span>
@@ -64,7 +64,7 @@ export default function FeedbackWidget() {
       )}
 
       {open && (
-        <div className="fixed bottom-4 right-4 z-50 w-[20rem] max-w-[calc(100vw-2rem)] bg-card border border-border rounded-2xl shadow-2xl p-4">
+        <div className="fixed top-14 right-4 z-50 w-[20rem] max-w-[calc(100vw-2rem)] bg-card border border-border rounded-2xl shadow-2xl p-4">
           <div className="flex items-center justify-between mb-2">
             <p className="text-sm font-semibold text-foreground">
               Share feedback

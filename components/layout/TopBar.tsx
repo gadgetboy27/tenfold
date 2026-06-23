@@ -6,6 +6,7 @@ import { useAppStore } from "@/store/useAppStore";
 import CreditMeter from "@/components/shared/CreditMeter";
 import ProBadge from "@/components/billing/ProBadge";
 import JobStatusIndicator from "@/components/shared/JobStatusIndicator";
+import FeedbackWidget from "@/components/feedback/FeedbackWidget";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import {
@@ -281,6 +282,7 @@ export default function TopBar({ user, showBack = false }: Props) {
 
       {/* RIGHT: job status + settings panel toggle + credits + avatar */}
       <div className="flex items-center gap-2.5 shrink-0">
+        <FeedbackWidget />
         {showBack && <JobStatusIndicator />}
 
         {showBack && (
