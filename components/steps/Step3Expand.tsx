@@ -30,8 +30,13 @@ export default function Step3Expand() {
   const patchExpandDrafts = useAppStore((s) => s.patchExpandDrafts);
   const videoDuration = expandDrafts.videoDuration;
   const videoStyle = expandDrafts.videoStyle as VideoStyle;
-  const { musicGenre, musicModel, scriptPlatform, scriptTone, variationDirection } =
-    expandDrafts;
+  const {
+    musicGenre,
+    musicModel,
+    scriptPlatform,
+    scriptTone,
+    variationDirection,
+  } = expandDrafts;
   const setVideoDuration = (v: 10 | 30 | 60) =>
     patchExpandDrafts({ videoDuration: v });
   const setVideoStyle = (v: VideoStyle) => patchExpandDrafts({ videoStyle: v });
@@ -105,8 +110,9 @@ export default function Step3Expand() {
         // Match the music length to the ACTUAL generated video length (the model
         // caps clips at ~5–10s), not the 10/30/60 label, so they line up when composed.
         params.durationSec =
-          ({ 10: 5, 30: 10, 60: 10 } as Record<number, number>)[videoDuration] ??
-          videoDuration;
+          ({ 10: 5, 30: 10, 60: 10 } as Record<number, number>)[
+            videoDuration
+          ] ?? videoDuration;
         params.musicModel = musicModel;
         if (variationDirection.music) {
           params.variationDirection = variationDirection.music;
@@ -303,7 +309,7 @@ export default function Step3Expand() {
     );
 
   return (
-    <div className="h-full overflow-y-auto pb-32 p-4 sm:p-6 lg:p-8 relative">
+    <div className="h-full overflow-y-auto pb-44 sm:pb-32 p-4 sm:p-6 lg:p-8 relative">
       <div className="max-w-5xl mx-auto mb-4 flex justify-end">
         <TipsToggle />
       </div>
