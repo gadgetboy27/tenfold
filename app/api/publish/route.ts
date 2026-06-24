@@ -10,6 +10,7 @@ import {
 } from "@/lib/social/meta";
 import { ayrsharePost } from "@/lib/ayrshare/client";
 import { getEntitlements } from "@/lib/billing/entitlements";
+import { composeVideo } from "@/lib/composition/video";
 import { v4 as uuidv4 } from "uuid";
 
 interface SocialProfile {
@@ -95,20 +96,57 @@ export async function POST(req: Request) {
     let asset: Asset | null = null;
     let resolvedCompositionId: string | null = null;
 
-    // "Publish the video": grab the campaign's most recent video clip directly
-    // (composed_video preferred, else the raw video). Reliable — no FFmpeg mix
-    // needed — and it takes priority when the user chose Video in Step 6.
+    // "Publish the video": post the campaign's actual clip. Prefer an already
+    // mixed video; otherwise mix the latest music onto the raw clip (so the post
+    // has SOUND) and store that in Supabase — permanent even after the source
+    // music URL expires. Falls back to the raw clip if there's no music or the
+    // mix fails (e.g. the source music URL is already dead).
     if (body.preferVideo && body.campaignId) {
-      const { data: v } = await admin
-        .from("assets")
-        .select("id, url, type")
-        .eq("campaign_id", body.campaignId)
-        .eq("workspace_id", session.workspaceId)
-        .in("type", ["composed_video", "video"])
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      asset = v as Asset | null;
+      const pick = (type: string, cols = "id, url, type") =>
+        admin
+          .from("assets")
+          .select(cols)
+          .eq("campaign_id", body.campaignId)
+          .eq("workspace_id", session.workspaceId)
+          .eq("type", type)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+      const { data: existing } = await pick("composed_video");
+      if (existing) {
+        asset = existing as unknown as Asset;
+      } else {
+        const { data: rawVideo } = await pick("video");
+        const { data: music } = await pick("audio", "url");
+        const rv = rawVideo as unknown as Asset | null;
+        const mus = music as unknown as { url: string } | null;
+        if (rv && mus) {
+          try {
+            const mix = await composeVideo({
+              videoUrl: rv.url,
+              audioUrl: mus.url,
+              captionStyle: "none", // caption rides as the post text
+              workspaceId: session.workspaceId,
+              campaignId: body.campaignId,
+            });
+            const newId = uuidv4();
+            await admin.from("assets").insert({
+              id: newId,
+              campaign_id: body.campaignId,
+              workspace_id: session.workspaceId,
+              type: "composed_video",
+              url: mix.url,
+              storage_path: mix.storagePath,
+            });
+            asset = { id: newId, url: mix.url, type: "composed_video" };
+          } catch {
+            asset = rv; // music expired / mix failed → publish the raw clip
+          }
+        } else {
+          asset = rv;
+        }
+      }
     }
 
     if (!asset && body.compositionId) {
