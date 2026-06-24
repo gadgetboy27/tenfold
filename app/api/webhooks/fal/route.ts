@@ -255,7 +255,17 @@ async function handleSuccess(
 
   if (payload.audio_file) {
     const assetId = uuidv4();
-    const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.mp3`;
+    // fal serves music as application/octet-stream, which the bucket rejected —
+    // so the URL stayed on fal's CDN and expired in ~1-2 days. Pick a real audio
+    // content-type from the file extension so the Supabase upload succeeds and
+    // the music URL becomes permanent.
+    const isWav = payload.audio_file.url
+      .toLowerCase()
+      .split("?")[0]
+      .endsWith(".wav");
+    const ext = isWav ? "wav" : "mp3";
+    const contentType = isWav ? "audio/wav" : "audio/mpeg";
+    const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.${ext}`;
     let publicUrl = payload.audio_file.url;
     let storedPath: string | null = null;
     try {
@@ -265,9 +275,7 @@ async function handleSuccess(
       const buffer = await audioRes.arrayBuffer();
       const { error: upErr } = await admin.storage
         .from("assets")
-        .upload(storagePath, buffer, {
-          contentType: payload.audio_file.content_type ?? "audio/mpeg",
-        });
+        .upload(storagePath, buffer, { contentType });
       if (!upErr) {
         const { data: urlData } = admin.storage
           .from("assets")
@@ -285,7 +293,7 @@ async function handleSuccess(
       job_id: job.id,
       type: "audio",
       url: publicUrl,
-      storage_path: storedPath ?? `fal/${assetId}.mp3`,
+      storage_path: storedPath ?? `fal/${assetId}.${ext}`,
     });
   }
 
