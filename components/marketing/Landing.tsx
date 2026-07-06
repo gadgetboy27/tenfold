@@ -5,6 +5,7 @@ import { PromptDemo } from "./PromptDemo";
 import { PipelineSection } from "./PipelineSection";
 import { ShowcaseSection } from "./ShowcaseSection";
 import { ValueProps } from "./ValueProps";
+import { FAQSection } from "./FAQSection";
 import { CTASection } from "./CTASection";
 import { Footer } from "./Footer";
 
@@ -19,6 +20,7 @@ export function Landing() {
         <PromptDemo />
         <ShowcaseSection />
         <ValueProps />
+        <FAQSection />
         <CTASection />
       </main>
       <Footer />

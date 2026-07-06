@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 const LINKS = [
   { href: "/#pipeline", label: "How it works" },
   { href: "/#showcase", label: "Showcase" },
+  { href: "/pricing", label: "Pricing" },
   { href: "/about", label: "About" },
 ];
 
@@ -39,7 +40,9 @@ export function MarketingNav() {
             height={26}
             className="h-6 w-6"
           />
-          <span className="font-serif text-lg font-bold tracking-tight">tenfold</span>
+          <span className="font-serif text-lg font-bold tracking-tight">
+            tenfold
+          </span>
         </Link>
 
         <div className="hidden items-center gap-8 md:flex">

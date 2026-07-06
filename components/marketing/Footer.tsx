@@ -32,6 +32,12 @@ export function Footer() {
             Showcase
           </Link>
           <Link
+            href="/pricing"
+            className="transition-colors hover:text-foreground"
+          >
+            Pricing
+          </Link>
+          <Link
             href="/about"
             className="transition-colors hover:text-foreground"
           >
@@ -49,6 +55,12 @@ export function Footer() {
           >
             Privacy
           </Link>
+          <a
+            href="mailto:support@tenfold.nz"
+            className="transition-colors hover:text-foreground"
+          >
+            Contact
+          </a>
           <Link
             href="/login"
             className="transition-colors hover:text-foreground"

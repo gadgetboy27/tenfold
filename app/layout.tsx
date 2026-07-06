@@ -14,7 +14,14 @@ export const metadata: Metadata = {
       "Turn one idea into a full campaign — images, video, music, copy — published everywhere. Start free with 50 credits.",
     url: "https://tenfold.nz",
     siteName: "tenfold",
-    images: ["/landing/hero-founder.jpg"],
+    images: [
+      {
+        url: "/landing/og-card.jpg",
+        width: 1200,
+        height: 630,
+        alt: "tenfold — one prompt, a whole campaign",
+      },
+    ],
     type: "website",
   },
   twitter: {
@@ -22,7 +29,7 @@ export const metadata: Metadata = {
     title: "tenfold — one prompt, a whole campaign",
     description:
       "Turn one idea into a full campaign — images, video, music, copy — published everywhere.",
-    images: ["/landing/hero-founder.jpg"],
+    images: ["/landing/og-card.jpg"],
   },
 };
 

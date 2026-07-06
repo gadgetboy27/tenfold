@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,15 +15,15 @@ import { resolveWorkspacePath } from "@/lib/auth/workspace-redirect";
 
 function LoginContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [method, setMethod] = useState<"password" | "magic-link">("password");
-  const [checkingAuth, setCheckingAuth] = useState(true);
 
+  // Render the form immediately; if a session already exists, redirect in the
+  // background instead of blocking the page behind a loading state.
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
     if (!supabase) {
@@ -31,7 +31,6 @@ function LoginContent() {
       setError(
         "Authentication is temporarily unavailable. Please try again later.",
       );
-      setCheckingAuth(false);
       return;
     }
 
@@ -39,35 +38,27 @@ function LoginContent() {
       if (user) {
         const slug = user.user_metadata?.workspace_slug as string | undefined;
         router.push(await resolveWorkspacePath(slug));
-      } else {
-        setCheckingAuth(false);
       }
     });
   }, [router]);
 
+  // Flash messages arrive via query params (?message= / ?error=). Read them
+  // from the URL directly so the page doesn't need a useSearchParams Suspense
+  // boundary — that boundary made the server-rendered HTML just "Loading...".
   useEffect(() => {
-    const msg = searchParams.get("message");
-    const err = searchParams.get("error");
+    const params = new URLSearchParams(window.location.search);
+    const msg = params.get("message");
+    const err = params.get("error");
     // eslint-disable-next-line react-hooks/set-state-in-effect -- surfacing URL flash messages on mount
     if (msg) setMessage(msg);
     if (err) setError(err);
-  }, [searchParams]);
+  }, []);
 
   const handleOAuth = async (provider: OAuthProvider) => {
     setError("");
     const { error } = await signInWithOAuthProvider(provider);
     if (error) setError(error);
   };
-
-  if (checkingAuth) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800">
-        <Card className="w-full max-w-md p-8 bg-white shadow-2xl text-center">
-          <p className="text-gray-600">Loading...</p>
-        </Card>
-      </div>
-    );
-  }
 
   const handlePasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -141,6 +132,12 @@ function LoginContent() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 px-4">
       <Card className="w-full max-w-md p-8 bg-white shadow-2xl">
+        <noscript>
+          <p className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+            Signing in requires JavaScript. Please enable it and reload this
+            page.
+          </p>
+        </noscript>
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             Sign in to tenfold
@@ -341,17 +338,5 @@ function LoginContent() {
 }
 
 export default function LoginPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800">
-          <Card className="w-full max-w-md p-8 bg-white shadow-2xl text-center">
-            <p className="text-gray-600">Loading...</p>
-          </Card>
-        </div>
-      }
-    >
-      <LoginContent />
-    </Suspense>
-  );
+  return <LoginContent />;
 }

@@ -1,20 +1,21 @@
 "use client";
 
 import { motion } from "framer-motion";
-import {
-  PenLine,
-  Images,
-  Target,
-  GitBranch,
-  Wand2,
-  Send,
-} from "lucide-react";
+import { PenLine, Images, Target, GitBranch, Wand2, Send } from "lucide-react";
 
 const STAGES = [
   { icon: PenLine, title: "Prompt", line: "Describe it once, in plain words." },
-  { icon: Images, title: "Generate", line: "Six on-brand images in seconds." },
+  {
+    icon: Images,
+    title: "Generate",
+    line: "Four distinct on-brand images in seconds.",
+  },
   { icon: Target, title: "Anchor", line: "Pick your hero shot." },
-  { icon: GitBranch, title: "Expand", line: "Branch it into video, music & script." },
+  {
+    icon: GitBranch,
+    title: "Expand",
+    line: "Branch it into video, music & script.",
+  },
   { icon: Wand2, title: "Compose", line: "Stamp your brand. Add the words." },
   { icon: Send, title: "Publish", line: "One click to 13 platforms." },
 ];

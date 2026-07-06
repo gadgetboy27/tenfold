@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -21,9 +21,9 @@ function SignUpContent() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [isSignedIn, setIsSignedIn] = useState(false);
-  const [checkingAuth, setCheckingAuth] = useState(true);
 
+  // Render the form immediately; if a session already exists, redirect in the
+  // background instead of blocking the page behind a loading state.
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
     if (!supabase) {
@@ -31,17 +31,13 @@ function SignUpContent() {
       setError(
         "Authentication is temporarily unavailable. Please try again later.",
       );
-      setCheckingAuth(false);
       return;
     }
 
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (user) {
-        setIsSignedIn(true);
         const slug = user.user_metadata?.workspace_slug as string | undefined;
         router.push(await resolveWorkspacePath(slug));
-      } else {
-        setCheckingAuth(false);
       }
     });
   }, [router]);
@@ -112,19 +108,15 @@ function SignUpContent() {
     if (error) setError(error);
   };
 
-  if (checkingAuth) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800">
-        <Card className="w-full max-w-md p-8 bg-white shadow-2xl text-center">
-          <p className="text-gray-600">Loading...</p>
-        </Card>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 px-4">
       <Card className="w-full max-w-md p-8 bg-white shadow-2xl">
+        <noscript>
+          <p className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+            Creating an account requires JavaScript. Please enable it and reload
+            this page.
+          </p>
+        </noscript>
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             Create Account
@@ -294,17 +286,5 @@ function SignUpContent() {
 }
 
 export default function SignUpPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800">
-          <Card className="w-full max-w-md p-8 bg-white shadow-2xl text-center">
-            <p className="text-gray-600">Loading...</p>
-          </Card>
-        </div>
-      }
-    >
-      <SignUpContent />
-    </Suspense>
-  );
+  return <SignUpContent />;
 }
