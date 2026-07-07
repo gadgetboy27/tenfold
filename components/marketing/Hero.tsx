@@ -28,7 +28,13 @@ function FloatTile({
       transition={{ duration: 0.9, delay: 0.2 + Math.abs(rotate) * 0.04 }}
       className={`absolute overflow-hidden rounded-2xl border border-white/10 shadow-2xl shadow-black/60 ${className}`}
     >
-      <Image src={src} alt="Made with tenfold" fill className="object-cover" sizes="240px" />
+      <Image
+        src={src}
+        alt="Made with tenfold"
+        fill
+        className="object-cover"
+        sizes="240px"
+      />
       <div className="absolute inset-0 ring-1 ring-inset ring-white/10" />
     </motion.div>
   );
@@ -38,7 +44,10 @@ export function Hero() {
   const ref = useRef<HTMLDivElement>(null);
 
   return (
-    <section ref={ref} className="relative overflow-hidden px-5 pt-36 pb-24 sm:pt-44">
+    <section
+      ref={ref}
+      className="relative overflow-hidden px-5 pt-36 pb-24 sm:pt-44"
+    >
       {/* violet ambient glows */}
       <div className="pointer-events-none absolute left-1/2 top-0 -z-10 h-[600px] w-[900px] -translate-x-1/2 rounded-full bg-primary/20 blur-[140px]" />
       <div className="pointer-events-none absolute -right-40 top-40 -z-10 h-[400px] w-[400px] rounded-full bg-fuchsia-500/10 blur-[120px]" />
@@ -75,9 +84,9 @@ export function Hero() {
             transition={{ duration: 0.7, delay: 0.15 }}
             className="mx-auto mt-6 max-w-xl text-lg text-muted-foreground lg:mx-0"
           >
-            tenfold turns a single idea into images, video, music and copy — then
-            publishes it to every platform you sell on. No agency. No editing suite.
-            Just one sentence.
+            tenfold turns a single idea into images, video, music and copy —
+            then publishes it to every platform you sell on. No agency. No
+            editing suite. Just one sentence.
           </motion.p>
 
           <motion.div
@@ -108,10 +117,30 @@ export function Hero() {
 
         {/* Parallax image cluster */}
         <div className="relative mx-auto hidden h-[460px] w-full max-w-md lg:block">
-          <FloatTile src="/landing/hero-founder.jpg" depth={-60} rotate={-5} className="left-0 top-6 h-64 w-44" />
-          <FloatTile src="/landing/product-skincare.jpg" depth={60} rotate={4} className="right-2 top-0 h-56 w-40" />
-          <FloatTile src="/landing/fashion-flatlay.jpg" depth={-30} rotate={6} className="bottom-0 left-10 h-44 w-44" />
-          <FloatTile src="/landing/cafe.jpg" depth={40} rotate={-4} className="bottom-6 right-0 h-44 w-40" />
+          <FloatTile
+            src="/landing/hero-presenter.jpg"
+            depth={-60}
+            rotate={-5}
+            className="left-0 top-6 h-64 w-44"
+          />
+          <FloatTile
+            src="/landing/product-skincare.jpg"
+            depth={60}
+            rotate={4}
+            className="right-2 top-0 h-56 w-40"
+          />
+          <FloatTile
+            src="/landing/fashion-flatlay.jpg"
+            depth={-30}
+            rotate={6}
+            className="bottom-0 left-10 h-44 w-44"
+          />
+          <FloatTile
+            src="/landing/cafe.jpg"
+            depth={40}
+            rotate={-4}
+            className="bottom-6 right-0 h-44 w-40"
+          />
         </div>
       </div>
     </section>
