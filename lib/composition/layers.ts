@@ -194,7 +194,12 @@ export const compositionDocSchema = z.object({
 
 export type CompositionDoc = z.infer<typeof compositionDocSchema>;
 
-/** Visibility × fade envelope for a layer at time t (0..1 alpha multiplier). */
+/**
+ * Visibility × fade envelope for a layer at time t (0..1 alpha multiplier).
+ * Fade-out only applies when the layer has an explicit disappearAt — a layer
+ * running to the end of the clip (null) holds at full alpha, so end-card
+ * logos fade in and stay.
+ */
 export function layerAlphaAt(
   layer: Layer,
   t: number,
@@ -205,11 +210,10 @@ export function layerAlphaAt(
   if (t < start || t > end) return 0;
   let alpha = 1;
   if (layer.fadeSec > 0) {
-    alpha = Math.min(
-      alpha,
-      (t - start) / layer.fadeSec,
-      (end - t) / layer.fadeSec,
-    );
+    alpha = Math.min(alpha, (t - start) / layer.fadeSec);
+    if (layer.disappearAt !== null) {
+      alpha = Math.min(alpha, (end - t) / layer.fadeSec);
+    }
   }
   return Math.min(1, Math.max(0, alpha)) * layer.opacity;
 }

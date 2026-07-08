@@ -28,6 +28,8 @@ interface BrandKit {
   font_family: Font;
   tagline: string;
   logo_url: string | null;
+  /** Dark variant of the mark, for light backgrounds. */
+  logo_dark_url: string | null;
 }
 
 const DEFAULTS: BrandKit = {
@@ -37,6 +39,7 @@ const DEFAULTS: BrandKit = {
   font_family: "Inter",
   tagline: "",
   logo_url: null,
+  logo_dark_url: null,
 };
 
 function ColorField({
@@ -86,8 +89,10 @@ export default function BrandKitPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadingDark, setUploadingDark] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const darkFileRef = useRef<HTMLInputElement>(null);
 
   const hasChanges =
     kit.primary_color !== saved.primary_color ||
@@ -132,11 +137,16 @@ export default function BrandKitPage() {
     }
   };
 
-  const uploadLogo = async (file: File) => {
-    setUploading(true);
+  const uploadLogo = async (
+    file: File,
+    variant: "light" | "dark" = "light",
+  ) => {
+    const setBusy = variant === "dark" ? setUploadingDark : setUploading;
+    setBusy(true);
     try {
       const form = new FormData();
       form.append("file", file);
+      form.append("variant", variant);
       const { getPublicEnv } = await import("@/lib/env/public-client");
       const pub = getPublicEnv();
       const supabase = (await import("@supabase/ssr")).createBrowserClient(
@@ -161,13 +171,16 @@ export default function BrandKitPage() {
         throw new Error(err.error ?? "Upload failed");
       }
       const { url } = (await res.json()) as { url: string };
-      setKit((k) => ({ ...k, logo_url: url }));
-      setSaved((k) => ({ ...k, logo_url: url }));
-      toast.success("Logo uploaded");
+      const key = variant === "dark" ? "logo_dark_url" : "logo_url";
+      setKit((k) => ({ ...k, [key]: url }));
+      setSaved((k) => ({ ...k, [key]: url }));
+      toast.success(
+        variant === "dark" ? "Dark logo uploaded" : "Logo uploaded",
+      );
     } catch (err) {
       toast.error((err as Error).message ?? "Upload failed");
     } finally {
-      setUploading(false);
+      setBusy(false);
     }
   };
 
@@ -184,13 +197,14 @@ export default function BrandKitPage() {
     if (f) uploadLogo(f);
   };
 
-  const removeLogo = async () => {
-    setKit((k) => ({ ...k, logo_url: null }));
-    setSaved((k) => ({ ...k, logo_url: null }));
+  const removeLogo = async (variant: "light" | "dark" = "light") => {
+    const key = variant === "dark" ? "logo_dark_url" : "logo_url";
+    setKit((k) => ({ ...k, [key]: null }));
+    setSaved((k) => ({ ...k, [key]: null }));
     await api("/api/brand-kit", {
       method: "PATCH",
       workspaceSlug: slug,
-      body: JSON.stringify({ logo_url: null }),
+      body: JSON.stringify({ [key]: null }),
     }).catch(() => {});
   };
 
@@ -269,7 +283,7 @@ export default function BrandKitPage() {
                       size="sm"
                       variant="ghost"
                       className="text-destructive hover:text-destructive"
-                      onClick={removeLogo}
+                      onClick={() => removeLogo("light")}
                     >
                       <X className="w-3.5 h-3.5 mr-1" /> Remove
                     </Button>
@@ -314,6 +328,72 @@ export default function BrandKitPage() {
               className="hidden"
               accept=".png,.jpg,.jpeg,.webp,.svg"
               onChange={handleFileChange}
+            />
+
+            {/* Dark variant — used when the mark sits on light backgrounds */}
+            <div className="mt-3 flex items-center gap-3 p-3 rounded-xl border border-border bg-card">
+              <div className="relative w-12 h-12 rounded-lg border border-border bg-white flex items-center justify-center overflow-hidden shrink-0">
+                {kit.logo_dark_url ? (
+                  <Image
+                    src={kit.logo_dark_url}
+                    alt="Dark logo"
+                    fill
+                    className="object-contain p-1"
+                    sizes="48px"
+                  />
+                ) : (
+                  <span className="text-[9px] text-gray-400 text-center leading-tight">
+                    dark
+                    <br />
+                    logo
+                  </span>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-foreground">
+                  Dark variant
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Optional — for compositions on light backgrounds.
+                </p>
+              </div>
+              <div className="flex gap-1.5 shrink-0">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => darkFileRef.current?.click()}
+                  disabled={uploadingDark}
+                >
+                  {uploadingDark ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : kit.logo_dark_url ? (
+                    "Replace"
+                  ) : (
+                    "Upload"
+                  )}
+                </Button>
+                {kit.logo_dark_url && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => removeLogo("dark")}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </Button>
+                )}
+              </div>
+            </div>
+            <input
+              ref={darkFileRef}
+              type="file"
+              className="hidden"
+              accept=".png,.jpg,.jpeg,.webp,.svg"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) uploadLogo(f, "dark");
+                e.target.value = "";
+              }}
             />
           </section>
 

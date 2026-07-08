@@ -1,12 +1,28 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { Play, Pause, ImagePlus, Type, Layers } from "lucide-react";
+import { useParams } from "next/navigation";
+import toast from "react-hot-toast";
+import {
+  Play,
+  Pause,
+  ImagePlus,
+  Type,
+  Layers,
+  Sparkles,
+  Loader2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { api } from "@/lib/api";
 import {
   ASPECT_DESIGN,
   type CompositionAspect,
 } from "@/lib/composition/layers";
+import {
+  brandKitLayers,
+  pickKitLogo,
+  type BrandKitInfo,
+} from "@/lib/composition/brand-apply";
 import { useCompositorStore } from "@/store/useCompositorStore";
 import {
   CompositorCanvas,
@@ -32,11 +48,13 @@ export function Compositor() {
   const setAspect = useCompositorStore((s) => s.setAspect);
   const addLayer = useCompositorStore((s) => s.addLayer);
 
+  const params = useParams<{ workspace?: string }>();
   const canvasRef = useRef<CompositorCanvasHandle>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(10);
+  const [applyingKit, setApplyingKit] = useState(false);
 
   const onTick = useCallback((t: number, d: number) => {
     setTime(t);
@@ -47,6 +65,42 @@ export function Compositor() {
   if (!doc) return null;
   const design = ASPECT_DESIGN[doc.aspect];
   const selected = doc.layers.find((l) => l.id === selectedLayerId) ?? null;
+
+  // One-click brand-aware defaults: logo as an end-frame screen-blend layer
+  // + tagline caption, from the saved kit (brief §4). Everything it adds is a
+  // normal layer, freely tweakable afterwards.
+  const applyBrandKit = async () => {
+    setApplyingKit(true);
+    try {
+      const res = await api("/api/brand-kit", {
+        workspaceSlug: params.workspace,
+      });
+      const kit = (await res.json().catch(() => ({}))) as BrandKitInfo;
+      const logoSrc = pickKitLogo(kit);
+      if (!logoSrc && !kit.tagline?.trim()) {
+        toast.error(
+          "No brand kit yet — add a logo or tagline in Settings → Brand.",
+        );
+        return;
+      }
+      // Measure the logo so it lands at ~45% of frame width.
+      const logoWidth = logoSrc
+        ? await new Promise<number | null>((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve(img.naturalWidth || null);
+            img.onerror = () => resolve(null);
+            img.src = logoSrc;
+          })
+        : null;
+      const layers = brandKitLayers(kit, doc.aspect, duration, logoWidth);
+      layers.forEach(addLayer);
+      toast.success("Brand kit applied — tweak anything you like.");
+    } catch {
+      toast.error("Couldn't load your brand kit.");
+    } finally {
+      setApplyingKit(false);
+    }
+  };
 
   const addImageLayer = (file: File) => {
     addLayer({
@@ -103,6 +157,19 @@ export function Compositor() {
               {a}
             </button>
           ))}
+          <Button
+            size="sm"
+            onClick={applyBrandKit}
+            disabled={applyingKit}
+            className="ml-auto h-7 gap-1.5 px-3 text-xs"
+          >
+            {applyingKit ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="h-3.5 w-3.5" />
+            )}
+            Apply brand kit
+          </Button>
         </div>
 
         <div className="min-h-0 flex-1">

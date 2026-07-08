@@ -11,6 +11,7 @@ import {
   type Layer,
 } from "@/lib/composition/layers";
 import { useCompositorStore } from "@/store/useCompositorStore";
+import { brandKitLayers, pickKitLogo } from "@/lib/composition/brand-apply";
 
 const imageLayer: Layer = {
   id: "logo-1",
@@ -120,11 +121,71 @@ describe("layerAlphaAt", () => {
     expect(layerAlphaAt(textLayer, 4, 10)).toBe(1); // fully visible
   });
 
-  it("treats disappearAt: null as the clip end", () => {
-    expect(layerAlphaAt(imageLayer, 10, 10)).toBe(0); // fade-out edge at end
+  it("holds to the clip end without fading out when disappearAt is null", () => {
+    // End-card logo: fades in over the final seconds and STAYS at full alpha.
+    expect(layerAlphaAt(imageLayer, 10, 10)).toBeCloseTo(0.9);
     expect(layerAlphaAt({ ...imageLayer, fadeSec: 0 }, 10, 10)).toBeCloseTo(
       0.9,
     );
+    // …but an explicit disappearAt still fades out at its edge.
+    expect(layerAlphaAt(textLayer, 7.75, 10)).toBeCloseTo(0.5);
+  });
+});
+
+describe("brandKitLayers", () => {
+  const kit = {
+    logo_url: "https://example.com/logo.png",
+    logo_dark_url: "https://example.com/logo-dark.png",
+    tagline: "Ten times the brand",
+    font_family: "Montserrat",
+  };
+
+  it("builds a schema-valid end-card logo + tagline caption from the kit", () => {
+    const layers = brandKitLayers(kit, "9:16", 10, 500);
+    expect(layers).toHaveLength(2);
+    for (const l of layers) expect(() => layerSchema.parse(l)).not.toThrow();
+
+    const logo = layers.find((l) => l.kind === "image")!;
+    // Screen blend, fades in over the last 2s of the clip and holds.
+    expect(logo).toMatchObject({
+      src: kit.logo_url,
+      blend: "screen",
+      appearAt: 8,
+      disappearAt: null,
+      fadeSec: 1,
+    });
+    // 500px-wide logo scaled to ~45% of the 1080 design width.
+    expect(logo.scale).toBeCloseTo((1080 * 0.45) / 500);
+
+    const text = layers.find((l) => l.kind === "text")!;
+    expect(text).toMatchObject({
+      text: kit.tagline,
+      font: "Montserrat",
+      appearAt: 0,
+    });
+  });
+
+  it("skips missing pieces and falls back safely", () => {
+    expect(brandKitLayers({}, "1:1", 10, null)).toHaveLength(0);
+    const only = brandKitLayers(
+      { tagline: "Hi", font_family: "Comic Sans" },
+      "1:1",
+      10,
+      null,
+    );
+    expect(only).toHaveLength(1);
+    expect(only[0]).toMatchObject({ kind: "text", font: "Inter" });
+    // Clips shorter than the fade window still get a valid appearAt.
+    const short = brandKitLayers({ logo_url: kit.logo_url }, "1:1", 1.5, 500);
+    expect(short[0].appearAt).toBe(0);
+  });
+
+  it("prefers the light mark for screen blending, falling back to dark", () => {
+    expect(pickKitLogo(kit)).toBe(kit.logo_url);
+    expect(pickKitLogo({ logo_dark_url: kit.logo_dark_url })).toBe(
+      kit.logo_dark_url,
+    );
+    expect(pickKitLogo({})).toBe(null);
   });
 });
 
