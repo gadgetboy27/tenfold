@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { backgroundSchema, layerSchema } from "@/lib/composition/layers";
 
 export const createCampaignSchema = z.object({
   prompt: z.string().min(3).max(2000),
@@ -60,6 +61,10 @@ export const createCompositionSchema = z.object({
     .default({ logo: false, primaryColor: false }),
   caption: z.string().max(2200).optional(),
   hashtags: z.array(z.string().max(100)).max(30).default([]),
+  // Layered compositor document (lib/composition/layers.ts). Optional so the
+  // legacy text-overlay path keeps working; compositor clients send these.
+  background: backgroundSchema.optional(),
+  layers: z.array(layerSchema).max(20).default([]),
 });
 
 // Cinema composition: layer existing assets (video + music + caption) into one

@@ -34,6 +34,8 @@ export async function POST(req: Request) {
         format: body.format,
         text_overlays: body.textOverlays,
         branding: body.branding,
+        background: body.background ?? null,
+        layers: body.layers,
         caption: body.caption,
         hashtags: body.hashtags,
         status: needsComposition ? 'composing' : 'draft',

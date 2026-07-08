@@ -278,6 +278,10 @@ export const compositions = pgTable("compositions", {
   format: text("format").notNull().default("square"),
   textOverlays: jsonb("text_overlays").notNull().default("[]"),
   branding: jsonb("branding").notNull().default("{}"),
+  // Layered compositor (docs/tenfold-compositor-brief.md): background footage
+  // + ordered Layer[] document. Shapes validated by lib/composition/layers.ts.
+  background: jsonb("background"),
+  layers: jsonb("layers").notNull().default("[]"),
   caption: text("caption"),
   hashtags: text("hashtags").array(),
   status: text("status").notNull().default("draft"),
