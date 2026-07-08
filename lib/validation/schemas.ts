@@ -77,6 +77,8 @@ export const composeVideoSchema = z.object({
     .enum(["none", "fade", "lower_third", "crawl"])
     .default("fade"),
   useMusic: z.boolean().default(true),
+  // Brand logo storage URL, baked into the film as an FFmpeg overlay layer.
+  logoUrl: z.string().url().nullable().optional(),
 });
 
 export const publishSchema = z.object({

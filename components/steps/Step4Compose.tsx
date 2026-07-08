@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import { useAppStore } from "@/store/useAppStore";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { api } from "@/lib/api";
+import { VideoWithMusic } from "@/components/compose/VideoWithMusic";
 import AssetComments from "@/components/shared/AssetComments";
 import { useEntitlements } from "@/lib/billing/useEntitlements";
 import UpgradeModal from "@/components/billing/UpgradeModal";
@@ -81,6 +82,8 @@ export default function Step4Compose() {
   const [caption, setCaption] = useState(expansions.script?.content || "");
   const [isSaving, setIsSaving] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoFromKit, setLogoFromKit] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
@@ -102,6 +105,24 @@ export default function Step4Compose() {
       : "image",
   );
 
+  // Pre-fill the logo from the saved brand kit so every film is brand-aware
+  // by default; an upload in this step overrides it for this campaign.
+  useEffect(() => {
+    if (!workspaceSlug) return;
+    api("/api/brand-kit", { workspaceSlug })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((kit: { logo_url?: string | null } | null) => {
+        if (kit?.logo_url) {
+          setLogoUrl((current) => {
+            if (current) return current;
+            setLogoFromKit(true);
+            return kit.logo_url!;
+          });
+        }
+      })
+      .catch(() => {});
+  }, [workspaceSlug]);
+
   const handleRenderFilm = async (): Promise<string | null> => {
     setRendering(true);
     try {
@@ -112,6 +133,7 @@ export default function Step4Compose() {
           caption,
           captionStyle,
           useMusic,
+          logoUrl,
         }),
         workspaceSlug,
       });
@@ -146,11 +168,35 @@ export default function Step4Compose() {
     expansions.music?.status === "ready" ? expansions.music.url : null;
   const hasScript = expansions.script?.status === "ready";
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Upload the logo to storage so the FFmpeg render can layer it into the
+  // film — an object URL only ever existed in this browser tab.
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setLogoUrl(URL.createObjectURL(file));
-    toast.success("Logo added");
+    setLogoUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await api("/api/uploads/image", {
+        method: "POST",
+        body: form,
+        workspaceSlug,
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        url?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.url)
+        throw new Error(data.error ?? "Logo upload failed");
+      setLogoUrl(data.url);
+      setLogoFromKit(false);
+      invalidateFilm();
+      toast.success("Logo added — it'll be layered into your film");
+    } catch (err: unknown) {
+      toast.error((err as Error).message ?? "Logo upload failed");
+    } finally {
+      setLogoUploading(false);
+    }
   };
 
   // Advance to the Publish step (shared by both the image + film paths).
@@ -295,7 +341,17 @@ export default function Step4Compose() {
                 <Maximize2 className="w-3.5 h-3.5" />
               </button>
             </div>
-            <video src={video} controls className="w-full max-h-64 bg-black" />
+            <VideoWithMusic
+              videoUrl={video}
+              musicUrl={useMusic ? music : null}
+              className="w-full max-h-64 bg-black"
+            />
+            {music && useMusic && (
+              <p className="px-4 py-1.5 text-[11px] text-muted-foreground border-t border-border">
+                ♪ Playing with your music layered in — exactly how the rendered
+                film will sound.
+              </p>
+            )}
           </div>
         )}
 
@@ -339,8 +395,8 @@ export default function Step4Compose() {
           {video ? (
             <>
               <p className="text-[11px] text-green-400/90 mb-3">
-                ✓ Mixes your existing video, music & caption — no extra credits.
-                New generations (Steps 2–3) are what cost credits.
+                ✓ Mixes your existing video, music, caption & logo — no extra
+                credits. New generations (Steps 2–3) are what cost credits.
               </p>
 
               <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
@@ -440,20 +496,30 @@ export default function Step4Compose() {
           </div>
           <button
             onClick={() => logoInputRef.current?.click()}
+            disabled={logoUploading}
             className="w-full border-2 border-dashed border-border rounded-lg p-4 flex flex-col items-center gap-2 hover:border-primary/50 hover:bg-primary/5 transition-all"
           >
-            {logoUrl ? (
+            {logoUploading ? (
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            ) : logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={logoUrl} alt="Logo" className="h-10 object-contain" />
             ) : (
               <>
                 <Upload className="w-5 h-5 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">
-                  Upload your logo — shown in top-right of ad
+                  Upload your logo — layered into the top-right of your film
                 </span>
               </>
             )}
           </button>
+          {logoUrl && (
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              {logoFromKit
+                ? "Using your brand kit logo — it'll be baked into the rendered film. Click to replace."
+                : "This logo will be baked into the rendered film, top-right."}
+            </p>
+          )}
         </div>
 
         {/* Redo anything */}
@@ -517,7 +583,7 @@ export default function Step4Compose() {
             </div>
             <p className="mt-2 text-[11px] text-muted-foreground">
               {outputKind === "video"
-                ? "Your video + music + caption, mixed into one film."
+                ? "Your video + music + caption + logo, mixed into one film."
                 : "Just the still image with your caption — no video or music."}
             </p>
           </div>
@@ -546,9 +612,9 @@ export default function Step4Compose() {
           className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center"
           onClick={() => setIsFullscreen(false)}
         >
-          <video
-            src={video}
-            controls
+          <VideoWithMusic
+            videoUrl={video}
+            musicUrl={useMusic ? music : null}
             autoPlay
             className="max-w-full max-h-[90vh] rounded-xl"
             onClick={(e) => e.stopPropagation()}

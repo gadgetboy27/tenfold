@@ -65,6 +65,7 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
       audioUrl,
       caption: body.caption,
       captionStyle: body.captionStyle,
+      logoUrl: body.logoUrl ?? null,
       workspaceId: session.workspaceId,
       campaignId: body.campaignId,
     });
@@ -95,7 +96,11 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
     format: "reel",
     caption: body.caption ?? null,
     text_overlays: [],
-    branding: { captionStyle: body.captionStyle, useMusic: body.useMusic },
+    branding: {
+      captionStyle: body.captionStyle,
+      useMusic: body.useMusic,
+      logoUrl: body.logoUrl ?? null,
+    },
     status: "ready",
   });
 

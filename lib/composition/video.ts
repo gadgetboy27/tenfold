@@ -115,6 +115,26 @@ async function probeDuration(path: string): Promise<number> {
   }
 }
 
+async function probeWidth(path: string): Promise<number> {
+  try {
+    const out = await run("ffprobe", [
+      "-v",
+      "error",
+      "-select_streams",
+      "v:0",
+      "-show_entries",
+      "stream=width",
+      "-of",
+      "default=noprint_wrappers=1:nokey=1",
+      path,
+    ]);
+    const w = parseInt(out.trim(), 10);
+    return Number.isFinite(w) && w > 0 ? w : 1080;
+  } catch {
+    return 1080;
+  }
+}
+
 async function download(url: string, path: string): Promise<void> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`);
@@ -126,6 +146,9 @@ export interface ComposeVideoInput {
   audioUrl?: string | null;
   caption?: string | null;
   captionStyle: CaptionStyle;
+  /** Brand logo (PNG/JPG/WEBP storage URL), overlaid top-right — drawn by
+   *  FFmpeg as a true layer, never re-rendered by a model. */
+  logoUrl?: string | null;
   durationSec?: number;
   workspaceId: string;
   campaignId: string;
@@ -143,17 +166,22 @@ export async function composeVideo(
   const dir = await mkdtemp(join(tmpdir(), "tf-compose-"));
   const videoPath = join(dir, "in.mp4");
   const audioPath = join(dir, "music.mp3");
+  const logoPath = join(dir, "logo.png");
   const capPath = join(dir, "caption.txt");
   const outPath = join(dir, "out.mp4");
 
   try {
     await download(input.videoUrl, videoPath);
     if (input.audioUrl) await download(input.audioUrl, audioPath);
+    if (input.logoUrl) await download(input.logoUrl, logoPath);
 
     const dur = input.durationSec ?? (await probeDuration(videoPath));
 
+    // Input order: 0 = video, then music, then logo (indices depend on both).
     const args: string[] = ["-y", "-i", videoPath];
     if (input.audioUrl) args.push("-i", audioPath);
+    const logoIdx = input.logoUrl ? (input.audioUrl ? 2 : 1) : -1;
+    if (input.logoUrl) args.push("-i", logoPath);
 
     const hasCaption = input.captionStyle !== "none" && !!input.caption?.trim();
     if (hasCaption) {
@@ -163,21 +191,30 @@ export async function composeVideo(
       ? captionFilter(input.captionStyle, dur, capPath)
       : null;
 
-    // Map carefully: a simple -vf is dropped if we also -map the raw video, so
-    // when there's BOTH a caption and music we must filter via filter_complex
-    // and map the labelled output.
-    if (vf && input.audioUrl) {
-      args.push(
-        "-filter_complex",
-        `[0:v]${vf}[v]`,
-        "-map",
-        "[v]",
-        "-map",
-        "1:a:0",
-        "-shortest",
-      );
-    } else if (vf) {
-      args.push("-vf", vf); // caption only — keeps the clip's own audio
+    // Build one filter graph layering caption then logo onto the footage, in
+    // any combination. All labelled through filter_complex so -map stays
+    // correct whether or not a music track replaces the original audio.
+    const filters: string[] = [];
+    let vLabel = "0:v";
+    if (vf) {
+      filters.push(`[${vLabel}]${vf}[cap]`);
+      vLabel = "cap";
+    }
+    if (input.logoUrl) {
+      // Logo ~16% of frame width, top-right, 3% margin — mirrors the preview.
+      const videoW = await probeWidth(videoPath);
+      const logoW = Math.round(videoW * 0.16);
+      const margin = Math.round(videoW * 0.03);
+      filters.push(`[${logoIdx}:v]scale=${logoW}:-1[logo]`);
+      filters.push(`[${vLabel}][logo]overlay=W-w-${margin}:${margin}[vout]`);
+      vLabel = "vout";
+    }
+
+    if (filters.length > 0) {
+      args.push("-filter_complex", filters.join(";"), "-map", `[${vLabel}]`);
+      // Music replaces the clip's own audio; otherwise keep it if present.
+      if (input.audioUrl) args.push("-map", "1:a:0", "-shortest");
+      else args.push("-map", "0:a?");
     } else if (input.audioUrl) {
       args.push("-map", "0:v:0", "-map", "1:a:0", "-shortest"); // music only
     }
