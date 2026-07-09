@@ -110,6 +110,9 @@ export interface DrawFrameInput {
   /** Text layer being edited inline — the DOM textarea replaces it, so the
    *  canvas skips drawing it to avoid a double image. */
   editingLayerId?: string | null;
+  /** Show the selected layer's outline regardless of ghosting (edge hover /
+   *  resize feedback). Still paused-only. */
+  forceOutline?: boolean;
 }
 
 /** True when the layer's TIMING envelope hides it at t — independent of the
@@ -181,7 +184,7 @@ export function drawFrame(
     input.paused &&
     selected &&
     selected.id !== input.editingLayerId &&
-    (selectedGhosted || dragging)
+    (selectedGhosted || dragging || input.forceOutline)
   ) {
     drawSelectionOutline(ctx, selected, input.images);
   }

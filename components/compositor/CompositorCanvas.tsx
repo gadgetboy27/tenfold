@@ -7,10 +7,52 @@ import {
   useRef,
   useState,
 } from "react";
-import { ASPECT_DESIGN } from "@/lib/composition/layers";
-import { drawFrame, hitTestLayer } from "@/lib/composition/render";
+import { ASPECT_DESIGN, type Layer } from "@/lib/composition/layers";
+import { drawFrame, hitTestLayer, layerBounds } from "@/lib/composition/render";
+import { wrapText } from "@/lib/composition/brand-apply";
 import { ensureBrandFontsLoaded } from "@/lib/composition/fonts";
 import { useCompositorStore } from "@/store/useCompositorStore";
+
+/** Edge/corner zones for manual resizing; "move" = inside the box. */
+type Zone = "move" | "l" | "r" | "t" | "b" | "tl" | "tr" | "bl" | "br";
+
+const ZONE_CURSOR: Record<Zone, string> = {
+  move: "grab",
+  l: "ew-resize",
+  r: "ew-resize",
+  t: "ns-resize",
+  b: "ns-resize",
+  tl: "nwse-resize",
+  br: "nwse-resize",
+  tr: "nesw-resize",
+  bl: "nesw-resize",
+};
+
+type PointerAction =
+  | {
+      mode: "move";
+      id: string;
+      dx: number;
+      dy: number;
+      startX: number;
+      startY: number;
+      moved: boolean;
+      textReclick: boolean;
+    }
+  | {
+      mode: "resize";
+      id: string;
+      zone: Exclude<Zone, "move">;
+      cx: number;
+      cy: number;
+      startX: number;
+      startY: number;
+      startScale: number;
+      /** Text side-resize: the unwrapped source + average char width. */
+      raw?: string;
+      avgCharW?: number;
+      lastMaxChars?: number;
+    };
 
 export interface CompositorCanvasHandle {
   seek: (t: number) => void;
@@ -47,15 +89,8 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
     const virtualT = useRef(0);
     const lastStamp = useRef<number | null>(null);
     const lastTickAt = useRef(0);
-    const drag = useRef<{
-      id: string;
-      dx: number;
-      dy: number;
-      startX: number;
-      startY: number;
-      moved: boolean;
-      textReclick: boolean;
-    } | null>(null);
+    const action = useRef<PointerAction | null>(null);
+    const hoverEdge = useRef(false);
     const wrapperRef = useRef<HTMLDivElement>(null);
     const [fontsReady, setFontsReady] = useState(false);
     // Inline text editing overlay (display-space position + font size).
@@ -160,8 +195,9 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
           images: imagesRef.current,
           selectedLayerId,
           paused: !playing && !cleanPreview,
-          draggingLayerId: drag.current?.id ?? null,
+          draggingLayerId: action.current?.id ?? null,
           editingLayerId: editing?.id ?? null,
+          forceOutline: hoverEdge.current || action.current?.mode === "resize",
         });
 
         if (stamp - lastTickAt.current > 100) {
@@ -242,15 +278,82 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
       selectLayer(layer.id);
     };
 
+    // Which zone of a layer's box the pointer is in — edges/corners resize,
+    // the interior moves. The band is ~9 display px, converted to design px.
+    const zoneFor = (
+      ctx: CanvasRenderingContext2D,
+      layer: Layer,
+      px: number,
+      py: number,
+    ): Zone | null => {
+      const canvas = canvasRef.current!;
+      const rect = canvas.getBoundingClientRect();
+      const band = 9 / (rect.width / canvas.width);
+      const b = layerBounds(ctx, layer, imagesRef.current);
+      const hw = (b.width * layer.scale) / 2;
+      const hh = (b.height * layer.scale) / 2;
+      const dx = px - layer.x;
+      const dy = py - layer.y;
+      if (Math.abs(dx) > hw + band || Math.abs(dy) > hh + band) return null;
+      const nearL = Math.abs(dx + hw) <= band;
+      const nearR = Math.abs(dx - hw) <= band;
+      const nearT = Math.abs(dy + hh) <= band;
+      const nearB = Math.abs(dy - hh) <= band;
+      if (nearT && nearL) return "tl";
+      if (nearT && nearR) return "tr";
+      if (nearB && nearL) return "bl";
+      if (nearB && nearR) return "br";
+      if (nearL) return "l";
+      if (nearR) return "r";
+      if (nearT) return "t";
+      if (nearB) return "b";
+      return Math.abs(dx) <= hw && Math.abs(dy) <= hh ? "move" : null;
+    };
+
+    const setCursor = (cursor: string) => {
+      if (canvasRef.current) canvasRef.current.style.cursor = cursor;
+    };
+
     const onPointerDown = (e: React.PointerEvent) => {
       const ctx = canvasRef.current?.getContext("2d");
       if (!ctx || !doc) return;
       const p = toDesign(e);
+
+      // Edge/corner of the SELECTED layer → start a resize.
+      const sel = doc.layers.find((l) => l.id === selectedLayerId);
+      const selZone = sel ? zoneFor(ctx, sel, p.x, p.y) : null;
+      if (sel && selZone && selZone !== "move") {
+        let raw: string | undefined;
+        let avgCharW: number | undefined;
+        if (sel.kind === "text") {
+          raw = sel.text.replace(/\n/g, " ");
+          ctx.save();
+          ctx.font = `${sel.sizePx}px "${sel.font}", sans-serif`;
+          avgCharW = ctx.measureText(raw).width / Math.max(1, raw.length);
+          ctx.restore();
+        }
+        action.current = {
+          mode: "resize",
+          id: sel.id,
+          zone: selZone,
+          cx: sel.x,
+          cy: sel.y,
+          startX: p.x,
+          startY: p.y,
+          startScale: sel.scale,
+          raw,
+          avgCharW,
+        };
+        e.currentTarget.setPointerCapture(e.pointerId);
+        return;
+      }
+
       const hit = hitTestLayer(ctx, doc, p.x, p.y, imagesRef.current);
       const wasSelected = hit?.id === selectedLayerId;
       selectLayer(hit?.id ?? null);
       if (hit) {
-        drag.current = {
+        action.current = {
+          mode: "move",
           id: hit.id,
           dx: p.x - hit.x,
           dy: p.y - hit.y,
@@ -259,32 +362,87 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
           moved: false,
           textReclick: wasSelected && hit.kind === "text",
         };
+        setCursor("grabbing");
         e.currentTarget.setPointerCapture(e.pointerId);
       }
     };
 
     const onPointerMove = (e: React.PointerEvent) => {
-      const d = drag.current;
-      if (!d) return;
-      // A few px of jitter is a click, not a drag.
-      if (
-        !d.moved &&
-        Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < 5
-      )
-        return;
-      d.moved = true;
+      const a = action.current;
+      const ctx = canvasRef.current?.getContext("2d");
+      if (!ctx || !doc) return;
       const p = toDesign(e);
-      updateLayer(d.id, {
-        x: Math.round(p.x - d.dx),
-        y: Math.round(p.y - d.dy),
+
+      if (!a) {
+        // Hover feedback: pull cursor on the selected layer's edge line,
+        // grab inside any layer, default elsewhere.
+        const sel = doc.layers.find((l) => l.id === selectedLayerId);
+        const selZone = sel ? zoneFor(ctx, sel, p.x, p.y) : null;
+        hoverEdge.current = !!selZone && selZone !== "move";
+        if (selZone && selZone !== "move") setCursor(ZONE_CURSOR[selZone]);
+        else if (hitTestLayer(ctx, doc, p.x, p.y, imagesRef.current))
+          setCursor("grab");
+        else setCursor("default");
+        return;
+      }
+
+      if (a.mode === "move") {
+        // A few px of jitter is a click, not a drag.
+        if (
+          !a.moved &&
+          Math.hypot(e.clientX - a.startX, e.clientY - a.startY) < 5
+        )
+          return;
+        a.moved = true;
+        updateLayer(a.id, {
+          x: Math.round(p.x - a.dx),
+          y: Math.round(p.y - a.dy),
+        });
+        return;
+      }
+
+      // Resize. Text pulled by a side edge re-wraps to fill the new box
+      // width (same centre and margins); everything else scales uniformly.
+      const layer = doc.layers.find((l) => l.id === a.id);
+      if (!layer) return;
+      const sideOnly = a.zone === "l" || a.zone === "r";
+      if (layer.kind === "text" && sideOnly && a.raw && a.avgCharW) {
+        const targetW = Math.max(80, Math.abs(p.x - a.cx) * 2);
+        const maxChars = Math.max(
+          4,
+          Math.round(targetW / (layer.scale * a.avgCharW)),
+        );
+        if (maxChars !== a.lastMaxChars) {
+          a.lastMaxChars = maxChars;
+          updateLayer(a.id, { text: wrapText(a.raw, maxChars) });
+        }
+        return;
+      }
+      const vertical = a.zone === "t" || a.zone === "b";
+      const f = sideOnly
+        ? Math.abs(p.x - a.cx) / Math.max(1, Math.abs(a.startX - a.cx))
+        : vertical
+          ? Math.abs(p.y - a.cy) / Math.max(1, Math.abs(a.startY - a.cy))
+          : Math.hypot(p.x - a.cx, p.y - a.cy) /
+            Math.max(1, Math.hypot(a.startX - a.cx, a.startY - a.cy));
+      updateLayer(a.id, {
+        scale: Math.min(20, Math.max(0.05, a.startScale * f)),
       });
     };
 
     const onPointerUp = () => {
-      const d = drag.current;
-      drag.current = null;
+      const a = action.current;
+      action.current = null;
+      setCursor("default");
       // Click (no drag) on an already-selected text layer opens inline edit.
-      if (d && !d.moved && d.textReclick) beginEdit(d.id);
+      if (a?.mode === "move" && !a.moved && a.textReclick) beginEdit(a.id);
+    };
+
+    const onPointerLeave = () => {
+      if (!action.current) {
+        hoverEdge.current = false;
+        setCursor("default");
+      }
     };
 
     const onDoubleClick = (e: React.MouseEvent) => {
@@ -325,8 +483,9 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
+          onPointerLeave={onPointerLeave}
           onDoubleClick={onDoubleClick}
-          className="max-h-full max-w-full cursor-grab rounded-lg border border-border bg-black object-contain active:cursor-grabbing"
+          className="max-h-full max-w-full rounded-lg border border-border bg-black object-contain"
         />
         {editing && editingLayer?.kind === "text" && (
           <textarea
