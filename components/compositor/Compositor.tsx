@@ -62,6 +62,7 @@ export function Compositor({
   const selectedLayerId = useCompositorStore((s) => s.selectedLayerId);
   const setAspect = useCompositorStore((s) => s.setAspect);
   const addLayer = useCompositorStore((s) => s.addLayer);
+  const replaceLayer = useCompositorStore((s) => s.replaceLayer);
   const load = useCompositorStore((s) => s.load);
 
   const params = useParams<{ workspace?: string }>();
@@ -161,6 +162,39 @@ export function Compositor({
       disappearAt: null,
       fadeSec: 0.5,
     });
+  };
+
+  // Everything a layer keeps when its kind is switched: position, transform,
+  // blend, timing and effects.
+  const baseOf = (l: NonNullable<typeof selected>) => ({
+    id: l.id,
+    x: l.x,
+    y: l.y,
+    scale: l.scale,
+    rotationDeg: l.rotationDeg,
+    opacity: l.opacity,
+    blend: l.blend,
+    appearAt: l.appearAt,
+    disappearAt: l.disappearAt,
+    fadeSec: l.fadeSec,
+    effects: l.effects,
+  });
+
+  const convertToText = () => {
+    if (!selected || selected.kind === "text") return;
+    replaceLayer(selected.id, {
+      ...baseOf(selected),
+      kind: "text",
+      text: "Your text here",
+      font: "Inter",
+      sizePx: 72,
+      color: "#ffffff",
+    });
+  };
+
+  const convertToImage = () => {
+    if (!selected || selected.kind === "image") return;
+    fileRef.current?.click(); // picker completes the conversion
   };
 
   // Render the composition to MP4 server-side. Local (blob:) sources are
@@ -300,26 +334,51 @@ export function Compositor({
       <div className="flex w-full flex-col gap-4 md:min-h-0 md:w-80 md:shrink-0 md:overflow-y-auto md:pr-1">
         <div className="rounded-xl border border-border bg-card p-4">
           <div className="mb-3 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm font-semibold">
+            {/* Click "Layers +" to add — then switch its type with the
+                Image / Text toggle on the right. */}
+            <button
+              onClick={addTextLayer}
+              title="Add a layer"
+              className="flex items-center gap-2 text-sm font-semibold transition-colors hover:text-primary"
+            >
               <Layers className="h-4 w-4 text-primary" /> Layers
-            </div>
-            <div className="flex gap-1.5">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => fileRef.current?.click()}
-                className="h-7 gap-1 px-2 text-xs"
+              <span className="rounded-md border border-primary/40 px-1.5 text-xs text-primary">
+                + add
+              </span>
+            </button>
+            <div className="flex overflow-hidden rounded-md border border-border">
+              <button
+                onClick={convertToImage}
+                disabled={!selected}
+                title={
+                  selected
+                    ? "Turn the selected layer into an image (pick a file)"
+                    : "Select a layer first"
+                }
+                className={`flex items-center gap-1 px-2 py-1 text-xs transition-colors disabled:opacity-40 ${
+                  selected?.kind === "image"
+                    ? "bg-primary/15 text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
               >
                 <ImagePlus className="h-3.5 w-3.5" /> Image
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={addTextLayer}
-                className="h-7 gap-1 px-2 text-xs"
+              </button>
+              <button
+                onClick={convertToText}
+                disabled={!selected}
+                title={
+                  selected
+                    ? "Turn the selected layer into text"
+                    : "Select a layer first"
+                }
+                className={`flex items-center gap-1 border-l border-border px-2 py-1 text-xs transition-colors disabled:opacity-40 ${
+                  selected?.kind === "text"
+                    ? "bg-primary/15 text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
               >
                 <Type className="h-3.5 w-3.5" /> Text
-              </Button>
+              </button>
             </div>
           </div>
           <input
@@ -329,7 +388,19 @@ export function Compositor({
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
-              if (f) addImageLayer(f);
+              if (f) {
+                // Picker completes an image conversion of the selected layer;
+                // with nothing selected it adds a fresh image layer.
+                if (selected) {
+                  replaceLayer(selected.id, {
+                    ...baseOf(selected),
+                    kind: "image",
+                    src: URL.createObjectURL(f),
+                  });
+                } else {
+                  addImageLayer(f);
+                }
+              }
               e.target.value = "";
             }}
           />

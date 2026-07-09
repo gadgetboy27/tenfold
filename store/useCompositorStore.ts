@@ -35,6 +35,9 @@ interface CompositorState {
   setBackground: (background: CompositionBackground) => void;
   addLayer: (layer: Layer) => void;
   updateLayer: (id: string, patch: LayerPatch) => void;
+  /** Swap a layer in place (same stack position) — e.g. image ⇄ text
+   *  conversion. The replacement keeps the old id via the caller. */
+  replaceLayer: (id: string, layer: Layer) => void;
   removeLayer: (id: string) => void;
   /** Move a layer toward the front (up) or back (down) in render order. */
   moveLayer: (id: string, dir: "up" | "down") => void;
@@ -88,6 +91,15 @@ export const useCompositorStore = create<CompositorState>((set) => ({
         ),
       })),
     ),
+
+  replaceLayer: (id, layer) =>
+    set((s) => ({
+      ...editDoc(s, (doc) => ({
+        ...doc,
+        layers: doc.layers.map((l) => (l.id === id ? layer : l)),
+      })),
+      selectedLayerId: layer.id,
+    })),
 
   removeLayer: (id) =>
     set((s) => ({

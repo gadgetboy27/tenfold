@@ -257,6 +257,27 @@ describe("useCompositorStore", () => {
     expect(s().selectedLayerId).toBe(null);
   });
 
+  it("replaces a layer in place, keeping stack position (kind conversion)", () => {
+    const s = () => useCompositorStore.getState();
+    s().load({ ...doc, layers: [textLayer, imageLayer] });
+
+    // Convert the text layer to an image, preserving base props + position.
+    s().replaceLayer("caption-1", {
+      ...imageLayer,
+      id: "caption-1",
+      x: 540,
+      y: 1600,
+      src: "https://example.com/swapped.png",
+    });
+    const ids = s().doc!.layers.map((l) => l.id);
+    expect(ids).toEqual(["caption-1", "logo-1"]); // same order
+    const swapped = s().doc!.layers[0];
+    expect(swapped.kind).toBe("image");
+    expect(swapped).toMatchObject({ x: 540, y: 1600 }); // position kept
+    expect(s().selectedLayerId).toBe("caption-1");
+    expect(s().dirty).toBe(true);
+  });
+
   it("ignores edits when no document is loaded", () => {
     const s = () => useCompositorStore.getState();
     s().addLayer(imageLayer);
