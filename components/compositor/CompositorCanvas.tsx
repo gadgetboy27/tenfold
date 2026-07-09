@@ -139,6 +139,8 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
           background: isVideo ? videoRef.current : bgImageRef.current,
           images: imagesRef.current,
           selectedLayerId,
+          paused: !playing,
+          draggingLayerId: drag.current?.id ?? null,
         });
 
         if (stamp - lastTickAt.current > 100) {

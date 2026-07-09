@@ -254,6 +254,10 @@ describe("useCompositorStore", () => {
 
     s().removeLayer("logo-1");
     expect(s().doc!.layers.map((l) => l.id)).toEqual(["caption-1"]);
+    // Deleting the selected layer keeps a selection alive (top remaining),
+    // so the properties panel never vanishes mid-edit.
+    expect(s().selectedLayerId).toBe("caption-1");
+    s().removeLayer("caption-1");
     expect(s().selectedLayerId).toBe(null);
   });
 

@@ -102,13 +102,18 @@ export const useCompositorStore = create<CompositorState>((set) => ({
     })),
 
   removeLayer: (id) =>
-    set((s) => ({
-      ...editDoc(s, (doc) => ({
-        ...doc,
-        layers: doc.layers.filter((l) => l.id !== id),
-      })),
-      selectedLayerId: s.selectedLayerId === id ? null : s.selectedLayerId,
-    })),
+    set((s) => {
+      const remaining = s.doc?.layers.filter((l) => l.id !== id) ?? [];
+      return {
+        ...editDoc(s, (doc) => ({ ...doc, layers: remaining })),
+        // Keep a selection alive (top remaining layer) so the properties
+        // panel doesn't vanish after a delete.
+        selectedLayerId:
+          s.selectedLayerId === id
+            ? (remaining[remaining.length - 1]?.id ?? null)
+            : s.selectedLayerId,
+      };
+    }),
 
   moveLayer: (id, dir) =>
     set((s) =>

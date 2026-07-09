@@ -4,7 +4,11 @@ import {
   type CompositionDoc,
   type Layer,
 } from "@/lib/composition/layers";
-import { motionAt, type EffectCtx } from "@/lib/composition/effects";
+import {
+  motionAt,
+  type EffectCtx,
+  type Motion,
+} from "@/lib/composition/effects";
 
 /**
  * Pure canvas drawing + hit-testing for the compositor preview. All maths is
@@ -58,22 +62,10 @@ export function coverRect(
 function drawLayer(
   ctx: CanvasRenderingContext2D,
   layer: Layer,
-  t: number,
-  clipDuration: number,
+  motion: Motion,
   images: Map<string, HTMLImageElement>,
-  effectCtx: EffectCtx,
-  ghostIfHidden = false,
 ): void {
-  // Entrance/exit/ambient effects share one motion function with the FFmpeg
-  // export (lib/composition/effects.ts) — preview and MP4 stay identical.
-  let motion = motionAt(layer, t, clipDuration, effectCtx);
-  // A selected layer that isn't visible at the current time (end-card logo
-  // at t=0, mid-entrance fade…) draws as a ghost at its rest position, so
-  // users can still see and position it. The export ignores this.
-  if (ghostIfHidden && (!motion || motion.alpha <= 0.08)) {
-    motion = { dx: 0, dy: 0, rotDeg: 0, alpha: 0.35 };
-  }
-  if (!motion || motion.alpha <= 0) return;
+  if (motion.alpha <= 0) return;
 
   ctx.save();
   ctx.globalAlpha = motion.alpha;
@@ -110,6 +102,20 @@ export interface DrawFrameInput {
   background: HTMLVideoElement | HTMLImageElement | null;
   images: Map<string, HTMLImageElement>;
   selectedLayerId: string | null;
+  /** Paused = arrange mode: timing-hidden layers ghost in as placeholders so
+   *  everything can be spaced together; playing shows true timing. */
+  paused: boolean;
+  /** Layer currently being dragged (keeps its outline visible). */
+  draggingLayerId: string | null;
+}
+
+/** True when the layer's TIMING envelope hides it at t — independent of the
+ *  user's opacity setting, so a low opacity slider is never mistaken for
+ *  "hidden by schedule" (that made opacity edits look broken). */
+function timingHidden(motion: Motion | null, opacity: number): boolean {
+  if (!motion) return true;
+  const envelope = opacity > 0 ? motion.alpha / opacity : motion.alpha;
+  return envelope <= 0.08;
 }
 
 /** Draw one full frame: background (cover-fit) then layers back-to-front. */
@@ -135,20 +141,40 @@ export function drawFrame(
     }
   }
 
+  const effectCtx: EffectCtx = { W: width, H: height };
+  let selectedGhosted = false;
+
   for (const layer of input.doc.layers) {
-    drawLayer(
-      ctx,
-      layer,
-      input.t,
-      input.clipDuration,
-      input.images,
-      { W: width, H: height },
-      layer.id === input.selectedLayerId,
-    );
+    // Effects share one motion function with the FFmpeg export
+    // (lib/composition/effects.ts) — preview and MP4 stay identical.
+    const motion = motionAt(layer, input.t, input.clipDuration, effectCtx);
+    const hidden = timingHidden(motion, layer.opacity);
+    const isSelected = layer.id === input.selectedLayerId;
+
+    if (!hidden && motion) {
+      drawLayer(ctx, layer, motion, input.images);
+    } else if (input.paused) {
+      // Arrange mode: draw the scheduled-away layer as a placeholder ghost
+      // at its rest position (preview only — the export honours timing).
+      drawLayer(
+        ctx,
+        layer,
+        { dx: 0, dy: 0, rotDeg: 0, alpha: isSelected ? 0.45 : 0.25 },
+        input.images,
+      );
+      if (isSelected) selectedGhosted = true;
+    } else if (isSelected) {
+      selectedGhosted = true;
+    }
   }
 
+  // The dashed box marks placeholder spots only: a ghosted selection or an
+  // active drag — finished content stays clean.
   const selected = input.doc.layers.find((l) => l.id === input.selectedLayerId);
-  if (selected) drawSelectionOutline(ctx, selected, input.images);
+  const dragging = input.draggingLayerId === input.selectedLayerId;
+  if (selected && (selectedGhosted || dragging)) {
+    drawSelectionOutline(ctx, selected, input.images);
+  }
 }
 
 function drawSelectionOutline(

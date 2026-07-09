@@ -104,22 +104,32 @@ export function LayerControls({ layer }: { layer: Layer }) {
         />
       </Row>
       <Row label="Rotation">
-        <Slider
-          min={-180}
-          max={180}
-          step={1}
-          value={[layer.rotationDeg]}
-          onValueChange={([v]) => set({ rotationDeg: v })}
-        />
+        <div className="flex items-center gap-2">
+          <Slider
+            min={-180}
+            max={180}
+            step={15}
+            value={[layer.rotationDeg]}
+            onValueChange={([v]) => set({ rotationDeg: v })}
+          />
+          <span className="w-11 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+            {layer.rotationDeg}°
+          </span>
+        </div>
       </Row>
       <Row label="Opacity">
-        <Slider
-          min={0}
-          max={1}
-          step={0.01}
-          value={[layer.opacity]}
-          onValueChange={([v]) => set({ opacity: v })}
-        />
+        <div className="flex items-center gap-2">
+          <Slider
+            min={0}
+            max={1}
+            step={0.01}
+            value={[layer.opacity]}
+            onValueChange={([v]) => set({ opacity: v })}
+          />
+          <span className="w-11 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+            {Math.round(layer.opacity * 100)}%
+          </span>
+        </div>
       </Row>
       <Row label="Blend">
         <select
@@ -169,81 +179,75 @@ export function LayerControls({ layer }: { layer: Layer }) {
       {/* ── Effects suite ── */}
       <div className="space-y-3 border-t border-border pt-3">
         <Row label="Enter">
-          <div className="flex items-center gap-2">
-            <select
-              value={fx.in.kind}
-              onChange={(e) =>
-                setFx({
-                  in: { ...fx.in, kind: e.target.value as EffectInKind },
-                })
-              }
-              className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-            >
-              {Object.entries(EFFECTS_IN).map(([id, e]) => (
-                <option key={id} value={id}>
-                  {e.label}
-                </option>
-              ))}
-            </select>
-            {fx.in.kind !== "none" && (
-              <Input
-                type="number"
+          <select
+            value={fx.in.kind}
+            onChange={(e) =>
+              setFx({
+                in: { ...fx.in, kind: e.target.value as EffectInKind },
+              })
+            }
+            className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+          >
+            {Object.entries(EFFECTS_IN).map(([id, e]) => (
+              <option key={id} value={id}>
+                {e.label}
+              </option>
+            ))}
+          </select>
+        </Row>
+        {fx.in.kind !== "none" && (
+          <Row label="↳ over">
+            <div className="flex items-center gap-2">
+              <Slider
                 min={0.1}
                 max={5}
                 step={0.1}
-                title="Duration (s)"
-                value={fx.in.durationSec}
-                onChange={(e) =>
-                  setFx({
-                    in: {
-                      ...fx.in,
-                      durationSec: Math.min(5, Math.max(0.1, +e.target.value)),
-                    },
-                  })
+                value={[fx.in.durationSec]}
+                onValueChange={([v]) =>
+                  setFx({ in: { ...fx.in, durationSec: v } })
                 }
-                className="h-8 w-16 shrink-0 text-sm"
               />
-            )}
-          </div>
-        </Row>
+              <span className="w-11 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                {fx.in.durationSec.toFixed(1)}s
+              </span>
+            </div>
+          </Row>
+        )}
         <Row label="Exit">
-          <div className="flex items-center gap-2">
-            <select
-              value={fx.out.kind}
-              onChange={(e) =>
-                setFx({
-                  out: { ...fx.out, kind: e.target.value as EffectOutKind },
-                })
-              }
-              className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-            >
-              {Object.entries(EFFECTS_OUT).map(([id, e]) => (
-                <option key={id} value={id}>
-                  {e.label}
-                </option>
-              ))}
-            </select>
-            {fx.out.kind !== "none" && (
-              <Input
-                type="number"
+          <select
+            value={fx.out.kind}
+            onChange={(e) =>
+              setFx({
+                out: { ...fx.out, kind: e.target.value as EffectOutKind },
+              })
+            }
+            className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+          >
+            {Object.entries(EFFECTS_OUT).map(([id, e]) => (
+              <option key={id} value={id}>
+                {e.label}
+              </option>
+            ))}
+          </select>
+        </Row>
+        {fx.out.kind !== "none" && (
+          <Row label="↳ over">
+            <div className="flex items-center gap-2">
+              <Slider
                 min={0.1}
                 max={5}
                 step={0.1}
-                title="Duration (s)"
-                value={fx.out.durationSec}
-                onChange={(e) =>
-                  setFx({
-                    out: {
-                      ...fx.out,
-                      durationSec: Math.min(5, Math.max(0.1, +e.target.value)),
-                    },
-                  })
+                value={[fx.out.durationSec]}
+                onValueChange={([v]) =>
+                  setFx({ out: { ...fx.out, durationSec: v } })
                 }
-                className="h-8 w-16 shrink-0 text-sm"
               />
-            )}
-          </div>
-        </Row>
+              <span className="w-11 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                {fx.out.durationSec.toFixed(1)}s
+              </span>
+            </div>
+          </Row>
+        )}
         <Row label="On screen">
           <select
             value={fx.loop}
