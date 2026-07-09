@@ -90,7 +90,6 @@ export default function CompositorPage() {
     if (!id) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time mount init from the URL
     setCampaignId(id);
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time mount init from the URL
     setInitialising(true);
     (async () => {
       try {
