@@ -97,11 +97,27 @@ export default function CompositorPage() {
           workspaceSlug: params.workspace,
         });
         if (!res.ok) throw new Error("Campaign not found");
-        const campaign = (await res.json()) as { assets?: CampaignAsset[] };
+        const campaign = (await res.json()) as {
+          assets?: CampaignAsset[];
+          expansion_data?: {
+            video?: { url?: string | null };
+            music?: { url?: string | null };
+          };
+        };
         const assets = campaign.assets ?? [];
-        const videoUrl = latest(assets, "video");
+        // Same source order as Step 4's preview: the assets table first, then
+        // the campaign's expansion_data (older/demo campaigns only have the
+        // latter) — so the two pages can never disagree about a video.
+        const videoUrl =
+          latest(assets, "video") ??
+          campaign.expansion_data?.video?.url ??
+          null;
         if (!videoUrl) throw new Error("Generate a video first (Step 3).");
-        setAudioUrl(latest(assets, "audio"));
+        setAudioUrl(
+          latest(assets, "audio") ??
+            campaign.expansion_data?.music?.url ??
+            null,
+        );
 
         const meta = await videoMeta(videoUrl);
         const kitRes = await api("/api/brand-kit", {
