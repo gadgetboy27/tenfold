@@ -39,12 +39,24 @@ function fmt(t: number): string {
   return `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
 }
 
+export interface CompositorProps {
+  /** Campaign context: exports persist as a campaign asset for publishing. */
+  campaignId?: string | null;
+  /** Campaign music, layered under the exported film. */
+  audioUrl?: string | null;
+  onExported?: (url: string) => void;
+}
+
 /**
  * The layered compositor (docs/tenfold-compositor-brief.md §4): canvas preview
  * with drag-to-position, timeline-lite transport, aspect presets, and the
  * layer stack + property controls. Load a doc into useCompositorStore first.
  */
-export function Compositor() {
+export function Compositor({
+  campaignId,
+  audioUrl,
+  onExported,
+}: CompositorProps = {}) {
   const doc = useCompositorStore((s) => s.doc);
   const selectedLayerId = useCompositorStore((s) => s.selectedLayerId);
   const setAspect = useCompositorStore((s) => s.setAspect);
@@ -157,9 +169,13 @@ export function Compositor() {
       ].some((s) => s.startsWith("blob:"));
       const materialized = await materializeDoc(doc, params.workspace);
       if (hadLocal) load(materialized);
-      const { url } = await requestExport(materialized, params.workspace);
+      const { url } = await requestExport(materialized, params.workspace, {
+        campaignId,
+        audioUrl,
+      });
       setExportUrl(url);
-      window.open(url, "_blank");
+      if (onExported) onExported(url);
+      else window.open(url, "_blank");
       toast.success("MP4 exported — all layers baked in.");
     } catch (err) {
       toast.error((err as Error).message ?? "Export failed");

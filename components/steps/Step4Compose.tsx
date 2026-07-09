@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useAppStore } from "@/store/useAppStore";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,8 @@ import {
   ImageIcon,
   Lock,
   Loader2,
+  Wand2,
+  ArrowRight,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { api } from "@/lib/api";
@@ -67,6 +70,7 @@ function RedoRow({
 }
 
 export default function Step4Compose() {
+  const router = useRouter();
   const {
     generatedAssets,
     selectedAnchorId,
@@ -481,6 +485,32 @@ export default function Step4Compose() {
             </p>
           )}
         </div>
+
+        {/* Full layered compositor — drag your logo anywhere, blend modes,
+            timed fades, then export a branded film for the publish step. */}
+        {video && (
+          <div className="bg-card border border-primary/30 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1 text-sm font-semibold text-foreground">
+              <Wand2 className="w-4 h-4 text-primary" /> Finish with your brand
+            </div>
+            <p className="text-[11px] text-muted-foreground mb-3">
+              Open the full compositor: your footage as the base, brand kit
+              pre-applied — drag the logo anywhere, pick blend modes, time the
+              fades, and export a film ready to publish.
+            </p>
+            <Button
+              onClick={() =>
+                router.push(
+                  `/${workspaceSlug}/compositor?campaign=${currentCampaignId}`,
+                )
+              }
+              disabled={!currentCampaignId || currentCampaignId === "__new__"}
+              className="w-full gap-2"
+            >
+              Open compositor <ArrowRight className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
 
         {/* Comments + AI suggestions on the anchor asset */}
         {anchor && workspaceSlug && (

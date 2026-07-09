@@ -70,13 +70,25 @@ export async function materializeDoc(
   return { ...doc, background, layers };
 }
 
+export interface ExportOptions {
+  /** Persist the MP4 as a campaign asset so the publish flow picks it up. */
+  campaignId?: string | null;
+  /** Music track layered under the film (replaces clip audio). */
+  audioUrl?: string | null;
+}
+
 export async function requestExport(
   doc: CompositionDoc,
   workspaceSlug?: string,
+  options: ExportOptions = {},
 ): Promise<{ url: string; durationSec: number }> {
   const res = await api("/api/compositions/export", {
     method: "POST",
-    body: JSON.stringify({ doc }),
+    body: JSON.stringify({
+      doc,
+      campaignId: options.campaignId ?? null,
+      audioUrl: options.audioUrl ?? null,
+    }),
     workspaceSlug,
   });
   const data = (await res.json().catch(() => ({}))) as {
