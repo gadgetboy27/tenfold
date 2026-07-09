@@ -80,10 +80,21 @@ export default function Step4Compose() {
     currentCampaignId,
     setCompositionId,
     workspaceSlug,
+    composeCaption,
+    setComposeCaption,
   } = useAppStore();
 
   const ent = useEntitlements();
-  const [caption, setCaption] = useState(expansions.script?.content || "");
+  // Caption lives in the store so it survives the round-trip to the
+  // compositor (and step navigation); seed it from the AI script once.
+  const caption = composeCaption;
+  const setCaption = setComposeCaption;
+  useEffect(() => {
+    const script = useAppStore.getState().expansions.script?.content;
+    if (!useAppStore.getState().composeCaption && script) {
+      setComposeCaption(script);
+    }
+  }, [setComposeCaption]);
   const [isSaving, setIsSaving] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);

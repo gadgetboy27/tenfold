@@ -129,6 +129,73 @@ const blendModeSchema = z.enum([
   "darken",
 ]);
 
+// ── Effect kinds ─────────────────────────────────────────────────────────────
+// Implementations live in lib/composition/effects.ts; the kind enums live here
+// so the schema owns the shape and imports stay one-directional.
+
+export const effectInKindSchema = z.enum([
+  "none",
+  "fade",
+  "slide-left",
+  "slide-right",
+  "slide-top",
+  "slide-bottom",
+  "slide-tl",
+  "slide-tr",
+  "slide-bl",
+  "slide-br",
+  "drop",
+  "bounce",
+  "rise",
+  "rotate",
+  "spin",
+  "walk-left",
+  "walk-right",
+  "kick-left",
+  "kick-right",
+  "kick-up",
+  "overshoot",
+  "swing",
+  "flash",
+]);
+export const effectOutKindSchema = z.enum([
+  "none",
+  "fade",
+  "slide-left",
+  "slide-right",
+  "slide-top",
+  "slide-bottom",
+  "drop-away",
+  "sink",
+  "spin",
+  "kick",
+  "flash",
+]);
+export const effectLoopKindSchema = z.enum([
+  "none",
+  "float",
+  "sway",
+  "shimmer",
+]);
+
+export type EffectInKind = z.infer<typeof effectInKindSchema>;
+export type EffectOutKind = z.infer<typeof effectOutKindSchema>;
+export type EffectLoopKind = z.infer<typeof effectLoopKindSchema>;
+
+export const layerEffectsSchema = z.object({
+  in: z.object({
+    kind: effectInKindSchema.default("none"),
+    durationSec: z.number().min(0.1).max(5).default(0.8),
+  }),
+  out: z.object({
+    kind: effectOutKindSchema.default("none"),
+    durationSec: z.number().min(0.1).max(5).default(0.8),
+  }),
+  loop: effectLoopKindSchema.default("none"),
+});
+
+export type LayerEffects = z.infer<typeof layerEffectsSchema>;
+
 const layerBaseSchema = z.object({
   id: z.string().min(1),
   /** Design-space pixel coords of the layer centre (see ASPECT_DESIGN). */
@@ -142,8 +209,11 @@ const layerBaseSchema = z.object({
   appearAt: z.number().min(0).default(0),
   /** null = visible until the end of the clip (Infinity isn't JSON-safe). */
   disappearAt: z.number().positive().nullable().default(null),
-  /** Fade-in/out duration applied at both edges of the visible window. */
+  /** Legacy fade duration — superseded by `effects`; old saved layers map
+   *  fadeSec onto fade in/out via effectsOf() in effects.ts. */
   fadeSec: z.number().min(0).max(10).default(0),
+  /** Entrance / exit / ambient animation (the effects suite). */
+  effects: layerEffectsSchema.optional(),
 });
 
 export const imageLayerSchema = layerBaseSchema.extend({

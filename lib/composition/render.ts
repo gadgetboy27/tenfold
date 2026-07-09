@@ -1,10 +1,10 @@
 import {
   ASPECT_DESIGN,
   blendToCanvas,
-  layerAlphaAt,
   type CompositionDoc,
   type Layer,
 } from "@/lib/composition/layers";
+import { motionAt, type EffectCtx } from "@/lib/composition/effects";
 
 /**
  * Pure canvas drawing + hit-testing for the compositor preview. All maths is
@@ -57,15 +57,18 @@ function drawLayer(
   t: number,
   clipDuration: number,
   images: Map<string, HTMLImageElement>,
+  effectCtx: EffectCtx,
 ): void {
-  const alpha = layerAlphaAt(layer, t, clipDuration);
-  if (alpha <= 0) return;
+  // Entrance/exit/ambient effects share one motion function with the FFmpeg
+  // export (lib/composition/effects.ts) — preview and MP4 stay identical.
+  const motion = motionAt(layer, t, clipDuration, effectCtx);
+  if (!motion || motion.alpha <= 0) return;
 
   ctx.save();
-  ctx.globalAlpha = alpha;
+  ctx.globalAlpha = motion.alpha;
   ctx.globalCompositeOperation = blendToCanvas(layer.blend);
-  ctx.translate(layer.x, layer.y);
-  ctx.rotate((layer.rotationDeg * Math.PI) / 180);
+  ctx.translate(layer.x + motion.dx, layer.y + motion.dy);
+  ctx.rotate(((layer.rotationDeg + motion.rotDeg) * Math.PI) / 180);
   ctx.scale(layer.scale, layer.scale);
 
   if (layer.kind === "image") {
@@ -117,7 +120,10 @@ export function drawFrame(
   }
 
   for (const layer of input.doc.layers) {
-    drawLayer(ctx, layer, input.t, input.clipDuration, input.images);
+    drawLayer(ctx, layer, input.t, input.clipDuration, input.images, {
+      W: width,
+      H: height,
+    });
   }
 
   const selected = input.doc.layers.find((l) => l.id === input.selectedLayerId);

@@ -25,6 +25,7 @@ import {
   type BrandKitInfo,
 } from "@/lib/composition/brand-apply";
 import { useCompositorStore } from "@/store/useCompositorStore";
+import { useAppStore } from "@/store/useAppStore";
 import { materializeDoc, requestExport } from "./export-client";
 import {
   CompositorCanvas,
@@ -109,7 +110,13 @@ export function Compositor({
             img.src = logoSrc;
           })
         : null;
-      const layers = brandKitLayers(kit, doc.aspect, duration, logoWidth);
+      const layers = brandKitLayers(
+        kit,
+        doc.aspect,
+        duration,
+        logoWidth,
+        useAppStore.getState().composeCaption || null,
+      );
       layers.forEach(addLayer);
       toast.success("Brand kit applied — tweak anything you like.");
     } catch {

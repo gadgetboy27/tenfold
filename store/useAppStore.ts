@@ -160,6 +160,9 @@ interface AppStore {
   tooltipsEnabled: boolean;
   /** AI-tailored caption per platform (e.g. { instagram, tiktok, linkedin }). */
   platformCaptions: Record<string, string>;
+  /** The Step 4 caption draft — held here (not component state) so it
+   *  survives navigating to the compositor and back. */
+  composeCaption: string;
   isGenerating: boolean;
   generationStage: string;
   generationElapsed: number;
@@ -179,6 +182,7 @@ interface AppStore {
   setAnchorId: (id: string | null) => void;
   setGeneratedAssets: (assets: Asset[]) => void;
   setPlatformCaptions: (captions: Record<string, string>) => void;
+  setComposeCaption: (caption: string) => void;
   updateExpansion: (
     type: keyof Expansions,
     expansion: Partial<Expansion>,
@@ -224,6 +228,7 @@ export const useAppStore = create<AppStore>()((set) => ({
   lastSpokenVideoUrl: "",
   tooltipsEnabled: true,
   platformCaptions: {},
+  composeCaption: "",
   isGenerating: false,
   generationStage: "",
   generationElapsed: 0,
@@ -243,6 +248,7 @@ export const useAppStore = create<AppStore>()((set) => ({
   setAnchorId: (id) => set({ selectedAnchorId: id }),
   setGeneratedAssets: (assets) => set({ generatedAssets: assets }),
   setPlatformCaptions: (captions) => set({ platformCaptions: captions }),
+  setComposeCaption: (caption) => set({ composeCaption: caption }),
   updateExpansion: (type, expansion) =>
     set((state) => ({
       expansions: {
@@ -316,6 +322,7 @@ export const useAppStore = create<AppStore>()((set) => ({
       abVariantsDraft: DEFAULT_AB_VARIANTS_DRAFT,
       productShotDraft: DEFAULT_PRODUCT_SHOT_DRAFT,
       lastSpokenVideoUrl: "",
+      composeCaption: "",
       isGenerating: false,
       generationStage: "",
       generationElapsed: 0,
@@ -338,6 +345,7 @@ export const useAppStore = create<AppStore>()((set) => ({
       productShotDraft: DEFAULT_PRODUCT_SHOT_DRAFT,
       lastSpokenVideoUrl: "",
       platformCaptions: {},
+      composeCaption: "",
       isGenerating: false,
       generationStage: "",
       generationElapsed: 0,

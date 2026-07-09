@@ -10,6 +10,7 @@ import {
   type CompositionDoc,
   type Layer,
 } from "@/lib/composition/layers";
+import { motionExprs, type MotionExprs } from "@/lib/composition/effects";
 
 /**
  * Headless MP4 export of a layered CompositionDoc via FFmpeg — the server
@@ -50,33 +51,48 @@ function fontFileFor(font: string): string {
   return join(process.cwd(), "public", "fonts", file);
 }
 
-/** drawtext alpha expression mirroring layerAlphaAt (fade-out only with an
- *  explicit disappearAt). Commas are safe — callers wrap it in quotes. */
-function textAlphaExpr(layer: Layer): string {
-  const { opacity, appearAt, disappearAt, fadeSec } = layer;
-  if (fadeSec <= 0) return `${opacity}`;
-  const fadeIn = `clip((t-${appearAt})/${fadeSec},0,1)`;
-  if (disappearAt === null) return `${opacity}*${fadeIn}`;
-  return `${opacity}*min(${fadeIn},clip((${disappearAt}-t)/${fadeSec},0,1))`;
-}
-
-/** Per-layer rgba pre-processing for image layers: scale, rotate, opacity,
- *  alpha fades. Input is a looped still (0..dur timestamps). */
-function imageLayerChain(layer: Extract<Layer, { kind: "image" }>): string {
+/** Per-layer rgba pre-processing for image layers: scale, rotation (static or
+ *  effect-animated), static opacity, and animated alpha (via geq, which
+ *  evaluates per-frame with T). Input is a looped still (0..dur timestamps). */
+function imageLayerChain(
+  layer: Extract<Layer, { kind: "image" }>,
+  fx: MotionExprs,
+): string {
   const parts = ["format=rgba", `scale=iw*${layer.scale}:ih*${layer.scale}`];
-  if (layer.rotationDeg !== 0) {
-    const rad = ((layer.rotationDeg * Math.PI) / 180).toFixed(6);
+
+  const staticRad = (layer.rotationDeg * Math.PI) / 180;
+  if (fx.rot) {
+    // Animated rotation: pad to the diagonal so the frame size stays fixed
+    // while the angle changes. geq/overlay downstream see a stable canvas.
+    parts.push(
+      `rotate=a='${staticRad.toFixed(6)}+(${fx.rot})*PI/180'` +
+        `:c=black@0:ow='hypot(iw,ih)':oh='hypot(iw,ih)'`,
+    );
+  } else if (layer.rotationDeg !== 0) {
+    const rad = staticRad.toFixed(6);
     parts.push(`rotate=${rad}:c=black@0:ow=rotw(${rad}):oh=roth(${rad})`);
   }
+
   if (layer.opacity < 1) parts.push(`colorchannelmixer=aa=${layer.opacity}`);
-  if (layer.fadeSec > 0) {
-    parts.push(`fade=t=in:st=${layer.appearAt}:d=${layer.fadeSec}:alpha=1`);
-    if (layer.disappearAt !== null) {
-      const st = Math.max(0, layer.disappearAt - layer.fadeSec);
-      parts.push(`fade=t=out:st=${st}:d=${layer.fadeSec}:alpha=1`);
-    }
+  if (fx.alpha) {
+    // geq uses T (frame time) rather than t.
+    const alphaT = fx.alpha.replace(/\bt\b/g, "T");
+    parts.push(
+      `geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='alpha(X,Y)*clip(${alphaT},0,1)'`,
+    );
   }
   return parts.join(",");
+}
+
+/** Overlay x/y for a layer centre, with effect motion when animated. */
+function overlayPos(layer: Layer, fx: MotionExprs): string {
+  const x = fx.dx
+    ? `x='${Math.round(layer.x)}-w/2+(${fx.dx})'`
+    : `x=${Math.round(layer.x)}-w/2`;
+  const y = fx.dy
+    ? `y='${Math.round(layer.y)}-h/2+(${fx.dy})'`
+    : `y=${Math.round(layer.y)}-h/2`;
+  return `${x}:${y}`;
 }
 
 export interface GraphFiles {
@@ -107,13 +123,16 @@ export function buildFilterGraph(
     const A = layer.appearAt;
     const E = layer.disappearAt ?? dur;
     const enable = `enable='between(t,${A},${E})'`;
+    // Effect motion (entrances/exits/ambient) as expressions in t — sampled
+    // from the same curves the canvas preview evaluates.
+    const fx = motionExprs(layer, dur, { W: width, H: height });
 
     if (layer.kind === "image") {
       const idx = files.imageInputIdx.get(layer.id);
       if (idx === undefined) continue;
       const lbl = `l${step}`;
-      chains.push(`[${idx}:v]${imageLayerChain(layer)}[${lbl}]`);
-      const pos = `x=${Math.round(layer.x)}-w/2:y=${Math.round(layer.y)}-h/2`;
+      chains.push(`[${idx}:v]${imageLayerChain(layer, fx)}[${lbl}]`);
+      const pos = overlayPos(layer, fx);
 
       if (layer.blend === "normal") {
         chains.push(
@@ -131,11 +150,21 @@ export function buildFilterGraph(
       const tf = files.textFile.get(layer.id);
       if (!tf) continue;
       const fontSize = Math.round(layer.sizePx * layer.scale);
+      // drawtext can't rotate, so text ignores the rot channel (documented
+      // v1 limit); position + alpha effects apply fully.
+      const tx = fx.dx
+        ? `x='${Math.round(layer.x)}-text_w/2+(${fx.dx})'`
+        : `x=${Math.round(layer.x)}-text_w/2`;
+      const ty = fx.dy
+        ? `y='${Math.round(layer.y)}-text_h/2+(${fx.dy})'`
+        : `y=${Math.round(layer.y)}-text_h/2`;
+      const alpha = fx.alpha
+        ? `clip(${layer.opacity}*(${fx.alpha}),0,1)`
+        : `${layer.opacity}`;
       const draw =
         `drawtext=fontfile=${fontFileFor(layer.font)}:textfile=${tf}` +
         `:fontsize=${fontSize}:fontcolor=${layer.color.replace("#", "0x")}` +
-        `:x=${Math.round(layer.x)}-text_w/2:y=${Math.round(layer.y)}-text_h/2` +
-        `:alpha='${textAlphaExpr(layer)}'`;
+        `:${tx}:${ty}:alpha='${alpha}'`;
 
       if (layer.blend === "normal") {
         chains.push(`[${from}]${draw}:${enable}[${to}]`);

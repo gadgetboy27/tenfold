@@ -1,6 +1,17 @@
 "use client";
 
-import { BLEND_MODES } from "@/lib/composition/layers";
+import {
+  BLEND_MODES,
+  type EffectInKind,
+  type EffectLoopKind,
+  type EffectOutKind,
+} from "@/lib/composition/layers";
+import {
+  EFFECTS_IN,
+  EFFECTS_LOOP,
+  EFFECTS_OUT,
+  effectsOf,
+} from "@/lib/composition/effects";
 import { useCompositorStore, type Layer } from "@/store/useCompositorStore";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
@@ -29,6 +40,12 @@ export function LayerControls({ layer }: { layer: Layer }) {
   const updateLayer = useCompositorStore((s) => s.updateLayer);
   const set = (patch: Parameters<typeof updateLayer>[1]) =>
     updateLayer(layer.id, patch);
+
+  // Materialised effects (maps legacy fadeSec on old layers); edits always
+  // write the explicit effects object.
+  const fx = effectsOf(layer);
+  const setFx = (patch: Partial<typeof fx>) =>
+    set({ effects: { ...fx, ...patch }, fadeSec: 0 });
 
   return (
     <div className="space-y-3">
@@ -115,7 +132,7 @@ export function LayerControls({ layer }: { layer: Layer }) {
         </select>
       </Row>
 
-      <div className="grid grid-cols-3 gap-2 pt-1">
+      <div className="grid grid-cols-2 gap-2 pt-1">
         <label className="text-xs text-muted-foreground">
           Appear (s)
           <Input
@@ -144,18 +161,104 @@ export function LayerControls({ layer }: { layer: Layer }) {
             className="mt-1 h-8 text-sm"
           />
         </label>
-        <label className="text-xs text-muted-foreground">
-          Fade (s)
-          <Input
-            type="number"
-            min={0}
-            max={10}
-            step={0.1}
-            value={layer.fadeSec}
-            onChange={(e) => set({ fadeSec: Math.max(0, +e.target.value) })}
-            className="mt-1 h-8 text-sm"
-          />
-        </label>
+      </div>
+
+      {/* ── Effects suite ── */}
+      <div className="space-y-3 border-t border-border pt-3">
+        <Row label="Enter">
+          <div className="flex items-center gap-2">
+            <select
+              value={fx.in.kind}
+              onChange={(e) =>
+                setFx({
+                  in: { ...fx.in, kind: e.target.value as EffectInKind },
+                })
+              }
+              className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+            >
+              {Object.entries(EFFECTS_IN).map(([id, e]) => (
+                <option key={id} value={id}>
+                  {e.label}
+                </option>
+              ))}
+            </select>
+            {fx.in.kind !== "none" && (
+              <Input
+                type="number"
+                min={0.1}
+                max={5}
+                step={0.1}
+                title="Duration (s)"
+                value={fx.in.durationSec}
+                onChange={(e) =>
+                  setFx({
+                    in: {
+                      ...fx.in,
+                      durationSec: Math.min(5, Math.max(0.1, +e.target.value)),
+                    },
+                  })
+                }
+                className="h-8 w-16 shrink-0 text-sm"
+              />
+            )}
+          </div>
+        </Row>
+        <Row label="Exit">
+          <div className="flex items-center gap-2">
+            <select
+              value={fx.out.kind}
+              onChange={(e) =>
+                setFx({
+                  out: { ...fx.out, kind: e.target.value as EffectOutKind },
+                })
+              }
+              className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+            >
+              {Object.entries(EFFECTS_OUT).map(([id, e]) => (
+                <option key={id} value={id}>
+                  {e.label}
+                </option>
+              ))}
+            </select>
+            {fx.out.kind !== "none" && (
+              <Input
+                type="number"
+                min={0.1}
+                max={5}
+                step={0.1}
+                title="Duration (s)"
+                value={fx.out.durationSec}
+                onChange={(e) =>
+                  setFx({
+                    out: {
+                      ...fx.out,
+                      durationSec: Math.min(5, Math.max(0.1, +e.target.value)),
+                    },
+                  })
+                }
+                className="h-8 w-16 shrink-0 text-sm"
+              />
+            )}
+          </div>
+        </Row>
+        <Row label="On screen">
+          <select
+            value={fx.loop}
+            onChange={(e) => setFx({ loop: e.target.value as EffectLoopKind })}
+            className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+          >
+            {Object.entries(EFFECTS_LOOP).map(([id, e]) => (
+              <option key={id} value={id}>
+                {e.label}
+              </option>
+            ))}
+          </select>
+        </Row>
+        {layer.kind === "text" && fx.in.kind.startsWith("spin") && (
+          <p className="text-[11px] text-muted-foreground">
+            Note: spin/rotate effects apply to images only in the exported MP4.
+          </p>
+        )}
       </div>
     </div>
   );

@@ -146,13 +146,13 @@ describe("brandKitLayers", () => {
     for (const l of layers) expect(() => layerSchema.parse(l)).not.toThrow();
 
     const logo = layers.find((l) => l.kind === "image")!;
-    // Screen blend, fades in over the last 2s of the clip and holds.
+    // Screen blend on the end card: fades in and holds to the clip end.
     expect(logo).toMatchObject({
       src: kit.logo_url,
       blend: "screen",
       appearAt: 8,
       disappearAt: null,
-      fadeSec: 1,
+      effects: { in: { kind: "fade", durationSec: 1 }, loop: "none" },
     });
     // 500px-wide logo scaled to ~45% of the 1080 design width.
     expect(logo.scale).toBeCloseTo((1080 * 0.45) / 500);
@@ -162,7 +162,17 @@ describe("brandKitLayers", () => {
       text: kit.tagline,
       font: "Montserrat",
       appearAt: 0,
+      effects: { in: { kind: "rise", durationSec: 0.8 } },
     });
+  });
+
+  it("uses the campaign caption as main text and moves the tagline to the end card", () => {
+    const layers = brandKitLayers(kit, "9:16", 10, 500, "Fresh drop friday");
+    const texts = layers.filter((l) => l.kind === "text");
+    expect(texts).toHaveLength(2);
+    expect(texts[0]).toMatchObject({ text: "Fresh drop friday", appearAt: 0 });
+    expect(texts[1]).toMatchObject({ text: kit.tagline, appearAt: 8 });
+    for (const l of layers) expect(() => layerSchema.parse(l)).not.toThrow();
   });
 
   it("skips missing pieces and falls back safely", () => {

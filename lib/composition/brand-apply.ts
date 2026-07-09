@@ -39,21 +39,27 @@ export function brandKitLayers(
   aspect: CompositionAspect,
   clipDurationSec: number,
   logoNaturalWidth: number | null,
+  /** The campaign's AI caption (Step 3/4). When present it becomes the main
+   *  text layer and the kit tagline moves to the end card with the logo. */
+  caption?: string | null,
 ): Layer[] {
   const design = ASPECT_DESIGN[aspect];
   const layers: Layer[] = [];
+  const endCardAt = Math.max(0, clipDurationSec - 2);
+
+  const font: BrandFont = (BRAND_FONTS as readonly string[]).includes(
+    kit.font_family ?? "",
+  )
+    ? (kit.font_family as BrandFont)
+    : "Inter";
 
   const tagline = kit.tagline?.trim();
-  if (tagline) {
-    const font: BrandFont = (BRAND_FONTS as readonly string[]).includes(
-      kit.font_family ?? "",
-    )
-      ? (kit.font_family as BrandFont)
-      : "Inter";
+  const mainText = caption?.trim() || tagline;
+  if (mainText) {
     layers.push({
       id: crypto.randomUUID(),
       kind: "text",
-      text: tagline,
+      text: mainText,
       font,
       sizePx: Math.round(design.width / 18),
       color: "#ffffff",
@@ -65,7 +71,39 @@ export function brandKitLayers(
       blend: "normal",
       appearAt: 0,
       disappearAt: null,
-      fadeSec: 0.5,
+      fadeSec: 0,
+      effects: {
+        in: { kind: "rise", durationSec: 0.8 },
+        out: { kind: "none", durationSec: 0.8 },
+        loop: "none",
+      },
+    });
+  }
+
+  // With a caption as the main text, the tagline joins the logo on the
+  // end card instead of being dropped.
+  if (caption?.trim() && tagline && tagline !== caption.trim()) {
+    layers.push({
+      id: crypto.randomUUID(),
+      kind: "text",
+      text: tagline,
+      font,
+      sizePx: Math.round(design.width / 26),
+      color: "#ffffff",
+      x: design.width / 2,
+      y: Math.round(design.height * 0.6),
+      scale: 1,
+      rotationDeg: 0,
+      opacity: 0.9,
+      blend: "normal",
+      appearAt: endCardAt,
+      disappearAt: null,
+      fadeSec: 0,
+      effects: {
+        in: { kind: "fade", durationSec: 1 },
+        out: { kind: "none", durationSec: 0.8 },
+        loop: "none",
+      },
     });
   }
 
@@ -85,9 +123,14 @@ export function brandKitLayers(
       rotationDeg: 0,
       opacity: 1,
       blend: "screen",
-      appearAt: Math.max(0, clipDurationSec - 2),
+      appearAt: endCardAt,
       disappearAt: null,
-      fadeSec: 1,
+      fadeSec: 0,
+      effects: {
+        in: { kind: "fade", durationSec: 1 },
+        out: { kind: "none", durationSec: 0.8 },
+        loop: "none",
+      },
     });
   }
 

@@ -109,11 +109,14 @@ export default function CompositorPage() {
         });
         const kit = kitRes.ok ? await kitRes.json() : {};
         const logoSrc = pickKitLogo(kit);
+        // The Step 4 caption (AI script draft) carries through to the
+        // compositor as the main text layer.
         const layers = brandKitLayers(
           kit,
           meta.aspect,
           meta.duration,
           logoSrc ? await logoWidth(logoSrc) : null,
+          useAppStore.getState().composeCaption || null,
         );
 
         load({
