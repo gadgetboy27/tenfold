@@ -11,7 +11,11 @@ import {
   type Layer,
 } from "@/lib/composition/layers";
 import { useCompositorStore } from "@/store/useCompositorStore";
-import { brandKitLayers, pickKitLogo } from "@/lib/composition/brand-apply";
+import {
+  brandKitLayers,
+  pickKitLogo,
+  wrapText,
+} from "@/lib/composition/brand-apply";
 
 const imageLayer: Layer = {
   id: "logo-1",
@@ -154,8 +158,8 @@ describe("brandKitLayers", () => {
       disappearAt: null,
       effects: { in: { kind: "fade", durationSec: 1 }, loop: "none" },
     });
-    // 500px-wide logo scaled to ~45% of the 1080 design width.
-    expect(logo.scale).toBeCloseTo((1080 * 0.45) / 500);
+    // 500px-wide logo scaled to ~35% of the 1080 design width.
+    expect(logo.scale).toBeCloseTo((1080 * 0.35) / 500);
 
     const text = layers.find((l) => l.kind === "text")!;
     expect(text).toMatchObject({
@@ -188,6 +192,21 @@ describe("brandKitLayers", () => {
     // Clips shorter than the fade window still get a valid appearAt.
     const short = brandKitLayers({ logo_url: kit.logo_url }, "1:1", 1.5, 500);
     expect(short[0].appearAt).toBe(0);
+  });
+
+  it("wraps long captions onto lines instead of one off-screen strip", () => {
+    const long =
+      "Fresh sourdough every morning baked with love in our little Ponsonby bakery";
+    const wrapped = wrapText(long);
+    const lines = wrapped.split("\n");
+    expect(lines.length).toBeGreaterThan(2);
+    for (const l of lines) expect(l.length).toBeLessThanOrEqual(26);
+    expect(wrapped.replace(/\n/g, " ")).toBe(long);
+    expect(wrapText("short one")).toBe("short one");
+
+    const layers = brandKitLayers(kit, "9:16", 10, 500, long);
+    const main = layers.find((l) => l.kind === "text")!;
+    expect(main.kind === "text" && main.text).toContain("\n");
   });
 
   it("prefers the light mark for screen blending, falling back to dark", () => {

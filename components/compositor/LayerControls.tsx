@@ -14,6 +14,7 @@ import {
 } from "@/lib/composition/effects";
 import { useCompositorStore, type Layer } from "@/store/useCompositorStore";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 
 const FONTS = ["Inter", "Montserrat", "Playfair Display", "Lora", "Roboto"];
@@ -52,10 +53,12 @@ export function LayerControls({ layer }: { layer: Layer }) {
       {layer.kind === "text" && (
         <>
           <Row label="Text">
-            <Input
+            <Textarea
               value={layer.text}
               onChange={(e) => set({ text: e.target.value })}
-              className="h-8 text-sm"
+              rows={3}
+              className="min-h-0 resize-y bg-background text-sm"
+              placeholder="One line per row — press Enter to wrap"
             />
           </Row>
           <Row label="Font">

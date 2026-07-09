@@ -34,6 +34,24 @@ export function pickKitLogo(kit: BrandKitInfo): string | null {
   return kit.logo_url ?? kit.logo_dark_url ?? null;
 }
 
+/** Word-wrap onto \n so long AI captions render as a readable block instead
+ *  of one line running off the frame (canvas and drawtext both honour \n). */
+export function wrapText(text: string, maxChars = 26): string {
+  const words = text.replace(/\s+/g, " ").trim().split(" ");
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    if (line && line.length + 1 + word.length > maxChars) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = line ? `${line} ${word}` : word;
+    }
+  }
+  if (line) lines.push(line);
+  return lines.join("\n");
+}
+
 export function brandKitLayers(
   kit: BrandKitInfo,
   aspect: CompositionAspect,
@@ -59,12 +77,12 @@ export function brandKitLayers(
     layers.push({
       id: crypto.randomUUID(),
       kind: "text",
-      text: mainText,
+      text: wrapText(mainText),
       font,
-      sizePx: Math.round(design.width / 18),
+      sizePx: Math.round(design.width / 22),
       color: "#ffffff",
       x: design.width / 2,
-      y: Math.round(design.height * 0.88),
+      y: Math.round(design.height * 0.84),
       scale: 1,
       rotationDeg: 0,
       opacity: 1,
@@ -86,7 +104,7 @@ export function brandKitLayers(
     layers.push({
       id: crypto.randomUUID(),
       kind: "text",
-      text: tagline,
+      text: wrapText(tagline, 32),
       font,
       sizePx: Math.round(design.width / 26),
       color: "#ffffff",
@@ -109,10 +127,11 @@ export function brandKitLayers(
 
   const logoSrc = pickKitLogo(kit);
   if (logoSrc) {
-    // Target ~45% of frame width for the end-card mark.
+    // Target ~35% of frame width for the end-card mark — prominent without
+    // dominating, and easy to nudge bigger with the scale slider.
     const scale = logoNaturalWidth
-      ? (design.width * 0.45) / logoNaturalWidth
-      : 0.5;
+      ? (design.width * 0.35) / logoNaturalWidth
+      : 0.4;
     layers.push({
       id: crypto.randomUUID(),
       kind: "image",

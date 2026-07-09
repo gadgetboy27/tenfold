@@ -18,6 +18,9 @@ export interface LayerBounds {
   height: number;
 }
 
+/** Line height multiplier shared with the FFmpeg export (line_spacing). */
+export const TEXT_LINE_HEIGHT = 1.25;
+
 /** Natural (unscaled) size of a layer's content in design pixels. */
 export function layerBounds(
   ctx: CanvasRenderingContext2D,
@@ -33,9 +36,10 @@ export function layerBounds(
   }
   ctx.save();
   ctx.font = `${layer.sizePx}px "${layer.font}", sans-serif`;
-  const m = ctx.measureText(layer.text);
+  const lines = layer.text.split("\n");
+  const width = Math.max(...lines.map((l) => ctx.measureText(l).width), 1);
   ctx.restore();
-  return { width: m.width, height: layer.sizePx * 1.2 };
+  return { width, height: lines.length * layer.sizePx * TEXT_LINE_HEIGHT };
 }
 
 /** Cover-fit a source rectangle into the design space (like CSS object-cover). */
@@ -82,7 +86,12 @@ function drawLayer(
     ctx.fillStyle = layer.color;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(layer.text, 0, 0);
+    // Multi-line: centre the block on the anchor, one line per \n.
+    const lines = layer.text.split("\n");
+    const lineHeight = layer.sizePx * TEXT_LINE_HEIGHT;
+    lines.forEach((line, i) => {
+      ctx.fillText(line, 0, (i - (lines.length - 1) / 2) * lineHeight);
+    });
   }
   ctx.restore();
 }

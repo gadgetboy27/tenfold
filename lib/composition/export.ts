@@ -161,9 +161,13 @@ export function buildFilterGraph(
       const alpha = fx.alpha
         ? `clip(${layer.opacity}*(${fx.alpha}),0,1)`
         : `${layer.opacity}`;
+      // Multi-line captions: centre-aligned lines with the same 1.25 line
+      // height as the canvas (line_spacing is the EXTRA space per line).
+      const lineSpacing = Math.round(fontSize * 0.25);
       const draw =
         `drawtext=fontfile=${fontFileFor(layer.font)}:textfile=${tf}` +
         `:fontsize=${fontSize}:fontcolor=${layer.color.replace("#", "0x")}` +
+        `:line_spacing=${lineSpacing}:text_align=center` +
         `:${tx}:${ty}:alpha='${alpha}'`;
 
       if (layer.blend === "normal") {

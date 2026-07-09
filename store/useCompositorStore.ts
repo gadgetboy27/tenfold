@@ -54,7 +54,16 @@ export const useCompositorStore = create<CompositorState>((set) => ({
   selectedLayerId: null,
   dirty: false,
 
-  load: (doc) => set({ doc, selectedLayerId: null, dirty: false }),
+  // Auto-select the top layer so the properties/effects panel is visible
+  // immediately — users shouldn't have to click around to discover it.
+  load: (doc) =>
+    set({
+      doc,
+      selectedLayerId: doc.layers.length
+        ? doc.layers[doc.layers.length - 1].id
+        : null,
+      dirty: false,
+    }),
   reset: () => set({ doc: null, selectedLayerId: null, dirty: false }),
   markSaved: () => set({ dirty: false }),
   selectLayer: (id) => set({ selectedLayerId: id }),

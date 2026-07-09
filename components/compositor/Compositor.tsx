@@ -296,8 +296,8 @@ export function Compositor({
         </div>
       </div>
 
-      {/* ── Layer stack + properties ── */}
-      <div className="flex w-full flex-col gap-4 md:w-80 md:shrink-0">
+      {/* ── Layer stack + properties (scrolls independently of the canvas) ── */}
+      <div className="flex w-full flex-col gap-4 md:min-h-0 md:w-80 md:shrink-0 md:overflow-y-auto md:pr-1">
         <div className="rounded-xl border border-border bg-card p-4">
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm font-semibold">
@@ -336,11 +336,20 @@ export function Compositor({
           <LayerList />
         </div>
 
-        {selected && (
+        {selected ? (
           <div className="rounded-xl border border-border bg-card p-4">
             <p className="mb-3 text-sm font-semibold">Layer properties</p>
             <LayerControls layer={selected} />
           </div>
+        ) : (
+          doc.layers.length > 0 && (
+            <div className="rounded-xl border border-dashed border-border p-4">
+              <p className="text-xs text-muted-foreground">
+                Select a layer above (or click it on the canvas) to edit its
+                size, blend, timing and effects.
+              </p>
+            </div>
+          )
         )}
       </div>
     </div>
