@@ -44,8 +44,25 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
     const virtualT = useRef(0);
     const lastStamp = useRef<number | null>(null);
     const lastTickAt = useRef(0);
-    const drag = useRef<{ id: string; dx: number; dy: number } | null>(null);
+    const drag = useRef<{
+      id: string;
+      dx: number;
+      dy: number;
+      startX: number;
+      startY: number;
+      moved: boolean;
+      textReclick: boolean;
+    } | null>(null);
+    const wrapperRef = useRef<HTMLDivElement>(null);
     const [fontsReady, setFontsReady] = useState(false);
+    // Inline text editing overlay (display-space position + font size).
+    const [editing, setEditing] = useState<{
+      id: string;
+      left: number;
+      top: number;
+      width: number;
+      fontSize: number;
+    } | null>(null);
 
     useEffect(() => {
       ensureBrandFontsLoaded().then(() => setFontsReady(true));
@@ -141,6 +158,7 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
           selectedLayerId,
           paused: !playing,
           draggingLayerId: drag.current?.id ?? null,
+          editingLayerId: editing?.id ?? null,
         });
 
         if (stamp - lastTickAt.current > 100) {
@@ -150,10 +168,19 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
       };
       raf = requestAnimationFrame(loop);
       return () => cancelAnimationFrame(raf);
-    }, [doc, isVideo, playing, selectedLayerId, fontsReady, onTick, onEnded]);
+    }, [
+      doc,
+      isVideo,
+      playing,
+      selectedLayerId,
+      fontsReady,
+      editing,
+      onTick,
+      onEnded,
+    ]);
 
     // Pointer → design-space coords (canvas buffer is design-sized, CSS-scaled).
-    const toDesign = (e: React.PointerEvent) => {
+    const toDesign = (e: React.PointerEvent | React.MouseEvent) => {
       const canvas = canvasRef.current!;
       const rect = canvas.getBoundingClientRect();
       return {
@@ -162,36 +189,92 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
       };
     };
 
+    // Inline text editing: a DOM textarea positioned over the layer, in the
+    // layer's own font/colour. Click a selected text layer (or double-click
+    // any text layer) to open it; the side-panel textarea stays in sync via
+    // the shared store.
+    const beginEdit = (layerId: string) => {
+      const canvas = canvasRef.current;
+      const wrapper = wrapperRef.current;
+      const layer = doc?.layers.find((l) => l.id === layerId);
+      if (!canvas || !wrapper || !layer || layer.kind !== "text") return;
+      const c = canvas.getBoundingClientRect();
+      const w = wrapper.getBoundingClientRect();
+      const s = c.width / canvas.width; // design px → display px
+      setEditing({
+        id: layer.id,
+        left: c.left - w.left + layer.x * s,
+        top: c.top - w.top + layer.y * s,
+        width: Math.min(c.width * 0.85, 560),
+        fontSize: Math.max(11, layer.sizePx * layer.scale * s),
+      });
+      selectLayer(layer.id);
+    };
+
     const onPointerDown = (e: React.PointerEvent) => {
       const ctx = canvasRef.current?.getContext("2d");
       if (!ctx || !doc) return;
       const p = toDesign(e);
       const hit = hitTestLayer(ctx, doc, p.x, p.y, imagesRef.current);
+      const wasSelected = hit?.id === selectedLayerId;
       selectLayer(hit?.id ?? null);
       if (hit) {
-        drag.current = { id: hit.id, dx: p.x - hit.x, dy: p.y - hit.y };
+        drag.current = {
+          id: hit.id,
+          dx: p.x - hit.x,
+          dy: p.y - hit.y,
+          startX: e.clientX,
+          startY: e.clientY,
+          moved: false,
+          textReclick: wasSelected && hit.kind === "text",
+        };
         e.currentTarget.setPointerCapture(e.pointerId);
       }
     };
 
     const onPointerMove = (e: React.PointerEvent) => {
-      if (!drag.current) return;
+      const d = drag.current;
+      if (!d) return;
+      // A few px of jitter is a click, not a drag.
+      if (
+        !d.moved &&
+        Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < 5
+      )
+        return;
+      d.moved = true;
       const p = toDesign(e);
-      updateLayer(drag.current.id, {
-        x: Math.round(p.x - drag.current.dx),
-        y: Math.round(p.y - drag.current.dy),
+      updateLayer(d.id, {
+        x: Math.round(p.x - d.dx),
+        y: Math.round(p.y - d.dy),
       });
     };
 
     const onPointerUp = () => {
+      const d = drag.current;
       drag.current = null;
+      // Click (no drag) on an already-selected text layer opens inline edit.
+      if (d && !d.moved && d.textReclick) beginEdit(d.id);
+    };
+
+    const onDoubleClick = (e: React.MouseEvent) => {
+      const ctx = canvasRef.current?.getContext("2d");
+      if (!ctx || !doc) return;
+      const p = toDesign(e);
+      const hit = hitTestLayer(ctx, doc, p.x, p.y, imagesRef.current);
+      if (hit?.kind === "text") beginEdit(hit.id);
     };
 
     if (!doc) return null;
     const { width, height } = ASPECT_DESIGN[doc.aspect];
+    const editingLayer = editing
+      ? doc.layers.find((l) => l.id === editing.id)
+      : null;
 
     return (
-      <div className="relative flex h-full w-full items-center justify-center">
+      <div
+        ref={wrapperRef}
+        className="relative flex h-full w-full items-center justify-center"
+      >
         {isVideo && (
           <video
             ref={videoRef}
@@ -211,8 +294,32 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
+          onDoubleClick={onDoubleClick}
           className="max-h-full max-w-full cursor-grab rounded-lg border border-border bg-black object-contain active:cursor-grabbing"
         />
+        {editing && editingLayer?.kind === "text" && (
+          <textarea
+            autoFocus
+            value={editingLayer.text}
+            rows={editingLayer.text.split("\n").length}
+            onChange={(e) => updateLayer(editing.id, { text: e.target.value })}
+            onFocus={(e) => e.target.select()}
+            onBlur={() => setEditing(null)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setEditing(null);
+            }}
+            style={{
+              left: editing.left,
+              top: editing.top,
+              width: editing.width,
+              fontSize: editing.fontSize,
+              lineHeight: 1.25,
+              color: editingLayer.color,
+              fontFamily: `"${editingLayer.font}", sans-serif`,
+            }}
+            className="absolute z-10 -translate-x-1/2 -translate-y-1/2 resize-none rounded-lg border border-primary/70 bg-black/40 p-1 text-center outline-none backdrop-blur-[2px]"
+          />
+        )}
       </div>
     );
   },

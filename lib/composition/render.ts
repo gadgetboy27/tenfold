@@ -107,6 +107,9 @@ export interface DrawFrameInput {
   paused: boolean;
   /** Layer currently being dragged (keeps its outline visible). */
   draggingLayerId: string | null;
+  /** Text layer being edited inline — the DOM textarea replaces it, so the
+   *  canvas skips drawing it to avoid a double image. */
+  editingLayerId?: string | null;
 }
 
 /** True when the layer's TIMING envelope hides it at t — independent of the
@@ -145,6 +148,7 @@ export function drawFrame(
   let selectedGhosted = false;
 
   for (const layer of input.doc.layers) {
+    if (layer.id === input.editingLayerId) continue; // DOM textarea covers it
     // Effects share one motion function with the FFmpeg export
     // (lib/composition/effects.ts) — preview and MP4 stay identical.
     const motion = motionAt(layer, input.t, input.clipDuration, effectCtx);
@@ -172,7 +176,11 @@ export function drawFrame(
   // active drag — finished content stays clean.
   const selected = input.doc.layers.find((l) => l.id === input.selectedLayerId);
   const dragging = input.draggingLayerId === input.selectedLayerId;
-  if (selected && (selectedGhosted || dragging)) {
+  if (
+    selected &&
+    selected.id !== input.editingLayerId &&
+    (selectedGhosted || dragging)
+  ) {
     drawSelectionOutline(ctx, selected, input.images);
   }
 }
