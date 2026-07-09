@@ -11,6 +11,7 @@ import {
   Layers,
   Sparkles,
   Loader2,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
@@ -24,6 +25,7 @@ import {
   type BrandKitInfo,
 } from "@/lib/composition/brand-apply";
 import { useCompositorStore } from "@/store/useCompositorStore";
+import { materializeDoc, requestExport } from "./export-client";
 import {
   CompositorCanvas,
   type CompositorCanvasHandle,
@@ -47,6 +49,7 @@ export function Compositor() {
   const selectedLayerId = useCompositorStore((s) => s.selectedLayerId);
   const setAspect = useCompositorStore((s) => s.setAspect);
   const addLayer = useCompositorStore((s) => s.addLayer);
+  const load = useCompositorStore((s) => s.load);
 
   const params = useParams<{ workspace?: string }>();
   const canvasRef = useRef<CompositorCanvasHandle>(null);
@@ -55,6 +58,8 @@ export function Compositor() {
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(10);
   const [applyingKit, setApplyingKit] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportUrl, setExportUrl] = useState<string | null>(null);
 
   const onTick = useCallback((t: number, d: number) => {
     setTime(t);
@@ -139,6 +144,30 @@ export function Compositor() {
     });
   };
 
+  // Render the composition to MP4 server-side. Local (blob:) sources are
+  // uploaded to storage first, and the doc is reloaded with permanent URLs so
+  // a second export skips the re-upload.
+  const exportMp4 = async () => {
+    setExporting(true);
+    setExportUrl(null);
+    try {
+      const hadLocal = [
+        doc.background.src,
+        ...doc.layers.map((l) => (l.kind === "image" ? l.src : "")),
+      ].some((s) => s.startsWith("blob:"));
+      const materialized = await materializeDoc(doc, params.workspace);
+      if (hadLocal) load(materialized);
+      const { url } = await requestExport(materialized, params.workspace);
+      setExportUrl(url);
+      window.open(url, "_blank");
+      toast.success("MP4 exported — all layers baked in.");
+    } catch (err) {
+      toast.error((err as Error).message ?? "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="flex h-full flex-col gap-4 md:flex-row">
       {/* ── Canvas + transport ── */}
@@ -170,7 +199,31 @@ export function Compositor() {
             )}
             Apply brand kit
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={exportMp4}
+            disabled={exporting || doc.layers.length === 0}
+            className="h-7 gap-1.5 px-3 text-xs"
+          >
+            {exporting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Download className="h-3.5 w-3.5" />
+            )}
+            {exporting ? "Rendering…" : "Export MP4"}
+          </Button>
         </div>
+        {exportUrl && (
+          <a
+            href={exportUrl}
+            target="_blank"
+            rel="noopener"
+            className="text-xs text-primary hover:underline"
+          >
+            ↓ Download your MP4 (also opened in a new tab)
+          </a>
+        )}
 
         <div className="min-h-0 flex-1">
           <CompositorCanvas
