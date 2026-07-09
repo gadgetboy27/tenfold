@@ -62,10 +62,17 @@ function drawLayer(
   clipDuration: number,
   images: Map<string, HTMLImageElement>,
   effectCtx: EffectCtx,
+  ghostIfHidden = false,
 ): void {
   // Entrance/exit/ambient effects share one motion function with the FFmpeg
   // export (lib/composition/effects.ts) — preview and MP4 stay identical.
-  const motion = motionAt(layer, t, clipDuration, effectCtx);
+  let motion = motionAt(layer, t, clipDuration, effectCtx);
+  // A selected layer that isn't visible at the current time (end-card logo
+  // at t=0, mid-entrance fade…) draws as a ghost at its rest position, so
+  // users can still see and position it. The export ignores this.
+  if (ghostIfHidden && (!motion || motion.alpha <= 0.08)) {
+    motion = { dx: 0, dy: 0, rotDeg: 0, alpha: 0.35 };
+  }
   if (!motion || motion.alpha <= 0) return;
 
   ctx.save();
@@ -129,10 +136,15 @@ export function drawFrame(
   }
 
   for (const layer of input.doc.layers) {
-    drawLayer(ctx, layer, input.t, input.clipDuration, input.images, {
-      W: width,
-      H: height,
-    });
+    drawLayer(
+      ctx,
+      layer,
+      input.t,
+      input.clipDuration,
+      input.images,
+      { W: width, H: height },
+      layer.id === input.selectedLayerId,
+    );
   }
 
   const selected = input.doc.layers.find((l) => l.id === input.selectedLayerId);

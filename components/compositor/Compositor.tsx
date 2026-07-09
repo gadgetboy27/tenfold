@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import toast from "react-hot-toast";
 import {
@@ -24,6 +24,7 @@ import {
   pickKitLogo,
   type BrandKitInfo,
 } from "@/lib/composition/brand-apply";
+import { effectsOf } from "@/lib/composition/effects";
 import { useCompositorStore } from "@/store/useCompositorStore";
 import { useAppStore } from "@/store/useAppStore";
 import { materializeDoc, requestExport } from "./export-client";
@@ -80,6 +81,32 @@ export function Compositor({
     if (d > 0 && Number.isFinite(d)) setDuration(d);
   }, []);
   const onEnded = useCallback(() => setPlaying(false), []);
+
+  // Mirrors for reading playback state inside the selection effect without
+  // re-running it on every tick.
+  const playbackRef = useRef({ playing: false, time: 0, duration: 10 });
+  useEffect(() => {
+    playbackRef.current = { playing, time, duration };
+  }, [playing, time, duration]);
+
+  // When a layer is selected while paused, jump the playhead into its visible
+  // window (just past its entrance) — an end-card logo at t=0 otherwise looks
+  // like it's missing.
+  useEffect(() => {
+    const pb = playbackRef.current;
+    const layer = useCompositorStore
+      .getState()
+      .doc?.layers.find((l) => l.id === selectedLayerId);
+    if (!layer || pb.playing) return;
+    const end = layer.disappearAt ?? pb.duration;
+    if (pb.time >= layer.appearAt && pb.time <= end) return;
+    const target = Math.min(
+      layer.appearAt + effectsOf(layer).in.durationSec,
+      Math.max(layer.appearAt, end - 0.05),
+    );
+    canvasRef.current?.seek(target);
+    setTime(target);
+  }, [selectedLayerId]);
 
   if (!doc) return null;
   const design = ASPECT_DESIGN[doc.aspect];
