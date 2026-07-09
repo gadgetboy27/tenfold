@@ -12,6 +12,8 @@ import {
   EFFECTS_OUT,
   effectsOf,
 } from "@/lib/composition/effects";
+import toast from "react-hot-toast";
+import { Copy } from "lucide-react";
 import { useCompositorStore, type Layer } from "@/store/useCompositorStore";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -39,6 +41,7 @@ function Row({
 /** Property editor for the selected layer (position edits happen on canvas). */
 export function LayerControls({ layer }: { layer: Layer }) {
   const updateLayer = useCompositorStore((s) => s.updateLayer);
+  const layerCount = useCompositorStore((s) => s.doc?.layers.length ?? 0);
   const set = (patch: Parameters<typeof updateLayer>[1]) =>
     updateLayer(layer.id, patch);
 
@@ -47,6 +50,19 @@ export function LayerControls({ layer }: { layer: Layer }) {
   const fx = effectsOf(layer);
   const setFx = (patch: Partial<typeof fx>) =>
     set({ effects: { ...fx, ...patch }, fadeSec: 0 });
+
+  // Effects stay per-layer (staggered choreography is what looks pro), but
+  // one click copies this layer's Enter/Exit/On-screen setup to every other
+  // layer for the times they should move as a unit. Each layer keeps its own
+  // appear/disappear times.
+  const copyEffectsToAll = () => {
+    const doc = useCompositorStore.getState().doc;
+    if (!doc) return;
+    for (const l of doc.layers) {
+      if (l.id !== layer.id) updateLayer(l.id, { effects: fx, fadeSec: 0 });
+    }
+    toast.success("Effects copied to all layers.");
+  };
 
   return (
     <div className="space-y-3">
@@ -265,6 +281,15 @@ export function LayerControls({ layer }: { layer: Layer }) {
           <p className="text-[11px] text-muted-foreground">
             Note: spin/rotate effects apply to images only in the exported MP4.
           </p>
+        )}
+        {layerCount > 1 && (
+          <button
+            onClick={copyEffectsToAll}
+            className="flex w-full items-center justify-center gap-1.5 rounded-md border border-border py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+            title="Give every layer this Enter / Exit / On-screen setup (their own appear and disappear times are kept)"
+          >
+            <Copy className="h-3.5 w-3.5" /> Copy these effects to all layers
+          </button>
         )}
       </div>
     </div>
