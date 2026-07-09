@@ -172,11 +172,13 @@ export function drawFrame(
     }
   }
 
-  // The dashed box marks placeholder spots only: a ghosted selection or an
-  // active drag — finished content stays clean.
+  // The dashed box marks placeholder spots only — a ghosted selection or an
+  // active drag, and only while paused. Playback and finished content stay
+  // completely clean.
   const selected = input.doc.layers.find((l) => l.id === input.selectedLayerId);
   const dragging = input.draggingLayerId === input.selectedLayerId;
   if (
+    input.paused &&
     selected &&
     selected.id !== input.editingLayerId &&
     (selectedGhosted || dragging)

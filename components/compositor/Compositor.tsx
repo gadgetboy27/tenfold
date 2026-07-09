@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import toast from "react-hot-toast";
 import {
@@ -12,6 +12,8 @@ import {
   Sparkles,
   Loader2,
   Download,
+  Maximize2,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
@@ -74,6 +76,17 @@ export function Compositor({
   const [applyingKit, setApplyingKit] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportUrl, setExportUrl] = useState<string | null>(null);
+  // Fullscreen finished-look preview (no ghosts, outlines or edit chrome).
+  const [isPreview, setIsPreview] = useState(false);
+
+  useEffect(() => {
+    if (!isPreview) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsPreview(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isPreview]);
 
   const onTick = useCallback((t: number, d: number) => {
     setTime(t);
@@ -227,8 +240,14 @@ export function Compositor({
 
   return (
     <div className="flex h-full flex-col gap-4 md:flex-row">
-      {/* ── Canvas + transport ── */}
-      <div className="flex min-h-0 flex-1 flex-col gap-3">
+      {/* ── Canvas + transport (expands to a clean fullscreen preview) ── */}
+      <div
+        className={
+          isPreview
+            ? "fixed inset-0 z-50 flex flex-col gap-3 bg-black/95 p-4 sm:p-6"
+            : "flex min-h-0 flex-1 flex-col gap-3"
+        }
+      >
         <div className="flex items-center gap-2">
           {ASPECTS.map((a) => (
             <button
@@ -243,33 +262,46 @@ export function Compositor({
               {a}
             </button>
           ))}
-          <Button
-            size="sm"
-            onClick={applyBrandKit}
-            disabled={applyingKit}
-            className="ml-auto h-7 gap-1.5 px-3 text-xs"
-          >
-            {applyingKit ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Sparkles className="h-3.5 w-3.5" />
-            )}
-            Apply brand kit
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={exportMp4}
-            disabled={exporting || doc.layers.length === 0}
-            className="h-7 gap-1.5 px-3 text-xs"
-          >
-            {exporting ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Download className="h-3.5 w-3.5" />
-            )}
-            {exporting ? "Rendering…" : "Export MP4"}
-          </Button>
+          {isPreview ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setIsPreview(false)}
+              className="ml-auto h-7 gap-1.5 px-3 text-xs"
+            >
+              <X className="h-3.5 w-3.5" /> Close preview
+            </Button>
+          ) : (
+            <>
+              <Button
+                size="sm"
+                onClick={applyBrandKit}
+                disabled={applyingKit}
+                className="ml-auto h-7 gap-1.5 px-3 text-xs"
+              >
+                {applyingKit ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5" />
+                )}
+                Apply brand kit
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={exportMp4}
+                disabled={exporting || doc.layers.length === 0}
+                className="h-7 gap-1.5 px-3 text-xs"
+              >
+                {exporting ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Download className="h-3.5 w-3.5" />
+                )}
+                {exporting ? "Rendering…" : "Export MP4"}
+              </Button>
+            </>
+          )}
         </div>
         {exportUrl && (
           <a
@@ -286,6 +318,7 @@ export function Compositor({
           <CompositorCanvas
             ref={canvasRef}
             playing={playing}
+            cleanPreview={isPreview}
             onTick={onTick}
             onEnded={onEnded}
           />
@@ -327,104 +360,117 @@ export function Compositor({
           <span className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
             {fmt(duration)}
           </span>
+          {!isPreview && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setIsPreview(true)}
+              title="Fullscreen preview — the finished look, no editing marks"
+              className="h-8 w-8 shrink-0 p-0"
+            >
+              <Maximize2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
       </div>
 
       {/* ── Layer stack + properties (scrolls independently of the canvas) ── */}
-      <div className="flex w-full flex-col gap-4 md:min-h-0 md:w-80 md:shrink-0 md:overflow-y-auto md:pr-1">
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="mb-3 flex items-center justify-between">
-            {/* Click "Layers +" to add — then switch its type with the
-                Image / Text toggle on the right. */}
-            <button
-              onClick={addTextLayer}
-              title="Add a layer"
-              className="flex items-center gap-2 text-sm font-semibold transition-colors hover:text-primary"
-            >
-              <Layers className="h-4 w-4 text-primary" /> Layers
-              <span className="rounded-md border border-primary/40 px-1.5 text-xs text-primary">
-                + add
-              </span>
-            </button>
-            <div className="flex overflow-hidden rounded-md border border-border">
-              <button
-                onClick={convertToImage}
-                disabled={!selected}
-                title={
-                  selected
-                    ? "Turn the selected layer into an image (pick a file)"
-                    : "Select a layer first"
-                }
-                className={`flex items-center gap-1 px-2 py-1 text-xs transition-colors disabled:opacity-40 ${
-                  selected?.kind === "image"
-                    ? "bg-primary/15 text-primary"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <ImagePlus className="h-3.5 w-3.5" /> Image
-              </button>
-              <button
-                onClick={convertToText}
-                disabled={!selected}
-                title={
-                  selected
-                    ? "Turn the selected layer into text"
-                    : "Select a layer first"
-                }
-                className={`flex items-center gap-1 border-l border-border px-2 py-1 text-xs transition-colors disabled:opacity-40 ${
-                  selected?.kind === "text"
-                    ? "bg-primary/15 text-primary"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <Type className="h-3.5 w-3.5" /> Text
-              </button>
-            </div>
-          </div>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/png,image/svg+xml,image/jpeg,image/webp"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) {
-                // Picker completes an image conversion of the selected layer;
-                // with nothing selected it adds a fresh image layer.
-                if (selected) {
-                  replaceLayer(selected.id, {
-                    ...baseOf(selected),
-                    kind: "image",
-                    src: URL.createObjectURL(f),
-                  });
-                } else {
-                  addImageLayer(f);
-                }
-              }
-              e.target.value = "";
-            }}
-          />
-          <LayerList />
-        </div>
-
-        {selected ? (
+      {!isPreview && (
+        <div className="flex w-full flex-col gap-4 md:min-h-0 md:w-80 md:shrink-0 md:overflow-y-auto md:pr-1">
           <div className="rounded-xl border border-border bg-card p-4">
-            <p className="mb-3 text-sm font-semibold">Layer properties</p>
-            <LayerControls layer={selected} />
+            <div className="mb-3 flex items-center justify-between">
+              {/* Click "Layers +" to add — then switch its type with the
+                Image / Text toggle on the right. */}
+              <button
+                onClick={addTextLayer}
+                title="Add a layer"
+                className="flex items-center gap-2 text-sm font-semibold transition-colors hover:text-primary"
+              >
+                <Layers className="h-4 w-4 text-primary" /> Layers
+                <span className="rounded-md border border-primary/40 px-1.5 text-xs text-primary">
+                  + add
+                </span>
+              </button>
+              <div className="flex overflow-hidden rounded-md border border-border">
+                <button
+                  onClick={convertToImage}
+                  disabled={!selected}
+                  title={
+                    selected
+                      ? "Turn the selected layer into an image (pick a file)"
+                      : "Select a layer first"
+                  }
+                  className={`flex items-center gap-1 px-2 py-1 text-xs transition-colors disabled:opacity-40 ${
+                    selected?.kind === "image"
+                      ? "bg-primary/15 text-primary"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <ImagePlus className="h-3.5 w-3.5" /> Image
+                </button>
+                <button
+                  onClick={convertToText}
+                  disabled={!selected}
+                  title={
+                    selected
+                      ? "Turn the selected layer into text"
+                      : "Select a layer first"
+                  }
+                  className={`flex items-center gap-1 border-l border-border px-2 py-1 text-xs transition-colors disabled:opacity-40 ${
+                    selected?.kind === "text"
+                      ? "bg-primary/15 text-primary"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Type className="h-3.5 w-3.5" /> Text
+                </button>
+              </div>
+            </div>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/png,image/svg+xml,image/jpeg,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) {
+                  // Picker completes an image conversion of the selected layer;
+                  // with nothing selected it adds a fresh image layer.
+                  if (selected) {
+                    replaceLayer(selected.id, {
+                      ...baseOf(selected),
+                      kind: "image",
+                      src: URL.createObjectURL(f),
+                    });
+                  } else {
+                    addImageLayer(f);
+                  }
+                }
+                e.target.value = "";
+              }}
+            />
+            <LayerList />
           </div>
-        ) : (
-          <div className="rounded-xl border border-dashed border-border p-4">
-            <p className="mb-1 text-sm font-semibold text-muted-foreground">
-              Layer properties
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {doc.layers.length > 0
-                ? "Select a layer above (or click it on the canvas) to edit its size, blend, timing and effects."
-                : "Click “Layers + add” to create your first layer — its size, blend, timing and effect controls will appear here."}
-            </p>
-          </div>
-        )}
-      </div>
+
+          {selected ? (
+            <div className="rounded-xl border border-border bg-card p-4">
+              <p className="mb-3 text-sm font-semibold">Layer properties</p>
+              <LayerControls layer={selected} />
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-border p-4">
+              <p className="mb-1 text-sm font-semibold text-muted-foreground">
+                Layer properties
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {doc.layers.length > 0
+                  ? "Select a layer above (or click it on the canvas) to edit its size, blend, timing and effects."
+                  : "Click “Layers + add” to create your first layer — its size, blend, timing and effect controls will appear here."}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

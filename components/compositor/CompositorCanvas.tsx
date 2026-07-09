@@ -18,6 +18,9 @@ export interface CompositorCanvasHandle {
 
 interface Props {
   playing: boolean;
+  /** Finished-look preview: no arrange ghosts, no outlines — exactly what
+   *  the export renders, even while paused. */
+  cleanPreview?: boolean;
   /** ~10Hz clock updates for the scrubber. */
   onTick: (t: number, duration: number) => void;
   onEnded: () => void;
@@ -30,7 +33,7 @@ interface Props {
  * layers back-to-front. Also owns drag-to-position.
  */
 export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
-  function CompositorCanvas({ playing, onTick, onEnded }, ref) {
+  function CompositorCanvas({ playing, cleanPreview, onTick, onEnded }, ref) {
     const doc = useCompositorStore((s) => s.doc);
     const selectedLayerId = useCompositorStore((s) => s.selectedLayerId);
     const selectLayer = useCompositorStore((s) => s.selectLayer);
@@ -156,7 +159,7 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
           background: isVideo ? videoRef.current : bgImageRef.current,
           images: imagesRef.current,
           selectedLayerId,
-          paused: !playing,
+          paused: !playing && !cleanPreview,
           draggingLayerId: drag.current?.id ?? null,
           editingLayerId: editing?.id ?? null,
         });
@@ -172,12 +175,40 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
       doc,
       isVideo,
       playing,
+      cleanPreview,
       selectedLayerId,
       fontsReady,
       editing,
       onTick,
       onEnded,
     ]);
+
+    // Keep the inline text editor glued to its layer through window resizes —
+    // the canvas is CSS-scaled, so display coordinates shift with the screen.
+    useEffect(() => {
+      if (!editing) return;
+      const relocate = () => {
+        const canvas = canvasRef.current;
+        const wrapper = wrapperRef.current;
+        const layer = doc?.layers.find((l) => l.id === editing.id);
+        if (!canvas || !wrapper || !layer || layer.kind !== "text") return;
+        const c = canvas.getBoundingClientRect();
+        const w = wrapper.getBoundingClientRect();
+        const s = c.width / canvas.width;
+        setEditing(
+          (prev) =>
+            prev && {
+              ...prev,
+              left: c.left - w.left + layer.x * s,
+              top: c.top - w.top + layer.y * s,
+              width: Math.min(c.width * 0.85, 560),
+              fontSize: Math.max(11, layer.sizePx * layer.scale * s),
+            },
+        );
+      };
+      window.addEventListener("resize", relocate);
+      return () => window.removeEventListener("resize", relocate);
+    }, [editing, doc]);
 
     // Pointer → design-space coords (canvas buffer is design-sized, CSS-scaled).
     const toDesign = (e: React.PointerEvent | React.MouseEvent) => {
