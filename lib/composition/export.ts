@@ -393,18 +393,33 @@ export interface FanOutResult {
  * layers and applies that aspect's per-format overrides (via effectiveLayer in
  * buildFilterGraph), and lands at its own storage path. Sequential to keep
  * FFmpeg memory bounded; ≤3 aspects in practice.
+ *
+ * Each render uploads its MP4 immediately, but the caller writes asset rows only
+ * after all renders finish — so if one aspect fails partway, the already-uploaded
+ * MP4s would be orphaned in Storage. On failure we delete them before rethrowing.
  */
 export async function renderFanOut(
   input: RenderCompositionInput,
   aspects: CompositionAspect[],
 ): Promise<FanOutResult[]> {
   const out: FanOutResult[] = [];
-  for (const aspect of aspects) {
-    const r = await renderComposition({
-      ...input,
-      doc: { ...input.doc, aspect },
-    });
-    out.push({ aspect, ...r });
+  try {
+    for (const aspect of aspects) {
+      const r = await renderComposition({
+        ...input,
+        doc: { ...input.doc, aspect },
+      });
+      out.push({ aspect, ...r });
+    }
+    return out;
+  } catch (err) {
+    if (out.length > 0) {
+      // Best-effort cleanup of orphaned uploads (no asset rows point to them).
+      await createSupabaseAdminClient()
+        .storage.from("assets")
+        .remove(out.map((o) => o.storagePath))
+        .catch(() => {});
+    }
+    throw err;
   }
-  return out;
 }
