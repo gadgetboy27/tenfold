@@ -9,6 +9,7 @@ import {
   isPlatformId,
   railFormats,
   formatWarnings,
+  pickForPlatform,
   GENERIC_RAIL,
   type NormRect,
 } from "@/lib/composition/formats";
@@ -143,6 +144,30 @@ describe("formatWarnings", () => {
   it("returns nothing when every layer is clear", () => {
     const boxes: NormRect[] = [{ x: 0.4, y: 0.4, w: 0.2, h: 0.2 }];
     expect(formatWarnings(boxes, safeZones)).toEqual([]);
+  });
+});
+
+describe("pickForPlatform", () => {
+  const byAspect = new Map<string, string>([
+    ["9:16", "vertical.mp4"],
+    ["16:9", "wide.mp4"],
+  ]);
+
+  it("posts each platform its format's render, falling back otherwise", () => {
+    expect(pickForPlatform("tiktok", byAspect, "fallback.mp4")).toBe(
+      "vertical.mp4", // TikTok is 9:16
+    );
+    expect(pickForPlatform("youtube", byAspect, "fallback.mp4")).toBe(
+      "wide.mp4", // YouTube is 16:9
+    );
+    // Facebook is 1:1 — not in the map → fallback.
+    expect(pickForPlatform("facebook", byAspect, "fallback.mp4")).toBe(
+      "fallback.mp4",
+    );
+    // Unknown platform → fallback.
+    expect(pickForPlatform("myspace", byAspect, "fallback.mp4")).toBe(
+      "fallback.mp4",
+    );
   });
 });
 

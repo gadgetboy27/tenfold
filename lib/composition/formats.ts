@@ -288,6 +288,24 @@ export const GENERIC_RAIL: RailFormat[] = [
   { key: "landscape", label: "Landscape", aspect: "16:9", safeZones: [] },
 ];
 
+/**
+ * The value (e.g. a rendered MP4/asset) a platform should receive, given a map
+ * keyed by aspect and a fallback — the per-platform publish policy. Picks the
+ * platform's format aspect from the registry; falls back when that aspect has no
+ * entry or the platform is unknown.
+ */
+export function pickForPlatform<T>(
+  platform: string,
+  byAspect: Map<string, T>,
+  fallback: T,
+): T {
+  if (isPlatformId(platform)) {
+    const v = byAspect.get(PLATFORM_FORMATS[platform].aspect);
+    if (v !== undefined) return v;
+  }
+  return fallback;
+}
+
 /** Rail items for a set of connected platform slugs, or the generic trio when
  *  none are recognised (see formatsForPlatforms for filtering/dedup rules). */
 export function railFormats(connected: string[]): RailFormat[] {

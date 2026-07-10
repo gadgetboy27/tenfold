@@ -11,6 +11,7 @@ import {
 import { ayrsharePost } from "@/lib/ayrshare/client";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { composeVideo } from "@/lib/composition/video";
+import { pickForPlatform } from "@/lib/composition/formats";
 import { v4 as uuidv4 } from "uuid";
 
 interface SocialProfile {
@@ -95,6 +96,9 @@ export async function POST(req: Request) {
     // leftover compositionId never hard-blocks publishing.
     let asset: Asset | null = null;
     let resolvedCompositionId: string | null = null;
+    // Fan-out exports tag each composed_video with its aspect; index them so
+    // each platform can post the format that matches its placement.
+    const assetsByAspect = new Map<string, Asset>();
 
     // "Publish the video": post the campaign's actual clip. Prefer an already
     // mixed video; otherwise mix the latest music onto the raw clip (so the post
@@ -112,6 +116,28 @@ export async function POST(req: Request) {
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle();
+
+      // All fan-out formats for this campaign, newest-first, indexed by aspect
+      // (first/newest wins per aspect). Untagged mixes just don't get indexed.
+      const { data: composed } = await admin
+        .from("assets")
+        .select("id, url, type, metadata")
+        .eq("campaign_id", body.campaignId)
+        .eq("workspace_id", session.workspaceId)
+        .eq("type", "composed_video")
+        .order("created_at", { ascending: false });
+      for (const row of composed ?? []) {
+        const r = row as unknown as {
+          id: string;
+          url: string;
+          type: string;
+          metadata?: { aspect?: string } | null;
+        };
+        const asp = r.metadata?.aspect;
+        if (asp && !assetsByAspect.has(asp)) {
+          assetsByAspect.set(asp, { id: r.id, url: r.url, type: r.type });
+        }
+      }
 
       const { data: existing } = await pick("composed_video");
       if (existing) {
@@ -183,6 +209,12 @@ export async function POST(req: Request) {
 
     if (!asset)
       return NextResponse.json({ error: "Asset not found" }, { status: 404 });
+    const resolvedAsset = asset; // non-null fallback for every platform
+
+    // The MP4 to post to a given platform: its format's fan-out render when one
+    // exists, otherwise the single resolved asset (backward compatible).
+    const assetForPlatform = (platform: string): Asset =>
+      pickForPlatform(platform, assetsByAspect, resolvedAsset);
 
     // Load connected profiles for requested platforms
     const { data: profiles } = await admin
@@ -229,6 +261,7 @@ export async function POST(req: Request) {
       // Per-platform AI caption when supplied (its hashtags are already tailored);
       // otherwise the base caption + shared hashtags.
       const platformCaption = body.platformCaptions?.[platform] ?? fullCaption;
+      const platformAsset = assetForPlatform(platform);
       try {
         const meta = metaByPlatform.get(platform);
         let postId: string;
@@ -251,9 +284,17 @@ export async function POST(req: Request) {
               access_token: chosen.access_token,
             };
           }
-          postId = await publishToFacebook(fbProfile, asset, platformCaption);
+          postId = await publishToFacebook(
+            fbProfile,
+            platformAsset,
+            platformCaption,
+          );
         } else if (platform === "instagram" && meta) {
-          postId = await publishToInstagram(meta, asset, platformCaption);
+          postId = await publishToInstagram(
+            meta,
+            platformAsset,
+            platformCaption,
+          );
         } else {
           // Everything else goes through Ayrshare (Pro).
           if (!ent.isPro) {
@@ -269,7 +310,7 @@ export async function POST(req: Request) {
           const result = await ayrsharePost(ayrshareKey, {
             post: platformCaption,
             platforms: [platform],
-            mediaUrls: [asset.url],
+            mediaUrls: [platformAsset.url],
             ...(body.scheduledAt ? { scheduleDate: body.scheduledAt } : {}),
           });
           postId = result.postIds?.[0]?.id ?? result.id ?? "posted";

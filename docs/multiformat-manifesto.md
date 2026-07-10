@@ -101,14 +101,19 @@ Migration is idempotent (skips layers that already have `pos`).
 
 ## 5. Phase Plan
 
-| Phase | Deliverable                                                                                                   | Status   |
-| ----- | ------------------------------------------------------------------------------------------------------------- | -------- |
-| **1** | Coordinate refactor: `pos` model, `resolveCenter`/`centerToPos`, `setAspect` reflows, legacy migration, tests | ✅ done  |
-| **2** | Format registry + safe-zone config (`lib/composition/formats.ts`)                                             | ✅ done  |
-| **3** | Format rail UI: live thumbnails per connected platform + ⚠ safe-zone flags                                    | ✅ done  |
-| **4** | Per-format overrides (delta storage on the doc) + anchor "pin to corner" control                              | ✅ done  |
-| 5     | Fan-out export + batch publish (+ persist `overrides` to the DB), each locked to its platform                 | **NEXT** |
-| 6     | _(optional)_ vision "auto-fix this format" button (credits)                                                   | pending  |
+| Phase | Deliverable                                                                                                   | Status  |
+| ----- | ------------------------------------------------------------------------------------------------------------- | ------- |
+| **1** | Coordinate refactor: `pos` model, `resolveCenter`/`centerToPos`, `setAspect` reflows, legacy migration, tests | ✅ done |
+| **2** | Format registry + safe-zone config (`lib/composition/formats.ts`)                                             | ✅ done |
+| **3** | Format rail UI: live thumbnails per connected platform + ⚠ safe-zone flags                                    | ✅ done |
+| **4** | Per-format overrides (delta storage on the doc) + anchor "pin to corner" control                              | ✅ done |
+| **5** | Fan-out export + batch publish (+ persist `overrides` to the DB), each locked to its platform                 | ✅ done |
+| 6     | _(optional)_ vision "auto-fix this format" button (credits)                                                   | pending |
+
+**Phase 5 deploy step:** run migration `db/migrations/0013_composition_overrides.sql`
+against the database (adds `compositions.overrides`). It's idempotent
+(`ADD COLUMN IF NOT EXISTS`). Nothing breaks without it today (no client PATCH
+sends overrides yet), but the fan-out publish + persistence assume it on deploy.
 
 ---
 
