@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import toast from "react-hot-toast";
 import {
@@ -18,6 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { type CompositionAspect } from "@/lib/composition/layers";
+import { railFormats } from "@/lib/composition/formats";
 import {
   brandKitLayers,
   pickKitLogo,
@@ -32,6 +33,7 @@ import {
 } from "./CompositorCanvas";
 import { LayerList } from "./LayerList";
 import { LayerControls } from "./LayerControls";
+import { FormatRail } from "./FormatRail";
 
 const ASPECTS: CompositionAspect[] = ["9:16", "1:1", "16:9"];
 
@@ -75,6 +77,33 @@ export function Compositor({
   const [exportUrl, setExportUrl] = useState<string | null>(null);
   // Fullscreen finished-look preview (no ghosts, outlines or edit chrome).
   const [isPreview, setIsPreview] = useState(false);
+  // Connected social platforms drive the format rail (empty → generic aspects).
+  const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([]);
+
+  useEffect(() => {
+    const slug = params.workspace;
+    if (!slug) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api("/api/social/profiles", { workspaceSlug: slug });
+        if (!res.ok) return;
+        const data = (await res.json()) as { platform: string }[];
+        if (!cancelled) setConnectedPlatforms(data.map((p) => p.platform));
+      } catch {
+        // Lab mode / offline: FormatRail falls back to the generic aspect trio.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [params.workspace]);
+
+  // Stable identity so FormatRail's effects don't loop on every render.
+  const rail = useMemo(
+    () => railFormats(connectedPlatforms),
+    [connectedPlatforms],
+  );
 
   useEffect(() => {
     if (!isPreview) return;
@@ -305,6 +334,15 @@ export function Compositor({
           >
             ↓ Download your MP4 (also opened in a new tab)
           </a>
+        )}
+
+        {!isPreview && (
+          <FormatRail
+            doc={doc}
+            formats={rail}
+            activeAspect={doc.aspect}
+            onPick={setAspect}
+          />
         )}
 
         <div className="min-h-0 flex-1">

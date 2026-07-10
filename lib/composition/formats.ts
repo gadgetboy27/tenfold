@@ -240,7 +240,7 @@ export function intersectionArea(a: NormRect, b: NormRect): number {
  */
 export function zoneIntrusions(
   box: NormRect,
-  format: PlatformFormat,
+  format: { safeZones: SafeZone[] },
   threshold = 0.1,
 ): SafeZone[] {
   const boxArea = box.w * box.h;
@@ -248,4 +248,55 @@ export function zoneIntrusions(
   return format.safeZones.filter(
     (z) => intersectionArea(box, z) / boxArea >= threshold,
   );
+}
+
+/**
+ * Every distinct safe zone that ANY of the given layer boxes intrudes into —
+ * the aggregated ⚠ set for one format thumbnail. Deduped by zone label.
+ */
+export function formatWarnings(
+  boxes: NormRect[],
+  safeZones: SafeZone[],
+  threshold = 0.1,
+): SafeZone[] {
+  const hit = new Map<string, SafeZone>();
+  for (const box of boxes) {
+    for (const z of zoneIntrusions(box, { safeZones }, threshold)) {
+      hit.set(z.label, z);
+    }
+  }
+  return [...hit.values()];
+}
+
+// ── Rail items ───────────────────────────────────────────────────────────────
+// The format rail (Phase 3) renders one thumbnail per item. A RailFormat is the
+// UI-facing shape both real platform formats and the lab-mode fallback satisfy.
+
+export interface RailFormat {
+  /** Stable React key (platform id, or a generic aspect key). */
+  key: string;
+  label: string;
+  aspect: CompositionAspect;
+  safeZones: SafeZone[];
+}
+
+/** Lab-mode fallback: one item per aspect, so the designer still previews across
+ *  shapes when no social accounts are connected. */
+export const GENERIC_RAIL: RailFormat[] = [
+  { key: "vertical", label: "Vertical", aspect: "9:16", safeZones: [] },
+  { key: "square", label: "Square", aspect: "1:1", safeZones: [] },
+  { key: "landscape", label: "Landscape", aspect: "16:9", safeZones: [] },
+];
+
+/** Rail items for a set of connected platform slugs, or the generic trio when
+ *  none are recognised (see formatsForPlatforms for filtering/dedup rules). */
+export function railFormats(connected: string[]): RailFormat[] {
+  const formats = formatsForPlatforms(connected);
+  if (formats.length === 0) return GENERIC_RAIL;
+  return formats.map((f) => ({
+    key: f.id,
+    label: f.label,
+    aspect: f.aspect,
+    safeZones: f.safeZones,
+  }));
 }

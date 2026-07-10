@@ -7,6 +7,9 @@ import {
   zoneIntrusions,
   intersectionArea,
   isPlatformId,
+  railFormats,
+  formatWarnings,
+  GENERIC_RAIL,
   type NormRect,
 } from "@/lib/composition/formats";
 
@@ -105,6 +108,41 @@ describe("zoneIntrusions", () => {
   it("returns nothing for a format with no safe zones", () => {
     const box: NormRect = { x: 0, y: 0, w: 1, h: 1 };
     expect(zoneIntrusions(box, PLATFORM_FORMATS.linkedin)).toEqual([]);
+  });
+});
+
+describe("railFormats", () => {
+  it("maps connected platforms to rail items", () => {
+    const rail = railFormats(["tiktok", "linkedin"]);
+    expect(rail.map((r) => r.key)).toEqual(["tiktok", "linkedin"]);
+    expect(rail[0]).toMatchObject({ label: "TikTok", aspect: "9:16" });
+    expect(rail[0].safeZones.length).toBeGreaterThan(0);
+  });
+
+  it("falls back to the generic aspect trio when nothing is connected", () => {
+    expect(railFormats([])).toBe(GENERIC_RAIL);
+    expect(railFormats(["myspace"])).toBe(GENERIC_RAIL);
+    expect(GENERIC_RAIL.map((r) => r.aspect)).toEqual(["9:16", "1:1", "16:9"]);
+  });
+});
+
+describe("formatWarnings", () => {
+  const { safeZones } = PLATFORM_FORMATS.tiktok;
+
+  it("aggregates and dedupes intruded zones across many layer boxes", () => {
+    const boxes: NormRect[] = [
+      { x: 0.35, y: 0.35, w: 0.2, h: 0.2 }, // clear
+      { x: 0.1, y: 0.82, w: 0.6, h: 0.1 }, // bottom caption
+      { x: 0.05, y: 0.85, w: 0.5, h: 0.1 }, // bottom caption again (dedupe)
+    ];
+    const hits = formatWarnings(boxes, safeZones);
+    expect(hits).toHaveLength(1);
+    expect(hits[0].label).toContain("caption");
+  });
+
+  it("returns nothing when every layer is clear", () => {
+    const boxes: NormRect[] = [{ x: 0.4, y: 0.4, w: 0.2, h: 0.2 }];
+    expect(formatWarnings(boxes, safeZones)).toEqual([]);
   });
 });
 
