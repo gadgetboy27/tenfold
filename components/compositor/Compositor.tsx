@@ -29,7 +29,12 @@ import {
 } from "@/lib/composition/brand-apply";
 import { useCompositorStore } from "@/store/useCompositorStore";
 import { useAppStore } from "@/store/useAppStore";
-import { materializeDoc, requestExport } from "./export-client";
+import {
+  materializeDoc,
+  requestExport,
+  requestFanOutExport,
+  type FanOutOutput,
+} from "./export-client";
 import {
   CompositorCanvas,
   type CompositorCanvasHandle,
@@ -81,6 +86,8 @@ export function Compositor({
   const [applyingKit, setApplyingKit] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportUrl, setExportUrl] = useState<string | null>(null);
+  const [exportingAll, setExportingAll] = useState(false);
+  const [fanOut, setFanOut] = useState<FanOutOutput[] | null>(null);
   // Fullscreen finished-look preview (no ghosts, outlines or edit chrome).
   const [isPreview, setIsPreview] = useState(false);
   // Connected social platforms drive the format rail (empty → generic aspects).
@@ -273,6 +280,35 @@ export function Compositor({
     }
   };
 
+  // Fan-out: render every connected format at once, each with its overrides.
+  const fanAspects = Array.from(new Set(rail.map((r) => r.aspect)));
+  const exportAllFormats = async () => {
+    setExportingAll(true);
+    setFanOut(null);
+    try {
+      const hadLocal = [
+        doc.background.src,
+        ...doc.layers.map((l) => (l.kind === "image" ? l.src : "")),
+      ].some((s) => s.startsWith("blob:"));
+      const materialized = await materializeDoc(doc, params.workspace);
+      if (hadLocal) load(materialized);
+      const outputs = await requestFanOutExport(
+        materialized,
+        params.workspace,
+        fanAspects,
+        { campaignId, audioUrl },
+      );
+      setFanOut(outputs);
+      toast.success(
+        `Rendered ${outputs.length} format${outputs.length > 1 ? "s" : ""}.`,
+      );
+    } catch (err) {
+      toast.error((err as Error).message ?? "Export failed");
+    } finally {
+      setExportingAll(false);
+    }
+  };
+
   return (
     <div className="flex h-full flex-col gap-4 md:flex-row">
       {/* ── Canvas + transport (expands to a clean fullscreen preview) ── */}
@@ -365,6 +401,25 @@ export function Compositor({
                 )}
                 {exporting ? "Rendering…" : "Export MP4"}
               </Button>
+              {fanAspects.length > 1 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={exportAllFormats}
+                  disabled={exportingAll || doc.layers.length === 0}
+                  className="h-7 gap-1.5 px-3 text-xs"
+                  title={`Render all ${fanAspects.length} connected formats at once`}
+                >
+                  {exportingAll ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Layers className="h-3.5 w-3.5" />
+                  )}
+                  {exportingAll
+                    ? "Rendering all…"
+                    : `Export all ${fanAspects.length} formats`}
+                </Button>
+              )}
             </>
           )}
         </div>
@@ -377,6 +432,24 @@ export function Compositor({
           >
             ↓ Download your MP4 (also opened in a new tab)
           </a>
+        )}
+        {fanOut && fanOut.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs">
+            <span className="text-muted-foreground">
+              {fanOut.length} formats rendered:
+            </span>
+            {fanOut.map((o) => (
+              <a
+                key={o.aspect}
+                href={o.url}
+                target="_blank"
+                rel="noopener"
+                className="rounded-full border border-border px-2 py-0.5 text-primary hover:border-primary/50"
+              >
+                {o.aspect} ↓
+              </a>
+            ))}
+          </div>
         )}
 
         {!isPreview && (

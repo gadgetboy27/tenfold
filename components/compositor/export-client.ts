@@ -1,7 +1,10 @@
 "use client";
 
 import { api } from "@/lib/api";
-import type { CompositionDoc } from "@/lib/composition/layers";
+import type {
+  CompositionAspect,
+  CompositionDoc,
+} from "@/lib/composition/layers";
 
 /**
  * Client half of the export flow: the server renderer can only fetch http(s)
@@ -98,4 +101,37 @@ export async function requestExport(
   };
   if (!res.ok || !data.url) throw new Error(data.error ?? "Export failed");
   return { url: data.url, durationSec: data.durationSec ?? 0 };
+}
+
+export interface FanOutOutput {
+  aspect: CompositionAspect;
+  url: string;
+  assetId: string | null;
+  durationSec: number;
+}
+
+/** Render every requested aspect at once (the master reflowed per format, each
+ *  with its overrides). Returns one output per aspect. */
+export async function requestFanOutExport(
+  doc: CompositionDoc,
+  workspaceSlug: string | undefined,
+  aspects: CompositionAspect[],
+  options: ExportOptions = {},
+): Promise<FanOutOutput[]> {
+  const res = await api("/api/compositions/export", {
+    method: "POST",
+    body: JSON.stringify({
+      doc,
+      aspects,
+      campaignId: options.campaignId ?? null,
+      audioUrl: options.audioUrl ?? null,
+    }),
+    workspaceSlug,
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    outputs?: FanOutOutput[];
+    error?: string;
+  };
+  if (!res.ok || !data.outputs) throw new Error(data.error ?? "Export failed");
+  return data.outputs;
 }

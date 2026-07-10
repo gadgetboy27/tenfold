@@ -6,9 +6,11 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   anchorAxes,
   ASPECT_DESIGN,
+  ASPECT_TO_FORMAT,
   BLEND_MODES,
   effectiveLayer,
   type BlendMode,
+  type CompositionAspect,
   type CompositionDoc,
   type Layer,
   type LayerPosition,
@@ -361,11 +363,12 @@ export async function renderComposition(
 
     await run("ffmpeg", args);
 
-    // 3. Store the MP4, named from the composition.
+    // 3. Store the MP4, named from the composition + its format so each aspect
+    //    of a fan-out lands at its own path (no upsert collision).
     const buffer = await readFile(outPath);
     const admin = createSupabaseAdminClient();
     const folder = input.campaignId ?? "compositor";
-    const storagePath = `${input.workspaceId}/${folder}/composition-${doc.id}.mp4`;
+    const storagePath = `${input.workspaceId}/${folder}/composition-${doc.id}-${ASPECT_TO_FORMAT[doc.aspect]}.mp4`;
     const { error } = await admin.storage
       .from("assets")
       .upload(storagePath, buffer, { contentType: "video/mp4", upsert: true });
@@ -375,4 +378,33 @@ export async function renderComposition(
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {});
   }
+}
+
+export interface FanOutResult {
+  aspect: CompositionAspect;
+  url: string;
+  storagePath: string;
+  durationSec: number;
+}
+
+/**
+ * Render the same master composition once per aspect — "build every format
+ * together" (docs/multiformat-manifesto.md Phase 5). Each render reflows the
+ * layers and applies that aspect's per-format overrides (via effectiveLayer in
+ * buildFilterGraph), and lands at its own storage path. Sequential to keep
+ * FFmpeg memory bounded; ≤3 aspects in practice.
+ */
+export async function renderFanOut(
+  input: RenderCompositionInput,
+  aspects: CompositionAspect[],
+): Promise<FanOutResult[]> {
+  const out: FanOutResult[] = [];
+  for (const aspect of aspects) {
+    const r = await renderComposition({
+      ...input,
+      doc: { ...input.doc, aspect },
+    });
+    out.push({ aspect, ...r });
+  }
+  return out;
 }
