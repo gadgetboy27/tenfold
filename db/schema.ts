@@ -282,6 +282,9 @@ export const compositions = pgTable("compositions", {
   // + ordered Layer[] document. Shapes validated by lib/composition/layers.ts.
   background: jsonb("background"),
   layers: jsonb("layers").notNull().default("[]"),
+  // Per-format layout nudges: aspect → layerId → {pos?, scale?, sizePx?,
+  // rotationDeg?} (deltas only). See CompositionOverrides in layers.ts.
+  overrides: jsonb("overrides").notNull().default("{}"),
   caption: text("caption"),
   hashtags: text("hashtags").array(),
   status: text("status").notNull().default("draft"),

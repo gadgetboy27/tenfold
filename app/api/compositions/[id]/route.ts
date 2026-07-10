@@ -4,6 +4,7 @@ import { withWorkspace } from "@/lib/api/with-workspace";
 import {
   ASPECT_TO_FORMAT,
   backgroundSchema,
+  compositionOverridesSchema,
   formatToAspect,
   layerSchema,
 } from "@/lib/composition/layers";
@@ -17,6 +18,7 @@ const patchSchema = z
     aspect: z.enum(["9:16", "1:1", "16:9"]).optional(),
     background: backgroundSchema.optional(),
     layers: z.array(layerSchema).max(20).optional(),
+    overrides: compositionOverridesSchema.optional(),
     caption: z.string().max(2200).nullable().optional(),
   })
   .refine((o) => Object.keys(o).length > 0, { message: "Empty patch" });
@@ -64,6 +66,7 @@ export const PATCH = withWorkspace<{ id: string }>(
     if (body.aspect) update.format = ASPECT_TO_FORMAT[body.aspect];
     if (body.background !== undefined) update.background = body.background;
     if (body.layers !== undefined) update.layers = body.layers;
+    if (body.overrides !== undefined) update.overrides = body.overrides;
     if (body.caption !== undefined) update.caption = body.caption;
 
     const { data, error } = await db
