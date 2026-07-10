@@ -10,6 +10,10 @@ import {
   railFormats,
   formatWarnings,
   pickForPlatform,
+  PLATFORM_DURATION,
+  snapToGenTier,
+  recommendVideoDuration,
+  overLengthPlatforms,
   GENERIC_RAIL,
   type NormRect,
 } from "@/lib/composition/formats";
@@ -144,6 +148,44 @@ describe("formatWarnings", () => {
   it("returns nothing when every layer is clear", () => {
     const boxes: NormRect[] = [{ x: 0.4, y: 0.4, w: 0.2, h: 0.2 }];
     expect(formatWarnings(boxes, safeZones)).toEqual([]);
+  });
+});
+
+describe("video length guidance", () => {
+  it("keeps a duration entry for every platform format (no drift)", () => {
+    expect(Object.keys(PLATFORM_DURATION).sort()).toEqual(
+      Object.keys(PLATFORM_FORMATS).sort(),
+    );
+    for (const d of Object.values(PLATFORM_DURATION)) {
+      expect(d.recommended).toBeGreaterThan(0);
+      expect(d.max).toBeGreaterThanOrEqual(d.recommended);
+    }
+  });
+
+  it("snaps a target length to the nearest producible gen tier", () => {
+    expect(snapToGenTier(12)).toBe(10);
+    expect(snapToGenTier(25)).toBe(30);
+    expect(snapToGenTier(40)).toBe(30); // closer to 30 than 60
+    expect(snapToGenTier(55)).toBe(60);
+  });
+
+  it("recommends the shortest cross-platform sweet spot, snapped to a tier", () => {
+    // TikTok + Instagram both ~30 → 30.
+    expect(recommendVideoDuration(["tiktok", "instagram"])).toBe(30);
+    // YouTube's ~55 sweet spot → 60.
+    expect(recommendVideoDuration(["youtube"])).toBe(60);
+    // Mixed: Pinterest's 15 is shortest → snaps to 10.
+    expect(recommendVideoDuration(["pinterest", "tiktok"])).toBe(10);
+    // Nothing recognised → 30 default.
+    expect(recommendVideoDuration([])).toBe(30);
+  });
+
+  it("flags platforms a too-long video exceeds", () => {
+    // 90s clip: over Snapchat (60) and GMB (30), fine for TikTok (600).
+    expect(
+      overLengthPlatforms(90, ["snapchat", "tiktok", "gmb"]).sort(),
+    ).toEqual(["gmb", "snapchat"]);
+    expect(overLengthPlatforms(20, ["snapchat", "tiktok"])).toEqual([]);
   });
 });
 

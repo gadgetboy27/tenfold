@@ -184,6 +184,62 @@ export function isPlatformId(x: string): x is PlatformId {
   return x in PLATFORM_FORMATS;
 }
 
+// ── Video length guidance ────────────────────────────────────────────────────
+// Per-platform durations (seconds), from 2026 platform guidance. `recommended`
+// is the engagement sweet spot; `max` is the platform's hard cap. Kept beside
+// the format registry; keys mirror PLATFORM_FORMATS (asserted in tests).
+
+export const PLATFORM_DURATION: Record<
+  PlatformId,
+  { recommended: number; max: number }
+> = {
+  tiktok: { recommended: 30, max: 600 }, // sweet spot 15–34s; 10min in-app
+  instagram: { recommended: 30, max: 180 }, // Reels: 7–15s viral, 30–45s value
+  snapchat: { recommended: 20, max: 60 },
+  pinterest: { recommended: 15, max: 60 },
+  youtube: { recommended: 55, max: 180 }, // Shorts sweet spot ~55s; 3min cap
+  twitter: { recommended: 30, max: 140 }, // X standard 2:20
+  reddit: { recommended: 30, max: 900 },
+  telegram: { recommended: 30, max: 600 },
+  gmb: { recommended: 30, max: 30 }, // Google Business ~30s
+  facebook: { recommended: 30, max: 90 }, // Reels 90s
+  linkedin: { recommended: 30, max: 600 },
+  threads: { recommended: 30, max: 300 },
+  bluesky: { recommended: 30, max: 60 },
+};
+
+/** Video-gen tiers our engine can actually produce (fal.ai Kling) — mirrors the
+ *  video_10s / video_30s / video_60s credit costs. */
+export const VIDEO_GEN_TIERS = [10, 30, 60] as const;
+export type VideoGenTier = (typeof VIDEO_GEN_TIERS)[number];
+
+/** Nearest producible gen tier to a target length. */
+export function snapToGenTier(sec: number): VideoGenTier {
+  return VIDEO_GEN_TIERS.reduce((best, t) =>
+    Math.abs(t - sec) < Math.abs(best - sec) ? t : best,
+  );
+}
+
+/** Recommended gen length for a set of target platforms: the shortest sweet spot
+ *  (safe cross-platform), snapped to a tier we can generate. Defaults to 30s. */
+export function recommendVideoDuration(platforms: string[]): VideoGenTier {
+  const recs = platforms
+    .filter(isPlatformId)
+    .map((p) => PLATFORM_DURATION[p].recommended);
+  return snapToGenTier(recs.length ? Math.min(...recs) : 30);
+}
+
+/** Platforms whose hard cap the given video exceeds — a "too long" flag for
+ *  uploaded backgrounds that outrun a platform's limit. */
+export function overLengthPlatforms(
+  durationSec: number,
+  platforms: string[],
+): PlatformId[] {
+  return platforms
+    .filter(isPlatformId)
+    .filter((p) => durationSec > PLATFORM_DURATION[p].max);
+}
+
 /**
  * The rail's format list for a set of connected platforms (raw slugs from
  * social_profiles). Unknown slugs are dropped, duplicates collapsed, input
