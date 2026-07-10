@@ -101,14 +101,14 @@ Migration is idempotent (skips layers that already have `pos`).
 
 ## 5. Phase Plan
 
-| Phase | Deliverable                                                                                                   | Status          |
-| ----- | ------------------------------------------------------------------------------------------------------------- | --------------- |
-| **1** | Coordinate refactor: `pos` model, `resolveCenter`/`centerToPos`, `setAspect` reflows, legacy migration, tests | **IN PROGRESS** |
-| 2     | Format registry + safe-zone config (`lib/composition/formats.ts`)                                             | pending         |
-| 3     | Format rail UI: live thumbnails per connected platform + ⚠ safe-zone flags                                    | pending         |
-| 4     | Per-format overrides (delta storage on the doc)                                                               | pending         |
-| 5     | Fan-out export + batch publish, each locked to its platform                                                   | pending         |
-| 6     | _(optional)_ vision "auto-fix this format" button (credits)                                                   | pending         |
+| Phase | Deliverable                                                                                                   | Status   |
+| ----- | ------------------------------------------------------------------------------------------------------------- | -------- |
+| **1** | Coordinate refactor: `pos` model, `resolveCenter`/`centerToPos`, `setAspect` reflows, legacy migration, tests | ✅ done  |
+| **2** | Format registry + safe-zone config (`lib/composition/formats.ts`)                                             | ✅ done  |
+| 3     | Format rail UI: live thumbnails per connected platform + ⚠ safe-zone flags                                    | **NEXT** |
+| 4     | Per-format overrides (delta storage on the doc)                                                               | pending  |
+| 5     | Fan-out export + batch publish, each locked to its platform                                                   | pending  |
+| 6     | _(optional)_ vision "auto-fix this format" button (credits)                                                   | pending  |
 
 ---
 
