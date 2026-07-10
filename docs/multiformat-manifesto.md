@@ -115,6 +115,19 @@ against the database (adds `compositions.overrides`). It's idempotent
 (`ADD COLUMN IF NOT EXISTS`). Nothing breaks without it today (no client PATCH
 sends overrides yet), but the fan-out publish + persistence assume it on deploy.
 
+**Phase 5 known follow-ups** (verified non-blocking, happy paths correct):
+
+- _Storage leak on partial fan-out failure._ `renderFanOut` uploads each aspect's
+  MP4 immediately but asset rows are written only after all renders finish, so if
+  render N throws, aspects 1..N-1 are orphaned in Storage with no row and no
+  cleanup. Error-path only. Fix: track uploaded paths and delete on failure, or
+  make the fan-out transactional.
+- _Persisted overrides are write-only._ PATCH stores `compositions.overrides`, but
+  no read path re-enters a render — the compositor rebuilds a fresh doc from
+  campaign assets on load rather than loading the saved composition row (same as
+  `layers`/`background` today). To make DB overrides survive a reload into a
+  render, wire a "load saved composition" path. In-session overrides already work.
+
 ---
 
 ## 6. Phase 1 Scope — explicit boundaries
