@@ -13,6 +13,7 @@ import {
   Loader2,
   Download,
   Maximize2,
+  Music,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -80,6 +81,11 @@ export function Compositor({
   const params = useParams<{ workspace?: string }>();
   const canvasRef = useRef<CompositorCanvasHandle>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const audioRef = useRef<HTMLInputElement>(null);
+  // Bring-your-own music: overrides the campaign's audio for the export mix.
+  const [audioOverride, setAudioOverride] = useState<string | null>(null);
+  const [audioAck, setAudioAck] = useState(false);
+  const [uploadingAudio, setUploadingAudio] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(10);
@@ -267,7 +273,7 @@ export function Compositor({
       if (hadLocal) load(materialized);
       const { url } = await requestExport(materialized, params.workspace, {
         campaignId,
-        audioUrl,
+        audioUrl: audioOverride ?? audioUrl,
       });
       setExportUrl(url);
       if (onExported) onExported(url);
@@ -296,7 +302,7 @@ export function Compositor({
         materialized,
         params.workspace,
         fanAspects,
-        { campaignId, audioUrl },
+        { campaignId, audioUrl: audioOverride ?? audioUrl },
       );
       setFanOut(outputs);
       toast.success(
@@ -306,6 +312,38 @@ export function Compositor({
       toast.error((err as Error).message ?? "Export failed");
     } finally {
       setExportingAll(false);
+    }
+  };
+
+  // Bring-your-own music: upload a track (gated by the rights acknowledgment)
+  // and use it as the export mix. The composed MP4 bakes it in, so publish posts
+  // it too — no separate wiring needed below.
+  const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploadingAudio(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("acknowledged", "true");
+      if (campaignId) form.append("campaignId", campaignId);
+      const res = await api("/api/uploads/audio", {
+        method: "POST",
+        body: form,
+        workspaceSlug: params.workspace,
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        url?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.url) throw new Error(data.error ?? "Upload failed");
+      setAudioOverride(data.url);
+      toast.success("Music added — it'll mix into your export.");
+    } catch (err) {
+      toast.error((err as Error).message ?? "Couldn't upload that track.");
+    } finally {
+      setUploadingAudio(false);
     }
   };
 
@@ -374,6 +412,49 @@ export function Compositor({
             </Button>
           ) : (
             <>
+              <label
+                className="flex items-center gap-1 text-[11px] text-muted-foreground"
+                title="Confirm you own or have licensed this track — social platforms mute copyrighted music."
+              >
+                <input
+                  type="checkbox"
+                  checked={audioAck}
+                  onChange={(e) => setAudioAck(e.target.checked)}
+                  className="h-3 w-3 accent-primary"
+                />
+                I own the music
+              </label>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => audioRef.current?.click()}
+                disabled={!audioAck || uploadingAudio}
+                className="h-7 gap-1.5 px-3 text-xs"
+                title="Upload your own cleared music track for the mix"
+              >
+                {uploadingAudio ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Music className="h-3.5 w-3.5" />
+                )}
+                {audioOverride ? "Music added ✓" : "Upload music"}
+              </Button>
+              {audioOverride && (
+                <button
+                  onClick={() => setAudioOverride(null)}
+                  className="text-[11px] text-muted-foreground hover:text-foreground"
+                  title="Revert to the campaign's original audio"
+                >
+                  clear
+                </button>
+              )}
+              <input
+                ref={audioRef}
+                type="file"
+                accept="audio/mpeg,audio/mp3,audio/wav,audio/x-m4a,audio/aac,audio/ogg"
+                className="hidden"
+                onChange={handleAudioUpload}
+              />
               <Button
                 size="sm"
                 onClick={applyBrandKit}
