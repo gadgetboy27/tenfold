@@ -12,6 +12,8 @@ import {
 import { drawFrame, scaledHalfExtents } from "@/lib/composition/render";
 import {
   formatWarnings,
+  isPlatformId,
+  PLATFORM_DURATION,
   type NormRect,
   type RailFormat,
   type SafeZone,
@@ -176,6 +178,8 @@ export function FormatRail({ doc, formats, activeAspect, onPick }: Props) {
   }, [doc, formats, mediaTick, fontsReady]);
 
   if (formats.length === 0) return null;
+  // 0 when unknown, so a missing duration never false-flags "too long".
+  const clipDuration = doc.background.durationSec ?? 0;
 
   return (
     <div className="flex shrink-0 items-stretch gap-2 overflow-x-auto pb-1">
@@ -199,16 +203,27 @@ export function FormatRail({ doc, formats, activeAspect, onPick }: Props) {
       {formats.map((fmt) => {
         const active = fmt.aspect === activeAspect;
         const zones = warnings[fmt.key] ?? [];
-        const flagged = zones.length > 0;
+        // Duration overflow: the clip runs longer than this platform's cap.
+        const cap = isPlatformId(fmt.key)
+          ? PLATFORM_DURATION[fmt.key].max
+          : null;
+        const tooLong = cap != null && clipDuration > cap;
+        const flagged = zones.length > 0 || tooLong;
+        const notes = [
+          ...(zones.length
+            ? [`content under: ${zones.map((z) => z.label).join(", ")}`]
+            : []),
+          ...(tooLong
+            ? [`clip too long (${Math.round(clipDuration)}s > ${cap}s cap)`]
+            : []),
+        ];
         return (
           <button
             key={fmt.key}
             onClick={() => onPick(fmt.aspect)}
             title={
               flagged
-                ? `Heads up — content sits under: ${zones
-                    .map((z) => z.label)
-                    .join(", ")}`
+                ? `Heads up — ${notes.join("; ")}`
                 : `${fmt.label} (${fmt.aspect})`
             }
             className={`group relative flex flex-col items-center gap-1 rounded-lg border p-1.5 transition-colors ${
