@@ -17,6 +17,7 @@ import {
 import {
   drawFrame,
   hitTestLayer,
+  layerBounds,
   layerCenter,
   scaledHalfExtents,
 } from "@/lib/composition/render";
@@ -331,12 +332,12 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
       const rect = canvas.getBoundingClientRect();
       const band = 9 / (rect.width / canvas.width);
       const e = eff(layer);
-      const { halfW: hw, halfH: hh } = scaledHalfExtents(
-        ctx,
-        e,
-        imagesRef.current,
-      );
-      const c = resolveCenter(e.pos, doc!.aspect, hw, hh);
+      // Centre from rotated extents (anchor lockstep); handles on the tight box.
+      const ext = scaledHalfExtents(ctx, e, imagesRef.current);
+      const c = resolveCenter(e.pos, doc!.aspect, ext.halfW, ext.halfH);
+      const bnds = layerBounds(ctx, e, imagesRef.current);
+      const hw = (bnds.width * e.scale) / 2;
+      const hh = (bnds.height * e.scale) / 2;
       const dx = px - c.x;
       const dy = py - c.y;
       if (Math.abs(dx) > hw + band || Math.abs(dy) > hh + band) return null;

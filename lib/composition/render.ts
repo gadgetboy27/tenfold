@@ -65,9 +65,14 @@ export function coverRect(
 
 /**
  * Scaled half-size used for anchoring & hit-testing. Images are anchored by
- * their ROTATED bounding box (matching FFmpeg's rotate-expanded overlay on
+ * their ROTATED bounding box (matching FFmpeg's static rotate=ow=rotw:oh=roth on
  * export); text isn't rotated on export (drawtext limitation), so it stays
  * unrotated — keeping preview and MP4 in lockstep for anchored, rotated layers.
+ *
+ * Known edge: this uses the layer's STATIC rotationDeg. An anchored image with
+ * an ANIMATED rotation effect (spin) is padded to a diagonal square on export
+ * (ow=hypot), so its pinned edge can drift during the spin — the resting/static
+ * placement is correct. Rare combo; not handled (see the manifesto Phase 4 note).
  */
 export function scaledHalfExtents(
   ctx: CanvasRenderingContext2D,
@@ -272,14 +277,14 @@ export function hitTestLayer(
     const master = doc.layers[i];
     // Hit-test the box as it renders in this aspect (overrides applied)…
     const layer = effectiveLayer(master, doc.aspect, doc.overrides);
-    const { halfW, halfH } = scaledHalfExtents(ctx, layer, images);
-    const c = resolveCenter(layer.pos, doc.aspect, halfW, halfH);
-    if (
-      x >= c.x - halfW &&
-      x <= c.x + halfW &&
-      y >= c.y - halfH &&
-      y <= c.y + halfH
-    ) {
+    // Centre uses the rotated extents (anchor lockstep with the export); the hit
+    // BOX uses the tight unrotated dims so it matches the drawn selection outline.
+    const ext = scaledHalfExtents(ctx, layer, images);
+    const c = resolveCenter(layer.pos, doc.aspect, ext.halfW, ext.halfH);
+    const b = layerBounds(ctx, layer, images);
+    const hw = (b.width * layer.scale) / 2;
+    const hh = (b.height * layer.scale) / 2;
+    if (x >= c.x - hw && x <= c.x + hw && y >= c.y - hh && y <= c.y + hh) {
       return master; // …but return the master so selection edits target it by id
     }
   }

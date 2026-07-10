@@ -17,7 +17,10 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
-import { type CompositionAspect } from "@/lib/composition/layers";
+import {
+  effectiveLayer,
+  type CompositionAspect,
+} from "@/lib/composition/layers";
 import { railFormats } from "@/lib/composition/formats";
 import {
   brandKitLayers,
@@ -125,6 +128,13 @@ export function Compositor({
 
   if (!doc) return null;
   const selected = doc.layers.find((l) => l.id === selectedLayerId) ?? null;
+  // In override mode the panel shows/edits the current format's effective layer;
+  // otherwise the master. (Structural ops like kind-conversion still use the
+  // master `selected`.)
+  const panelLayer =
+    selected && overrideMode
+      ? effectiveLayer(selected, doc.aspect, doc.overrides)
+      : selected;
 
   // One-click brand-aware defaults: logo as an end-frame screen-blend layer
   // + tagline caption, from the saved kit (brief §4). Everything it adds is a
@@ -519,7 +529,7 @@ export function Compositor({
           {selected ? (
             <div className="rounded-xl border border-border bg-card p-4">
               <p className="mb-3 text-sm font-semibold">Layer properties</p>
-              <LayerControls layer={selected} />
+              <LayerControls layer={panelLayer ?? selected} />
             </div>
           ) : (
             <div className="rounded-xl border border-dashed border-border p-4">

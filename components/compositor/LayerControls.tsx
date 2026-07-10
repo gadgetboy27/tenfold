@@ -56,23 +56,28 @@ function Row({
 /** Property editor for the selected layer (position edits happen on canvas). */
 export function LayerControls({ layer }: { layer: Layer }) {
   const updateLayer = useCompositorStore((s) => s.updateLayer);
+  const patchLayout = useCompositorStore((s) => s.patchLayout);
   const layerCount = useCompositorStore((s) => s.doc?.layers.length ?? 0);
   const aspect = useCompositorStore((s) => s.doc?.aspect ?? "9:16");
   const set = (patch: Parameters<typeof updateLayer>[1]) =>
     updateLayer(layer.id, patch);
+  // Layout edits (position/size/rotation) go through patchLayout so they honour
+  // override mode — matching the canvas drag/resize behaviour.
+  const setLayout = (patch: Parameters<typeof patchLayout>[1]) =>
+    patchLayout(layer.id, patch);
 
   // Position mode: "Float" reflows proportionally with the frame; "Pin" locks
   // the layer to a corner/edge with a constant margin, so a logo holds its spot
-  // in every format. Pinning is a master decision (applies to all aspects).
+  // in every format.
   const pos = layer.pos;
   const pin = (anchor: LayerAnchor) => {
     const mx = pos.mode === "anchor" ? pos.mx : 0.05;
     const my = pos.mode === "anchor" ? pos.my : 0.05;
-    set({ pos: { mode: "anchor", anchor, mx, my } });
+    setLayout({ pos: { mode: "anchor", anchor, mx, my } });
   };
   const float = () => {
     if (pos.mode !== "anchor") return;
-    set({
+    setLayout({
       pos: {
         mode: "fraction",
         ...anchorToFraction(pos.anchor, pos.mx, pos.my, aspect),
@@ -131,7 +136,7 @@ export function LayerControls({ layer }: { layer: Layer }) {
               max={240}
               step={1}
               value={[layer.sizePx]}
-              onValueChange={([v]) => set({ sizePx: v })}
+              onValueChange={([v]) => setLayout({ sizePx: v })}
             />
           </Row>
           <Row label="Colour">
@@ -197,7 +202,7 @@ export function LayerControls({ layer }: { layer: Layer }) {
           max={3}
           step={0.01}
           value={[layer.scale]}
-          onValueChange={([v]) => set({ scale: v })}
+          onValueChange={([v]) => setLayout({ scale: v })}
         />
       </Row>
       <Row label="Rotation">
@@ -207,7 +212,7 @@ export function LayerControls({ layer }: { layer: Layer }) {
             max={180}
             step={15}
             value={[layer.rotationDeg]}
-            onValueChange={([v]) => set({ rotationDeg: v })}
+            onValueChange={([v]) => setLayout({ rotationDeg: v })}
           />
           <span className="w-11 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
             {layer.rotationDeg}°

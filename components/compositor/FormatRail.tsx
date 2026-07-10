@@ -9,7 +9,7 @@ import {
   type CompositionAspect,
   type CompositionDoc,
 } from "@/lib/composition/layers";
-import { drawFrame, layerBounds } from "@/lib/composition/render";
+import { drawFrame, scaledHalfExtents } from "@/lib/composition/render";
 import {
   formatWarnings,
   type NormRect,
@@ -154,9 +154,13 @@ export function FormatRail({ doc, formats, activeAspect, onPick }: Props) {
       const design = ASPECT_DESIGN[fmt.aspect];
       const boxes: NormRect[] = doc.layers.map((master) => {
         const layer = effectiveLayer(master, fmt.aspect, doc.overrides);
-        const b = layerBounds(probe, layer, imagesRef.current);
-        const halfW = (b.width * layer.scale) / 2;
-        const halfH = (b.height * layer.scale) / 2;
+        // Rotated footprint (matches the exported overlay) so the ⚠ box
+        // reflects what actually lands under the chrome.
+        const { halfW, halfH } = scaledHalfExtents(
+          probe,
+          layer,
+          imagesRef.current,
+        );
         const c = resolveCenter(layer.pos, fmt.aspect, halfW, halfH);
         return {
           x: (c.x - halfW) / design.width,

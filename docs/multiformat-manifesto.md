@@ -146,6 +146,13 @@ the export, but the compositions PATCH route doesn't persist it yet — so
 per-format nudges survive a session and an export, not a reload. The DB column +
 PATCH wiring lands with the fan-out work.
 
+**Known edge (accepted, not fixed):** an anchor-pinned image that ALSO has an
+animated rotation effect (spin) drifts from its pinned edge _during_ the spin —
+the export pads the spinning overlay to a diagonal square while the preview uses
+the static-angle bounding box. The resting placement is correct; only the
+in-motion frames disagree. Left as-is (rare combo; a fix would couple the
+renderer to the effects system). `scaledHalfExtents` in `render.ts` documents it.
+
 ---
 
 ## 7. Invariants (do not break)
