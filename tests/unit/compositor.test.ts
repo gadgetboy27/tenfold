@@ -3,6 +3,7 @@ import {
   ASPECT_DESIGN,
   ASPECT_TO_FORMAT,
   BLEND_MODES,
+  anchorToFraction,
   centerToPos,
   compositionDocSchema,
   effectiveLayer,
@@ -11,6 +12,7 @@ import {
   layerSchema,
   migrateDocInput,
   resolveCenter,
+  rotatedHalfExtents,
   type CompositionDoc,
   type Layer,
 } from "@/lib/composition/layers";
@@ -187,6 +189,39 @@ describe("aspect-independent layout", () => {
     // Idempotent: a doc that already has pos passes straight through.
     const twice = compositionDocSchema.parse(migrateDocInput(legacy));
     expect(twice.layers[0].pos).toEqual({ mode: "fraction", nx: 0.5, ny: 0.5 });
+  });
+});
+
+describe("anchor pinning + rotation", () => {
+  it("rotatedHalfExtents leaves an unrotated box unchanged", () => {
+    expect(rotatedHalfExtents(100, 40, 0)).toEqual({ halfW: 100, halfH: 40 });
+  });
+
+  it("rotatedHalfExtents swaps extents at 90° and grows the bbox at 45°", () => {
+    const r90 = rotatedHalfExtents(100, 40, 90);
+    expect(r90.halfW).toBeCloseTo(40);
+    expect(r90.halfH).toBeCloseTo(100);
+    // 45° square: bbox half grows by ~√2.
+    const r45 = rotatedHalfExtents(100, 100, 45);
+    expect(r45.halfW).toBeCloseTo(141.42, 1);
+    expect(r45.halfH).toBeCloseTo(141.42, 1);
+  });
+
+  it("anchorToFraction places a corner near its edge, accounting for aspect", () => {
+    // 1:1 (W=H=1080=min): margin fraction maps 1:1.
+    expect(anchorToFraction("bottom-right", 0.05, 0.05, "1:1")).toEqual({
+      nx: 0.95,
+      ny: 0.95,
+    });
+    // 16:9 (W=1920, min=1080): the horizontal margin fraction shrinks.
+    const wide = anchorToFraction("bottom-right", 0.05, 0.05, "16:9");
+    expect(wide.nx).toBeCloseTo(1 - (0.05 * 1080) / 1920);
+    expect(wide.ny).toBeCloseTo(0.95);
+    // Centre anchor sits dead centre regardless of margin.
+    expect(anchorToFraction("center", 0.05, 0.05, "9:16")).toEqual({
+      nx: 0.5,
+      ny: 0.5,
+    });
   });
 });
 

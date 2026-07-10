@@ -17,8 +17,8 @@ import {
 import {
   drawFrame,
   hitTestLayer,
-  layerBounds,
   layerCenter,
+  scaledHalfExtents,
 } from "@/lib/composition/render";
 import { wrapText } from "@/lib/composition/brand-apply";
 import { ensureBrandFontsLoaded } from "@/lib/composition/fonts";
@@ -331,9 +331,11 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
       const rect = canvas.getBoundingClientRect();
       const band = 9 / (rect.width / canvas.width);
       const e = eff(layer);
-      const b = layerBounds(ctx, e, imagesRef.current);
-      const hw = (b.width * e.scale) / 2;
-      const hh = (b.height * e.scale) / 2;
+      const { halfW: hw, halfH: hh } = scaledHalfExtents(
+        ctx,
+        e,
+        imagesRef.current,
+      );
       const c = resolveCenter(e.pos, doc!.aspect, hw, hh);
       const dx = px - c.x;
       const dy = py - c.y;
@@ -455,15 +457,19 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
         const layer = eff(master);
         // New design-space centre → aspect-independent pos (mode-preserving).
         // Writes to the master, or this aspect's override in override mode.
-        const b = layerBounds(ctx, layer, imagesRef.current);
+        const { halfW, halfH } = scaledHalfExtents(
+          ctx,
+          layer,
+          imagesRef.current,
+        );
         patchLayout(a.id, {
           pos: centerToPos(
             layer.pos,
             p.x - a.dx,
             p.y - a.dy,
             doc.aspect,
-            (b.width * layer.scale) / 2,
-            (b.height * layer.scale) / 2,
+            halfW,
+            halfH,
           ),
         });
         return;

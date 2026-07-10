@@ -1,10 +1,12 @@
 "use client";
 
 import {
+  anchorToFraction,
   BLEND_MODES,
   type EffectInKind,
   type EffectLoopKind,
   type EffectOutKind,
+  type LayerAnchor,
 } from "@/lib/composition/layers";
 import {
   EFFECTS_IN,
@@ -20,6 +22,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 
 const FONTS = ["Inter", "Montserrat", "Playfair Display", "Lora", "Roboto"];
+
+// 3×3 anchor grid order (top row → bottom row).
+const ANCHOR_GRID: LayerAnchor[] = [
+  "top-left",
+  "top",
+  "top-right",
+  "left",
+  "center",
+  "right",
+  "bottom-left",
+  "bottom",
+  "bottom-right",
+];
 
 function Row({
   label,
@@ -42,8 +57,28 @@ function Row({
 export function LayerControls({ layer }: { layer: Layer }) {
   const updateLayer = useCompositorStore((s) => s.updateLayer);
   const layerCount = useCompositorStore((s) => s.doc?.layers.length ?? 0);
+  const aspect = useCompositorStore((s) => s.doc?.aspect ?? "9:16");
   const set = (patch: Parameters<typeof updateLayer>[1]) =>
     updateLayer(layer.id, patch);
+
+  // Position mode: "Float" reflows proportionally with the frame; "Pin" locks
+  // the layer to a corner/edge with a constant margin, so a logo holds its spot
+  // in every format. Pinning is a master decision (applies to all aspects).
+  const pos = layer.pos;
+  const pin = (anchor: LayerAnchor) => {
+    const mx = pos.mode === "anchor" ? pos.mx : 0.05;
+    const my = pos.mode === "anchor" ? pos.my : 0.05;
+    set({ pos: { mode: "anchor", anchor, mx, my } });
+  };
+  const float = () => {
+    if (pos.mode !== "anchor") return;
+    set({
+      pos: {
+        mode: "fraction",
+        ...anchorToFraction(pos.anchor, pos.mx, pos.my, aspect),
+      },
+    });
+  };
 
   // Materialised effects (maps legacy fadeSec on old layers); edits always
   // write the explicit effects object.
@@ -110,6 +145,52 @@ export function LayerControls({ layer }: { layer: Layer }) {
         </>
       )}
 
+      <Row label="Position">
+        <div className="space-y-1.5">
+          <div className="flex gap-1">
+            <button
+              onClick={float}
+              className={`flex-1 rounded-md border px-2 py-1 text-xs transition-colors ${
+                pos.mode === "fraction"
+                  ? "border-primary/50 bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground hover:text-foreground"
+              }`}
+              title="Reflow proportionally with each format"
+            >
+              Float
+            </button>
+            <button
+              onClick={() =>
+                pin(pos.mode === "anchor" ? pos.anchor : "bottom-right")
+              }
+              className={`flex-1 rounded-md border px-2 py-1 text-xs transition-colors ${
+                pos.mode === "anchor"
+                  ? "border-primary/50 bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground hover:text-foreground"
+              }`}
+              title="Pin to a corner/edge with a constant margin in every format"
+            >
+              Pin
+            </button>
+          </div>
+          {pos.mode === "anchor" && (
+            <div className="grid w-fit grid-cols-3 gap-0.5">
+              {ANCHOR_GRID.map((a) => (
+                <button
+                  key={a}
+                  onClick={() => pin(a)}
+                  title={a}
+                  className={`h-5 w-5 rounded-sm border transition-colors ${
+                    pos.anchor === a
+                      ? "border-primary bg-primary"
+                      : "border-border bg-background hover:border-primary/50"
+                  }`}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </Row>
       <Row label="Scale">
         <Slider
           min={0.05}

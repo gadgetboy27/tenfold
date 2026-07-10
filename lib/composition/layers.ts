@@ -230,6 +230,40 @@ export function resolveCenter(
   return { x, y };
 }
 
+/** Half-extents of a box's AXIS-ALIGNED bounding box after rotation. Anchoring
+ *  an image uses this so the preview pins the same rotated box FFmpeg's rotate
+ *  filter produces on export (docs/multiformat-manifesto.md §6). */
+export function rotatedHalfExtents(
+  halfW: number,
+  halfH: number,
+  rotationDeg: number,
+): { halfW: number; halfH: number } {
+  const r = (rotationDeg * Math.PI) / 180;
+  const c = Math.abs(Math.cos(r));
+  const s = Math.abs(Math.sin(r));
+  return { halfW: halfW * c + halfH * s, halfH: halfW * s + halfH * c };
+}
+
+/** Approximate fraction pos for the CENTRE implied by an anchor+margin in a
+ *  given aspect (ignores the layer's own size — a good-enough "unpin" nudge that
+ *  keeps the layer near its pinned corner). */
+export function anchorToFraction(
+  anchor: LayerAnchor,
+  mx: number,
+  my: number,
+  aspect: CompositionAspect,
+): { nx: number; ny: number } {
+  const { width: W, height: H } = ASPECT_DESIGN[aspect];
+  const m = Math.min(W, H);
+  const fx = (mx * m) / W;
+  const fy = (my * m) / H;
+  const { h, v } = anchorAxes(anchor);
+  return {
+    nx: h === "left" ? fx : h === "right" ? 1 - fx : 0.5,
+    ny: v === "top" ? fy : v === "bottom" ? 1 - fy : 0.5,
+  };
+}
+
 /** Inverse of resolveCenter — mode-preserving. Dragging a fraction layer
  *  rewrites its fraction; dragging an anchor layer recomputes the margins of
  *  its anchored edges (centre-anchored axes hold their prior margin). */

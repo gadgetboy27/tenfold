@@ -3,6 +3,7 @@ import {
   blendToCanvas,
   effectiveLayer,
   resolveCenter,
+  rotatedHalfExtents,
   type CompositionAspect,
   type CompositionDoc,
   type Layer,
@@ -62,6 +63,25 @@ export function coverRect(
   return { x: (dstW - width) / 2, y: (dstH - height) / 2, width, height };
 }
 
+/**
+ * Scaled half-size used for anchoring & hit-testing. Images are anchored by
+ * their ROTATED bounding box (matching FFmpeg's rotate-expanded overlay on
+ * export); text isn't rotated on export (drawtext limitation), so it stays
+ * unrotated — keeping preview and MP4 in lockstep for anchored, rotated layers.
+ */
+export function scaledHalfExtents(
+  ctx: CanvasRenderingContext2D,
+  layer: Layer,
+  images: Map<string, HTMLImageElement>,
+): { halfW: number; halfH: number } {
+  const b = layerBounds(ctx, layer, images);
+  const halfW = (b.width * layer.scale) / 2;
+  const halfH = (b.height * layer.scale) / 2;
+  return layer.kind === "image"
+    ? rotatedHalfExtents(halfW, halfH, layer.rotationDeg)
+    : { halfW, halfH };
+}
+
 /** Design-space centre of a layer for the given aspect (resolves its pos). */
 export function layerCenter(
   ctx: CanvasRenderingContext2D,
@@ -69,13 +89,8 @@ export function layerCenter(
   aspect: CompositionAspect,
   images: Map<string, HTMLImageElement>,
 ): { x: number; y: number } {
-  const b = layerBounds(ctx, layer, images);
-  return resolveCenter(
-    layer.pos,
-    aspect,
-    (b.width * layer.scale) / 2,
-    (b.height * layer.scale) / 2,
-  );
+  const { halfW, halfH } = scaledHalfExtents(ctx, layer, images);
+  return resolveCenter(layer.pos, aspect, halfW, halfH);
 }
 
 function drawLayer(
@@ -257,9 +272,7 @@ export function hitTestLayer(
     const master = doc.layers[i];
     // Hit-test the box as it renders in this aspect (overrides applied)…
     const layer = effectiveLayer(master, doc.aspect, doc.overrides);
-    const b = layerBounds(ctx, layer, images);
-    const halfW = (b.width * layer.scale) / 2;
-    const halfH = (b.height * layer.scale) / 2;
+    const { halfW, halfH } = scaledHalfExtents(ctx, layer, images);
     const c = resolveCenter(layer.pos, doc.aspect, halfW, halfH);
     if (
       x >= c.x - halfW &&

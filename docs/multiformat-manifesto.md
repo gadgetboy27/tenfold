@@ -106,8 +106,8 @@ Migration is idempotent (skips layers that already have `pos`).
 | **1** | Coordinate refactor: `pos` model, `resolveCenter`/`centerToPos`, `setAspect` reflows, legacy migration, tests | ✅ done  |
 | **2** | Format registry + safe-zone config (`lib/composition/formats.ts`)                                             | ✅ done  |
 | **3** | Format rail UI: live thumbnails per connected platform + ⚠ safe-zone flags                                    | ✅ done  |
-| 4     | Per-format overrides (delta storage on the doc) + anchor "pin to corner" control                              | **NEXT** |
-| 5     | Fan-out export + batch publish, each locked to its platform                                                   | pending  |
+| **4** | Per-format overrides (delta storage on the doc) + anchor "pin to corner" control                              | ✅ done  |
+| 5     | Fan-out export + batch publish (+ persist `overrides` to the DB), each locked to its platform                 | **NEXT** |
 | 6     | _(optional)_ vision "auto-fix this format" button (credits)                                                   | pending  |
 
 ---
@@ -132,20 +132,19 @@ Migration is idempotent (skips layers that already have `pos`).
 - **Size adaptation.** `scale` / `sizePx` stay as authored (constant px). Because
   the min axis is a constant 1080, sizes read consistently across aspects for v1.
   Canvas-relative sizing is a later refinement.
-- **A UI control to mark a layer as anchor-pinned.** The model, resolver, and
-  export fully support anchor mode and it is unit-tested, but current seeders all
-  emit fraction. The "pin to corner" control is deferred to Phase 4 (alongside
-  per-format overrides), where the rotated-anchor fix below is also resolved.
-  - **Known constraint to resolve alongside anchor authoring:** anchor pinning
-    uses the layer's _un-rotated_ half-size, while the FFmpeg export pins the
-    _rotated_ bounding box (the `rotate` filter expands `w`/`h` via
-    `rotw`/`roth`). So an anchor layer with `rotationDeg != 0` would sit a
-    different distance from its corner in preview vs. MP4. Unreachable today
-    (nothing emits anchor pos; fraction mode is immune because it centres
-    regardless of size). Fix when the pin UI lands: feed `resolveCenter` the
-    rotated bounding-box half-size for rotated anchor layers.
-- Multi-format documents, per-format overrides, the rail, fan-out, vision — all
-  later phases.
+- ~~**A UI control to mark a layer as anchor-pinned.**~~ **Shipped in Phase 4**
+  — the LayerControls "Float / Pin" toggle + 3×3 anchor grid. The rotated-anchor
+  fix landed with it: `scaledHalfExtents` feeds `resolveCenter` the _rotated_
+  bounding-box half-size for image layers (matching FFmpeg's rotate-expanded
+  overlay), while text stays unrotated (drawtext can't rotate) — preview and MP4
+  now agree for anchored, rotated layers.
+- Multi-format documents & per-format overrides, the rail, anchor pin — all
+  shipped (Phases 3–4). Fan-out export + `overrides` DB persistence, vision — later.
+
+**Phase 4 follow-up (Phase 5):** `overrides` rides on the doc and is honoured by
+the export, but the compositions PATCH route doesn't persist it yet — so
+per-format nudges survive a session and an export, not a reload. The DB column +
+PATCH wiring lands with the fan-out work.
 
 ---
 
