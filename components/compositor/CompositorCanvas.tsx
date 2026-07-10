@@ -10,6 +10,7 @@ import {
 import {
   ASPECT_DESIGN,
   centerToPos,
+  effectiveLayer,
   resolveCenter,
   type Layer,
 } from "@/lib/composition/layers";
@@ -90,6 +91,7 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
     const selectedLayerId = useCompositorStore((s) => s.selectedLayerId);
     const selectLayer = useCompositorStore((s) => s.selectLayer);
     const updateLayer = useCompositorStore((s) => s.updateLayer);
+    const patchLayout = useCompositorStore((s) => s.patchLayout);
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -250,7 +252,9 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
         const c = canvas.getBoundingClientRect();
         const w = wrapper.getBoundingClientRect();
         const s = c.width / canvas.width;
-        const centre = layerCenter(ctx, layer, doc.aspect, imagesRef.current);
+        // Inline (not the `eff` closure) so this effect's deps stay stable.
+        const e = effectiveLayer(layer, doc.aspect, doc.overrides);
+        const centre = layerCenter(ctx, e, doc.aspect, imagesRef.current);
         setEditing(
           (prev) =>
             prev && {
@@ -258,7 +262,8 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
               left: c.left - w.left + centre.x * s,
               top: c.top - w.top + centre.y * s,
               width: Math.min(c.width * 0.85, 560),
-              fontSize: Math.max(11, layer.sizePx * layer.scale * s),
+              fontSize:
+                e.kind === "text" ? Math.max(11, e.sizePx * e.scale * s) : 11,
             },
         );
       };
@@ -275,6 +280,11 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
         y: ((e.clientY - rect.top) / rect.height) * canvas.height,
       };
     };
+
+    // The layer as it renders in the current aspect — per-format overrides
+    // applied — so geometry (centre/bounds/handles) matches what's on screen.
+    const eff = (layer: Layer): Layer =>
+      doc ? effectiveLayer(layer, doc.aspect, doc.overrides) : layer;
 
     // Inline text editing: a DOM textarea positioned over the layer, in the
     // layer's own font/colour. Click a selected text layer (or double-click
@@ -297,13 +307,14 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
       const c = canvas.getBoundingClientRect();
       const w = wrapper.getBoundingClientRect();
       const s = c.width / canvas.width; // design px → display px
-      const centre = layerCenter(ctx, layer, doc.aspect, imagesRef.current);
+      const e = eff(layer);
+      const centre = layerCenter(ctx, e, doc.aspect, imagesRef.current);
       setEditing({
         id: layer.id,
         left: c.left - w.left + centre.x * s,
         top: c.top - w.top + centre.y * s,
         width: Math.min(c.width * 0.85, 560),
-        fontSize: Math.max(11, layer.sizePx * layer.scale * s),
+        fontSize: e.kind === "text" ? Math.max(11, e.sizePx * e.scale * s) : 11,
       });
       selectLayer(layer.id);
     };
@@ -319,10 +330,11 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
       const canvas = canvasRef.current!;
       const rect = canvas.getBoundingClientRect();
       const band = 9 / (rect.width / canvas.width);
-      const b = layerBounds(ctx, layer, imagesRef.current);
-      const hw = (b.width * layer.scale) / 2;
-      const hh = (b.height * layer.scale) / 2;
-      const c = resolveCenter(layer.pos, doc!.aspect, hw, hh);
+      const e = eff(layer);
+      const b = layerBounds(ctx, e, imagesRef.current);
+      const hw = (b.width * e.scale) / 2;
+      const hh = (b.height * e.scale) / 2;
+      const c = resolveCenter(e.pos, doc!.aspect, hw, hh);
       const dx = px - c.x;
       const dy = py - c.y;
       if (Math.abs(dx) > hw + band || Math.abs(dy) > hh + band) return null;
@@ -354,16 +366,22 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
       const sel = doc.layers.find((l) => l.id === selectedLayerId);
       const selZone = sel ? zoneFor(ctx, sel, p.x, p.y) : null;
       if (sel && selZone && selZone !== "move") {
+        const selEff = eff(sel);
         let raw: string | undefined;
         let avgCharW: number | undefined;
-        if (sel.kind === "text") {
-          raw = sel.text.replace(/\n/g, " ");
+        if (selEff.kind === "text") {
+          raw = selEff.text.replace(/\n/g, " ");
           ctx.save();
-          ctx.font = `${sel.sizePx}px "${sel.font}", sans-serif`;
+          ctx.font = `${selEff.sizePx}px "${selEff.font}", sans-serif`;
           avgCharW = ctx.measureText(raw).width / Math.max(1, raw.length);
           ctx.restore();
         }
-        const selCentre = layerCenter(ctx, sel, doc.aspect, imagesRef.current);
+        const selCentre = layerCenter(
+          ctx,
+          selEff,
+          doc.aspect,
+          imagesRef.current,
+        );
         action.current = {
           mode: "resize",
           id: sel.id,
@@ -372,7 +390,7 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
           cy: selCentre.y,
           startX: p.x,
           startY: p.y,
-          startScale: sel.scale,
+          startScale: selEff.scale,
           raw,
           avgCharW,
         };
@@ -384,7 +402,12 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
       const wasSelected = hit?.id === selectedLayerId;
       selectLayer(hit?.id ?? null);
       if (hit) {
-        const hitCentre = layerCenter(ctx, hit, doc.aspect, imagesRef.current);
+        const hitCentre = layerCenter(
+          ctx,
+          eff(hit),
+          doc.aspect,
+          imagesRef.current,
+        );
         action.current = {
           mode: "move",
           id: hit.id,
@@ -427,11 +450,13 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
         )
           return;
         a.moved = true;
-        const layer = doc.layers.find((l) => l.id === a.id);
-        if (!layer) return;
+        const master = doc.layers.find((l) => l.id === a.id);
+        if (!master) return;
+        const layer = eff(master);
         // New design-space centre → aspect-independent pos (mode-preserving).
+        // Writes to the master, or this aspect's override in override mode.
         const b = layerBounds(ctx, layer, imagesRef.current);
-        updateLayer(a.id, {
+        patchLayout(a.id, {
           pos: centerToPos(
             layer.pos,
             p.x - a.dx,
@@ -446,8 +471,9 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
 
       // Resize. Text pulled by a side edge re-wraps to fill the new box
       // width (same centre and margins); everything else scales uniformly.
-      const layer = doc.layers.find((l) => l.id === a.id);
-      if (!layer) return;
+      const master = doc.layers.find((l) => l.id === a.id);
+      if (!master) return;
+      const layer = eff(master);
       const sideOnly = a.zone === "l" || a.zone === "r";
       if (layer.kind === "text" && sideOnly && a.raw && a.avgCharW) {
         const targetW = Math.max(80, Math.abs(p.x - a.cx) * 2);
@@ -457,6 +483,7 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
         );
         if (maxChars !== a.lastMaxChars) {
           a.lastMaxChars = maxChars;
+          // Re-wrapping changes text content → shared across formats (master).
           updateLayer(a.id, { text: wrapText(a.raw, maxChars) });
         }
         return;
@@ -468,7 +495,7 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
           ? Math.abs(p.y - a.cy) / Math.max(1, Math.abs(a.startY - a.cy))
           : Math.hypot(p.x - a.cx, p.y - a.cy) /
             Math.max(1, Math.hypot(a.startX - a.cx, a.startY - a.cy));
-      updateLayer(a.id, {
+      patchLayout(a.id, {
         scale: Math.min(20, Math.max(0.05, a.startScale * f)),
       });
     };

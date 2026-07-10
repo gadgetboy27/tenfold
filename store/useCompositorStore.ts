@@ -7,6 +7,7 @@ import type {
   CompositionDoc,
   ImageLayer,
   Layer,
+  LayerOverride,
   TextLayer,
 } from "@/lib/composition/layers";
 
@@ -25,16 +26,26 @@ interface CompositorState {
   doc: CompositionDoc | null;
   selectedLayerId: string | null;
   dirty: boolean;
+  /** When true, canvas geometry edits (drag/resize) write to the CURRENT
+   *  aspect's per-format override instead of the shared master layer. */
+  overrideMode: boolean;
 
   load: (doc: CompositionDoc) => void;
   reset: () => void;
   markSaved: () => void;
   selectLayer: (id: string | null) => void;
+  setOverrideMode: (on: boolean) => void;
 
   setAspect: (aspect: CompositionAspect) => void;
   setBackground: (background: CompositionBackground) => void;
   addLayer: (layer: Layer) => void;
   updateLayer: (id: string, patch: LayerPatch) => void;
+  /** Layout edit (position/size/rotation) from the canvas — writes to the
+   *  master, or to the current aspect's override when overrideMode is on. */
+  patchLayout: (id: string, patch: LayerOverride) => void;
+  /** Drop the current aspect's override for one layer, or all layers (no id),
+   *  reverting them to the master layout. */
+  resetOverride: (id?: string) => void;
   /** Swap a layer in place (same stack position) — e.g. image ⇄ text
    *  conversion. The replacement keeps the old id via the caller. */
   replaceLayer: (id: string, layer: Layer) => void;
@@ -56,6 +67,7 @@ export const useCompositorStore = create<CompositorState>((set) => ({
   doc: null,
   selectedLayerId: null,
   dirty: false,
+  overrideMode: false,
 
   // Auto-select the top layer so the properties/effects panel is visible
   // immediately — users shouldn't have to click around to discover it.
@@ -66,10 +78,18 @@ export const useCompositorStore = create<CompositorState>((set) => ({
         ? doc.layers[doc.layers.length - 1].id
         : null,
       dirty: false,
+      overrideMode: false,
     }),
-  reset: () => set({ doc: null, selectedLayerId: null, dirty: false }),
+  reset: () =>
+    set({
+      doc: null,
+      selectedLayerId: null,
+      dirty: false,
+      overrideMode: false,
+    }),
   markSaved: () => set({ dirty: false }),
   selectLayer: (id) => set({ selectedLayerId: id }),
+  setOverrideMode: (on) => set({ overrideMode: on }),
 
   setAspect: (aspect) => set((s) => editDoc(s, (doc) => ({ ...doc, aspect }))),
 
@@ -91,6 +111,48 @@ export const useCompositorStore = create<CompositorState>((set) => ({
         ),
       })),
     ),
+
+  patchLayout: (id, patch) =>
+    set((s) => {
+      if (!s.doc) return {};
+      // Default: edit the shared master layer (affects every format via reflow).
+      if (!s.overrideMode) {
+        return editDoc(s, (doc) => ({
+          ...doc,
+          layers: doc.layers.map((l) =>
+            l.id === id ? ({ ...l, ...patch } as Layer) : l,
+          ),
+        }));
+      }
+      // Override mode: merge the delta into this aspect's override only.
+      const aspect = s.doc.aspect;
+      return editDoc(s, (doc) => {
+        const overrides = { ...(doc.overrides ?? {}) };
+        const forAspect = { ...(overrides[aspect] ?? {}) };
+        forAspect[id] = { ...(forAspect[id] ?? {}), ...patch };
+        overrides[aspect] = forAspect;
+        return { ...doc, overrides };
+      });
+    }),
+
+  resetOverride: (id) =>
+    set((s) => {
+      if (!s.doc?.overrides) return {};
+      const aspect = s.doc.aspect;
+      return editDoc(s, (doc) => {
+        const overrides = { ...(doc.overrides ?? {}) };
+        if (!overrides[aspect]) return doc;
+        if (id === undefined) {
+          delete overrides[aspect];
+        } else {
+          const forAspect = { ...overrides[aspect] };
+          delete forAspect[id];
+          if (Object.keys(forAspect).length) overrides[aspect] = forAspect;
+          else delete overrides[aspect];
+        }
+        return { ...doc, overrides };
+      });
+    }),
 
   replaceLayer: (id, layer) =>
     set((s) => ({

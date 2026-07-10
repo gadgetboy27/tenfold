@@ -1,6 +1,7 @@
 import {
   ASPECT_DESIGN,
   blendToCanvas,
+  effectiveLayer,
   resolveCenter,
   type CompositionAspect,
   type CompositionDoc,
@@ -170,13 +171,15 @@ export function drawFrame(
   const effectCtx: EffectCtx = { W: width, H: height };
   let selectedGhosted = false;
 
-  for (const layer of input.doc.layers) {
-    if (layer.id === input.editingLayerId) continue; // DOM textarea covers it
+  for (const master of input.doc.layers) {
+    if (master.id === input.editingLayerId) continue; // DOM textarea covers it
+    // Apply this aspect's per-format nudges before drawing.
+    const layer = effectiveLayer(master, input.doc.aspect, input.doc.overrides);
     // Effects share one motion function with the FFmpeg export
     // (lib/composition/effects.ts) — preview and MP4 stay identical.
     const motion = motionAt(layer, input.t, input.clipDuration, effectCtx);
     const hidden = timingHidden(motion, layer.opacity);
-    const isSelected = layer.id === input.selectedLayerId;
+    const isSelected = master.id === input.selectedLayerId;
 
     if (!hidden && motion) {
       drawLayer(ctx, layer, motion, input.doc.aspect, input.images);
@@ -207,7 +210,12 @@ export function drawFrame(
     selected.id !== input.editingLayerId &&
     (selectedGhosted || dragging || input.forceOutline)
   ) {
-    drawSelectionOutline(ctx, selected, input.doc.aspect, input.images);
+    drawSelectionOutline(
+      ctx,
+      effectiveLayer(selected, input.doc.aspect, input.doc.overrides),
+      input.doc.aspect,
+      input.images,
+    );
   }
 }
 
@@ -246,7 +254,9 @@ export function hitTestLayer(
   images: Map<string, HTMLImageElement>,
 ): Layer | null {
   for (let i = doc.layers.length - 1; i >= 0; i--) {
-    const layer = doc.layers[i];
+    const master = doc.layers[i];
+    // Hit-test the box as it renders in this aspect (overrides applied)…
+    const layer = effectiveLayer(master, doc.aspect, doc.overrides);
     const b = layerBounds(ctx, layer, images);
     const halfW = (b.width * layer.scale) / 2;
     const halfH = (b.height * layer.scale) / 2;
@@ -257,7 +267,7 @@ export function hitTestLayer(
       y >= c.y - halfH &&
       y <= c.y + halfH
     ) {
-      return layer;
+      return master; // …but return the master so selection edits target it by id
     }
   }
   return null;

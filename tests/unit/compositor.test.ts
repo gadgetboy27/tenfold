@@ -5,6 +5,7 @@ import {
   BLEND_MODES,
   centerToPos,
   compositionDocSchema,
+  effectiveLayer,
   formatToAspect,
   layerAlphaAt,
   layerSchema,
@@ -189,6 +190,34 @@ describe("aspect-independent layout", () => {
   });
 });
 
+describe("per-format overrides", () => {
+  it("returns the master layer untouched when no override applies", () => {
+    expect(effectiveLayer(imageLayer, "9:16", undefined)).toBe(imageLayer);
+    // An override for a DIFFERENT aspect must not leak in.
+    expect(
+      effectiveLayer(imageLayer, "9:16", {
+        "1:1": { [imageLayer.id]: { scale: 2 } },
+      }),
+    ).toBe(imageLayer);
+  });
+
+  it("merges only the overridden aspect's layout fields", () => {
+    const eff = effectiveLayer(imageLayer, "1:1", {
+      "1:1": {
+        [imageLayer.id]: {
+          scale: 2,
+          pos: { mode: "fraction", nx: 0.1, ny: 0.1 },
+        },
+      },
+    });
+    expect(eff.scale).toBe(2);
+    expect(eff.pos).toEqual({ mode: "fraction", nx: 0.1, ny: 0.1 });
+    // Identity + content (blend, timing) survive.
+    expect(eff.id).toBe(imageLayer.id);
+    expect(eff.blend).toBe(imageLayer.blend);
+  });
+});
+
 describe("layerAlphaAt", () => {
   it("is 0 outside the visible window", () => {
     expect(layerAlphaAt(imageLayer, 7.9, 10)).toBe(0);
@@ -331,6 +360,26 @@ describe("useCompositorStore", () => {
     // the stored pos is untouched.
     expect(s().doc!.aspect).toBe("16:9");
     expect(s().doc!.layers.map((l) => l.pos)).toEqual(before);
+  });
+
+  it("patchLayout writes the master by default, this aspect's override in override mode", () => {
+    const s = () => useCompositorStore.getState();
+    s().load(doc); // aspect 9:16
+
+    // Default: layout edits land on the shared master layer.
+    s().patchLayout("logo-1", { scale: 3 });
+    expect(s().doc!.layers.find((l) => l.id === "logo-1")!.scale).toBe(3);
+    expect(s().doc!.overrides).toBeUndefined();
+
+    // Override mode: the master is untouched, the delta lands on 9:16 only.
+    s().setOverrideMode(true);
+    s().patchLayout("logo-1", { scale: 5 });
+    expect(s().doc!.layers.find((l) => l.id === "logo-1")!.scale).toBe(3);
+    expect(s().doc!.overrides!["9:16"]!["logo-1"].scale).toBe(5);
+
+    // Reset reverts this format to the master layout.
+    s().resetOverride("logo-1");
+    expect(s().doc!.overrides?.["9:16"]).toBeUndefined();
   });
 
   it("adds, reorders and removes layers", () => {

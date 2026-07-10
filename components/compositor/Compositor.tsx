@@ -65,6 +65,9 @@ export function Compositor({
   const addLayer = useCompositorStore((s) => s.addLayer);
   const replaceLayer = useCompositorStore((s) => s.replaceLayer);
   const load = useCompositorStore((s) => s.load);
+  const overrideMode = useCompositorStore((s) => s.overrideMode);
+  const setOverrideMode = useCompositorStore((s) => s.setOverrideMode);
+  const resetOverride = useCompositorStore((s) => s.resetOverride);
 
   const params = useParams<{ workspace?: string }>();
   const canvasRef = useRef<CompositorCanvasHandle>(null);
@@ -284,6 +287,36 @@ export function Compositor({
               {a}
             </button>
           ))}
+
+          {!isPreview && (
+            <>
+              <span className="mx-1 h-4 w-px bg-border" />
+              <button
+                onClick={() => setOverrideMode(!overrideMode)}
+                title={
+                  overrideMode
+                    ? `Edits apply to the ${doc.aspect} format only`
+                    : "Edits apply to every format (the master design)"
+                }
+                className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
+                  overrideMode
+                    ? "border-amber-500/60 bg-amber-500/10 text-amber-500"
+                    : "border-border text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {overrideMode ? `Editing ${doc.aspect} only` : "Editing master"}
+              </button>
+              {doc.overrides?.[doc.aspect] && (
+                <button
+                  onClick={() => resetOverride()}
+                  title={`Revert ${doc.aspect} to the master layout`}
+                  className="rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  Reset {doc.aspect}
+                </button>
+              )}
+            </>
+          )}
           {isPreview ? (
             <Button
               size="sm"

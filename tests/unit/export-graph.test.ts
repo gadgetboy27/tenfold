@@ -133,6 +133,18 @@ describe("buildFilterGraph", () => {
     expect(graph).toContain("overlay=x=1026-w:y=1866-h:format=gbrp");
   });
 
+  it("applies a per-format override to the rendered aspect", () => {
+    const withOverride: CompositionDoc = {
+      ...doc,
+      overrides: {
+        "9:16": { logo: { pos: { mode: "fraction", nx: 0.25, ny: 0.25 } } },
+      },
+    };
+    const { graph } = buildFilterGraph(withOverride, 4, files);
+    // 0.25*1080=270, 0.25*1920=480 — the override moves the logo overlay.
+    expect(graph).toContain("x=270-w/2:y=480-h/2");
+  });
+
   it("keeps static layers expression-free", () => {
     const still: CompositionDoc = {
       ...doc,

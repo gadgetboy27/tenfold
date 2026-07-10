@@ -7,6 +7,7 @@ import {
   anchorAxes,
   ASPECT_DESIGN,
   BLEND_MODES,
+  effectiveLayer,
   type BlendMode,
   type CompositionDoc,
   type Layer,
@@ -160,7 +161,9 @@ export function buildFilterGraph(
   ];
 
   let step = 0;
-  for (const layer of doc.layers) {
+  for (const master of doc.layers) {
+    // Render this aspect's per-format nudges (position/size/rotation).
+    const layer = effectiveLayer(master, doc.aspect, doc.overrides);
     const from = `m${step}`;
     const to = `m${step + 1}`;
     const A = layer.appearAt;

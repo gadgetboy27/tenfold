@@ -390,6 +390,45 @@ export type ImageLayer = z.infer<typeof imageLayerSchema>;
 export type TextLayer = z.infer<typeof textLayerSchema>;
 export type Layer = z.infer<typeof layerSchema>;
 
+// ── Per-format overrides ─────────────────────────────────────────────────────
+// The master doc holds one design; a per-aspect override stores ONLY the layout
+// fields the designer nudged for that format (docs/multiformat-manifesto.md §3,
+// Phase 4). effectiveLayer() merges an override onto its master for an aspect.
+// Scoped to layout (position/size/rotation) — content (text, colour, effects)
+// stays shared across formats.
+
+export const layerOverrideSchema = z.object({
+  pos: layerPositionSchema.optional(),
+  scale: z.number().positive().max(20).optional(),
+  sizePx: z.number().min(8).max(400).optional(),
+  rotationDeg: z.number().min(-360).max(360).optional(),
+});
+
+export type LayerOverride = z.infer<typeof layerOverrideSchema>;
+
+/** aspect → (layerId → nudged layout fields). String-keyed so any subset of
+ *  aspects/layers is valid (deltas only). */
+export const compositionOverridesSchema = z.record(
+  z.string(),
+  z.record(z.string(), layerOverrideSchema),
+);
+
+export type CompositionOverrides = z.infer<typeof compositionOverridesSchema>;
+
+/** The layer as it renders in `aspect`: master fields with this aspect's
+ *  override (if any) applied on top. */
+export function effectiveLayer(
+  layer: Layer,
+  aspect: CompositionAspect,
+  overrides?: CompositionOverrides,
+): Layer {
+  const o = overrides?.[aspect]?.[layer.id];
+  if (!o) return layer;
+  // Overrides carry only layout fields; spreading is safe (irrelevant fields,
+  // e.g. sizePx on an image, are ignored downstream).
+  return { ...layer, ...o } as Layer;
+}
+
 // ── Composition document ─────────────────────────────────────────────────────
 
 export const backgroundSchema = z.object({
@@ -444,6 +483,9 @@ export const compositionDocSchema = z.preprocess(
     background: backgroundSchema,
     /** Render order: index 0 draws first (back), last draws on top (front). */
     layers: z.array(layerSchema).max(20),
+    /** Per-format layout nudges (deltas only); absent = every format inherits
+     *  the master. */
+    overrides: compositionOverridesSchema.optional(),
   }),
 );
 

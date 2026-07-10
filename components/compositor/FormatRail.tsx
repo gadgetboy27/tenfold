@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import {
   ASPECT_DESIGN,
+  effectiveLayer,
   resolveCenter,
   type CompositionAspect,
   type CompositionDoc,
@@ -151,7 +152,8 @@ export function FormatRail({ doc, formats, activeAspect, onPick }: Props) {
         continue;
       }
       const design = ASPECT_DESIGN[fmt.aspect];
-      const boxes: NormRect[] = doc.layers.map((layer) => {
+      const boxes: NormRect[] = doc.layers.map((master) => {
+        const layer = effectiveLayer(master, fmt.aspect, doc.overrides);
         const b = layerBounds(probe, layer, imagesRef.current);
         const halfW = (b.width * layer.scale) / 2;
         const halfH = (b.height * layer.scale) / 2;
