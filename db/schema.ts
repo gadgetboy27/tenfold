@@ -241,9 +241,11 @@ export const assets = pgTable(
     workspaceId: uuid("workspace_id")
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
-    jobId: uuid("job_id")
-      .notNull()
-      .references(() => creativeJobs.id, { onDelete: "cascade" }),
+    // Nullable: composed_video (compositor exports) and publish-mix assets have
+    // no originating creative_job. AI-generated assets still set it.
+    jobId: uuid("job_id").references(() => creativeJobs.id, {
+      onDelete: "cascade",
+    }),
     type: text("type").notNull(),
     url: text("url").notNull(),
     storagePath: text("storage_path").notNull(),

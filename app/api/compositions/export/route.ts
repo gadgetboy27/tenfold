@@ -66,7 +66,7 @@ export const POST = withWorkspace(async (req, { admin, session }) => {
   ): Promise<string | null> => {
     if (!campaignId) return null;
     const id = uuidv4();
-    await admin.from("assets").insert({
+    const { error } = await admin.from("assets").insert({
       id,
       campaign_id: campaignId,
       workspace_id: session.workspaceId,
@@ -77,6 +77,10 @@ export const POST = withWorkspace(async (req, { admin, session }) => {
       height_px: ASPECT_DESIGN[aspect].height,
       metadata: { aspect, format: ASPECT_TO_FORMAT[aspect] },
     });
+    // Surface failures instead of returning an id for a row that doesn't exist
+    // (this insert used to fail the job_id NOT NULL constraint silently).
+    if (error)
+      throw new Error(`Failed to save ${aspect} asset: ${error.message}`);
     return id;
   };
 

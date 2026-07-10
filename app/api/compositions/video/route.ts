@@ -77,7 +77,7 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
   // Persist the rendered MP4 as a new asset + a composition record. Source
   // assets are untouched, so the user can re-render with different layers.
   const assetId = uuidv4();
-  await admin.from("assets").insert({
+  const { error: assetErr } = await admin.from("assets").insert({
     id: assetId,
     campaign_id: body.campaignId,
     workspace_id: session.workspaceId,
@@ -85,6 +85,14 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
     url: result.url,
     storage_path: result.storagePath,
   });
+  // The composition below references this asset via output_asset_id, so a failed
+  // insert must surface (it used to fail the job_id NOT NULL constraint silently).
+  if (assetErr) {
+    return NextResponse.json(
+      { error: `Failed to save composed video: ${assetErr.message}` },
+      { status: 500 },
+    );
+  }
 
   const compositionId = uuidv4();
   await admin.from("compositions").insert({
