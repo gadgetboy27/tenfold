@@ -14,8 +14,7 @@ const doc: CompositionDoc = {
       font: "Montserrat",
       sizePx: 60,
       color: "#ffffff",
-      x: 540,
-      y: 1690,
+      pos: { mode: "fraction", nx: 540 / 1080, ny: 1690 / 1920 },
       scale: 1,
       rotationDeg: 0,
       opacity: 1,
@@ -28,8 +27,7 @@ const doc: CompositionDoc = {
       id: "logo",
       kind: "image",
       src: "https://example.com/logo.png",
-      x: 540,
-      y: 860,
+      pos: { mode: "fraction", nx: 540 / 1080, ny: 860 / 1920 },
       scale: 0.5,
       rotationDeg: 0,
       opacity: 0.9,
@@ -115,6 +113,24 @@ describe("buildFilterGraph", () => {
     expect(graph).toContain("ow='hypot(iw,ih)'");
     // spin exit also fades alpha via geq
     expect(graph).toContain("gte(T,3.5)");
+  });
+
+  it("pins an anchor layer to its corner with a constant-pixel margin", () => {
+    const pinned: CompositionDoc = {
+      ...doc,
+      layers: [
+        {
+          ...doc.layers[1],
+          blend: "normal",
+          fadeSec: 0,
+          pos: { mode: "anchor", anchor: "bottom-right", mx: 0.05, my: 0.05 },
+        },
+      ],
+    };
+    const { graph } = buildFilterGraph(pinned, 4, files);
+    // min(1080,1920)=1080, margin 0.05 → 54px inset; overlay uses runtime w/h,
+    // so the mark's bottom-right corner sits 54px from the frame corner.
+    expect(graph).toContain("overlay=x=1026-w:y=1866-h:format=gbrp");
   });
 
   it("keeps static layers expression-free", () => {

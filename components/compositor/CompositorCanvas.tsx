@@ -7,8 +7,18 @@ import {
   useRef,
   useState,
 } from "react";
-import { ASPECT_DESIGN, type Layer } from "@/lib/composition/layers";
-import { drawFrame, hitTestLayer, layerBounds } from "@/lib/composition/render";
+import {
+  ASPECT_DESIGN,
+  centerToPos,
+  resolveCenter,
+  type Layer,
+} from "@/lib/composition/layers";
+import {
+  drawFrame,
+  hitTestLayer,
+  layerBounds,
+  layerCenter,
+} from "@/lib/composition/render";
 import { wrapText } from "@/lib/composition/brand-apply";
 import { ensureBrandFontsLoaded } from "@/lib/composition/fonts";
 import { useCompositorStore } from "@/store/useCompositorStore";
@@ -227,16 +237,26 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
         const canvas = canvasRef.current;
         const wrapper = wrapperRef.current;
         const layer = doc?.layers.find((l) => l.id === editing.id);
-        if (!canvas || !wrapper || !layer || layer.kind !== "text") return;
+        const ctx = canvas?.getContext("2d");
+        if (
+          !canvas ||
+          !ctx ||
+          !wrapper ||
+          !doc ||
+          !layer ||
+          layer.kind !== "text"
+        )
+          return;
         const c = canvas.getBoundingClientRect();
         const w = wrapper.getBoundingClientRect();
         const s = c.width / canvas.width;
+        const centre = layerCenter(ctx, layer, doc.aspect, imagesRef.current);
         setEditing(
           (prev) =>
             prev && {
               ...prev,
-              left: c.left - w.left + layer.x * s,
-              top: c.top - w.top + layer.y * s,
+              left: c.left - w.left + centre.x * s,
+              top: c.top - w.top + centre.y * s,
               width: Math.min(c.width * 0.85, 560),
               fontSize: Math.max(11, layer.sizePx * layer.scale * s),
             },
@@ -262,16 +282,26 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
     // the shared store.
     const beginEdit = (layerId: string) => {
       const canvas = canvasRef.current;
+      const ctx = canvas?.getContext("2d");
       const wrapper = wrapperRef.current;
       const layer = doc?.layers.find((l) => l.id === layerId);
-      if (!canvas || !wrapper || !layer || layer.kind !== "text") return;
+      if (
+        !canvas ||
+        !ctx ||
+        !wrapper ||
+        !doc ||
+        !layer ||
+        layer.kind !== "text"
+      )
+        return;
       const c = canvas.getBoundingClientRect();
       const w = wrapper.getBoundingClientRect();
       const s = c.width / canvas.width; // design px → display px
+      const centre = layerCenter(ctx, layer, doc.aspect, imagesRef.current);
       setEditing({
         id: layer.id,
-        left: c.left - w.left + layer.x * s,
-        top: c.top - w.top + layer.y * s,
+        left: c.left - w.left + centre.x * s,
+        top: c.top - w.top + centre.y * s,
         width: Math.min(c.width * 0.85, 560),
         fontSize: Math.max(11, layer.sizePx * layer.scale * s),
       });
@@ -292,8 +322,9 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
       const b = layerBounds(ctx, layer, imagesRef.current);
       const hw = (b.width * layer.scale) / 2;
       const hh = (b.height * layer.scale) / 2;
-      const dx = px - layer.x;
-      const dy = py - layer.y;
+      const c = resolveCenter(layer.pos, doc!.aspect, hw, hh);
+      const dx = px - c.x;
+      const dy = py - c.y;
       if (Math.abs(dx) > hw + band || Math.abs(dy) > hh + band) return null;
       const nearL = Math.abs(dx + hw) <= band;
       const nearR = Math.abs(dx - hw) <= band;
@@ -332,12 +363,13 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
           avgCharW = ctx.measureText(raw).width / Math.max(1, raw.length);
           ctx.restore();
         }
+        const selCentre = layerCenter(ctx, sel, doc.aspect, imagesRef.current);
         action.current = {
           mode: "resize",
           id: sel.id,
           zone: selZone,
-          cx: sel.x,
-          cy: sel.y,
+          cx: selCentre.x,
+          cy: selCentre.y,
           startX: p.x,
           startY: p.y,
           startScale: sel.scale,
@@ -352,11 +384,12 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
       const wasSelected = hit?.id === selectedLayerId;
       selectLayer(hit?.id ?? null);
       if (hit) {
+        const hitCentre = layerCenter(ctx, hit, doc.aspect, imagesRef.current);
         action.current = {
           mode: "move",
           id: hit.id,
-          dx: p.x - hit.x,
-          dy: p.y - hit.y,
+          dx: p.x - hitCentre.x,
+          dy: p.y - hitCentre.y,
           startX: e.clientX,
           startY: e.clientY,
           moved: false,
@@ -394,9 +427,19 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
         )
           return;
         a.moved = true;
+        const layer = doc.layers.find((l) => l.id === a.id);
+        if (!layer) return;
+        // New design-space centre → aspect-independent pos (mode-preserving).
+        const b = layerBounds(ctx, layer, imagesRef.current);
         updateLayer(a.id, {
-          x: Math.round(p.x - a.dx),
-          y: Math.round(p.y - a.dy),
+          pos: centerToPos(
+            layer.pos,
+            p.x - a.dx,
+            p.y - a.dy,
+            doc.aspect,
+            (b.width * layer.scale) / 2,
+            (b.height * layer.scale) / 2,
+          ),
         });
         return;
       }

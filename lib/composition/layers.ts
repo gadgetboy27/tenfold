@@ -110,6 +110,155 @@ export function blendToCanvas(blend: BlendMode): GlobalCompositeOperation {
   return BLEND_MODES.find((b) => b.id === blend)?.canvas ?? "source-over";
 }
 
+// ── Position (aspect-independent) ────────────────────────────────────────────
+// A layer stores its position RELATIVE to the canvas, not in absolute pixels,
+// so one master composition reflows to every aspect automatically
+// (docs/multiformat-manifesto.md §4). resolveCenter() turns a pos into
+// design-space centre pixels for a given aspect; centerToPos() is the inverse.
+
+export type LayerAnchor =
+  | "top-left"
+  | "top"
+  | "top-right"
+  | "left"
+  | "center"
+  | "right"
+  | "bottom-left"
+  | "bottom"
+  | "bottom-right";
+
+const layerAnchorSchema = z.enum([
+  "top-left",
+  "top",
+  "top-right",
+  "left",
+  "center",
+  "right",
+  "bottom-left",
+  "bottom",
+  "bottom-right",
+]);
+
+/**
+ * Fraction mode: the layer CENTRE as 0..1 of the canvas width/height — floats
+ * with the frame, used for captions and free art.
+ * Anchor mode: pinned to an edge/corner; margin (mx/my) is an inward inset as a
+ * fraction of the canvas MIN dimension (a constant 1080 across every aspect, so
+ * the inset is a stable pixel distance) — used for logos and brand marks.
+ */
+export const layerPositionSchema = z.discriminatedUnion("mode", [
+  z.object({
+    mode: z.literal("fraction"),
+    nx: z.number(),
+    ny: z.number(),
+  }),
+  z.object({
+    mode: z.literal("anchor"),
+    anchor: layerAnchorSchema,
+    mx: z.number().min(0).default(0.04),
+    my: z.number().min(0).default(0.04),
+  }),
+]);
+
+export type LayerPosition = z.infer<typeof layerPositionSchema>;
+
+const LEFT_ANCHORS: readonly LayerAnchor[] = [
+  "top-left",
+  "left",
+  "bottom-left",
+];
+const RIGHT_ANCHORS: readonly LayerAnchor[] = [
+  "top-right",
+  "right",
+  "bottom-right",
+];
+const TOP_ANCHORS: readonly LayerAnchor[] = ["top-left", "top", "top-right"];
+const BOTTOM_ANCHORS: readonly LayerAnchor[] = [
+  "bottom-left",
+  "bottom",
+  "bottom-right",
+];
+
+/** Which edge each axis of an anchor pins to — shared by the canvas resolver
+ *  and the FFmpeg export so preview and MP4 place anchors identically. */
+export function anchorAxes(anchor: LayerAnchor): {
+  h: "left" | "center" | "right";
+  v: "top" | "middle" | "bottom";
+} {
+  return {
+    h: LEFT_ANCHORS.includes(anchor)
+      ? "left"
+      : RIGHT_ANCHORS.includes(anchor)
+        ? "right"
+        : "center",
+    v: TOP_ANCHORS.includes(anchor)
+      ? "top"
+      : BOTTOM_ANCHORS.includes(anchor)
+        ? "bottom"
+        : "middle",
+  };
+}
+
+/** pos → design-space centre pixels for `aspect`. halfW/halfH are the layer's
+ *  scaled half-size (only used by anchor mode, to keep its box inside the edge
+ *  inset). NOTE: pass the *un-rotated* half-size; rotated anchor layers need the
+ *  rotated bounding box to stay in lockstep with the FFmpeg export — deferred to
+ *  the Phase 3 pin UI (docs/multiformat-manifesto.md §6). */
+export function resolveCenter(
+  pos: LayerPosition,
+  aspect: CompositionAspect,
+  halfW: number,
+  halfH: number,
+): { x: number; y: number } {
+  const { width: W, height: H } = ASPECT_DESIGN[aspect];
+  if (pos.mode === "fraction") {
+    return { x: pos.nx * W, y: pos.ny * H };
+  }
+  const m = Math.min(W, H);
+  const Mx = pos.mx * m;
+  const My = pos.my * m;
+  const x = LEFT_ANCHORS.includes(pos.anchor)
+    ? Mx + halfW
+    : RIGHT_ANCHORS.includes(pos.anchor)
+      ? W - Mx - halfW
+      : W / 2;
+  const y = TOP_ANCHORS.includes(pos.anchor)
+    ? My + halfH
+    : BOTTOM_ANCHORS.includes(pos.anchor)
+      ? H - My - halfH
+      : H / 2;
+  return { x, y };
+}
+
+/** Inverse of resolveCenter — mode-preserving. Dragging a fraction layer
+ *  rewrites its fraction; dragging an anchor layer recomputes the margins of
+ *  its anchored edges (centre-anchored axes hold their prior margin). */
+export function centerToPos(
+  prev: LayerPosition,
+  x: number,
+  y: number,
+  aspect: CompositionAspect,
+  halfW: number,
+  halfH: number,
+): LayerPosition {
+  const { width: W, height: H } = ASPECT_DESIGN[aspect];
+  if (prev.mode === "fraction") {
+    return { mode: "fraction", nx: x / W, ny: y / H };
+  }
+  const m = Math.min(W, H);
+  const mx = LEFT_ANCHORS.includes(prev.anchor)
+    ? Math.max(0, (x - halfW) / m)
+    : RIGHT_ANCHORS.includes(prev.anchor)
+      ? Math.max(0, (W - x - halfW) / m)
+      : prev.mx;
+  const my = TOP_ANCHORS.includes(prev.anchor)
+    ? Math.max(0, (y - halfH) / m)
+    : BOTTOM_ANCHORS.includes(prev.anchor)
+      ? Math.max(0, (H - y - halfH) / m)
+      : prev.my;
+  return { mode: "anchor", anchor: prev.anchor, mx, my };
+}
+
 // ── Layers ───────────────────────────────────────────────────────────────────
 
 const BRAND_FONTS = [
@@ -198,9 +347,8 @@ export type LayerEffects = z.infer<typeof layerEffectsSchema>;
 
 const layerBaseSchema = z.object({
   id: z.string().min(1),
-  /** Design-space pixel coords of the layer centre (see ASPECT_DESIGN). */
-  x: z.number(),
-  y: z.number(),
+  /** Aspect-independent position; resolveCenter() maps it to design pixels. */
+  pos: layerPositionSchema,
   scale: z.number().positive().max(20).default(1),
   rotationDeg: z.number().min(-360).max(360).default(0),
   opacity: z.number().min(0).max(1).default(1),
@@ -253,14 +401,51 @@ export const backgroundSchema = z.object({
 
 export type CompositionBackground = z.infer<typeof backgroundSchema>;
 
+/**
+ * Upgrade a raw (possibly legacy) doc in place-safe fashion: a layer that still
+ * carries absolute `x, y` (authored before the aspect-independent model) gets a
+ * fraction `pos` derived from the doc's aspect, reproducing the same pixel
+ * centre. Idempotent — layers that already have `pos` pass straight through.
+ */
+export function migrateDocInput(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object") return raw;
+  const doc = raw as Record<string, unknown>;
+  const aspect = doc.aspect;
+  if (!Array.isArray(doc.layers) || typeof aspect !== "string") return raw;
+  const design = ASPECT_DESIGN[aspect as CompositionAspect];
+  if (!design) return raw;
+  return {
+    ...doc,
+    layers: doc.layers.map((l) => {
+      if (!l || typeof l !== "object") return l;
+      const layer = l as Record<string, unknown>;
+      if (layer.pos !== undefined) return layer;
+      if (typeof layer.x !== "number" || typeof layer.y !== "number")
+        return layer;
+      const { x, y, ...rest } = layer;
+      return {
+        ...rest,
+        pos: {
+          mode: "fraction",
+          nx: (x as number) / design.width,
+          ny: (y as number) / design.height,
+        },
+      };
+    }),
+  };
+}
+
 /** The editable document (row id + persisted jsonb columns). */
-export const compositionDocSchema = z.object({
-  id: z.string().uuid(),
-  aspect: z.enum(["9:16", "1:1", "16:9"]),
-  background: backgroundSchema,
-  /** Render order: index 0 draws first (back), last draws on top (front). */
-  layers: z.array(layerSchema).max(20),
-});
+export const compositionDocSchema = z.preprocess(
+  migrateDocInput,
+  z.object({
+    id: z.string().uuid(),
+    aspect: z.enum(["9:16", "1:1", "16:9"]),
+    background: backgroundSchema,
+    /** Render order: index 0 draws first (back), last draws on top (front). */
+    layers: z.array(layerSchema).max(20),
+  }),
+);
 
 export type CompositionDoc = z.infer<typeof compositionDocSchema>;
 

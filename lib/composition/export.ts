@@ -4,11 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
+  anchorAxes,
   ASPECT_DESIGN,
   BLEND_MODES,
   type BlendMode,
   type CompositionDoc,
   type Layer,
+  type LayerPosition,
 } from "@/lib/composition/layers";
 import { motionExprs, type MotionExprs } from "@/lib/composition/effects";
 
@@ -84,14 +86,55 @@ function imageLayerChain(
   return parts.join(",");
 }
 
-/** Overlay x/y for a layer centre, with effect motion when animated. */
-function overlayPos(layer: Layer, fx: MotionExprs): string {
-  const x = fx.dx
-    ? `x='${Math.round(layer.x)}-w/2+(${fx.dx})'`
-    : `x=${Math.round(layer.x)}-w/2`;
-  const y = fx.dy
-    ? `y='${Math.round(layer.y)}-h/2+(${fx.dy})'`
-    : `y=${Math.round(layer.y)}-h/2`;
+/**
+ * Top-left position EXPRESSIONS for a layer's pos in the WxH design space —
+ * the FFmpeg twin of resolveCenter() (render.ts). wVar/hVar name the overlaid
+ * element's own size in the target filter (`w`/`h` for overlay, `text_w`/
+ * `text_h` for drawtext). Fraction mode is a constant centre; anchor mode pins
+ * to an edge using the runtime size vars so it stays inside its margin.
+ */
+function basePos(
+  pos: LayerPosition,
+  W: number,
+  H: number,
+  wVar: string,
+  hVar: string,
+): { x: string; y: string } {
+  if (pos.mode === "fraction") {
+    return {
+      x: `${Math.round(pos.nx * W)}-${wVar}/2`,
+      y: `${Math.round(pos.ny * H)}-${hVar}/2`,
+    };
+  }
+  const m = Math.min(W, H);
+  const Mx = Math.round(pos.mx * m);
+  const My = Math.round(pos.my * m);
+  const { h, v } = anchorAxes(pos.anchor);
+  const x =
+    h === "left"
+      ? `${Mx}`
+      : h === "right"
+        ? `${W - Mx}-${wVar}`
+        : `(${W}-${wVar})/2`;
+  const y =
+    v === "top"
+      ? `${My}`
+      : v === "bottom"
+        ? `${H - My}-${hVar}`
+        : `(${H}-${hVar})/2`;
+  return { x, y };
+}
+
+/** Overlay x/y for a layer, with effect motion when animated. */
+function overlayPos(
+  layer: Layer,
+  fx: MotionExprs,
+  W: number,
+  H: number,
+): string {
+  const b = basePos(layer.pos, W, H, "w", "h");
+  const x = fx.dx ? `x='${b.x}+(${fx.dx})'` : `x=${b.x}`;
+  const y = fx.dy ? `y='${b.y}+(${fx.dy})'` : `y=${b.y}`;
   return `${x}:${y}`;
 }
 
@@ -132,7 +175,7 @@ export function buildFilterGraph(
       if (idx === undefined) continue;
       const lbl = `l${step}`;
       chains.push(`[${idx}:v]${imageLayerChain(layer, fx)}[${lbl}]`);
-      const pos = overlayPos(layer, fx);
+      const pos = overlayPos(layer, fx, width, height);
 
       if (layer.blend === "normal") {
         chains.push(
@@ -152,12 +195,9 @@ export function buildFilterGraph(
       const fontSize = Math.round(layer.sizePx * layer.scale);
       // drawtext can't rotate, so text ignores the rot channel (documented
       // v1 limit); position + alpha effects apply fully.
-      const tx = fx.dx
-        ? `x='${Math.round(layer.x)}-text_w/2+(${fx.dx})'`
-        : `x=${Math.round(layer.x)}-text_w/2`;
-      const ty = fx.dy
-        ? `y='${Math.round(layer.y)}-text_h/2+(${fx.dy})'`
-        : `y=${Math.round(layer.y)}-text_h/2`;
+      const base = basePos(layer.pos, width, height, "text_w", "text_h");
+      const tx = fx.dx ? `x='${base.x}+(${fx.dx})'` : `x=${base.x}`;
+      const ty = fx.dy ? `y='${base.y}+(${fx.dy})'` : `y=${base.y}`;
       const alpha = fx.alpha
         ? `clip(${layer.opacity}*(${fx.alpha}),0,1)`
         : `${layer.opacity}`;

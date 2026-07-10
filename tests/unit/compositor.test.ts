@@ -3,10 +3,13 @@ import {
   ASPECT_DESIGN,
   ASPECT_TO_FORMAT,
   BLEND_MODES,
+  centerToPos,
   compositionDocSchema,
   formatToAspect,
   layerAlphaAt,
   layerSchema,
+  migrateDocInput,
+  resolveCenter,
   type CompositionDoc,
   type Layer,
 } from "@/lib/composition/layers";
@@ -21,8 +24,7 @@ const imageLayer: Layer = {
   id: "logo-1",
   kind: "image",
   src: "https://example.com/storage/logo.png",
-  x: 900,
-  y: 1700,
+  pos: { mode: "fraction", nx: 0.83, ny: 0.885 },
   scale: 0.5,
   rotationDeg: 0,
   opacity: 0.9,
@@ -39,8 +41,7 @@ const textLayer: Layer = {
   font: "Montserrat",
   sizePx: 72,
   color: "#ffffff",
-  x: 540,
-  y: 1600,
+  pos: { mode: "fraction", nx: 0.5, ny: 0.833 },
   scale: 1,
   rotationDeg: 0,
   opacity: 1,
@@ -72,8 +73,7 @@ describe("composition layer model", () => {
       id: "l1",
       kind: "image",
       src: "https://example.com/a.png",
-      x: 0,
-      y: 0,
+      pos: { mode: "fraction", nx: 0, ny: 0 },
     });
     expect(parsed).toMatchObject({
       scale: 1,
@@ -109,6 +109,83 @@ describe("composition layer model", () => {
       expect(b.canvas.length).toBeGreaterThan(0);
       expect(b.label).toContain("—");
     }
+  });
+});
+
+describe("aspect-independent layout", () => {
+  it("resolves a fraction centre proportionally in every aspect", () => {
+    const pos = { mode: "fraction", nx: 0.5, ny: 0.85 } as const;
+    // Centre stays at the same FRACTION of the canvas whatever the aspect —
+    // the caption near the bottom stays near the bottom when reflowed.
+    for (const aspect of ["9:16", "1:1", "16:9"] as const) {
+      const { width, height } = ASPECT_DESIGN[aspect];
+      const c = resolveCenter(pos, aspect, 0, 0);
+      expect(c.x).toBeCloseTo(0.5 * width);
+      expect(c.y).toBeCloseTo(0.85 * height);
+    }
+  });
+
+  it("pins an anchor to its corner with a constant-pixel margin across aspects", () => {
+    // margin is a fraction of min(W,H) = 1080 for every aspect, so a
+    // bottom-right logo sits the same distance from the corner everywhere.
+    const pos = {
+      mode: "anchor",
+      anchor: "bottom-right",
+      mx: 0.05,
+      my: 0.05,
+    } as const;
+    const halfW = 100;
+    const halfH = 60;
+    for (const aspect of ["9:16", "1:1", "16:9"] as const) {
+      const { width, height } = ASPECT_DESIGN[aspect];
+      const c = resolveCenter(pos, aspect, halfW, halfH);
+      // right/bottom edge of the box sits 54px (0.05 * 1080) from the corner.
+      expect(width - (c.x + halfW)).toBeCloseTo(54);
+      expect(height - (c.y + halfH)).toBeCloseTo(54);
+    }
+  });
+
+  it("round-trips centre → pos → centre for both modes", () => {
+    const cases: Array<Parameters<typeof resolveCenter>[0]> = [
+      { mode: "fraction", nx: 0.3, ny: 0.72 },
+      { mode: "anchor", anchor: "top-left", mx: 0.06, my: 0.04 },
+      { mode: "anchor", anchor: "bottom-right", mx: 0.05, my: 0.05 },
+    ];
+    for (const pos of cases) {
+      const c = resolveCenter(pos, "1:1", 80, 40);
+      const back = centerToPos(pos, c.x, c.y, "1:1", 80, 40);
+      const c2 = resolveCenter(back, "1:1", 80, 40);
+      expect(c2.x).toBeCloseTo(c.x);
+      expect(c2.y).toBeCloseTo(c.y);
+    }
+  });
+
+  it("migrates legacy absolute x/y into a fraction pos for the doc's aspect", () => {
+    const legacy = {
+      id: "5b0c8f6e-2a1d-4e3b-9c7f-1234567890ab",
+      aspect: "9:16",
+      background: { kind: "video", src: "https://example.com/clip.mp4" },
+      layers: [
+        {
+          id: "old",
+          kind: "image",
+          src: "https://example.com/logo.png",
+          x: 540,
+          y: 960,
+          scale: 1,
+        },
+      ],
+    };
+    const parsed = compositionDocSchema.parse(legacy);
+    // 540/1080 = 0.5, 960/1920 = 0.5 — same pixel centre in 9:16, reflowable.
+    expect(parsed.layers[0].pos).toEqual({
+      mode: "fraction",
+      nx: 0.5,
+      ny: 0.5,
+    });
+    // Idempotent: a doc that already has pos passes straight through.
+    const twice = compositionDocSchema.parse(migrateDocInput(legacy));
+    expect(twice.layers[0].pos).toEqual({ mode: "fraction", nx: 0.5, ny: 0.5 });
   });
 });
 
@@ -228,15 +305,32 @@ describe("useCompositorStore", () => {
     s().load(doc);
     expect(s().dirty).toBe(false);
 
-    s().updateLayer("caption-1", { text: "New caption", x: 100 });
+    s().updateLayer("caption-1", {
+      text: "New caption",
+      pos: { mode: "fraction", nx: 0.2, ny: 0.9 },
+    });
     expect(s().dirty).toBe(true);
     const edited = s().doc!.layers.find((l) => l.id === "caption-1")!;
-    expect(edited).toMatchObject({ text: "New caption", x: 100, y: 1600 });
+    expect(edited).toMatchObject({
+      text: "New caption",
+      pos: { mode: "fraction", nx: 0.2, ny: 0.9 },
+    });
 
     // The edited doc still validates — what the PATCH endpoint will receive.
     expect(() => compositionDocSchema.parse(s().doc)).not.toThrow();
     s().markSaved();
     expect(s().dirty).toBe(false);
+  });
+
+  it("setAspect reflows by swapping the aspect only, never a layer's pos", () => {
+    const s = () => useCompositorStore.getState();
+    s().load(doc);
+    const before = s().doc!.layers.map((l) => l.pos);
+    s().setAspect("16:9");
+    // Positions are aspect-independent, so the reflow is purely at render time —
+    // the stored pos is untouched.
+    expect(s().doc!.aspect).toBe("16:9");
+    expect(s().doc!.layers.map((l) => l.pos)).toEqual(before);
   });
 
   it("adds, reorders and removes layers", () => {
@@ -269,15 +363,16 @@ describe("useCompositorStore", () => {
     s().replaceLayer("caption-1", {
       ...imageLayer,
       id: "caption-1",
-      x: 540,
-      y: 1600,
+      pos: { mode: "fraction", nx: 0.5, ny: 0.83 },
       src: "https://example.com/swapped.png",
     });
     const ids = s().doc!.layers.map((l) => l.id);
     expect(ids).toEqual(["caption-1", "logo-1"]); // same order
     const swapped = s().doc!.layers[0];
     expect(swapped.kind).toBe("image");
-    expect(swapped).toMatchObject({ x: 540, y: 1600 }); // position kept
+    expect(swapped).toMatchObject({
+      pos: { mode: "fraction", nx: 0.5, ny: 0.83 },
+    }); // position kept
     expect(s().selectedLayerId).toBe("caption-1");
     expect(s().dirty).toBe(true);
   });

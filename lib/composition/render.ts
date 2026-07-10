@@ -1,6 +1,8 @@
 import {
   ASPECT_DESIGN,
   blendToCanvas,
+  resolveCenter,
+  type CompositionAspect,
   type CompositionDoc,
   type Layer,
 } from "@/lib/composition/layers";
@@ -59,18 +61,36 @@ export function coverRect(
   return { x: (dstW - width) / 2, y: (dstH - height) / 2, width, height };
 }
 
+/** Design-space centre of a layer for the given aspect (resolves its pos). */
+export function layerCenter(
+  ctx: CanvasRenderingContext2D,
+  layer: Layer,
+  aspect: CompositionAspect,
+  images: Map<string, HTMLImageElement>,
+): { x: number; y: number } {
+  const b = layerBounds(ctx, layer, images);
+  return resolveCenter(
+    layer.pos,
+    aspect,
+    (b.width * layer.scale) / 2,
+    (b.height * layer.scale) / 2,
+  );
+}
+
 function drawLayer(
   ctx: CanvasRenderingContext2D,
   layer: Layer,
   motion: Motion,
+  aspect: CompositionAspect,
   images: Map<string, HTMLImageElement>,
 ): void {
   if (motion.alpha <= 0) return;
 
+  const c = layerCenter(ctx, layer, aspect, images);
   ctx.save();
   ctx.globalAlpha = motion.alpha;
   ctx.globalCompositeOperation = blendToCanvas(layer.blend);
-  ctx.translate(layer.x + motion.dx, layer.y + motion.dy);
+  ctx.translate(c.x + motion.dx, c.y + motion.dy);
   ctx.rotate(((layer.rotationDeg + motion.rotDeg) * Math.PI) / 180);
   ctx.scale(layer.scale, layer.scale);
 
@@ -159,7 +179,7 @@ export function drawFrame(
     const isSelected = layer.id === input.selectedLayerId;
 
     if (!hidden && motion) {
-      drawLayer(ctx, layer, motion, input.images);
+      drawLayer(ctx, layer, motion, input.doc.aspect, input.images);
     } else if (input.paused) {
       // Arrange mode: draw the scheduled-away layer as a placeholder ghost
       // at its rest position (preview only — the export honours timing).
@@ -167,6 +187,7 @@ export function drawFrame(
         ctx,
         layer,
         { dx: 0, dy: 0, rotDeg: 0, alpha: isSelected ? 0.45 : 0.25 },
+        input.doc.aspect,
         input.images,
       );
       if (isSelected) selectedGhosted = true;
@@ -186,18 +207,20 @@ export function drawFrame(
     selected.id !== input.editingLayerId &&
     (selectedGhosted || dragging || input.forceOutline)
   ) {
-    drawSelectionOutline(ctx, selected, input.images);
+    drawSelectionOutline(ctx, selected, input.doc.aspect, input.images);
   }
 }
 
 function drawSelectionOutline(
   ctx: CanvasRenderingContext2D,
   layer: Layer,
+  aspect: CompositionAspect,
   images: Map<string, HTMLImageElement>,
 ): void {
   const b = layerBounds(ctx, layer, images);
+  const c = layerCenter(ctx, layer, aspect, images);
   ctx.save();
-  ctx.translate(layer.x, layer.y);
+  ctx.translate(c.x, c.y);
   ctx.rotate((layer.rotationDeg * Math.PI) / 180);
   ctx.strokeStyle = "#818cf8";
   ctx.lineWidth = 3;
@@ -227,11 +250,12 @@ export function hitTestLayer(
     const b = layerBounds(ctx, layer, images);
     const halfW = (b.width * layer.scale) / 2;
     const halfH = (b.height * layer.scale) / 2;
+    const c = resolveCenter(layer.pos, doc.aspect, halfW, halfH);
     if (
-      x >= layer.x - halfW &&
-      x <= layer.x + halfW &&
-      y >= layer.y - halfH &&
-      y <= layer.y + halfH
+      x >= c.x - halfW &&
+      x <= c.x + halfW &&
+      y >= c.y - halfH &&
+      y <= c.y + halfH
     ) {
       return layer;
     }

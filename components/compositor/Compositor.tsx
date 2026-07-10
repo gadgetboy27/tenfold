@@ -17,10 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
-import {
-  ASPECT_DESIGN,
-  type CompositionAspect,
-} from "@/lib/composition/layers";
+import { type CompositionAspect } from "@/lib/composition/layers";
 import {
   brandKitLayers,
   pickKitLogo,
@@ -95,7 +92,6 @@ export function Compositor({
   const onEnded = useCallback(() => setPlaying(false), []);
 
   if (!doc) return null;
-  const design = ASPECT_DESIGN[doc.aspect];
   const selected = doc.layers.find((l) => l.id === selectedLayerId) ?? null;
 
   // One-click brand-aware defaults: logo as an end-frame screen-blend layer
@@ -145,8 +141,7 @@ export function Compositor({
       id: crypto.randomUUID(),
       kind: "image",
       src: URL.createObjectURL(file),
-      x: design.width / 2,
-      y: design.height / 2,
+      pos: { mode: "fraction", nx: 0.5, ny: 0.5 },
       scale: 0.5,
       rotationDeg: 0,
       opacity: 1,
@@ -165,8 +160,7 @@ export function Compositor({
       font: "Inter",
       sizePx: 72,
       color: "#ffffff",
-      x: design.width / 2,
-      y: design.height * 0.85,
+      pos: { mode: "fraction", nx: 0.5, ny: 0.85 },
       scale: 1,
       rotationDeg: 0,
       opacity: 1,
@@ -181,8 +175,7 @@ export function Compositor({
   // blend, timing and effects.
   const baseOf = (l: NonNullable<typeof selected>) => ({
     id: l.id,
-    x: l.x,
-    y: l.y,
+    pos: l.pos,
     scale: l.scale,
     rotationDeg: l.rotationDeg,
     opacity: l.opacity,
