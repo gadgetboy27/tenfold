@@ -1,9 +1,10 @@
 "use client";
 
 import { api } from "@/lib/api";
-import type {
-  CompositionAspect,
-  CompositionDoc,
+import {
+  compositionDocSchema,
+  type CompositionAspect,
+  type CompositionDoc,
 } from "@/lib/composition/layers";
 
 /**
@@ -101,6 +102,44 @@ export async function requestExport(
   };
   if (!res.ok || !data.url) throw new Error(data.error ?? "Export failed");
   return { url: data.url, durationSec: data.durationSec ?? 0 };
+}
+
+/**
+ * Load a saved composition back into an editable doc — restores background,
+ * layers, and per-format overrides so a reopened design renders identically.
+ * Returns null when the row isn't a usable layered doc (no background/layers) or
+ * fails validation, so the caller can fall back to building fresh.
+ */
+export async function fetchCompositionDoc(
+  compositionId: string,
+  workspaceSlug?: string,
+): Promise<CompositionDoc | null> {
+  const res = await api(`/api/compositions/${compositionId}`, {
+    workspaceSlug,
+  });
+  if (!res.ok) return null;
+  const row = (await res.json().catch(() => null)) as {
+    id?: string;
+    aspect?: string;
+    background?: unknown;
+    layers?: unknown;
+    overrides?: unknown;
+  } | null;
+  if (
+    !row?.background ||
+    !Array.isArray(row.layers) ||
+    row.layers.length === 0
+  ) {
+    return null;
+  }
+  const parsed = compositionDocSchema.safeParse({
+    id: row.id,
+    aspect: row.aspect,
+    background: row.background,
+    layers: row.layers,
+    overrides: row.overrides ?? undefined,
+  });
+  return parsed.success ? parsed.data : null;
 }
 
 export interface FanOutOutput {

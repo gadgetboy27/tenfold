@@ -273,9 +273,9 @@ export const compositions = pgTable("compositions", {
   workspaceId: uuid("workspace_id")
     .notNull()
     .references(() => workspaces.id, { onDelete: "cascade" }),
-  anchorAssetId: uuid("anchor_asset_id")
-    .notNull()
-    .references(() => assets.id),
+  // Nullable: layered compositor docs (background + layers) have no single
+  // image anchor. Legacy image compositions still set it.
+  anchorAssetId: uuid("anchor_asset_id").references(() => assets.id),
   outputAssetId: uuid("output_asset_id").references(() => assets.id),
   format: text("format").notNull().default("square"),
   textOverlays: jsonb("text_overlays").notNull().default("[]"),

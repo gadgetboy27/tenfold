@@ -110,23 +110,28 @@ Migration is idempotent (skips layers that already have `pos`).
 | **5** | Fan-out export + batch publish (+ persist `overrides` to the DB), each locked to its platform                 | ✅ done |
 | 6     | _(optional)_ vision "auto-fix this format" button (credits)                                                   | pending |
 
-**Phase 5 deploy step:** run migration `db/migrations/0013_composition_overrides.sql`
-against the database (adds `compositions.overrides`). It's idempotent
-(`ADD COLUMN IF NOT EXISTS`). Nothing breaks without it today (no client PATCH
-sends overrides yet), but the fan-out publish + persistence assume it on deploy.
+**Deploy migrations** (applied to the live DB during development; idempotent):
 
-**Phase 5 known follow-ups** (verified non-blocking, happy paths correct):
+- `0013_composition_overrides.sql` — adds `compositions.overrides`.
+- `0014_assets_job_id_nullable.sql` — `assets.job_id` nullable (composed_video /
+  mix assets have no creative_job; the insert was failing silently before).
+- `0015_compositions_anchor_nullable.sql` — `compositions.anchor_asset_id`
+  nullable (layered docs have no image anchor; needed for save-on-export).
+
+**Save / load round-trip (shipped).** Exporting in campaign mode persists the doc
+(`background` + `layers` + `overrides` + `format`) to the campaign's composition
+row (`saveComposition` in the export route, best-effort). Reopening the compositor
+restores it: the page reads `latestCompositionId` and `fetchCompositionDoc` rebuilds
+the editable doc, so per-format overrides survive a reload into a render. Falls
+back to a fresh branded doc when no save exists.
+
+**Phase 5 known follow-up** (verified non-blocking):
 
 - _Storage leak on partial fan-out failure._ `renderFanOut` uploads each aspect's
   MP4 immediately but asset rows are written only after all renders finish, so if
   render N throws, aspects 1..N-1 are orphaned in Storage with no row and no
   cleanup. Error-path only. Fix: track uploaded paths and delete on failure, or
   make the fan-out transactional.
-- _Persisted overrides are write-only._ PATCH stores `compositions.overrides`, but
-  no read path re-enters a render — the compositor rebuilds a fresh doc from
-  campaign assets on load rather than loading the saved composition row (same as
-  `layers`/`background` today). To make DB overrides survive a reload into a
-  render, wire a "load saved composition" path. In-session overrides already work.
 
 ---
 

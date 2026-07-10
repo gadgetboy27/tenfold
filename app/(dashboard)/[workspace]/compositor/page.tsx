@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { Compositor } from "@/components/compositor/Compositor";
+import { fetchCompositionDoc } from "@/components/compositor/export-client";
 import { brandKitLayers, pickKitLogo } from "@/lib/composition/brand-apply";
 import type { CompositionAspect } from "@/lib/composition/layers";
 import { useCompositorStore } from "@/store/useCompositorStore";
@@ -103,8 +104,29 @@ export default function CompositorPage() {
             video?: { url?: string | null };
             music?: { url?: string | null };
           };
+          latestCompositionId?: string | null;
         };
         const assets = campaign.assets ?? [];
+        // Music is needed for a re-export whether or not we restore a save.
+        setAudioUrl(
+          latest(assets, "audio") ??
+            campaign.expansion_data?.music?.url ??
+            null,
+        );
+
+        // Restore a previously saved layered composition (with its per-format
+        // overrides) if one exists — otherwise build a fresh branded doc below.
+        if (campaign.latestCompositionId) {
+          const saved = await fetchCompositionDoc(
+            campaign.latestCompositionId,
+            params.workspace,
+          );
+          if (saved) {
+            load(saved);
+            return;
+          }
+        }
+
         // Same source order as Step 4's preview: the assets table first, then
         // the campaign's expansion_data (older/demo campaigns only have the
         // latter) — so the two pages can never disagree about a video.
@@ -113,11 +135,6 @@ export default function CompositorPage() {
           campaign.expansion_data?.video?.url ??
           null;
         if (!videoUrl) throw new Error("Generate a video first (Step 3).");
-        setAudioUrl(
-          latest(assets, "audio") ??
-            campaign.expansion_data?.music?.url ??
-            null,
-        );
 
         const meta = await videoMeta(videoUrl);
         const kitRes = await api("/api/brand-kit", {

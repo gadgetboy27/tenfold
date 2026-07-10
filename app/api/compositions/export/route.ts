@@ -84,6 +84,58 @@ export const POST = withWorkspace(async (req, { admin, session }) => {
     return id;
   };
 
+  // Persist the editable doc so it reloads on reopen — background, layers, and
+  // per-format overrides survive into a later render. Upserts the campaign's
+  // composition row (best-effort: the render already produced valid assets, so a
+  // save hiccup must not fail the export). Returns the composition id.
+  const saveComposition = async (
+    outputAssetId: string | null,
+  ): Promise<string | null> => {
+    if (!campaignId) return null;
+    const row = {
+      format: ASPECT_TO_FORMAT[doc.aspect],
+      background: doc.background,
+      layers: doc.layers,
+      overrides: doc.overrides ?? {},
+      output_asset_id: outputAssetId,
+      status: "ready",
+      updated_at: new Date().toISOString(),
+    };
+    try {
+      let targetId = compositionId ?? null;
+      if (!targetId) {
+        const { data: existing } = await admin
+          .from("compositions")
+          .select("id")
+          .eq("campaign_id", campaignId)
+          .eq("workspace_id", session.workspaceId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        targetId = (existing as { id: string } | null)?.id ?? null;
+      }
+      if (targetId) {
+        await admin
+          .from("compositions")
+          .update(row)
+          .eq("id", targetId)
+          .eq("workspace_id", session.workspaceId);
+        return targetId;
+      }
+      const newId = uuidv4();
+      const { error } = await admin.from("compositions").insert({
+        id: newId,
+        campaign_id: campaignId,
+        workspace_id: session.workspaceId,
+        anchor_asset_id: null,
+        ...row,
+      });
+      return error ? null : newId;
+    } catch {
+      return null; // best-effort: don't fail a successful render on a save error
+    }
+  };
+
   const renderInput = {
     doc,
     workspaceId: session.workspaceId,
@@ -110,21 +162,15 @@ export const POST = withWorkspace(async (req, { admin, session }) => {
         durationSec: r.durationSec,
       });
     }
-    if (compositionId) {
-      // Point the saved composition at the master aspect's output.
-      const primary =
-        outputs.find((o) => o.aspect === doc.aspect) ?? outputs[0];
-      await admin
-        .from("compositions")
-        .update({
-          output_asset_id: primary.assetId,
-          status: "ready",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", compositionId)
-        .eq("workspace_id", session.workspaceId);
-    }
-    return NextResponse.json({ outputs, free: true }, { status: 201 });
+    // Save the doc, pointing output at the master aspect's render.
+    const primaryAsset =
+      (outputs.find((o) => o.aspect === doc.aspect) ?? outputs[0])?.assetId ??
+      null;
+    const savedId = await saveComposition(primaryAsset);
+    return NextResponse.json(
+      { outputs, compositionId: savedId, free: true },
+      { status: 201 },
+    );
   }
 
   // ── Single render (doc.aspect) ─────────────────────────────────────────────
@@ -137,20 +183,16 @@ export const POST = withWorkspace(async (req, { admin, session }) => {
   }
 
   const assetId = await saveAsset(doc.aspect, result.url, result.storagePath);
-  if (compositionId) {
-    await admin
-      .from("compositions")
-      .update({
-        output_asset_id: assetId,
-        status: "ready",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", compositionId)
-      .eq("workspace_id", session.workspaceId);
-  }
+  const savedId = await saveComposition(assetId);
 
   return NextResponse.json(
-    { url: result.url, assetId, durationSec: result.durationSec, free: true },
+    {
+      url: result.url,
+      assetId,
+      compositionId: savedId,
+      durationSec: result.durationSec,
+      free: true,
+    },
     { status: 201 },
   );
 });
