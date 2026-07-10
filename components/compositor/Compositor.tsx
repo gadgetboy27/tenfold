@@ -24,10 +24,6 @@ import {
 } from "@/lib/composition/layers";
 import { railFormats } from "@/lib/composition/formats";
 import {
-  MUSIC_LIBRARY,
-  hasMusicLibrary,
-} from "@/lib/composition/music-library";
-import {
   brandKitLayers,
   pickKitLogo,
   type BrandKitInfo,
@@ -459,28 +455,6 @@ export function Compositor({
                 className="hidden"
                 onChange={handleAudioUpload}
               />
-              {hasMusicLibrary() && (
-                <select
-                  onChange={(e) => {
-                    const t = MUSIC_LIBRARY.find(
-                      (m) => m.id === e.target.value,
-                    );
-                    if (t) setAudioOverride(t.url); // library tracks are pre-cleared
-                  }}
-                  defaultValue=""
-                  className="h-7 rounded-md border border-border bg-background px-2 text-xs"
-                  title="Pick a royalty-free track from the library"
-                >
-                  <option value="" disabled>
-                    Library music…
-                  </option>
-                  {MUSIC_LIBRARY.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.mood} · {t.title}
-                    </option>
-                  ))}
-                </select>
-              )}
               <Button
                 size="sm"
                 onClick={applyBrandKit}
