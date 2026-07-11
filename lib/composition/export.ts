@@ -340,12 +340,18 @@ export async function renderComposition(
     if (input.audioUrl) {
       const audioPath = join(dir, "music.mp3");
       await download(input.audioUrl, audioPath);
-      args.push("-i", audioPath);
+      // Loop the track so a SHORT upload fills the whole clip; `-t dur` below
+      // trims it to the exact video length. Marries any-length music to the
+      // video (never truncates the video, unlike the old `-shortest`).
+      args.push("-stream_loop", "-1", "-i", audioPath);
     }
 
     const { graph, outLabel } = buildFilterGraph(doc, dur, files);
     args.push("-filter_complex", graph, "-map", `[${outLabel}]`);
-    if (input.audioUrl) args.push("-map", `${audioIdx}:a:0`, "-shortest");
+    // `-t dur` (below) caps the output at the VIDEO length — the video is always
+    // the master; the looped music is snipped to match. No `-shortest` (it would
+    // let a short track cut the video short).
+    if (input.audioUrl) args.push("-map", `${audioIdx}:a:0`);
     else args.push("-map", "0:a?");
     args.push(
       "-t",

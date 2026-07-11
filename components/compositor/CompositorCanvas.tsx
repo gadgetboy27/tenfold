@@ -75,6 +75,9 @@ interface Props {
   /** Finished-look preview: no arrange ghosts, no outlines — exactly what
    *  the export renders, even while paused. */
   cleanPreview?: boolean;
+  /** Music to play under the clip on replay (uploaded / library / campaign) —
+   *  the export bakes this in; the preview plays it live, synced + looped. */
+  previewAudio?: string | null;
   /** ~10Hz clock updates for the scrubber. */
   onTick: (t: number, duration: number) => void;
   onEnded: () => void;
@@ -87,7 +90,10 @@ interface Props {
  * layers back-to-front. Also owns drag-to-position.
  */
 export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
-  function CompositorCanvas({ playing, cleanPreview, onTick, onEnded }, ref) {
+  function CompositorCanvas(
+    { playing, cleanPreview, previewAudio, onTick, onEnded },
+    ref,
+  ) {
     const doc = useCompositorStore((s) => s.doc);
     const selectedLayerId = useCompositorStore((s) => s.selectedLayerId);
     const selectLayer = useCompositorStore((s) => s.selectLayer);
@@ -96,6 +102,7 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
+    const audioEl = useRef<HTMLAudioElement>(null);
     const bgImageRef = useRef<HTMLImageElement | null>(null);
     const imagesRef = useRef(new Map<string, HTMLImageElement>());
     // Virtual clock for image backgrounds.
@@ -150,12 +157,24 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
       }
     }, [doc?.layers]);
 
-    // Play/pause the master clock.
+    // Play/pause the master clock — and the preview music alongside it.
     useEffect(() => {
       const video = videoRef.current;
       if (isVideo && video) {
         if (playing) video.play().catch(() => {});
         else video.pause();
+      }
+      const audio = audioEl.current;
+      if (audio) {
+        if (playing) {
+          // Start the music from the current clock position (looped for short
+          // tracks — mirrors the export's stream_loop).
+          const t = isVideo ? (video?.currentTime ?? 0) : virtualT.current;
+          audio.currentTime = Math.min(t, audio.duration || t);
+          audio.play().catch(() => {});
+        } else {
+          audio.pause();
+        }
       }
       lastStamp.current = null; // reset virtual clock delta either way
     }, [playing, isVideo]);
@@ -164,6 +183,8 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
       seek: (t: number) => {
         if (isVideo && videoRef.current) videoRef.current.currentTime = t;
         else virtualT.current = t;
+        const audio = audioEl.current;
+        if (audio && audio.duration) audio.currentTime = t % audio.duration;
       },
     }));
 
@@ -212,6 +233,15 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
           editingLayerId: editing?.id ?? null,
           forceOutline: hoverEdge.current || action.current?.mode === "resize",
         });
+
+        // Keep the music glued to the master clock — correct only on real drift
+        // (>0.35s) so we don't stutter it every frame. Loop short tracks.
+        const audio = audioEl.current;
+        if (audio && playing && audio.duration) {
+          const target = t % audio.duration;
+          if (Math.abs(audio.currentTime - target) > 0.35)
+            audio.currentTime = target;
+        }
 
         if (stamp - lastTickAt.current > 100) {
           lastTickAt.current = stamp;
@@ -550,6 +580,15 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
             playsInline
             preload="auto"
             onEnded={onEnded}
+            className="hidden"
+          />
+        )}
+        {previewAudio && (
+          <audio
+            ref={audioEl}
+            src={previewAudio}
+            crossOrigin="anonymous"
+            preload="auto"
             className="hidden"
           />
         )}

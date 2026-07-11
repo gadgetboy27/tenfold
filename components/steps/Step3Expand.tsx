@@ -347,7 +347,7 @@ export default function Step3Expand() {
             onSelect={(url) => updateExpansion("video", { url })}
           >
             <div className="space-y-3">
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-1.5">
                 {([5, 10, 30] as const).map((t) => {
                   const locked = ent ? !ent.videoDurations.includes(t) : false;
                   return (
@@ -357,7 +357,7 @@ export default function Step3Expand() {
                       onClick={() =>
                         locked ? setUpgradeOpen(true) : setVideoDuration(t)
                       }
-                      className={`relative flex-1 py-1.5 text-xs rounded-full border transition-colors ${
+                      className={`relative w-full rounded-md border px-3 py-1.5 text-left text-xs transition-colors ${
                         videoDuration === t && !locked
                           ? "border-primary/50 text-primary bg-primary/10"
                           : locked
@@ -427,13 +427,13 @@ export default function Step3Expand() {
             onSelect={(url) => updateExpansion("music", { url })}
           >
             <div className="space-y-3">
-              <div className="grid max-h-40 grid-cols-2 gap-1.5 overflow-y-auto pr-0.5">
+              <div className="flex max-h-48 flex-col gap-1.5 overflow-y-auto pr-0.5">
                 {MUSIC_GENRES.map((g) => (
                   <button
                     key={g}
                     type="button"
                     onClick={() => setMusicGenre(g)}
-                    className={`rounded-full border px-2 py-1.5 text-xs leading-tight transition-colors ${
+                    className={`w-full rounded-md border px-3 py-1.5 text-left text-xs transition-colors ${
                       musicGenre === g
                         ? "border-primary/50 text-primary bg-primary/10"
                         : "border-border bg-background hover:border-primary/50"

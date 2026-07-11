@@ -575,6 +575,7 @@ export function Compositor({
             ref={canvasRef}
             playing={playing}
             cleanPreview={isPreview}
+            previewAudio={audioOverride ?? audioUrl ?? null}
             onTick={onTick}
             onEnded={onEnded}
           />
