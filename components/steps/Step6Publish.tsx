@@ -101,7 +101,28 @@ const PLATFORM_META: Record<string, PlatformMeta> = {
     bg: "bg-[#0085FF]/15",
     charLimit: 300,
   },
+  reddit: {
+    label: "Reddit",
+    color: "#FF4500",
+    bg: "bg-[#FF4500]/15",
+    charLimit: 40000,
+  },
+  telegram: {
+    label: "Telegram",
+    color: "#26A5E4",
+    bg: "bg-[#26A5E4]/15",
+    charLimit: 4096,
+  },
+  snapchat: {
+    label: "Snapchat",
+    color: "#FFFC00",
+    bg: "bg-[#FFFC00]/15",
+    charLimit: 250,
+  },
 };
+
+// Every platform we can publish to (the 13 in publishSchema), in display order.
+const ALL_PLATFORMS = Object.keys(PLATFORM_META);
 
 interface PostResult {
   platform: string;
@@ -159,6 +180,45 @@ function PlatformRow({
         )}
       </div>
     </button>
+  );
+}
+
+// ── A not-yet-connected platform: shown so all 13 are visible, with a link to
+//    connect it in Settings (you can only post to connected accounts). ────────
+function ConnectRow({
+  platform,
+  workspaceSlug,
+}: {
+  platform: string;
+  workspaceSlug: string;
+}) {
+  const meta = PLATFORM_META[platform];
+  if (!meta) return null;
+  const initials = meta.label.replace(/\s.*/, "").slice(0, 2).toUpperCase();
+  return (
+    <div className="w-full flex items-center gap-3 p-3 rounded-xl border border-dashed border-border bg-card/40 text-left">
+      <div
+        className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${meta.bg} opacity-70`}
+      >
+        <span className="text-[9px] font-bold" style={{ color: meta.color }}>
+          {initials}
+        </span>
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium leading-none text-muted-foreground">
+          {meta.label}
+        </p>
+        <p className="text-[10px] text-muted-foreground/70 mt-0.5">
+          Not connected
+        </p>
+      </div>
+      <Link
+        href={`/${workspaceSlug}/settings/social`}
+        className="text-[11px] font-medium text-primary hover:underline shrink-0"
+      >
+        Connect
+      </Link>
+    </div>
   );
 }
 
@@ -607,6 +667,7 @@ export default function Step5Publish() {
               </div>
             ) : (
               <div className="space-y-2">
+                {/* Connected accounts — tap to select which to post to. */}
                 {profiles.map((profile) => (
                   <PlatformRow
                     key={profile.platform}
@@ -615,13 +676,24 @@ export default function Step5Publish() {
                     onToggle={() => togglePlatform(profile.platform)}
                   />
                 ))}
-                <Link
-                  href={`/${workspaceSlug}/settings/social`}
-                  className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-primary transition-colors pt-1"
-                >
-                  <ExternalLink className="w-3 h-3" /> Add more platforms in
-                  Settings
-                </Link>
+                {/* Every other platform — visible so you see all 13, each with a
+                    one-tap Connect (you can only post to connected accounts). */}
+                {ALL_PLATFORMS.filter(
+                  (p) => !profiles.some((pr) => pr.platform === p),
+                ).length > 0 && (
+                  <p className="pt-2 text-[10px] font-mono uppercase tracking-wider text-muted-foreground/70">
+                    Connect more to reach them
+                  </p>
+                )}
+                {ALL_PLATFORMS.filter(
+                  (p) => !profiles.some((pr) => pr.platform === p),
+                ).map((p) => (
+                  <ConnectRow
+                    key={p}
+                    platform={p}
+                    workspaceSlug={workspaceSlug ?? ""}
+                  />
+                ))}
                 {(() => {
                   const fb = profiles.find((p) => p.platform === "facebook");
                   const pages = fb?.availablePages ?? [];
