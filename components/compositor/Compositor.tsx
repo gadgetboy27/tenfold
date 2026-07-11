@@ -10,13 +10,13 @@ import {
   Type,
   Layers,
   Sparkles,
-  Loader2,
   Download,
   Maximize2,
   Music,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/brand/Spinner";
 import { api } from "@/lib/api";
 import {
   effectiveLayer,
@@ -88,6 +88,7 @@ export function Compositor({
   const audioRef = useRef<HTMLInputElement>(null);
   // Bring-your-own music: overrides the campaign's audio for the export mix.
   const [audioOverride, setAudioOverride] = useState<string | null>(null);
+  const [audioName, setAudioName] = useState<string | null>(null);
   const [audioAck, setAudioAck] = useState(false);
   const [uploadingAudio, setUploadingAudio] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -343,7 +344,8 @@ export function Compositor({
       };
       if (!res.ok || !data.url) throw new Error(data.error ?? "Upload failed");
       setAudioOverride(data.url);
-      toast.success("Music added — it'll mix into your export.");
+      setAudioName(file.name.replace(/\.[^.]+$/, "")); // drop the extension
+      toast.success("Music added — press play to preview it with the video.");
     } catch (err) {
       toast.error((err as Error).message ?? "Couldn't upload that track.");
     } finally {
@@ -437,20 +439,31 @@ export function Compositor({
                 title="Upload your own cleared music track for the mix"
               >
                 {uploadingAudio ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Spinner size={14} />
                 ) : (
                   <Music className="h-3.5 w-3.5" />
                 )}
-                {audioOverride ? "Music added ✓" : "Upload music"}
+                Upload my own music
               </Button>
               {audioOverride && (
-                <button
-                  onClick={() => setAudioOverride(null)}
-                  className="text-[11px] text-muted-foreground hover:text-foreground"
-                  title="Revert to the campaign's original audio"
+                <span
+                  className="flex max-w-[220px] items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-2.5 py-1 text-[11px] text-primary"
+                  title="Press play to preview this track with the video"
                 >
-                  clear
-                </button>
+                  <Music className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{audioName ?? "Music added"}</span>
+                  <span className="shrink-0 text-primary/70">— ▶ preview</span>
+                  <button
+                    onClick={() => {
+                      setAudioOverride(null);
+                      setAudioName(null);
+                    }}
+                    className="shrink-0 text-primary/60 hover:text-primary"
+                    title="Remove this track"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
               )}
               <input
                 ref={audioRef}
@@ -465,7 +478,10 @@ export function Compositor({
                     const t = MUSIC_LIBRARY.find(
                       (m) => m.id === e.target.value,
                     );
-                    if (t) setAudioOverride(t.url); // library tracks are pre-cleared
+                    if (t) {
+                      setAudioOverride(t.url); // library tracks are pre-cleared
+                      setAudioName(t.title);
+                    }
                   }}
                   defaultValue=""
                   className="h-7 rounded-md border border-border bg-background px-2 text-xs"
@@ -488,7 +504,7 @@ export function Compositor({
                 className="ml-auto h-7 gap-1.5 px-3 text-xs"
               >
                 {applyingKit ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Spinner size={14} />
                 ) : (
                   <Sparkles className="h-3.5 w-3.5" />
                 )}
@@ -502,7 +518,7 @@ export function Compositor({
                 className="h-7 gap-1.5 px-3 text-xs"
               >
                 {exporting ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Spinner size={14} />
                 ) : (
                   <Download className="h-3.5 w-3.5" />
                 )}
@@ -518,7 +534,7 @@ export function Compositor({
                   title={`Render all ${fanAspects.length} connected formats at once`}
                 >
                   {exportingAll ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <Spinner size={14} />
                   ) : (
                     <Layers className="h-3.5 w-3.5" />
                   )}

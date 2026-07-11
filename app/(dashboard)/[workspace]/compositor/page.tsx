@@ -8,6 +8,7 @@ import {
   Film,
   ImageIcon,
   RotateCcw,
+  ArrowLeft,
   ArrowRight,
   Loader2,
 } from "lucide-react";
@@ -177,6 +178,13 @@ export default function CompositorPage() {
     router.push(`/${params.workspace}`);
   };
 
+  // Back to the compose screen (Step 4) to pick a different video — the brand
+  // work here is discarded, but the campaign's assets are untouched.
+  const backToCompose = () => {
+    setStep(4);
+    router.push(`/${params.workspace}`);
+  };
+
   const startLab = (file: File, kind: "video" | "image") => {
     load({
       id: crypto.randomUUID(),
@@ -202,15 +210,27 @@ export default function CompositorPage() {
             Beta
           </span>
         </div>
-        {doc && !campaignId && (
+        {campaignId ? (
           <Button
             size="sm"
             variant="outline"
-            onClick={reset}
+            onClick={backToCompose}
             className="gap-1.5 text-xs"
+            title="Go back to Compose to pick a different video"
           >
-            <RotateCcw className="h-3.5 w-3.5" /> Start over
+            <ArrowLeft className="h-3.5 w-3.5" /> Back to Compose
           </Button>
+        ) : (
+          doc && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={reset}
+              className="gap-1.5 text-xs"
+            >
+              <RotateCcw className="h-3.5 w-3.5" /> Start over
+            </Button>
+          )
         )}
       </div>
 
