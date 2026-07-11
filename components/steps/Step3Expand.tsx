@@ -380,14 +380,14 @@ export default function Step3Expand() {
                   );
                 })}
               </div>
-              <div className="flex gap-1 flex-wrap">
+              <div className="flex flex-col gap-1.5">
                 {(["Cinematic", "Fast-cut", "Dramatic", "Smooth"] as const).map(
                   (s) => (
                     <button
                       key={s}
                       type="button"
                       onClick={() => setVideoStyle(s)}
-                      className={`flex-1 py-1.5 text-xs rounded-full border transition-colors ${
+                      className={`w-full rounded-md border px-3 py-1.5 text-left text-xs transition-colors ${
                         videoStyle === s
                           ? "border-primary/50 text-primary bg-primary/10"
                           : "border-border bg-background hover:border-primary/50"
