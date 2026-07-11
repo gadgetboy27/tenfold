@@ -497,52 +497,55 @@ export function Compositor({
                   ))}
                 </select>
               )}
-              <Button
-                size="sm"
-                onClick={applyBrandKit}
-                disabled={applyingKit}
-                className="ml-auto h-7 gap-1.5 px-3 text-xs"
-              >
-                {applyingKit ? (
-                  <Spinner size={14} />
-                ) : (
-                  <Sparkles className="h-3.5 w-3.5" />
-                )}
-                Apply brand kit
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={exportMp4}
-                disabled={exporting || doc.layers.length === 0}
-                className="h-7 gap-1.5 px-3 text-xs"
-              >
-                {exporting ? (
-                  <Spinner size={14} />
-                ) : (
-                  <Download className="h-3.5 w-3.5" />
-                )}
-                {exporting ? "Rendering…" : "Export MP4"}
-              </Button>
-              {fanAspects.length > 1 && (
+              <div className="ml-auto flex flex-wrap items-center gap-2">
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={exportAllFormats}
-                  disabled={exportingAll || doc.layers.length === 0}
+                  onClick={applyBrandKit}
+                  disabled={applyingKit}
                   className="h-7 gap-1.5 px-3 text-xs"
-                  title={`Render all ${fanAspects.length} connected formats at once`}
                 >
-                  {exportingAll ? (
+                  {applyingKit ? (
                     <Spinner size={14} />
                   ) : (
-                    <Layers className="h-3.5 w-3.5" />
+                    <Sparkles className="h-3.5 w-3.5" />
                   )}
-                  {exportingAll
-                    ? "Rendering all…"
-                    : `Export all ${fanAspects.length} formats`}
+                  Apply brand kit
                 </Button>
-              )}
+                <Button
+                  size="sm"
+                  onClick={exportMp4}
+                  disabled={exporting}
+                  className="h-7 gap-1.5 px-3 text-xs"
+                  title="Render the finished video (with your music) to an MP4"
+                >
+                  {exporting ? (
+                    <Spinner size={14} />
+                  ) : (
+                    <Download className="h-3.5 w-3.5" />
+                  )}
+                  {exporting ? "Rendering…" : "Export MP4"}
+                </Button>
+                {fanAspects.length > 1 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={exportAllFormats}
+                    disabled={exportingAll}
+                    className="h-7 gap-1.5 px-3 text-xs"
+                    title={`Render all ${fanAspects.length} connected formats at once`}
+                  >
+                    {exportingAll ? (
+                      <Spinner size={14} />
+                    ) : (
+                      <Layers className="h-3.5 w-3.5" />
+                    )}
+                    {exportingAll
+                      ? "Rendering all…"
+                      : `Export all ${fanAspects.length} formats`}
+                  </Button>
+                )}
+              </div>
             </>
           )}
         </div>
