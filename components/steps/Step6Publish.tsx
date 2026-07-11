@@ -131,55 +131,44 @@ interface PostResult {
   error?: string;
 }
 
-// ── Platform checkbox row ─────────────────────────────────────────────────
-function PlatformRow({
-  profile,
+// ── Connected-platform chips: tap to include this asset on that social. ──────
+function PlatformChips({
+  profiles,
   selected,
   onToggle,
 }: {
-  profile: SocialProfile;
-  selected: boolean;
-  onToggle: () => void;
+  profiles: SocialProfile[];
+  selected: string[];
+  onToggle: (id: string) => void;
 }) {
-  const meta = PLATFORM_META[profile.platform];
-  if (!meta) return null;
-  const initials = meta.label.replace(/\s.*/, "").slice(0, 2).toUpperCase();
-
+  if (profiles.length === 0)
+    return (
+      <p className="text-[11px] text-muted-foreground">
+        No accounts connected yet.
+      </p>
+    );
   return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${
-        selected
-          ? "border-primary bg-primary/10 text-foreground"
-          : "border-border bg-card text-muted-foreground hover:border-border/70 hover:text-foreground"
-      }`}
-    >
-      <div
-        className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${meta.bg}`}
-      >
-        <span className="text-[9px] font-bold" style={{ color: meta.color }}>
-          {initials}
-        </span>
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium leading-none">{meta.label}</p>
-        {(profile.profile_display_name ?? profile.handle) && (
-          <p className="text-[10px] text-muted-foreground font-mono mt-0.5 truncate">
-            {profile.profile_display_name ?? profile.handle}
-          </p>
-        )}
-      </div>
-      <div
-        className={`w-4 h-4 rounded border-2 shrink-0 flex items-center justify-center transition-colors ${
-          selected ? "border-primary bg-primary" : "border-muted-foreground/30"
-        }`}
-      >
-        {selected && (
-          <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
-        )}
-      </div>
-    </button>
+    <div className="flex flex-wrap gap-1.5">
+      {profiles.map((pr) => {
+        const meta = PLATFORM_META[pr.platform];
+        if (!meta) return null;
+        const on = selected.includes(pr.platform);
+        return (
+          <button
+            key={pr.platform}
+            type="button"
+            onClick={() => onToggle(pr.platform)}
+            className={`px-2.5 py-1 rounded-full border text-xs font-medium transition-colors ${
+              on
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {meta.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -206,14 +195,24 @@ export default function Step5Publish() {
   // Always show the "connect your socials" screen first (a deliberate step
   // before the publish page); "Continue to publish" dismisses it.
   const [connectGate, setConnectGate] = useState(true);
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
+  // Dual publish: the static image and the video each get their OWN set of
+  // socials (same or different). One "Publish" fires both.
+  const [imagePlatforms, setImagePlatforms] = useState<string[]>([]);
+  const [videoPlatforms, setVideoPlatforms] = useState<string[]>([]);
   const [facebookPageId, setFacebookPageId] = useState<string>("");
-  // Default to Video whenever a clip exists — reactive (no mount-time race with
-  // expansions loading); the user can override via the toggle.
-  const [publishKindOverride, setPublishKindOverride] = useState<
-    "video" | "image" | null
-  >(null);
-  const publishKind = publishKindOverride ?? (hasVideo ? "video" : "image");
+  // Union of both — drives the caption char-limit, FB-page selector, and button.
+  const selectedPlatforms = useMemo(
+    () => Array.from(new Set([...imagePlatforms, ...videoPlatforms])),
+    [imagePlatforms, videoPlatforms],
+  );
+  const toggleImage = (id: string) =>
+    setImagePlatforms((p) =>
+      p.includes(id) ? p.filter((x) => x !== id) : [...p, id],
+    );
+  const toggleVideo = (id: string) =>
+    setVideoPlatforms((p) =>
+      p.includes(id) ? p.filter((x) => x !== id) : [...p, id],
+    );
   const [caption, setCaption] = useState(expansions.script?.content ?? "");
   const [hashtags, setHashtags] = useState<string[]>([]);
   const [hashtagInput, setHashtagInput] = useState("");
@@ -276,7 +275,13 @@ export default function Step5Publish() {
       if (res.ok) {
         const data = (await res.json()) as SocialProfile[];
         setProfiles(data);
-        setSelectedPlatforms(data.map((p) => p.platform));
+        // Default: publish the finished VIDEO everywhere; the static image is
+        // opt-in (tick it per platform). If there's no video, default the image.
+        const all = data.map((p) => p.platform);
+        const videoReady =
+          useAppStore.getState().expansions.video?.status === "ready";
+        if (videoReady) setVideoPlatforms(all);
+        else setImagePlatforms(all);
         // Default the FB Page picker to the workspace's active Page.
         const fb = data.find((p) => p.platform === "facebook");
         if (fb?.activePageId) setFacebookPageId(fb.activePageId);
@@ -290,11 +295,6 @@ export default function Step5Publish() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial load of connected profiles
     fetchProfiles();
   }, [fetchProfiles]);
-
-  const togglePlatform = (id: string) =>
-    setSelectedPlatforms((prev) =>
-      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id],
-    );
 
   const addHashtag = (raw: string) => {
     const tag = raw.replace(/^#+/, "").trim().replace(/\s+/g, "_");
@@ -324,64 +324,76 @@ export default function Step5Publish() {
 
     setIsPublishing(true);
     try {
-      const body: Record<string, unknown> = {
-        platforms: selectedPlatforms,
-        caption,
-        hashtags,
-      };
-      // "Publish the video": let the server grab the campaign's actual video clip
-      // and post it AS a video (reliable — no FFmpeg mix step that can silently
-      // fall back to a still image).
-      if (publishKind === "video" && hasVideo) {
-        body.preferVideo = true;
-        body.campaignId = currentCampaignId;
-      }
-      // Send only the tailored captions for the platforms being published.
-      const tailored = Object.fromEntries(
-        selectedPlatforms
-          .filter((p) => platformCaptions[p])
-          .map((p) => [p, platformCaptions[p]]),
-      );
-      if (Object.keys(tailored).length) body.platformCaptions = tailored;
-      // Composition + anchor as fallbacks (used when NOT publishing the video),
-      // so a stale compositionId can never block the publish.
-      if (currentCompositionId) body.compositionId = currentCompositionId;
-      if (selectedAnchorId) body.assetId = selectedAnchorId;
-      if (selectedPlatforms.includes("facebook") && facebookPageId)
-        body.facebookPageId = facebookPageId;
-      if (scheduleMode === "later")
-        body.scheduledAt = new Date(scheduledAt).toISOString();
+      const scheduledIso =
+        scheduleMode === "later"
+          ? new Date(scheduledAt).toISOString()
+          : undefined;
 
-      const res = await api("/api/publish", {
-        method: "POST",
-        body: JSON.stringify(body),
-        workspaceSlug,
-      });
-      const data = (await res.json()) as {
-        platformResults?: Record<string, string>;
-        errors?: Record<string, string>;
-        error?: string;
-      };
-      if (!res.ok)
-        throw new Error(data.error ?? `Publish failed (${res.status})`);
+      // One publish call per asset, each to ITS chosen platforms. The static
+      // image and the video can go to the same or different socials.
+      const sendTo = async (
+        platforms: string[],
+        kind: "image" | "video",
+      ): Promise<PostResult[]> => {
+        if (platforms.length === 0) return [];
+        const body: Record<string, unknown> = { platforms, caption, hashtags };
+        if (kind === "video") {
+          body.preferVideo = true;
+          body.campaignId = currentCampaignId;
+          if (currentCompositionId) body.compositionId = currentCompositionId;
+        } else {
+          // Image: post the anchor still (no preferVideo → the route uses it).
+          if (selectedAnchorId) body.assetId = selectedAnchorId;
+        }
+        const tailored = Object.fromEntries(
+          platforms
+            .filter((p) => platformCaptions[p])
+            .map((p) => [p, platformCaptions[p]]),
+        );
+        if (Object.keys(tailored).length) body.platformCaptions = tailored;
+        if (platforms.includes("facebook") && facebookPageId)
+          body.facebookPageId = facebookPageId;
+        if (scheduledIso) body.scheduledAt = scheduledIso;
 
-      const resultList: PostResult[] = [
-        ...Object.entries(data.platformResults ?? {}).map(([platform, id]) => ({
-          platform,
-          status: "success",
-          id,
-        })),
-        ...Object.entries(data.errors ?? {}).map(([platform, error]) => ({
-          platform,
-          status: "error",
-          error,
-        })),
-      ];
-      setResults(
-        resultList.length
-          ? resultList
-          : selectedPlatforms.map((p) => ({ platform: p, status: "success" })),
-      );
+        const res = await api("/api/publish", {
+          method: "POST",
+          body: JSON.stringify(body),
+          workspaceSlug,
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          platformResults?: Record<string, string>;
+          errors?: Record<string, string>;
+          error?: string;
+        };
+        if (!res.ok && !data.platformResults) {
+          return platforms.map((platform) => ({
+            platform,
+            status: "error",
+            error: data.error ?? `Publish failed (${res.status})`,
+          }));
+        }
+        const tag = kind === "video" ? "🎬" : "📷";
+        return [
+          ...Object.entries(data.platformResults ?? {}).map(
+            ([platform, id]) => ({
+              platform: `${tag} ${PLATFORM_META[platform]?.label ?? platform}`,
+              status: "success",
+              id,
+            }),
+          ),
+          ...Object.entries(data.errors ?? {}).map(([platform, error]) => ({
+            platform: `${tag} ${PLATFORM_META[platform]?.label ?? platform}`,
+            status: "error",
+            error,
+          })),
+        ];
+      };
+
+      const [videoRes, imageRes] = await Promise.all([
+        sendTo(videoPlatforms, "video"),
+        sendTo(imagePlatforms, "image"),
+      ]);
+      setResults([...videoRes, ...imageRes]);
     } catch (err: unknown) {
       toast.error((err as Error).message ?? "Publish failed");
     } finally {
@@ -705,10 +717,11 @@ export default function Step5Publish() {
       {/* Controls panel */}
       <div className="w-full md:w-[360px] flex flex-col overflow-hidden border-t md:border-t-0 border-border">
         <div className="flex-1 overflow-y-auto divide-y divide-border">
-          {/* Platform picker */}
-          <div className="p-4">
-            <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-3">
-              Platforms
+          {/* Dual publish — the static image and the video each to their OWN
+              socials, with a thumbnail so it's clear which is which. */}
+          <div className="p-4 space-y-4">
+            <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
+              Publish to
             </p>
             {loadingProfiles ? (
               <div className="flex items-center gap-2 text-muted-foreground text-sm py-2">
@@ -716,21 +729,78 @@ export default function Step5Publish() {
                 accounts…
               </div>
             ) : (
-              <div className="space-y-2">
-                {/* Connected accounts — tap to select which to post to. The
-                    connect step before this handles linking new platforms. */}
-                {profiles.map((profile) => (
-                  <PlatformRow
-                    key={profile.platform}
-                    profile={profile}
-                    selected={selectedPlatforms.includes(profile.platform)}
-                    onToggle={() => togglePlatform(profile.platform)}
-                  />
-                ))}
+              <>
+                {/* Static image (with its caption) */}
+                {anchor && (
+                  <div className="rounded-xl border border-border overflow-hidden">
+                    <div className="flex gap-3 p-3">
+                      <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-secondary shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={anchor.url}
+                          alt="Static image"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground">
+                          📷 Static image
+                        </p>
+                        <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
+                          {caption
+                            ? `“${caption.slice(0, 70)}${caption.length > 70 ? "…" : ""}”`
+                            : "with your caption"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="px-3 pb-3">
+                      <p className="text-[10px] text-muted-foreground mb-1.5">
+                        Send the image to:
+                      </p>
+                      <PlatformChips
+                        profiles={profiles}
+                        selected={imagePlatforms}
+                        onToggle={toggleImage}
+                      />
+                    </div>
+                  </div>
+                )}
+                {/* Video */}
+                {hasVideo && (
+                  <div className="rounded-xl border border-border overflow-hidden">
+                    <div className="flex gap-3 p-3">
+                      <video
+                        src={expansions.video?.url}
+                        muted
+                        playsInline
+                        preload="metadata"
+                        className="w-16 h-16 rounded-lg object-cover bg-black shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground">
+                          🎬 Video
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          your finished film + music
+                        </p>
+                      </div>
+                    </div>
+                    <div className="px-3 pb-3">
+                      <p className="text-[10px] text-muted-foreground mb-1.5">
+                        Send the video to:
+                      </p>
+                      <PlatformChips
+                        profiles={profiles}
+                        selected={videoPlatforms}
+                        onToggle={toggleVideo}
+                      />
+                    </div>
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={() => setConnectGate(true)}
-                  className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-primary transition-colors pt-1"
+                  className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-primary transition-colors"
                 >
                   <ExternalLink className="w-3 h-3" /> Connect more platforms
                 </button>
@@ -743,7 +813,7 @@ export default function Step5Publish() {
                   )
                     return null;
                   return (
-                    <div className="pt-2">
+                    <div>
                       <label className="block text-[11px] text-muted-foreground mb-1">
                         Facebook Page — publishing to:
                       </label>
@@ -758,53 +828,12 @@ export default function Step5Publish() {
                           </option>
                         ))}
                       </select>
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        Choose which Page this campaign posts to.
-                      </p>
                     </div>
                   );
                 })()}
-              </div>
+              </>
             )}
           </div>
-
-          {/* What you're publishing — video vs still (only when a video exists) */}
-          {hasVideo && (
-            <div className="p-4">
-              <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-3">
-                Publishing
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPublishKindOverride("video")}
-                  className={`py-2 text-xs rounded-lg border transition-colors ${
-                    publishKind === "video"
-                      ? "border-primary/50 text-primary bg-primary/10"
-                      : "border-border hover:border-primary/50"
-                  }`}
-                >
-                  🎬 Video
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPublishKindOverride("image")}
-                  className={`py-2 text-xs rounded-lg border transition-colors ${
-                    publishKind === "image"
-                      ? "border-primary/50 text-primary bg-primary/10"
-                      : "border-border hover:border-primary/50"
-                  }`}
-                >
-                  📷 Image
-                </button>
-              </div>
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                {publishKind === "video"
-                  ? "Your video + music + caption, posted as a video."
-                  : "Just the still image with your caption — no video."}
-              </p>
-            </div>
-          )}
 
           {/* Caption */}
           <div className="p-4">
