@@ -29,12 +29,12 @@ export const MUSIC_NATURAL_SUFFIX =
   "high-quality, natural acoustic instrumentation, warm analog tone, rich organic texture, real played instruments, no harsh digital synths, professional studio recording";
 
 export const VIDEO_DURATION_PROMPTS: Record<string, string> = {
+  video_5s:
+    "ultra-short social hook, one striking beat, instant attention-grab, snappy motion",
   video_10s:
     "short punchy social media clip, fast-paced, attention-grabbing, snappy motion",
   video_30s:
     "dynamic narrative sequence, building story arc, engaging pacing, social content",
-  video_60s:
-    "cinematic brand story, sweeping composition, deliberate pacing, high production value",
 };
 
 export type VideoStyle = "Cinematic" | "Fast-cut" | "Dramatic" | "Smooth";

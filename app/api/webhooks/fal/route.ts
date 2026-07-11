@@ -4,6 +4,7 @@ import { falWebhookPayloadSchema, isSuccessStatus } from "@/lib/fal/webhooks";
 import { refundCredits } from "@/lib/credits/refund";
 import { recordJobCost } from "@/lib/costs/tracker";
 import { analyzeJobFailure } from "@/lib/fal/error-analyzer";
+import { concatVideos } from "@/lib/composition/concat";
 import { v4 as uuidv4 } from "uuid";
 
 interface CreativeJob {
@@ -86,10 +87,17 @@ export async function POST(req: Request) {
           requestId?: string;
         }>
       | undefined) ?? [];
+  // Video_30s ties two segment fal requests to one job (like directions).
+  const segments =
+    (job?.input_params?.segments as
+      | Array<{ index: number; requestId?: string }>
+      | undefined) ?? [];
   const validRequestIds = new Set<string>(
-    [job?.fal_request_id, ...directions.map((d) => d.requestId)].filter(
-      Boolean,
-    ) as string[],
+    [
+      job?.fal_request_id,
+      ...directions.map((d) => d.requestId),
+      ...segments.map((s) => s.requestId),
+    ].filter(Boolean) as string[],
   );
   if (
     jobId &&
@@ -111,6 +119,13 @@ export async function POST(req: Request) {
     directions.find((d) => d.index === dIndex) ??
     directions.find((d) => d.requestId === requestId) ??
     null;
+
+  // Which video segment is this? (?seg=index, else match by requestId)
+  const segParam = new URL(req.url).searchParams.get("seg");
+  const segIndex =
+    segParam !== null && segParam !== ""
+      ? Number(segParam)
+      : (segments.find((s) => s.requestId === requestId)?.index ?? null);
 
   if (!job) {
     await admin
@@ -134,6 +149,7 @@ export async function POST(req: Request) {
       job,
       resultData as Parameters<typeof handleSuccess>[1],
       direction,
+      segIndex,
     );
   } else {
     const errMsg =
@@ -170,6 +186,7 @@ async function handleSuccess(
     prompt?: string;
     requestId?: string;
   } | null = null,
+  segIndex: number | null = null,
 ) {
   const admin = createSupabaseAdminClient();
   const assetInserts: Record<string, unknown>[] = [];
@@ -241,6 +258,23 @@ async function handleSuccess(
       }
     } catch {
       // Fallback to fal CDN URL — it may expire but is better than nothing
+    }
+    // Multi-segment 30s: store this as an intermediate video_segment (tagged with
+    // its index), then let the finalizer stitch once every segment has landed.
+    const expectedSegments = Number(job.input_params?.expected_segments ?? 0);
+    if (expectedSegments > 1) {
+      await admin.from("assets").insert({
+        id: assetId,
+        campaign_id: job.campaign_id,
+        workspace_id: job.workspace_id,
+        job_id: job.id,
+        type: "video_segment",
+        url: publicUrl,
+        storage_path: storedPath ?? `fal/${assetId}.mp4`,
+        metadata: { segment_index: segIndex ?? 0 },
+      });
+      await finalizeMultiSegment(job, expectedSegments);
+      return;
     }
     assetInserts.push({
       id: assetId,
@@ -392,6 +426,130 @@ async function finalizeMultiImage(job: CreativeJob, expected: number) {
   // else: still waiting for more direction webhooks — leave processing.
 }
 
+/**
+ * Completion gate for the real 30s video (2× 15s Kling v3 segments). Each
+ * segment's webhook (success or failure) calls this. Once all segments have
+ * landed as video_segment assets, exactly ONE webhook wins an atomic claim
+ * (processing → stitching) and concatenates them into the final `video` asset;
+ * if every segment webhook has reported but the full set didn't land, the clip
+ * failed → refund. A partial 30s is not a usable video, so we require ALL.
+ */
+async function finalizeMultiSegment(job: CreativeJob, expected: number) {
+  const admin = createSupabaseAdminClient();
+
+  const { data: segAssets } = await admin
+    .from("assets")
+    .select("id, url, storage_path, metadata")
+    .eq("job_id", job.id)
+    .eq("type", "video_segment");
+  const segs = (segAssets ?? []) as Array<{
+    id: string;
+    url: string;
+    storage_path: string;
+    metadata: { segment_index?: number } | null;
+  }>;
+
+  const segments =
+    (job.input_params?.segments as Array<{ requestId?: string }> | undefined) ??
+    [];
+  const reqIds = segments.map((s) => s.requestId).filter(Boolean) as string[];
+  const { count: arrivedCount } = reqIds.length
+    ? await admin
+        .from("webhook_logs")
+        .select("event_id", { count: "exact", head: true })
+        .in("event_id", reqIds)
+    : { count: 0 };
+  const arrived = arrivedCount ?? 0;
+
+  if (segs.length >= expected) {
+    // Claim the stitch atomically — only one concurrent webhook wins.
+    const { data: claimed } = await admin
+      .from("creative_jobs")
+      .update({ status: "stitching" })
+      .eq("id", job.id)
+      .eq("status", "processing")
+      .select("id");
+    if (!claimed || claimed.length === 0) return; // another webhook is stitching
+
+    try {
+      const ordered = [...segs].sort(
+        (a, b) =>
+          (a.metadata?.segment_index ?? 0) - (b.metadata?.segment_index ?? 0),
+      );
+      const { url, storagePath } = await concatVideos({
+        urls: ordered.map((s) => s.url),
+        workspaceId: job.workspace_id,
+        campaignId: job.campaign_id,
+        name: job.id,
+      });
+      await admin.from("assets").insert({
+        id: uuidv4(),
+        campaign_id: job.campaign_id,
+        workspace_id: job.workspace_id,
+        job_id: job.id,
+        type: "video",
+        url,
+        storage_path: storagePath,
+      });
+      // Tidy the intermediate segments (best-effort — they're not user-facing).
+      const paths = segs
+        .map((s) => s.storage_path)
+        .filter((p) => p && !p.startsWith("fal/"));
+      if (paths.length)
+        await admin.storage
+          .from("assets")
+          .remove(paths)
+          .catch(() => {});
+      await admin
+        .from("assets")
+        .delete()
+        .eq("job_id", job.id)
+        .eq("type", "video_segment");
+
+      await admin
+        .from("creative_jobs")
+        .update({ status: "completed", completed_at: new Date().toISOString() })
+        .eq("id", job.id);
+      await admin
+        .from("campaigns")
+        .update({ status: "ready" })
+        .eq("id", job.campaign_id)
+        .in("status", ["generating", "expanding"]);
+      await recordJobCost(job.id, job.type);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Video stitch failed";
+      await admin
+        .from("creative_jobs")
+        .update({ status: "failed", error_message: msg })
+        .eq("id", job.id);
+      await admin
+        .from("campaigns")
+        .update({ status: "failed" })
+        .eq("id", job.campaign_id);
+      await refundCredits(job.id);
+    }
+    return;
+  }
+
+  // Not all segments landed. If every segment webhook has reported, one failed →
+  // fail + refund (idempotent). Otherwise keep waiting.
+  if (arrived >= expected) {
+    await admin
+      .from("creative_jobs")
+      .update({
+        status: "failed",
+        error_message: "A video segment failed to render",
+      })
+      .eq("id", job.id)
+      .eq("status", "processing");
+    await admin
+      .from("campaigns")
+      .update({ status: "failed" })
+      .eq("id", job.campaign_id);
+    await refundCredits(job.id);
+  }
+}
+
 async function handleFailure(
   job: CreativeJob,
   errorMessage: string,
@@ -405,6 +563,15 @@ async function handleFailure(
   const expected = Number(job.input_params?.expected_images ?? 0);
   if (expected > 1) {
     await finalizeMultiImage(job, expected);
+    return;
+  }
+
+  // Multi-segment 30s video: any segment failing kills the clip (a partial 30s
+  // is unusable). Defer to the segment gate, which fails+refunds once every
+  // segment webhook has reported and the full set didn't land.
+  const expectedSegments = Number(job.input_params?.expected_segments ?? 0);
+  if (expectedSegments > 1) {
+    await finalizeMultiSegment(job, expectedSegments);
     return;
   }
 

@@ -163,17 +163,17 @@ describe("video length guidance", () => {
   });
 
   it("snaps a target length to the nearest producible gen tier", () => {
+    expect(snapToGenTier(6)).toBe(5);
     expect(snapToGenTier(12)).toBe(10);
-    expect(snapToGenTier(25)).toBe(30);
-    expect(snapToGenTier(40)).toBe(30); // closer to 30 than 60
-    expect(snapToGenTier(55)).toBe(60);
+    expect(snapToGenTier(25)).toBe(30); // closer to 30 than 10
+    expect(snapToGenTier(40)).toBe(30);
   });
 
   it("recommends the shortest cross-platform sweet spot, snapped to a tier", () => {
     // TikTok + Instagram both ~30 → 30.
     expect(recommendVideoDuration(["tiktok", "instagram"])).toBe(30);
-    // YouTube's ~55 sweet spot → 60.
-    expect(recommendVideoDuration(["youtube"])).toBe(60);
+    // YouTube's ~55 sweet spot → snaps to 30 (max producible tier).
+    expect(recommendVideoDuration(["youtube"])).toBe(30);
     // Mixed: Pinterest's 15 is shortest → snaps to 10.
     expect(recommendVideoDuration(["pinterest", "tiktok"])).toBe(10);
     // Nothing recognised → 30 default.

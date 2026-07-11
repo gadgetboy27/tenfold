@@ -208,9 +208,9 @@ export const PLATFORM_DURATION: Record<
   bluesky: { recommended: 30, max: 60 },
 };
 
-/** Video-gen tiers our engine can actually produce (fal.ai Kling) — mirrors the
- *  video_10s / video_30s / video_60s credit costs. */
-export const VIDEO_GEN_TIERS = [10, 30, 60] as const;
+/** Video-gen tiers our engine can actually produce (fal.ai Kling v3) — mirrors
+ *  the video_5s / video_10s / video_30s credit costs (30s = 2×15s stitched). */
+export const VIDEO_GEN_TIERS = [5, 10, 30] as const;
 export type VideoGenTier = (typeof VIDEO_GEN_TIERS)[number];
 
 /** Nearest producible gen tier to a target length. */

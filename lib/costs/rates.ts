@@ -4,15 +4,16 @@
 
 export const PROVIDER_COST_USD: Record<string, number> = {
   // fal.ai — FLUX Pro v1.1 @ $0.05/image × 6 images
-  image_generation: 0.30,
+  image_generation: 0.3,
   // fal.ai — FLUX Kontext (single variation)
   image_variation: 0.04,
   // fal.ai — Clarity Upscaler
   upscale: 0.012,
-  // fal.ai — Kling v1.6 Pro (charged per second of output)
-  video_10s: 0.30,
-  video_30s: 0.90,
-  video_60s: 1.80,
+  // fal.ai — Kling v3 Pro (charged per second of output, ~$0.095/s). 30s renders
+  // as 2× 15s segments, so ~2× the 15s cost. Tune against live fal pricing.
+  video_5s: 0.48,
+  video_10s: 0.95,
+  video_30s: 2.85,
   // Talking video pipeline: ElevenLabs TTS (~$0.05) + VEED Fabric lip-sync
   // (~$1.20 for ~15s @ 480p) + Claude script (~$0.002). Tune with resolution/length.
   talking_video: 1.25,
@@ -32,7 +33,7 @@ export const PROVIDER_COST_USD: Record<string, number> = {
 
 // Credit pack value in USD (used for margin calculations)
 // 1 credit ≈ NZD 0.17 ≈ USD 0.10 at 1.65 exchange rate
-export const CREDIT_VALUE_USD = 0.10;
+export const CREDIT_VALUE_USD = 0.1;
 
 // NZD/USD exchange rate — update quarterly
 export const NZD_USD_RATE = 0.61;

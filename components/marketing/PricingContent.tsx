@@ -10,9 +10,9 @@ const COST_ROWS: { key: keyof typeof CREDIT_COSTS; label: string }[] = [
   { key: "image_generation", label: "Campaign image set (4 images)" },
   { key: "image_variation", label: "Image variation" },
   { key: "upscale", label: "Upscale to high resolution" },
+  { key: "video_5s", label: "5-second video" },
   { key: "video_10s", label: "10-second video" },
   { key: "video_30s", label: "30-second video" },
-  { key: "video_60s", label: "60-second video" },
   { key: "music_generation", label: "Music track" },
   { key: "script_generation", label: "Script or caption" },
 ];

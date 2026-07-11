@@ -37,7 +37,7 @@ export default function Step3Expand() {
     scriptTone,
     variationDirection,
   } = expandDrafts;
-  const setVideoDuration = (v: 10 | 30 | 60) =>
+  const setVideoDuration = (v: 5 | 10 | 30) =>
     patchExpandDrafts({ videoDuration: v });
   const setVideoStyle = (v: VideoStyle) => patchExpandDrafts({ videoStyle: v });
   const setMusicGenre = (v: string) => patchExpandDrafts({ musicGenre: v });
@@ -94,9 +94,9 @@ export default function Step3Expand() {
       const jobType =
         type === "video"
           ? (`video_${videoDuration}s` as
+              | "video_5s"
               | "video_10s"
-              | "video_30s"
-              | "video_60s")
+              | "video_30s")
           : type === "music"
             ? "music_generation"
             : "script_generation";
@@ -107,12 +107,9 @@ export default function Step3Expand() {
       };
       if (type === "music") {
         params.genre = musicGenre;
-        // Match the music length to the ACTUAL generated video length (the model
-        // caps clips at ~5–10s), not the 10/30/60 label, so they line up when composed.
-        params.durationSec =
-          ({ 10: 5, 30: 10, 60: 10 } as Record<number, number>)[
-            videoDuration
-          ] ?? videoDuration;
+        // Music length now matches the real video length (5/10/30s), capped at
+        // the model's max (~47s) server-side, so the track fits the clip.
+        params.durationSec = videoDuration;
         params.musicModel = musicModel;
         if (variationDirection.music) {
           params.variationDirection = variationDirection.music;
@@ -341,8 +338,8 @@ export default function Step3Expand() {
           <FormatCard
             type="video"
             title="Video"
-            subtitle="5 or 10-second clip"
-            cost={`${CREDIT_COSTS[`video_${videoDuration}s` as "video_10s" | "video_30s" | "video_60s"]} cr`}
+            subtitle="5, 10 or 30-second clip"
+            cost={`${CREDIT_COSTS[`video_${videoDuration}s` as "video_5s" | "video_10s" | "video_30s"]} cr`}
             icon={Film}
             onGenerate={() => handleGenerate("video")}
             onRefresh={() => handleRefresh("video")}
@@ -351,7 +348,7 @@ export default function Step3Expand() {
           >
             <div className="space-y-3">
               <div className="flex gap-2">
-                {([10, 30] as const).map((t) => {
+                {([5, 10, 30] as const).map((t) => {
                   const locked = ent ? !ent.videoDurations.includes(t) : false;
                   return (
                     <button
@@ -368,7 +365,14 @@ export default function Step3Expand() {
                             : "border-border bg-background hover:border-primary/50"
                       }`}
                     >
-                      {({ 10: "5s", 30: "10s" } as Record<number, string>)[t]}
+                      {
+                        (
+                          { 5: "5s", 10: "10s", 30: "30s" } as Record<
+                            number,
+                            string
+                          >
+                        )[t]
+                      }
                       {locked && (
                         <Lock className="inline-block w-2.5 h-2.5 ml-1 -mt-0.5" />
                       )}

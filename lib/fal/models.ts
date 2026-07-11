@@ -2,9 +2,11 @@ export const FAL_MODELS = {
   image_generation: "fal-ai/flux-pro/v1.1-ultra",
   image_variation: "fal-ai/flux-pro/kontext",
   upscale: "fal-ai/clarity-upscaler",
-  video_10s: "fal-ai/kling-video/v2.1/pro/image-to-video",
-  video_30s: "fal-ai/kling-video/v2.1/pro/image-to-video",
-  video_60s: "fal-ai/kling-video/v2.1/pro/image-to-video",
+  // Kling v3 Pro (image-to-video): 3–15s per call, native audio, sharper motion.
+  // video_30s renders as 2× 15s segments concatenated (see webhooks/fal + jobs).
+  video_5s: "fal-ai/kling-video/v3/pro/image-to-video",
+  video_10s: "fal-ai/kling-video/v3/pro/image-to-video",
+  video_30s: "fal-ai/kling-video/v3/pro/image-to-video",
   music_generation: "fal-ai/stable-audio",
 } as const;
 

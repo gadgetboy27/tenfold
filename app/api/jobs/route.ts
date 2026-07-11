@@ -35,11 +35,13 @@ function buildFalInput(
       seed: params.seed as number | undefined,
     };
   }
-  if (type === "video_10s" || type === "video_30s" || type === "video_60s") {
+  if (type === "video_5s" || type === "video_10s" || type === "video_30s") {
+    // Kling v3 seconds PER CALL. 5s/10s are single calls; 30s renders as 2× 15s
+    // segments (see the video_30s enqueue below), so its per-segment duration is 15.
     const durationMap: Record<string, number> = {
-      video_10s: 5,
-      video_30s: 10,
-      video_60s: 10,
+      video_5s: 5,
+      video_10s: 10,
+      video_30s: 15,
     };
     const style = (params.videoStyle as VideoStyle) ?? "Cinematic";
     const durationBrief = VIDEO_DURATION_PROMPTS[type];
@@ -92,10 +94,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unknown job type" }, { status: 400 });
     }
 
-    // Gate Pro-only video durations by plan entitlement — before charging.
-    if (body.type === "video_30s" || body.type === "video_60s") {
+    // Gate video durations by plan entitlement — before charging. 30s is Pro-only.
+    if (
+      body.type === "video_5s" ||
+      body.type === "video_10s" ||
+      body.type === "video_30s"
+    ) {
       const ent = await getEntitlements(session.workspaceId);
-      const seconds = body.type === "video_30s" ? 30 : 60;
+      const seconds = Number(body.type.replace(/\D/g, "")); // 5 | 10 | 30
       if (!ent.videoDurations.includes(seconds)) {
         return NextResponse.json(
           {
@@ -172,6 +178,63 @@ export async function POST(req: Request) {
         await refundCredits(jobId);
         return NextResponse.json({ error: msg }, { status: 500 });
       }
+    }
+
+    // Real 30s = two 15s Kling v3 segments, concatenated by the webhook once both
+    // land (montage). Each segment is its own fal request tied to this one job via
+    // ?j=<jobId>&seg=<i>; the webhook validates the segment requestIds, stores each
+    // as a video_segment asset, then stitches. One debit already covered the job.
+    if (body.type === "video_30s") {
+      const SEGMENTS = 2;
+      const base = buildFalInput("video_30s", body.params, prompt) as Record<
+        string,
+        unknown
+      >;
+      // Light per-segment prompt variation so the two shots feel intentional.
+      const hints = [
+        "opening moment, establishing the scene with energy",
+        "continuation, building motion toward a strong finish",
+      ];
+      const segments: { index: number; requestId: string }[] = [];
+      try {
+        for (let i = 0; i < SEGMENTS; i++) {
+          const segWebhook = `${process.env.APP_URL}/api/webhooks/fal?j=${jobId}&seg=${i}`;
+          const segInput = {
+            ...base,
+            prompt: `${base.prompt as string}, ${hints[i]}`,
+          };
+          const { requestId: rid } = await enqueueJob(
+            "video_30s",
+            segInput,
+            segWebhook,
+          );
+          segments.push({ index: i, requestId: rid });
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Submit failed";
+        await admin
+          .from("creative_jobs")
+          .update({ status: "failed", error_message: msg })
+          .eq("id", jobId);
+        await refundCredits(jobId);
+        return NextResponse.json({ error: msg }, { status: 500 });
+      }
+      await admin
+        .from("creative_jobs")
+        .update({
+          status: "processing",
+          fal_request_id: segments[0].requestId,
+          input_params: {
+            ...body.params,
+            segments,
+            expected_segments: SEGMENTS,
+          },
+        })
+        .eq("id", jobId);
+      return NextResponse.json(
+        { jobId, creditCost: cost, status: "processing", segments: SEGMENTS },
+        { status: 201 },
+      );
     }
 
     // All other types go through fal.ai async queue
