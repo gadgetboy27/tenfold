@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import toast from "react-hot-toast";
+import Link from "next/link";
 import {
   Clapperboard,
   Film,
@@ -10,6 +11,7 @@ import {
   RotateCcw,
   ArrowLeft,
   ArrowRight,
+  Download,
   Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -185,6 +187,22 @@ export default function CompositorPage() {
     router.push(`/${params.workspace}`);
   };
 
+  // Real download-to-file (fetch → blob) so the browser saves the MP4 instead
+  // of just opening/playing it in a tab.
+  const downloadFile = async (url: string) => {
+    try {
+      const res = await fetch(url);
+      const href = URL.createObjectURL(await res.blob());
+      const el = document.createElement("a");
+      el.href = href;
+      el.download = `tenfold-${Date.now()}.mp4`;
+      el.click();
+      URL.revokeObjectURL(href);
+    } catch {
+      window.open(url, "_blank", "noopener");
+    }
+  };
+
   const startLab = (file: File, kind: "video" | "image") => {
     load({
       id: crypto.randomUUID(),
@@ -237,10 +255,17 @@ export default function CompositorPage() {
       {exportedUrl && (
         <div className="flex flex-col items-start justify-between gap-3 rounded-xl border border-primary/40 bg-primary/10 px-4 py-3 sm:flex-row sm:items-center">
           <p className="text-sm">
-            🎬 Your branded film is rendered and saved to this campaign —
-            it&apos;s what the publish step will post.
+            🎬 Your finished film is rendered and saved to this campaign — find
+            it any time in your{" "}
+            <Link
+              href={`/${params.workspace}/gallery`}
+              className="font-medium text-primary underline"
+            >
+              Gallery
+            </Link>
+            .
           </p>
-          <div className="flex shrink-0 gap-2">
+          <div className="flex shrink-0 flex-wrap gap-2">
             <a
               href={exportedUrl}
               target="_blank"
@@ -249,6 +274,12 @@ export default function CompositorPage() {
             >
               Preview
             </a>
+            <button
+              onClick={() => downloadFile(exportedUrl)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border px-4 py-1.5 text-sm hover:border-primary/50"
+            >
+              <Download className="h-3.5 w-3.5" /> Download MP4
+            </button>
             <Button size="sm" onClick={continueToPublish} className="gap-1.5">
               Continue to publish <ArrowRight className="h-3.5 w-3.5" />
             </Button>
