@@ -175,8 +175,10 @@ export default function CompositorPage() {
   }, [params.workspace, load, reset]);
 
   const continueToPublish = () => {
+    // Land directly on the Publish step (the social send-off area), not Review.
     completeStep(4);
-    setStep(5);
+    completeStep(5);
+    setStep(6);
     router.push(`/${params.workspace}`);
   };
 

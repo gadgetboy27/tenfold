@@ -427,7 +427,7 @@ export default function Step3Expand() {
             onSelect={(url) => updateExpansion("music", { url })}
           >
             <div className="space-y-3">
-              <div className="flex max-h-48 flex-col gap-1.5 overflow-y-auto pr-0.5">
+              <div className="flex flex-col gap-1.5">
                 {MUSIC_GENRES.map((g) => (
                   <button
                     key={g}

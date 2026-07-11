@@ -98,8 +98,10 @@ export default function ProductionsPage() {
       const expansion_data = {
         ...(full.expansion_data ?? {}),
       } as Record<string, { status?: string; url?: string }>;
-      const video = (full.assets ?? []).find((a) => a.type === "video");
-      if (video) expansion_data.video = { status: "ready", url: video.url };
+      // Mark the video ready so Publish treats this as a VIDEO post (hasVideo) —
+      // point it at THIS finished production. The publish route still resolves
+      // the campaign's latest composed_video from the DB when it posts.
+      expansion_data.video = { status: "ready", url: p.url };
       const audio = (full.assets ?? []).find((a) => a.type === "audio");
       if (audio) expansion_data.music = { status: "ready", url: audio.url };
 
