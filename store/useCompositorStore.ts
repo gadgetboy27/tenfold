@@ -10,6 +10,7 @@ import type {
   LayerOverride,
   TextLayer,
 } from "@/lib/composition/layers";
+import { mergeFormatOverrides } from "@/lib/composition/autofix";
 
 /**
  * Editing state for the layered compositor (docs/tenfold-compositor-brief.md).
@@ -46,6 +47,12 @@ interface CompositorState {
   /** Drop the current aspect's override for one layer, or all layers (no id),
    *  reverting them to the master layout. */
   resetOverride: (id?: string) => void;
+  /** Merge a batch of per-layer overrides into an aspect (the vision auto-fix
+   *  applies its proposed nudges this way). */
+  setFormatOverrides: (
+    aspect: CompositionAspect,
+    patch: Record<string, LayerOverride>,
+  ) => void;
   /** Swap a layer in place (same stack position) — e.g. image ⇄ text
    *  conversion. The replacement keeps the old id via the caller. */
   replaceLayer: (id: string, layer: Layer) => void;
@@ -134,6 +141,14 @@ export const useCompositorStore = create<CompositorState>((set) => ({
         return { ...doc, overrides };
       });
     }),
+
+  setFormatOverrides: (aspect, patch) =>
+    set((s) =>
+      editDoc(s, (doc) => ({
+        ...doc,
+        overrides: mergeFormatOverrides(doc.overrides, aspect, patch),
+      })),
+    ),
 
   resetOverride: (id) =>
     set((s) => {

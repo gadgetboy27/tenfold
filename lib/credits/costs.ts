@@ -12,6 +12,7 @@ export const CREDIT_COSTS = {
   product_shot: 6,
   music_generation: 8,
   script_generation: 1,
+  layout_autofix: 3,
 } as const satisfies Record<string, number>;
 
 export type CreditCostKey = keyof typeof CREDIT_COSTS;

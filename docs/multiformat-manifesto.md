@@ -108,7 +108,7 @@ Migration is idempotent (skips layers that already have `pos`).
 | **3** | Format rail UI: live thumbnails per connected platform + ⚠ safe-zone flags                                    | ✅ done |
 | **4** | Per-format overrides (delta storage on the doc) + anchor "pin to corner" control                              | ✅ done |
 | **5** | Fan-out export + batch publish (+ persist `overrides` to the DB), each locked to its platform                 | ✅ done |
-| 6     | _(optional)_ vision "auto-fix this format" button (credits)                                                   | pending |
+| **6** | Vision "auto-fix this format" button (credits) — Claude reviews a flagged format, nudges land as overrides    | ✅ done |
 
 **Deploy migrations** (applied to the live DB during development; idempotent):
 

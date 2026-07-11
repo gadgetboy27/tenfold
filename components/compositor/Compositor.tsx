@@ -539,6 +539,8 @@ export function Compositor({
             formats={rail}
             activeAspect={doc.aspect}
             onPick={setAspect}
+            campaignId={campaignId}
+            workspaceSlug={params.workspace}
           />
         )}
 
