@@ -45,10 +45,10 @@ function Row({
 }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="w-20 shrink-0 text-xs text-muted-foreground">
+      <span className="w-24 shrink-0 text-xs leading-tight text-muted-foreground">
         {label}
       </span>
-      <div className="flex-1">{children}</div>
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   );
 }

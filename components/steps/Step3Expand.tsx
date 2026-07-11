@@ -18,7 +18,7 @@ import { motion } from "framer-motion";
 import toast from "react-hot-toast";
 import { api } from "@/lib/api";
 import { CREDIT_COSTS } from "@/lib/credits/costs";
-import type { VideoStyle } from "@/lib/fal/prompts";
+import { MUSIC_GENRES, type VideoStyle } from "@/lib/fal/prompts";
 
 type ExpandType = "video" | "music" | "script";
 
@@ -427,20 +427,13 @@ export default function Step3Expand() {
             onSelect={(url) => updateExpansion("music", { url })}
           >
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-1.5">
-                {[
-                  "Epic Cinematic",
-                  "Lo-fi Chill",
-                  "Corporate Jazz",
-                  "Electronic",
-                  "Acoustic Folk",
-                  "Soulful Boom-bap",
-                ].map((g) => (
+              <div className="grid max-h-40 grid-cols-2 gap-1.5 overflow-y-auto pr-0.5">
+                {MUSIC_GENRES.map((g) => (
                   <button
                     key={g}
                     type="button"
                     onClick={() => setMusicGenre(g)}
-                    className={`py-1.5 text-xs rounded-full border transition-colors ${
+                    className={`rounded-full border px-2 py-1.5 text-xs leading-tight transition-colors ${
                       musicGenre === g
                         ? "border-primary/50 text-primary bg-primary/10"
                         : "border-border bg-background hover:border-primary/50"

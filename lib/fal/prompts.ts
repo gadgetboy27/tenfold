@@ -22,7 +22,26 @@ export const MUSIC_GENRE_PROMPTS: Record<string, string> = {
     "intimate acoustic folk, fingerpicked steel-string guitar, soft mandolin, warm upright bass, brushed snare, gentle natural room recording, uplifting, 90 BPM",
   "Soulful Boom-bap":
     "warm boom-bap hip hop, dusty soul samples, live electric bass, soft real drums, mellow Rhodes chords, organic vinyl texture, laid-back groove, 90 BPM",
+  "Upbeat Pop":
+    "bright modern pop, catchy plucked synth hook, punchy real drums, groovy electric bass, hand claps, feel-good and radio-ready, energetic and polished, 118 BPM",
+  "Funk Groove":
+    "tight funk, syncopated slap electric bass, wah-wah rhythm guitar, live horn stabs, crisp drum kit, infectious danceable pocket, warm and lively, 108 BPM",
+  "Ambient Calm":
+    "serene ambient, soft evolving synth pads, gentle piano motifs, airy reverb, subtle field-recording textures, spacious and meditative, minimal percussion, 70 BPM",
+  Synthwave:
+    "retro synthwave, pulsing analog arpeggios, gated reverb drums, driving bass, neon nostalgic mood, cinematic 80s energy, 100 BPM",
+  "Indie Anthem":
+    "uplifting indie rock, jangly electric guitars, driving live drums, warm bass, big anthemic build, hopeful and euphoric, 122 BPM",
+  "Trap Energy":
+    "modern trap, booming 808 bass, crisp hi-hat rolls, dark atmospheric keys, hard-hitting and confident, contemporary and punchy, 140 BPM",
+  "Latin Groove":
+    "vibrant latin pop, syncopated nylon guitar, live congas and timbales, warm brass, infectious reggaeton-tinged rhythm, sunny and danceable, 96 BPM",
+  "R&B Smooth":
+    "smooth modern R&B, silky Rhodes chords, deep round bass, soft trap-influenced drums, lush background textures, sensual and laid-back, 84 BPM",
 };
+
+/** Genre keys in display order — single source of truth for the picker UI. */
+export const MUSIC_GENRES = Object.keys(MUSIC_GENRE_PROMPTS);
 
 // Appended to every music prompt to push the model toward natural instrumentation.
 export const MUSIC_NATURAL_SUFFIX =
