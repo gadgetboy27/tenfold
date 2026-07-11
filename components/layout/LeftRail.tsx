@@ -13,6 +13,7 @@ import {
   Check,
   Settings,
   Image as ImageIcon,
+  Film,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -127,6 +128,16 @@ export default function LeftRail() {
 
             {workspaceSlug && (
               <div className="px-3 pb-2 space-y-1">
+                <Link
+                  href={`/${workspaceSlug}/productions`}
+                  onClick={() => setLeftDrawerOpen(false)}
+                  className="flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-all"
+                >
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center border-2 border-border bg-card shrink-0">
+                    <Film className="w-4 h-4" />
+                  </div>
+                  <span>Productions</span>
+                </Link>
                 <Link
                   href={`/${workspaceSlug}/gallery`}
                   onClick={() => setLeftDrawerOpen(false)}

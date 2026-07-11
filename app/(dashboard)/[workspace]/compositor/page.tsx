@@ -255,15 +255,14 @@ export default function CompositorPage() {
       {exportedUrl && (
         <div className="flex flex-col items-start justify-between gap-3 rounded-xl border border-primary/40 bg-primary/10 px-4 py-3 sm:flex-row sm:items-center">
           <p className="text-sm">
-            🎬 Your finished film is rendered and saved to this campaign — find
-            it any time in your{" "}
+            🎬 Your finished film is rendered and saved — find it any time in{" "}
             <Link
-              href={`/${params.workspace}/gallery`}
+              href={`/${params.workspace}/productions`}
               className="font-medium text-primary underline"
             >
-              Gallery
+              Productions
             </Link>
-            .
+            , or send it off now.
           </p>
           <div className="flex shrink-0 flex-wrap gap-2">
             <a

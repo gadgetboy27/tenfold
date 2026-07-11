@@ -95,18 +95,13 @@ export default function GalleryPage() {
       .finally(() => setLoading(false));
   }, [slug]);
 
-  const isVideo = (type: string) =>
-    type === "video" || type === "composed_video";
-
-  // Real download-to-file (fetch → blob → <a download>), so the browser saves
-  // the MP4/JPG instead of just opening/playing it in a new tab.
   const download = async (a: GalleryAsset) => {
     try {
       const res = await fetch(a.url);
       const href = URL.createObjectURL(await res.blob());
       const el = document.createElement("a");
       el.href = href;
-      el.download = `tenfold-${a.id}.${isVideo(a.type) ? "mp4" : "jpg"}`;
+      el.download = `tenfold-${a.id}.jpg`;
       el.click();
       URL.revokeObjectURL(href);
     } catch {
@@ -128,9 +123,8 @@ export default function GalleryPage() {
             <ImageIcon className="w-6 h-6 text-primary" /> Gallery
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Every finished creation — images and videos — kept and reusable.
-            Your exported films land here; download any of them to your
-            computer.
+            Every image you&apos;ve generated, kept and reusable — you already
+            paid to create these. Finished videos live in Productions.
           </p>
         </div>
       </div>
@@ -142,8 +136,7 @@ export default function GalleryPage() {
         </div>
       ) : assets.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground text-sm border border-dashed border-border rounded-xl">
-          Nothing here yet — your generated images and exported videos will be
-          saved here.
+          No images yet — generate a campaign and they&apos;ll be saved here.
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -152,60 +145,43 @@ export default function GalleryPage() {
               key={a.id}
               className="relative aspect-square rounded-xl overflow-hidden border border-border group bg-card"
             >
-              {isVideo(a.type) ? (
-                <video
-                  src={a.url}
-                  muted
-                  loop
-                  playsInline
-                  preload="metadata"
-                  onMouseEnter={(e) => e.currentTarget.play().catch(() => {})}
-                  onMouseLeave={(e) => e.currentTarget.pause()}
-                  className="w-full h-full bg-black object-cover"
-                />
-              ) : (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={a.url}
-                  alt={a.metadata?.direction ?? "Generated image"}
-                  loading="lazy"
-                  className="w-full h-full object-cover"
-                />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={a.url}
+                alt={a.metadata?.direction ?? "Generated image"}
+                loading="lazy"
+                className="w-full h-full object-cover"
+              />
+              {a.metadata?.direction && (
+                <span className="absolute top-2 left-2 bg-black/55 backdrop-blur-sm text-white text-[9px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  {a.metadata.direction}
+                </span>
               )}
-              <span className="absolute top-2 left-2 bg-black/55 backdrop-blur-sm text-white text-[9px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                {isVideo(a.type) ? "Video" : (a.metadata?.direction ?? "Image")}
-              </span>
               <div className="absolute inset-x-0 bottom-0 p-2 flex items-center justify-between gap-1.5 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                {isVideo(a.type) ? (
-                  <span />
-                ) : (
-                  <button
-                    onClick={() => reuseAsAnchor(a.id)}
-                    disabled={reusing === a.id}
-                    title="Start a new campaign with this image as the anchor — free"
-                    className="px-2 h-7 rounded-full bg-primary hover:bg-primary/90 text-white flex items-center gap-1 text-[10px] font-semibold disabled:opacity-60"
-                  >
-                    {reusing === a.id ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                    ) : (
-                      <Anchor className="w-3 h-3" />
-                    )}
-                    Use as anchor
-                  </button>
-                )}
+                <button
+                  onClick={() => reuseAsAnchor(a.id)}
+                  disabled={reusing === a.id}
+                  title="Start a new campaign with this image as the anchor — free"
+                  className="px-2 h-7 rounded-full bg-primary hover:bg-primary/90 text-white flex items-center gap-1 text-[10px] font-semibold disabled:opacity-60"
+                >
+                  {reusing === a.id ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <Anchor className="w-3 h-3" />
+                  )}
+                  Use as anchor
+                </button>
                 <div className="flex gap-1.5">
                   <button
                     onClick={() => window.open(a.url, "_blank", "noopener")}
-                    title={
-                      isVideo(a.type) ? "Play full size" : "View full size"
-                    }
+                    title="View full size"
                     className="w-7 h-7 rounded-full bg-black/60 hover:bg-primary text-white flex items-center justify-center"
                   >
                     <Maximize2 className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={() => download(a)}
-                    title={isVideo(a.type) ? "Download MP4" : "Download"}
+                    title="Download"
                     className="w-7 h-7 rounded-full bg-black/60 hover:bg-primary text-white flex items-center justify-center"
                   >
                     <Download className="w-3.5 h-3.5" />
