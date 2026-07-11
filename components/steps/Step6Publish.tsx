@@ -213,6 +213,10 @@ export default function Step5Publish() {
     setVideoPlatforms((p) =>
       p.includes(id) ? p.filter((x) => x !== id) : [...p, id],
     );
+  // "Connect image to start/end of video" — bakes the image onto the clip.
+  const [buildingCard, setBuildingCard] = useState(false);
+  const [cardDone, setCardDone] = useState<"intro" | "outro" | null>(null);
+  const [mergedVideoUrl, setMergedVideoUrl] = useState<string | null>(null);
   const [caption, setCaption] = useState(expansions.script?.content ?? "");
   const [hashtags, setHashtags] = useState<string[]>([]);
   const [hashtagInput, setHashtagInput] = useState("");
@@ -310,6 +314,45 @@ export default function Step5Publish() {
     }
     if (e.key === "Backspace" && !hashtagInput && hashtags.length > 0)
       setHashtags((prev) => prev.slice(0, -1));
+  };
+
+  // Bake the static image onto the video as a title (intro) or end (outro) card.
+  // The merged clip becomes the campaign's latest video, so publishing the video
+  // includes it; the image is no longer published separately.
+  const buildCard = async (position: "intro" | "outro") => {
+    if (!anchor?.url || !expansions.video?.url || !currentCampaignId) {
+      toast.error("Need both an image and a video for this.");
+      return;
+    }
+    setBuildingCard(true);
+    try {
+      const res = await api("/api/compositions/card", {
+        method: "POST",
+        body: JSON.stringify({
+          campaignId: currentCampaignId,
+          videoUrl: expansions.video.url,
+          imageUrl: anchor.url,
+          position,
+        }),
+        workspaceSlug,
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        url?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.url)
+        throw new Error(data.error ?? "Couldn't build the card");
+      setMergedVideoUrl(data.url);
+      setCardDone(position);
+      setImagePlatforms([]); // image is now baked into the video
+      toast.success(
+        `Image added to the ${position === "intro" ? "start" : "end"} of your video.`,
+      );
+    } catch (err) {
+      toast.error((err as Error).message ?? "Couldn't build the card");
+    } finally {
+      setBuildingCard(false);
+    }
   };
 
   const handlePublish = async () => {
@@ -754,14 +797,57 @@ export default function Step5Publish() {
                       </div>
                     </div>
                     <div className="px-3 pb-3">
-                      <p className="text-[10px] text-muted-foreground mb-1.5">
-                        Send the image to:
-                      </p>
-                      <PlatformChips
-                        profiles={profiles}
-                        selected={imagePlatforms}
-                        onToggle={toggleImage}
-                      />
+                      {cardDone ? (
+                        <p className="flex items-center gap-1.5 text-[11px] font-medium text-primary">
+                          <Check className="w-3.5 h-3.5" /> Baked onto the{" "}
+                          {cardDone === "intro" ? "start" : "end"} of your video —
+                          it publishes with the video.
+                        </p>
+                      ) : (
+                        <>
+                          <p className="text-[10px] text-muted-foreground mb-1.5">
+                            Send the image to:
+                          </p>
+                          <PlatformChips
+                            profiles={profiles}
+                            selected={imagePlatforms}
+                            onToggle={toggleImage}
+                          />
+                          {hasVideo && (
+                            <div className="mt-3 pt-3 border-t border-border/50">
+                              <p className="text-[10px] text-muted-foreground mb-1.5">
+                                Or bake it onto the video instead:
+                              </p>
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => buildCard("intro")}
+                                  disabled={buildingCard}
+                                  className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-border px-2 py-1.5 text-xs hover:border-primary/50 disabled:opacity-60"
+                                >
+                                  {buildingCard ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    "＋ Start"
+                                  )}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => buildCard("outro")}
+                                  disabled={buildingCard}
+                                  className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-border px-2 py-1.5 text-xs hover:border-primary/50 disabled:opacity-60"
+                                >
+                                  {buildingCard ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    "＋ End"
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )}
                     </div>
                   </div>
                 )}
@@ -770,7 +856,7 @@ export default function Step5Publish() {
                   <div className="rounded-xl border border-border overflow-hidden">
                     <div className="flex gap-3 p-3">
                       <video
-                        src={expansions.video?.url}
+                        src={mergedVideoUrl ?? expansions.video?.url}
                         muted
                         playsInline
                         preload="metadata"
@@ -781,7 +867,9 @@ export default function Step5Publish() {
                           🎬 Video
                         </p>
                         <p className="text-[11px] text-muted-foreground mt-0.5">
-                          your finished film + music
+                          {cardDone
+                            ? `your film with the image ${cardDone === "intro" ? "intro" : "outro"}`
+                            : "your finished film + music"}
                         </p>
                       </div>
                     </div>
