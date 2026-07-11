@@ -69,6 +69,9 @@ export function FormatRail({
   const [fontsReady, setFontsReady] = useState(false);
   const [warnings, setWarnings] = useState<Record<string, SafeZone[]>>({});
   const [fixing, setFixing] = useState<string | null>(null);
+  // Synchronous guard: state disables the button only after a re-render, so a
+  // rapid double-click could otherwise fire two charged requests.
+  const fixingRef = useRef(false);
   const setFormatOverrides = useCompositorStore((s) => s.setFormatOverrides);
 
   const isVideo = doc.background.kind === "video";
@@ -211,7 +214,8 @@ export function FormatRail({
     }
     const canvas = canvasEls.current.get(fmt.key);
     const probe = document.createElement("canvas").getContext("2d");
-    if (!canvas || !probe) return;
+    if (!canvas || !probe || fixingRef.current) return;
+    fixingRef.current = true;
     setFixing(fmt.key);
     try {
       const image = canvas.toDataURL("image/png");
@@ -271,6 +275,7 @@ export function FormatRail({
     } catch (err) {
       toast.error((err as Error).message ?? "Auto-fix failed");
     } finally {
+      fixingRef.current = false;
       setFixing(null);
     }
   };

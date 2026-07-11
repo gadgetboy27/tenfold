@@ -28,7 +28,7 @@ const bodySchema = z.object({
   zones: z.array(autofixZoneSchema).max(10),
 });
 
-export const POST = withWorkspace(async (req, { admin, session }) => {
+export const POST = withWorkspace(async (req, { db, admin, session }) => {
   const parsed = bodySchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json(
@@ -40,21 +40,28 @@ export const POST = withWorkspace(async (req, { admin, session }) => {
     parsed.data;
   const imageBase64 = image.includes(",") ? image.split(",")[1] : image;
 
-  // Debit first (atomic ledger), then anchor the transaction with a job row.
+  // Order matters for the ledger: refund_credits() reverses a debit by reading
+  // creative_jobs.credits_charged, so the JOB ROW MUST EXIST BEFORE WE DEBIT —
+  // otherwise a failed job insert would strand the charge with nothing to
+  // refund. So: verify the campaign (workspace-scoped) → insert the job →
+  // debit → run the fix. Any failure after the debit refunds cleanly.
   const jobId = uuidv4();
   const cost = CREDIT_COSTS.layout_autofix;
-  const debit = await debitCredits(
-    session.workspaceId,
-    jobId,
-    "layout_autofix",
-  );
-  if (!debit.success) {
-    return NextResponse.json(
-      { error: "Insufficient credits" },
-      { status: 402 },
-    );
+
+  // 1. Campaign must belong to this workspace (also prevents the FK failure
+  //    that would otherwise strand a charge). Uses the scoped db client.
+  const { data: campaign } = await db
+    .from("campaigns")
+    .select("id")
+    .eq("id", campaignId)
+    .maybeSingle();
+  if (!campaign) {
+    return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
   }
-  await admin.from("creative_jobs").insert({
+
+  // 2. Insert the job row first (error-checked) — no debit yet, so a failure
+  //    here can never leave a charge.
+  const { error: jobErr } = await admin.from("creative_jobs").insert({
     id: jobId,
     campaign_id: campaignId,
     workspace_id: session.workspaceId,
@@ -63,7 +70,31 @@ export const POST = withWorkspace(async (req, { admin, session }) => {
     input_params: { aspect, platformLabel },
     credits_charged: cost,
   });
+  if (jobErr) {
+    return NextResponse.json(
+      { error: "Could not start auto-fix" },
+      { status: 500 },
+    );
+  }
 
+  // 3. Debit. If insufficient, mark the job failed and 402 (no charge occurred).
+  const debit = await debitCredits(
+    session.workspaceId,
+    jobId,
+    "layout_autofix",
+  );
+  if (!debit.success) {
+    await admin
+      .from("creative_jobs")
+      .update({ status: "failed", error_message: "Insufficient credits" })
+      .eq("id", jobId);
+    return NextResponse.json(
+      { error: "Insufficient credits" },
+      { status: 402 },
+    );
+  }
+
+  // 4. Run the vision fix. Any failure from here refunds (the job row exists).
   try {
     const adjustments = await autofixLayout({
       imageBase64,
@@ -73,6 +104,15 @@ export const POST = withWorkspace(async (req, { admin, session }) => {
       layers,
       zones,
     });
+    // Nothing to change → don't charge for a no-op (the user got no value).
+    if (adjustments.length === 0) {
+      await refundCredits(jobId);
+      await admin
+        .from("creative_jobs")
+        .update({ status: "completed", error_message: "No changes needed" })
+        .eq("id", jobId);
+      return NextResponse.json({ adjustments: [], refunded: true });
+    }
     await admin
       .from("creative_jobs")
       .update({ status: "completed" })
