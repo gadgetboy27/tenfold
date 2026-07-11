@@ -7,6 +7,7 @@ import { refundCredits } from "@/lib/credits/refund";
 import { CREDIT_COSTS } from "@/lib/credits/costs";
 import { autofixLayout } from "@/lib/claude/autofix";
 import {
+  adjustmentsToOverrides,
   autofixLayerSchema,
   autofixZoneSchema,
 } from "@/lib/composition/autofix";
@@ -104,8 +105,14 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
       layers,
       zones,
     });
-    // Nothing to change → don't charge for a no-op (the user got no value).
-    if (adjustments.length === 0) {
+    // Compute the SAME value gate the client applies (adjustmentsToOverrides
+    // drops unknown layers and no-op adjustments that carry no pos/scale). Gate
+    // the charge on the EFFECTIVE result, not the raw array length — otherwise a
+    // schema-valid but empty adjustment (e.g. `{layerId}` only) would charge for
+    // a no-op the client silently discards.
+    const knownScale = Object.fromEntries(layers.map((l) => [l.id, 1]));
+    const effective = adjustmentsToOverrides(adjustments, knownScale);
+    if (Object.keys(effective).length === 0) {
       await refundCredits(jobId);
       await admin
         .from("creative_jobs")

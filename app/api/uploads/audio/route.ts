@@ -61,9 +61,20 @@ export async function POST(req: Request) {
     const url = urlData.publicUrl;
 
     // Persist as a campaign audio asset so it survives a reopen and the publish
-    // mix picks it up (job_id is nullable — no originating creative job).
+    // mix picks it up (job_id is nullable — no originating creative job). Verify
+    // the campaign belongs to this workspace first (tenant isolation).
     let assetId: string | null = null;
     if (campaignId) {
+      const { data: campaign } = await admin
+        .from("campaigns")
+        .select("id")
+        .eq("id", campaignId)
+        .eq("workspace_id", session.workspaceId)
+        .maybeSingle();
+      if (!campaign) {
+        // Not this workspace's campaign — return the usable URL, skip persistence.
+        return NextResponse.json({ url, assetId: null });
+      }
       assetId = uuidv4();
       const { error: assetErr } = await admin.from("assets").insert({
         id: assetId,

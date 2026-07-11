@@ -184,16 +184,21 @@ export async function POST(req: Request) {
         .single();
       if (composition) {
         resolvedCompositionId = body.compositionId;
+        // anchor_asset_id is nullable since migration 0015 (layered docs have no
+        // image anchor), so the asset id can be null → fall through to assetId.
         const comp = composition as {
           output_asset_id: string | null;
-          anchor_asset_id: string;
+          anchor_asset_id: string | null;
         };
-        const { data: a } = await admin
-          .from("assets")
-          .select("id, url, type")
-          .eq("id", comp.output_asset_id ?? comp.anchor_asset_id)
-          .single();
-        asset = a as Asset | null;
+        const assetRef = comp.output_asset_id ?? comp.anchor_asset_id;
+        if (assetRef) {
+          const { data: a } = await admin
+            .from("assets")
+            .select("id, url, type")
+            .eq("id", assetRef)
+            .single();
+          asset = a as Asset | null;
+        }
       }
     }
 

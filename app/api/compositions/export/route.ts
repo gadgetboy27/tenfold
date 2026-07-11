@@ -33,7 +33,7 @@ const bodySchema = z.object({
 
 const isHttp = (u: string) => /^https?:\/\//i.test(u);
 
-export const POST = withWorkspace(async (req, { admin, session }) => {
+export const POST = withWorkspace(async (req, { db, admin, session }) => {
   const parsed = bodySchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json(
@@ -42,6 +42,23 @@ export const POST = withWorkspace(async (req, { admin, session }) => {
     );
   }
   const { doc, campaignId, compositionId, audioUrl, aspects } = parsed.data;
+
+  // When persisting to a campaign, verify it belongs to this workspace (scoped
+  // db client) before writing asset/composition rows — tenant isolation, and it
+  // rules out the FK failure that would otherwise strand a partial write.
+  if (campaignId) {
+    const { data: campaign } = await db
+      .from("campaigns")
+      .select("id")
+      .eq("id", campaignId)
+      .maybeSingle();
+    if (!campaign) {
+      return NextResponse.json(
+        { error: "Campaign not found" },
+        { status: 404 },
+      );
+    }
+  }
 
   // Every source must be fetchable by the server — a blob: URL only ever
   // existed in the user's browser tab.
