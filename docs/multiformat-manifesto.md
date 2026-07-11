@@ -125,13 +125,12 @@ restores it: the page reads `latestCompositionId` and `fetchCompositionDoc` rebu
 the editable doc, so per-format overrides survive a reload into a render. Falls
 back to a fresh branded doc when no save exists.
 
-**Phase 5 known follow-up** (verified non-blocking):
-
-- _Storage leak on partial fan-out failure._ `renderFanOut` uploads each aspect's
-  MP4 immediately but asset rows are written only after all renders finish, so if
-  render N throws, aspects 1..N-1 are orphaned in Storage with no row and no
-  cleanup. Error-path only. Fix: track uploaded paths and delete on failure, or
-  make the fan-out transactional.
+**All follow-ups resolved.** The fan-out storage leak (orphaned MP4s on a
+partial-render failure) is fixed — `renderFanOut` now deletes its uploads before
+rethrowing. Overrides save/load round-trips (above). Music: rights-gated upload +
+AI-gen (a curated library is deferred — Pixabay has no music API, so it needs a
+curated-hosted set or a Jamendo integration). Video length: 10/30/60s tiers kept;
+the rail flags clips past a platform's cap.
 
 ---
 
