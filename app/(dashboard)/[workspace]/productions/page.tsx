@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAppStore } from "@/store/useAppStore";
 import { api } from "@/lib/api";
+import { openCampaignForPublish } from "@/lib/campaign/publish-nav";
 import { Film, Download, ArrowLeft, Loader2, Send } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -26,7 +27,6 @@ export default function ProductionsPage() {
   const params = useParams<{ workspace: string }>();
   const router = useRouter();
   const storeSlug = useAppStore((s) => s.workspaceSlug);
-  const loadCampaign = useAppStore((s) => s.loadCampaign);
   const slug = storeSlug || params.workspace;
 
   const [items, setItems] = useState<Production[]>([]);
@@ -57,68 +57,17 @@ export default function ProductionsPage() {
     }
   };
 
-  // Open the video's campaign at the Publish step and go — the publish flow
-  // resolves this campaign's latest finished video and posts it, as before.
+  // Open this production's campaign at the Publish step and go — the publish
+  // flow posts the campaign's finished video to social, as before.
   const publish = async (p: Production) => {
     setPublishing(p.id);
-    try {
-      const res = await api(`/api/campaigns/${p.campaignId}`, {
-        workspaceSlug: slug,
-      });
-      if (!res.ok) throw new Error("Couldn't open that campaign");
-      const full = (await res.json()) as {
-        id: string;
-        name: string;
-        anchor_asset_id: string | null;
-        expansion_data?: Record<string, unknown>;
-        prompt?: string;
-        parameters?: { aspectRatio?: string; style?: string };
-        assets?: Array<{
-          id: string;
-          url: string;
-          type: string;
-          created_at: string;
-          metadata?: { direction?: string; hd?: boolean };
-        }>;
-        latestCompositionId?: string | null;
-      };
-
-      const imageAssets = (full.assets ?? [])
-        .filter((a) => a.type === "image" && !a.metadata?.hd)
-        .map((a) => ({
-          id: a.id,
-          url: a.url,
-          prompt: full.prompt ?? "",
-          aspectRatio: full.parameters?.aspectRatio ?? "1:1",
-          style: full.parameters?.style ?? "Photorealistic",
-          createdAt: a.created_at,
-          direction: a.metadata?.direction,
-        }));
-
-      const expansion_data = {
-        ...(full.expansion_data ?? {}),
-      } as Record<string, { status?: string; url?: string }>;
-      // Mark the video ready so Publish treats this as a VIDEO post (hasVideo) —
-      // point it at THIS finished production. The publish route still resolves
-      // the campaign's latest composed_video from the DB when it posts.
-      expansion_data.video = { status: "ready", url: p.url };
-      const audio = (full.assets ?? []).find((a) => a.type === "audio");
-      if (audio) expansion_data.music = { status: "ready", url: audio.url };
-
-      loadCampaign({
-        id: full.id,
-        name: full.name,
-        current_step: 6, // jump to Publish
-        anchor_asset_id: full.anchor_asset_id ?? imageAssets[0]?.id ?? null,
-        expansion_data,
-        imageAssets,
-        compositionId: full.latestCompositionId ?? null,
-      });
-      router.push(`/${slug}`);
-    } catch (err) {
-      toast.error((err as Error).message ?? "Couldn't open publish");
+    const ok = await openCampaignForPublish(p.campaignId, slug, p.url);
+    if (!ok) {
+      toast.error("Couldn't open publish — please try again.");
       setPublishing(null);
+      return;
     }
+    router.push(`/${slug}`);
   };
 
   return (

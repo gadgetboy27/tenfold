@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { Compositor } from "@/components/compositor/Compositor";
 import { fetchCompositionDoc } from "@/components/compositor/export-client";
+import { openCampaignForPublish } from "@/lib/campaign/publish-nav";
 import { brandKitLayers, pickKitLogo } from "@/lib/composition/brand-apply";
 import type { CompositionAspect } from "@/lib/composition/layers";
 import { useCompositorStore } from "@/store/useCompositorStore";
@@ -78,7 +79,6 @@ export default function CompositorPage() {
   const load = useCompositorStore((s) => s.load);
   const reset = useCompositorStore((s) => s.reset);
   const setStep = useAppStore((s) => s.setStep);
-  const completeStep = useAppStore((s) => s.completeStep);
 
   const videoRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
@@ -174,11 +174,20 @@ export default function CompositorPage() {
     return () => reset();
   }, [params.workspace, load, reset]);
 
-  const continueToPublish = () => {
-    // Land directly on the Publish step (the social send-off area), not Review.
-    completeStep(4);
-    completeStep(5);
-    setStep(6);
+  const continueToPublish = async () => {
+    // Load the campaign into the app store AT the Publish step, then navigate —
+    // otherwise currentCampaignId is unset (the compositor uses a local id) and
+    // the workspace root shows the lobby instead of the publish screen.
+    if (!campaignId) return;
+    const ok = await openCampaignForPublish(
+      campaignId,
+      params.workspace,
+      exportedUrl,
+    );
+    if (!ok) {
+      toast.error("Couldn't open publish — please try again.");
+      return;
+    }
     router.push(`/${params.workspace}`);
   };
 
