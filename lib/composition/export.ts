@@ -369,12 +369,15 @@ export async function renderComposition(
 
     await run("ffmpeg", args);
 
-    // 3. Store the MP4, named from the composition + its format so each aspect
-    //    of a fan-out lands at its own path (no upsert collision).
+    // 3. Store the MP4 at a UNIQUE path per export. A stable path + upsert meant
+    //    getPublicUrl returned the same URL every time, so after an edit the
+    //    browser/CDN served the CACHED old video — the render was fresh but the
+    //    preview looked unchanged. The build stamp makes each export a new URL.
     const buffer = await readFile(outPath);
     const admin = createSupabaseAdminClient();
     const folder = input.campaignId ?? "compositor";
-    const storagePath = `${input.workspaceId}/${folder}/composition-${doc.id}-${ASPECT_TO_FORMAT[doc.aspect]}.mp4`;
+    const stamp = Date.now().toString(36);
+    const storagePath = `${input.workspaceId}/${folder}/composition-${doc.id}-${ASPECT_TO_FORMAT[doc.aspect]}-${stamp}.mp4`;
     const { error } = await admin.storage
       .from("assets")
       .upload(storagePath, buffer, { contentType: "video/mp4", upsert: true });
