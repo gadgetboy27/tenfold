@@ -183,45 +183,6 @@ function PlatformRow({
   );
 }
 
-// ── A not-yet-connected platform: shown so all 13 are visible, with a link to
-//    connect it in Settings (you can only post to connected accounts). ────────
-function ConnectRow({
-  platform,
-  workspaceSlug,
-}: {
-  platform: string;
-  workspaceSlug: string;
-}) {
-  const meta = PLATFORM_META[platform];
-  if (!meta) return null;
-  const initials = meta.label.replace(/\s.*/, "").slice(0, 2).toUpperCase();
-  return (
-    <div className="w-full flex items-center gap-3 p-3 rounded-xl border border-dashed border-border bg-card/40 text-left">
-      <div
-        className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${meta.bg} opacity-70`}
-      >
-        <span className="text-[9px] font-bold" style={{ color: meta.color }}>
-          {initials}
-        </span>
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium leading-none text-muted-foreground">
-          {meta.label}
-        </p>
-        <p className="text-[10px] text-muted-foreground/70 mt-0.5">
-          Not connected
-        </p>
-      </div>
-      <Link
-        href={`/${workspaceSlug}/settings/social`}
-        className="text-[11px] font-medium text-primary hover:underline shrink-0"
-      >
-        Connect
-      </Link>
-    </div>
-  );
-}
-
 // ── Main component ────────────────────────────────────────────────────────
 export default function Step5Publish() {
   const {
@@ -242,6 +203,9 @@ export default function Step5Publish() {
 
   const [profiles, setProfiles] = useState<SocialProfile[]>([]);
   const [loadingProfiles, setLoadingProfiles] = useState(true);
+  // Always show the "connect your socials" screen first (a deliberate step
+  // before the publish page); "Continue to publish" dismisses it.
+  const [connectGate, setConnectGate] = useState(true);
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [facebookPageId, setFacebookPageId] = useState<string>("");
   // Default to Video whenever a clip exists — reactive (no mount-time race with
@@ -570,7 +534,93 @@ export default function Step5Publish() {
     );
   }
 
-  // ── No platforms connected guard ─────────────────────────────────────────
+  // ── Connect-your-socials step — always shown before the publish page ───────
+  if (connectGate) {
+    return (
+      <div className="h-full flex flex-col">
+        <div className="p-6 border-b border-border shrink-0">
+          <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+            <Send className="w-5 h-5 text-primary" /> Connect your social
+            accounts
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1 max-w-lg">
+            Link the platforms you want this project sent to. You only connect
+            once — accounts stay linked for every project.
+          </p>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="max-w-md mx-auto space-y-2">
+            {loadingProfiles ? (
+              <div className="flex items-center gap-2 text-muted-foreground text-sm py-4 justify-center">
+                <Loader2 className="w-4 h-4 animate-spin" /> Checking your
+                accounts…
+              </div>
+            ) : (
+              ALL_PLATFORMS.map((p) => {
+                const meta = PLATFORM_META[p];
+                const connected = profiles.some((pr) => pr.platform === p);
+                const initials = meta.label
+                  .replace(/\s.*/, "")
+                  .slice(0, 2)
+                  .toUpperCase();
+                return (
+                  <div
+                    key={p}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl border border-border bg-card"
+                  >
+                    <div
+                      className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${meta.bg}`}
+                    >
+                      <span
+                        className="text-[10px] font-bold"
+                        style={{ color: meta.color }}
+                      >
+                        {initials}
+                      </span>
+                    </div>
+                    <p className="flex-1 min-w-0 text-sm font-medium text-foreground">
+                      {meta.label}
+                    </p>
+                    {connected ? (
+                      <span className="flex items-center gap-1 text-xs font-medium text-success">
+                        <Check className="w-3.5 h-3.5" /> Connected
+                      </span>
+                    ) : (
+                      <Link
+                        href={`/${workspaceSlug}/settings/social`}
+                        className="text-xs font-medium text-primary hover:underline shrink-0"
+                      >
+                        Connect
+                      </Link>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+        <div className="p-6 border-t border-border shrink-0 flex items-center justify-between gap-3">
+          <span className="text-xs text-muted-foreground">
+            {profiles.length} connected
+          </span>
+          <Button
+            onClick={() => setConnectGate(false)}
+            disabled={profiles.length === 0}
+            className="gap-2"
+            title={
+              profiles.length === 0
+                ? "Connect at least one account to publish"
+                : "Continue to the publish screen"
+            }
+          >
+            Continue to publish <ChevronRight className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── No platforms connected guard (fallback) ────────────────────────────────
   if (!loadingProfiles && profiles.length === 0) {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-4 px-8 text-center">
@@ -667,7 +717,8 @@ export default function Step5Publish() {
               </div>
             ) : (
               <div className="space-y-2">
-                {/* Connected accounts — tap to select which to post to. */}
+                {/* Connected accounts — tap to select which to post to. The
+                    connect step before this handles linking new platforms. */}
                 {profiles.map((profile) => (
                   <PlatformRow
                     key={profile.platform}
@@ -676,24 +727,13 @@ export default function Step5Publish() {
                     onToggle={() => togglePlatform(profile.platform)}
                   />
                 ))}
-                {/* Every other platform — visible so you see all 13, each with a
-                    one-tap Connect (you can only post to connected accounts). */}
-                {ALL_PLATFORMS.filter(
-                  (p) => !profiles.some((pr) => pr.platform === p),
-                ).length > 0 && (
-                  <p className="pt-2 text-[10px] font-mono uppercase tracking-wider text-muted-foreground/70">
-                    Connect more to reach them
-                  </p>
-                )}
-                {ALL_PLATFORMS.filter(
-                  (p) => !profiles.some((pr) => pr.platform === p),
-                ).map((p) => (
-                  <ConnectRow
-                    key={p}
-                    platform={p}
-                    workspaceSlug={workspaceSlug ?? ""}
-                  />
-                ))}
+                <button
+                  type="button"
+                  onClick={() => setConnectGate(true)}
+                  className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-primary transition-colors pt-1"
+                >
+                  <ExternalLink className="w-3 h-3" /> Connect more platforms
+                </button>
                 {(() => {
                   const fb = profiles.find((p) => p.platform === "facebook");
                   const pages = fb?.availablePages ?? [];
