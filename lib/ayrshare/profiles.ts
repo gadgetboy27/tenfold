@@ -46,7 +46,13 @@ export async function getConnectedPlatforms(profileKey: string): Promise<string[
   return data.activeSocialAccounts ?? [];
 }
 
-export async function generateSocialConnectUrl(profileKey: string): Promise<string> {
+export async function generateSocialConnectUrl(
+  profileKey: string,
+  // Where Ayrshare returns the user after they finish linking — pass the
+  // Tenfold page to bounce them back into (e.g. the Publish step), so they
+  // never sit stranded on the hosted linkage screen.
+  redirect?: string,
+): Promise<string> {
   const domain = process.env.AYRSHARE_DOMAIN;
   // PEM stored in env with literal \n — restore real newlines.
   const privateKey = process.env.AYRSHARE_PRIVATE_KEY?.replace(/\\n/g, '\n');
@@ -61,7 +67,12 @@ export async function generateSocialConnectUrl(profileKey: string): Promise<stri
       Authorization: `Bearer ${process.env.AYRSHARE_API_KEY}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ domain, privateKey, profileKey }),
+    body: JSON.stringify({
+      domain,
+      privateKey,
+      profileKey,
+      ...(redirect ? { redirect } : {}),
+    }),
   });
 
   if (!res.ok) {

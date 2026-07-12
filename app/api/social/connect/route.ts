@@ -28,7 +28,15 @@ export async function GET(req: Request) {
         .eq('id', session.workspaceId);
     }
 
-    const connectUrl = await generateSocialConnectUrl(profileKey);
+    // Bounce the user back into Tenfold after they finish linking, instead of
+    // leaving them stranded on Ayrshare's hosted page. Prefer the configured
+    // app URL, fall back to the request origin; land on the social settings
+    // page, which re-fetches profiles on mount and reflects what they linked.
+    const slug = req.headers.get('x-workspace-slug');
+    const origin = process.env.APP_URL ?? new URL(req.url).origin;
+    const redirect = slug ? `${origin}/${slug}/settings/social` : undefined;
+
+    const connectUrl = await generateSocialConnectUrl(profileKey, redirect);
     return NextResponse.json({ connectUrl });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
