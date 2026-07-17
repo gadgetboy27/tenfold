@@ -1,3 +1,5 @@
+import { PLANS, PACKS } from "@/lib/billing/plans";
+
 // Actual provider costs in USD per job type.
 // Update these whenever fal.ai or Anthropic change their pricing.
 // Source: https://fal.ai/pricing  https://www.anthropic.com/pricing
@@ -31,9 +33,41 @@ export const PROVIDER_COST_USD: Record<string, number> = {
   script_generation: 0.002,
 } as const;
 
-// Credit pack value in USD (used for margin calculations)
-// 1 credit ≈ NZD 0.17 ≈ USD 0.10 at 1.65 exchange rate
-export const CREDIT_VALUE_USD = 0.1;
-
 // NZD/USD exchange rate — update quarterly
 export const NZD_USD_RATE = 0.61;
+
+/**
+ * How a credit was ACQUIRED, which is the only thing that determines what it
+ * was worth. Mirrors subscriptions.tier, plus the free welcome grant.
+ */
+export type CreditSource = "grant" | "payg" | "creator" | "business" | "agency";
+
+/**
+ * What one credit actually sold for, in USD.
+ *
+ * This replaces a flat `CREDIT_VALUE_USD = 0.1`, which was not a price anyone
+ * ever paid: subscribers pay ~$0.05/credit and top-up packs run $0.24–$0.37.
+ * Valuing every credit at $0.10 reported roughly DOUBLE the true margin on the
+ * subscription path — which is the path that matters — and hid the fact that
+ * video sells at ~1.3x its inference cost, not the 10x the model assumes.
+ *
+ * Derived from PLANS/PACKS rather than hardcoded, so repricing a plan moves the
+ * margin maths with it instead of silently invalidating it.
+ */
+export function creditValueUsd(source: CreditSource): number {
+  // Welcome credits are free. A job run on them earns nothing — it is pure
+  // COGS, and calling it revenue is how a free tier looks profitable.
+  if (source === "grant") return 0;
+
+  if (source === "payg") {
+    // Bought as a top-up. Use the pack most people take (the one marked
+    // popular) — the small pack's higher rate would flatter the numbers.
+    const pack = PACKS.find((p) => p.popular) ?? PACKS[0];
+    if (!pack) return 0;
+    return (pack.priceNzd * NZD_USD_RATE) / pack.credits;
+  }
+
+  const plan = PLANS.find((p) => p.id === source);
+  if (!plan || plan.creditsPerMonth <= 0) return 0;
+  return (plan.priceNzd * NZD_USD_RATE) / plan.creditsPerMonth;
+}

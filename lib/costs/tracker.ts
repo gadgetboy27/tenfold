@@ -1,5 +1,81 @@
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { PROVIDER_COST_USD, CREDIT_VALUE_USD } from './rates';
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import {
+  PROVIDER_COST_USD,
+  creditValueUsd,
+  NZD_USD_RATE,
+  type CreditSource,
+} from "./rates";
+import { PACKS } from "@/lib/billing/plans";
+
+/**
+ * What this workspace's credits were actually worth: money genuinely collected,
+ * divided by every credit they ever received.
+ *
+ * BLENDED on purpose. Two cheaper heuristics are both wrong:
+ *
+ *  - A flat rate (the old `CREDIT_VALUE_USD = 0.1`) is a price nobody paid;
+ *    subscribers pay ~$0.05 and packs $0.24–$0.37, so it roughly doubled the
+ *    reported margin on the path that matters.
+ *  - "Did they ever buy? then price everything at the pack rate" is just as
+ *    wrong the other way: a real workspace here holds 500 granted credits and
+ *    50 purchased ones, so that rule valued free credits at $0.24 and invented
+ *    ~$30 of revenue.
+ *
+ * Grants are counted as credits acquired at $0 — which is the point. They
+ * dilute the rate exactly as much as they dilute the real economics.
+ */
+async function creditRateFor(
+  workspaceId: string,
+): Promise<{ rate: number; source: CreditSource }> {
+  const admin = createSupabaseAdminClient();
+
+  const { data: sub } = await admin
+    .from("subscriptions")
+    .select("tier, status")
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  const s = sub as { tier: string | null; status: string | null } | null;
+  const active = s?.status === "active" || s?.status === "trialing";
+  const tier = (active && s?.tier ? s.tier : "payg") as CreditSource;
+
+  const { data: rows } = await admin
+    .from("credit_transactions")
+    .select("type, amount")
+    .eq("workspace_id", workspaceId);
+  const txns = (rows ?? []) as { type: string; amount: number }[];
+
+  let usdIn = 0;
+  let creditsIn = 0;
+  for (const t of txns) {
+    if (t.amount <= 0) continue; // spends and refunds aren't acquisitions
+    creditsIn += t.amount;
+    if (t.type === "purchase") usdIn += packRevenueUsd(t.amount);
+    // Subscription credits arrive as a grant on the tier's rate.
+    else if (t.type === "grant" && tier !== "payg") {
+      usdIn += t.amount * creditValueUsd(tier);
+    }
+    // Everything else — welcome credits, promos, admin top-ups — is free.
+  }
+
+  if (creditsIn === 0) return { rate: 0, source: "grant" };
+  const rate = usdIn / creditsIn;
+  // Report the SOURCE by what actually funded them, not what they signed up as.
+  const source: CreditSource = usdIn === 0 ? "grant" : tier;
+  return { rate, source };
+}
+
+/** USD a top-up of N credits brought in, matched to the pack that sells N. */
+function packRevenueUsd(credits: number): number {
+  const pack = PACKS.find((p) => p.credits === credits);
+  if (pack) return pack.priceNzd * NZD_USD_RATE;
+  // Unknown size (pack repriced/retired since). Value at the nearest pack's
+  // per-credit rate rather than $0 — silently free would understate revenue.
+  const nearest = [...PACKS].sort(
+    (a, b) => Math.abs(a.credits - credits) - Math.abs(b.credits - credits),
+  )[0];
+  if (!nearest) return 0;
+  return credits * ((nearest.priceNzd * NZD_USD_RATE) / nearest.credits);
+}
 
 export async function recordJobCost(
   jobId: string,
@@ -10,12 +86,12 @@ export async function recordJobCost(
   const admin = createSupabaseAdminClient();
   const actualCostUsd = overrideCostUsd ?? PROVIDER_COST_USD[jobType] ?? 0;
   await admin
-    .from('creative_jobs')
+    .from("creative_jobs")
     .update({
       actual_cost_usd: actualCostUsd,
       ...(durationMs !== undefined ? { provider_duration_ms: durationMs } : {}),
     })
-    .eq('id', jobId);
+    .eq("id", jobId);
 }
 
 export interface UsageSummary {
@@ -29,6 +105,11 @@ export interface UsageSummary {
   actualCostUsd: number;
   grossMarginUsd: number;
   grossMarginPct: number;
+  /** How this workspace's credits were valued, and at what rate. Reported so a
+   *  margin figure can never again be read without knowing what it assumes —
+   *  "grant" means these credits were free and the margin is -100% by design. */
+  creditSource: CreditSource;
+  creditRateUsd: number;
   byType: JobTypeSummary[];
 }
 
@@ -48,11 +129,13 @@ export async function getUsageSummary(
   _to: Date,
 ): Promise<UsageSummary> {
   const admin = createSupabaseAdminClient();
+  const { rate: creditRate, source: creditSource } =
+    await creditRateFor(workspaceId);
   const { data: rows } = await admin
-    .from('creative_jobs')
-    .select('type, status, credits_charged, actual_cost_usd')
-    .eq('workspace_id', workspaceId)
-    .gte('created_at', from.toISOString());
+    .from("creative_jobs")
+    .select("type, status, credits_charged, actual_cost_usd")
+    .eq("workspace_id", workspaceId)
+    .gte("created_at", from.toISOString());
 
   const jobs = (rows ?? []) as {
     type: string;
@@ -62,24 +145,36 @@ export async function getUsageSummary(
   }[];
 
   const byType: Record<string, JobTypeSummary> = {};
-  let totalJobs = 0, completedJobs = 0, failedJobs = 0;
-  let totalCredits = 0, totalRevenue = 0, totalCost = 0;
+  let totalJobs = 0,
+    completedJobs = 0,
+    failedJobs = 0;
+  let totalCredits = 0,
+    totalRevenue = 0,
+    totalCost = 0;
 
   for (const job of jobs) {
     totalJobs++;
-    if (job.status === 'completed') completedJobs++;
-    if (job.status === 'failed') failedJobs++;
+    if (job.status === "completed") completedJobs++;
+    if (job.status === "failed") failedJobs++;
 
     const credits = job.credits_charged ?? 0;
     const costUsd = job.actual_cost_usd ?? PROVIDER_COST_USD[job.type] ?? 0;
-    const revenueUsd = credits * CREDIT_VALUE_USD;
+    const revenueUsd = credits * creditRate;
 
     totalCredits += credits;
     totalRevenue += revenueUsd;
     totalCost += costUsd;
 
     if (!byType[job.type]) {
-      byType[job.type] = { type: job.type, jobs: 0, creditsCharged: 0, revenueUsd: 0, actualCostUsd: 0, marginUsd: 0, marginPct: 0 };
+      byType[job.type] = {
+        type: job.type,
+        jobs: 0,
+        creditsCharged: 0,
+        revenueUsd: 0,
+        actualCostUsd: 0,
+        marginUsd: 0,
+        marginPct: 0,
+      };
     }
     byType[job.type].jobs++;
     byType[job.type].creditsCharged += credits;
@@ -92,19 +187,38 @@ export async function getUsageSummary(
     revenueUsd: round(row.revenueUsd),
     actualCostUsd: round(row.actualCostUsd),
     marginUsd: round(row.revenueUsd - row.actualCostUsd),
-    marginPct: row.revenueUsd > 0 ? round(((row.revenueUsd - row.actualCostUsd) / row.revenueUsd) * 100) : 0,
+    // Same as the total: free credits that cost real money are -100%, not 0%.
+    marginPct:
+      row.revenueUsd > 0
+        ? round(((row.revenueUsd - row.actualCostUsd) / row.revenueUsd) * 100)
+        : row.actualCostUsd > 0
+          ? -100
+          : 0,
   }));
 
   const grossMarginUsd = totalRevenue - totalCost;
   return {
-    periodStart: from, periodEnd: _to,
-    totalJobs, completedJobs, failedJobs,
+    periodStart: from,
+    periodEnd: _to,
+    totalJobs,
+    completedJobs,
+    failedJobs,
     totalCreditsCharged: totalCredits,
     revenueUsd: round(totalRevenue),
     actualCostUsd: round(totalCost),
     grossMarginUsd: round(grossMarginUsd),
-    grossMarginPct: totalRevenue > 0 ? round((grossMarginUsd / totalRevenue) * 100) : 0,
-    byType: byTypeArr.sort((a, b) => b.revenueUsd - a.revenueUsd),
+    // Free credits earn nothing, so margin is -100% whenever cost was incurred.
+    // Reporting 0% there (as a `revenue > 0` guard does) would hide exactly the
+    // spend this summary exists to expose.
+    grossMarginPct:
+      totalRevenue > 0
+        ? round((grossMarginUsd / totalRevenue) * 100)
+        : totalCost > 0
+          ? -100
+          : 0,
+    creditSource,
+    creditRateUsd: round(creditRate),
+    byType: byTypeArr.sort((a, b) => b.actualCostUsd - a.actualCostUsd),
   };
 }
 

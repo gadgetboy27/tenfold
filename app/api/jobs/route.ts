@@ -94,21 +94,49 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unknown job type" }, { status: 400 });
     }
 
-    // Gate video durations by plan entitlement — before charging. 30s is Pro-only.
+    const ent = await getEntitlements(session.workspaceId);
+
+    // Gate video durations by plan entitlement — before charging. Free gets no
+    // video at all; 30s is Business/Agency.
     if (
       body.type === "video_5s" ||
       body.type === "video_10s" ||
       body.type === "video_30s"
     ) {
-      const ent = await getEntitlements(session.workspaceId);
       const seconds = Number(body.type.replace(/\D/g, "")); // 5 | 10 | 30
       if (!ent.videoDurations.includes(seconds)) {
         return NextResponse.json(
           {
-            error: `${seconds}-second video is a Pro feature — upgrade to generate it.`,
+            error: ent.videoDurations.length
+              ? `${seconds}-second video is a Pro feature — upgrade to generate it.`
+              : "Video is available on paid plans — upgrade to generate it.",
             upgrade: true,
           },
           { status: 403 },
+        );
+      }
+    }
+
+    // Daily generation cap — checked BEFORE the debit, so a capped request
+    // costs the user nothing. Credits are the real bound on a free workspace
+    // (50 welcome credits buys ~4 image grids), so this only bites when credits
+    // don't bound: promo grants and admin top-ups have put 500+ free credits on
+    // payg workspaces, and a runaway loop could otherwise burn the lot.
+    if (ent.dailyGenerationCap !== null) {
+      const since = new Date();
+      since.setUTCHours(0, 0, 0, 0);
+      const { count } = await admin
+        .from("creative_jobs")
+        .select("id", { count: "exact", head: true })
+        .eq("workspace_id", session.workspaceId)
+        .gte("created_at", since.toISOString());
+      if ((count ?? 0) >= ent.dailyGenerationCap) {
+        return NextResponse.json(
+          {
+            error: `Daily limit reached (${ent.dailyGenerationCap} generations). It resets at midnight UTC${ent.isPro ? "" : " — upgrade for a higher limit"}.`,
+            upgrade: !ent.isPro,
+          },
+          { status: 429 },
         );
       }
     }

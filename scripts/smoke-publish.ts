@@ -89,6 +89,32 @@ async function main() {
 
   if (checks.some((c) => c.fatal && !c.ok)) return report();
 
+  // ── 0b. Free-tier abuse: is email verification actually on? ──────────────
+  // The ONLY thing stopping unlimited fake signups drawing 50 free credits
+  // each (~$1.20 of fal spend apiece) is a Supabase dashboard toggle that no
+  // code asserts. mailer_autoconfirm=true silently opens the tap.
+  try {
+    const s = (await fetch(`${SUPA}/auth/v1/settings`, {
+      headers: { apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "" },
+    }).then((r) => r.json())) as {
+      mailer_autoconfirm?: boolean;
+      disable_signup?: boolean;
+    };
+    add(
+      "abuse → email verification required",
+      s.mailer_autoconfirm === false,
+      s.mailer_autoconfirm === false
+        ? "confirmations on"
+        : "AUTO-CONFIRM IS ON — anyone can sign up with a fake address and burn credits",
+    );
+  } catch {
+    add(
+      "abuse → email verification required",
+      false,
+      "could not read auth settings",
+    );
+  }
+
   // ── 1. Signup → workspace provisioning ───────────────────────────────────
   const ws = await rest<Array<{ id: string; slug: string }>>(
     "workspaces?select=id,slug&limit=5",

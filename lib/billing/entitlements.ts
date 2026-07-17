@@ -8,8 +8,18 @@ export interface Entitlements {
   label: string;
   /** Any paid subscription (gates the "Pro" / commercial toolset). */
   isPro: boolean;
-  /** Video lengths (seconds) this tier may generate. */
+  /** Video lengths (seconds) this tier may generate. Empty = no video at all. */
   videoDurations: number[];
+  /**
+   * Generations per UTC day. null = uncapped.
+   *
+   * A backstop, not the main defence — credits already bound a free workspace
+   * (50 welcome credits buys 4 image grids, ~$1.20 of fal spend, once). This
+   * exists for the case credits DON'T bound: promo grants and admin top-ups
+   * have handed free workspaces 500+ credits, and a runaway client loop or a
+   * compromised account could otherwise burn all of it in minutes.
+   */
+  dailyGenerationCap: number | null;
   /** Distinct anchor directions generated per campaign. */
   maxVariations: number;
   /** High-resolution / print-ready upscaled exports. */
@@ -31,7 +41,11 @@ const TIERS: Record<Tier, Entitlements> = {
     tier: "payg",
     label: "Pay-as-you-go",
     isPro: false,
-    videoDurations: [5, 10],
+    // No video on the free tier. It is both the most expensive action
+    // (video_10s is $0.95 of fal spend) and the worst-margin one, so giving it
+    // away is the single largest avoidable COGS on an account paying nothing.
+    videoDurations: [],
+    dailyGenerationCap: 15,
     maxVariations: 4,
     hdExport: false,
     whiteLabel: false,
@@ -45,6 +59,7 @@ const TIERS: Record<Tier, Entitlements> = {
     label: "Creator",
     isPro: true,
     videoDurations: [5, 10, 30],
+    dailyGenerationCap: 100,
     maxVariations: 4,
     hdExport: false,
     whiteLabel: false,
@@ -58,6 +73,7 @@ const TIERS: Record<Tier, Entitlements> = {
     label: "Business",
     isPro: true,
     videoDurations: [5, 10, 30],
+    dailyGenerationCap: 300,
     maxVariations: 6,
     hdExport: true,
     whiteLabel: false,
@@ -71,6 +87,8 @@ const TIERS: Record<Tier, Entitlements> = {
     label: "Agency",
     isPro: true,
     videoDurations: [5, 10, 30],
+    // Uncapped: they pay per credit and credits are the limit.
+    dailyGenerationCap: null,
     maxVariations: 8,
     hdExport: true,
     whiteLabel: true,
