@@ -254,7 +254,14 @@ export async function POST(req: Request) {
       },
       credits_charged: cost,
     });
-    if (jobErr) throw new Error(jobErr.message);
+    if (jobErr) {
+      // Debited at step 2, so throwing here without a refund charges for a job
+      // that never existed — and with no job row, nothing downstream can ever
+      // refund it. The fal-submit failure below already refunds; this path is
+      // likelier (a bad campaignId trips the FK) and didn't.
+      await refundCredits(jobId);
+      throw new Error(jobErr.message);
+    }
 
     // 4. Enqueue one fal request per direction (num_images:1 each). The webhook
     //    is told which direction via ?d=<index>. Refund only if ALL fail.

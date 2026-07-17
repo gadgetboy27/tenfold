@@ -51,7 +51,13 @@ export async function POST(req: Request) {
       );
     }
 
-    await admin.from("creative_jobs").insert({
+    // Checked, and refunded on failure. supabase-js returns { error } rather
+    // than throwing, so an unchecked insert fails SILENTLY: the debit stands,
+    // fal still gets called, and the webhook then has no job row to write the
+    // result to — the customer pays and receives nothing, with no error raised
+    // anywhere. Nothing downstream can refund it either, because refundCredits
+    // keys off the job that was never created.
+    const { error: jobErr } = await admin.from("creative_jobs").insert({
       id: jobId,
       campaign_id: body.campaignId,
       workspace_id: session.workspaceId,
@@ -64,6 +70,13 @@ export async function POST(req: Request) {
       },
       credits_charged: cost,
     });
+    if (jobErr) {
+      await refundCredits(jobId);
+      return NextResponse.json(
+        { error: "Could not start the job — you have not been charged." },
+        { status: 500 },
+      );
+    }
 
     const webhookUrl = `${process.env.APP_URL}/api/webhooks/fal?j=${jobId}`;
     try {

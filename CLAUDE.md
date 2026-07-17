@@ -21,7 +21,14 @@ At each step the user can fine-tune, add text overlays, and apply their brand ki
 The final composed asset publishes directly to 1–13 social platforms via Ayrshare.
 
 The business model is **credits + subscriptions**. Every generative action costs credits
-at a 10× markup on raw inference cost. Subscriptions bundle credits at a discount.
+at a markup on raw inference cost. Subscriptions bundle credits at a discount.
+
+**The markup is not uniform, and cannot be.** Where inference is nearly free the
+margin is huge (script ~25×, music ~20×). Video is the opposite: Kling bills
+~$0.095/second, so video is priced at **~3×** and always will be. 10× on a 10s
+clip works out to 188 credits — one video a month on Creator — or Creator at
+NZD 218 instead of 29. The cheap actions fund video; video cannot fund itself.
+Check the real numbers with `lib/costs/rates.ts`, never by assuming a multiple.
 
 ---
 
@@ -219,19 +226,21 @@ export const GET = withWorkspace<{ id: string }>(async (req, { db, session, para
 
 ## 6. Credit System
 
-```typescript
-// lib/credits/costs.ts — single source of truth, never hardcode elsewhere
-export const CREDIT_COSTS = {
-  image_generation:  12,
-  image_variation:    3,
-  upscale:            2,
-  video_10s:         15,
-  video_30s:         40,
-  video_60s:         80,
-  music_generation:   8,
-  script_generation:  1,
-} as const satisfies Record<string, number>;
-```
+**`lib/credits/costs.ts` is the single source of truth. It is deliberately not
+reproduced here** — the copy that used to live in this section drifted until it
+claimed `video_10s: 15` (really 56), `video_30s: 40` (really 169), and a
+`video_60s` that has never existed, while omitting eight actions that do. A
+second copy of a source of truth is just a lie with a delay.
+
+Two files move together and neither is optional:
+
+| file | holds |
+|---|---|
+| `lib/credits/costs.ts` | what we charge the user, in credits |
+| `lib/costs/rates.ts` | what the provider charges us, in USD |
+
+Changing one without the other silently changes the margin. `tests/unit/credit-value.test.ts`
+pins the relationship between them and will fail if a reprice breaks it.
 
 Rule: `debitCredits()` returns `{ success: false }` → reject with HTTP 402.
 Never create the `creative_job` row. Never call fal.ai.

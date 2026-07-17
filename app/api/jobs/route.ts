@@ -172,7 +172,15 @@ export async function POST(req: Request) {
       input_params: body.params,
       credits_charged: cost,
     });
-    if (jobErr) throw new Error(jobErr.message);
+    if (jobErr) {
+      // The debit already went through, so bailing here without a refund
+      // charges for a job that does not exist and cannot fail, retry, or be
+      // refunded later — the credits are simply gone. Every other failure on
+      // this path refunds (fal submit, webhook, upscale); this one didn't, and
+      // it is the likeliest of them: a bad campaignId trips the FK.
+      await refundCredits(jobId);
+      throw new Error(jobErr.message);
+    }
 
     // Script generation is synchronous
     if (body.type === "script_generation") {
