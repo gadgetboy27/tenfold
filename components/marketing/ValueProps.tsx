@@ -51,7 +51,9 @@ export function ValueProps() {
                   <Icon className="h-5 w-5" />
                 </div>
                 <h3 className="font-serif text-lg font-bold">{p.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{p.body}</p>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  {p.body}
+                </p>
               </motion.div>
             );
           })}

@@ -11,8 +11,12 @@ const DEFAULT_ITEMS: FaqItem[] = [
     a: "Yes. Everything you generate on tenfold — images, video, music, captions — is yours to use commercially. It's written into our terms, not buried in them.",
   },
   {
+    // The list is real (all 13 are wired through Ayrshare) but the FREE tier
+    // reaches only Facebook and Instagram — everything else is gated on isPro
+    // in app/api/publish/route.ts. Saying "13 platforms" to someone reading the
+    // free-signup FAQ was true of the product and false of their account.
     q: "Which platforms can I publish to?",
-    a: "Facebook, Instagram, TikTok, LinkedIn, X (Twitter), YouTube, Pinterest, Google Business Profile and more — 13 platforms in total, all from one publish button.",
+    a: "Facebook and Instagram on the free plan. Paid plans add TikTok, LinkedIn, X (Twitter), YouTube, Pinterest, Google Business Profile and more — 13 in total, all from one publish button.",
   },
   {
     q: "What happens when my free credits run out?",

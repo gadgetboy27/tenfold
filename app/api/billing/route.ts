@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { PLANS, PACKS } from "@/lib/billing/plans";
+import { VISIBLE_PLANS, PACKS } from "@/lib/billing/plans";
 
 export async function GET(req: Request) {
   try {
@@ -33,7 +33,9 @@ export async function GET(req: Request) {
         (accountRes.data as { cached_balance: number } | null)
           ?.cached_balance ?? 0,
       transactions: txRes.data ?? [],
-      plans: PLANS,
+      // VISIBLE_PLANS, not PLANS: a tier whose differentiators aren't built
+      // must not be purchasable, and this route is what the billing page buys from.
+      plans: VISIBLE_PLANS,
       packs: PACKS,
     });
   } catch (err) {

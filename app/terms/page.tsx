@@ -7,9 +7,15 @@ export const metadata: Metadata = {
 };
 
 // NOTE: This is a starting template, not legal advice. Have it reviewed by a
-// lawyer (and tailored to your entity + jurisdiction) before relying on it.
-// Placeholders to confirm: legal entity name, governing-law jurisdiction,
-// contact email, effective date.
+// lawyer before relying on it.
+//
+// Still to confirm with counsel: the NZBN / company number, the registered
+// address, and the governing-law clause below (currently New Zealand).
+//
+// The entity was previously unnamed — the Terms said "operated by tenfold",
+// which is a brand, not a legal person. A contract has to say who you are
+// contracting WITH, or there is nothing to enforce in either direction.
+const LEGAL_ENTITY = "Blue Maunga Limited";
 const LAST_UPDATED = "22 June 2026";
 const CONTACT_EMAIL = "support@tenfold.nz";
 
@@ -34,10 +40,10 @@ export default function TermsPage() {
           <p>
             These Terms of Service (&ldquo;Terms&rdquo;) govern your access to
             and use of tenfold.nz and its related services (the
-            &ldquo;Service&rdquo;), operated by tenfold (&ldquo;we&rdquo;,
-            &ldquo;us&rdquo;, &ldquo;our&rdquo;). By creating an account or using
-            the Service, you agree to these Terms. If you do not agree, do not
-            use the Service.
+            &ldquo;Service&rdquo;), operated by {LEGAL_ENTITY} trading as
+            tenfold (&ldquo;we&rdquo;, &ldquo;us&rdquo;, &ldquo;our&rdquo;). By
+            creating an account or using the Service, you agree to these Terms.
+            If you do not agree, do not use the Service.
           </p>
         </section>
 
@@ -93,8 +99,8 @@ export default function TermsPage() {
             applicable credits, you own the content you generate, to the extent
             permitted by the underlying model providers&rsquo; terms. AI output
             may be similar to output generated for others and is not guaranteed
-            to be original or free of third-party rights. You are responsible for
-            reviewing output before publishing or commercial use.
+            to be original or free of third-party rights. You are responsible
+            for reviewing output before publishing or commercial use.
           </p>
         </section>
 
@@ -104,8 +110,9 @@ export default function TermsPage() {
             The Service relies on third parties including model and
             infrastructure providers and the social platforms you connect. Your
             use of those platforms is also subject to their terms. We are not
-            responsible for third-party services, and connecting a social account
-            authorises us to publish content on your behalf as you direct.
+            responsible for third-party services, and connecting a social
+            account authorises us to publish content on your behalf as you
+            direct.
           </p>
         </section>
 
@@ -121,9 +128,9 @@ export default function TermsPage() {
         <section className="space-y-2">
           <h2>9. Disclaimers &amp; Limitation of Liability</h2>
           <p>
-            The Service is provided &ldquo;as is&rdquo; without warranties of any
-            kind. To the maximum extent permitted by law, we are not liable for
-            indirect, incidental, or consequential damages, and our total
+            The Service is provided &ldquo;as is&rdquo; without warranties of
+            any kind. To the maximum extent permitted by law, we are not liable
+            for indirect, incidental, or consequential damages, and our total
             liability for any claim is limited to the amount you paid us in the
             three months preceding the claim.
           </p>
@@ -142,9 +149,9 @@ export default function TermsPage() {
         <section className="space-y-2">
           <h2>11. Changes</h2>
           <p>
-            We may update these Terms from time to time. Material changes will be
-            posted here with an updated date; continued use after changes take
-            effect constitutes acceptance.
+            We may update these Terms from time to time. Material changes will
+            be posted here with an updated date; continued use after changes
+            take effect constitutes acceptance.
           </p>
         </section>
 

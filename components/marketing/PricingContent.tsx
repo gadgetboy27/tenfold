@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Check } from "lucide-react";
-import { PLANS, PACKS } from "@/lib/billing/plans";
+import { VISIBLE_PLANS, PACKS } from "@/lib/billing/plans";
 import { CREDIT_COSTS } from "@/lib/credits/costs";
 import { WELCOME_CREDITS } from "@/lib/auth/provisioning";
 
@@ -42,8 +42,15 @@ export function PricingContent() {
       </div>
 
       {/* ── Subscription plans ── */}
-      <div className="mx-auto mt-20 grid max-w-5xl gap-5 md:grid-cols-3">
-        {PLANS.map((plan) => (
+      {/* Columns follow the number of plans actually on sale — hardcoding three
+          would stretch two cards across a three-column grid the moment a tier
+          is hidden. */}
+      <div
+        className={`mx-auto mt-20 grid max-w-5xl gap-5 ${
+          VISIBLE_PLANS.length >= 3 ? "md:grid-cols-3" : "md:grid-cols-2"
+        }`}
+      >
+        {VISIBLE_PLANS.map((plan) => (
           <div
             key={plan.id}
             className={`relative rounded-2xl border p-6 backdrop-blur ${

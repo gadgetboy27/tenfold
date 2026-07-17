@@ -110,8 +110,17 @@ export function Hero() {
             </a>
           </motion.div>
 
+          {/* "No card required" and "13 platforms" were one line, which read as
+              a single promise — and it wasn't one. The free tier publishes to
+              Facebook and Instagram only; everything else is gated behind isPro
+              in app/api/publish/route.ts. Same claim, no longer implying the
+              free tier includes it. */}
           <p className="mt-4 text-xs text-muted-foreground">
-            No card required · Publish to up to 13 platforms
+            No card required · 50 free credits
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground/70">
+            Publish to Facebook &amp; Instagram free — up to 13 platforms on a
+            paid plan
           </p>
         </div>
 
