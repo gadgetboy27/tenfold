@@ -13,6 +13,7 @@ import { Hexagon, Clock, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { api } from "@/lib/api";
+import { creditLevel } from "@/lib/billing/credit-levels";
 
 // Credit packs are the SAME source of truth as the billing page: they come from
 // /api/billing, which builds them from the STRIPE_PRICE_* env vars. Never
@@ -35,8 +36,9 @@ export default function CreditMeter() {
   const [purchasing, setPurchasing] = useState<string | null>(null);
   const [topping, setTopping] = useState(false);
 
-  const isLow = creditBalance < 50;
-  const isWarning = creditBalance >= 50 && creditBalance < 150;
+  const level = creditLevel(creditBalance);
+  const isLow = level === "low";
+  const isWarning = level === "warning";
 
   useEffect(() => {
     api("/api/billing", { workspaceSlug })
