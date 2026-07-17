@@ -12,6 +12,7 @@ import { ayrsharePost } from "@/lib/ayrshare/client";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { composeVideo } from "@/lib/composition/video";
 import { pickForPlatform } from "@/lib/composition/formats";
+import { decryptToken } from "@/lib/security/token-crypto";
 import { v4 as uuidv4 } from "uuid";
 
 interface SocialProfile {
@@ -235,11 +236,16 @@ export async function POST(req: Request) {
     //    workspace has connected that account here.
     //  • Every other network → Ayrshare (Pro feature; uses the workspace's
     //    Ayrshare profile key + its linked socials).
+    // Decrypt at the boundary, once, so nothing downstream has to remember to.
+    // Tokens written before encryption existed pass through untouched.
     const metaByPlatform = new Map<string, SocialProfile>(
-      (profiles ?? []).map((p) => [
-        (p as SocialProfile).platform,
-        p as SocialProfile,
-      ]),
+      (profiles ?? []).map((p) => {
+        const row = p as SocialProfile;
+        return [
+          row.platform,
+          { ...row, access_token: decryptToken(row.access_token) },
+        ];
+      }),
     );
 
     const { data: ws } = await admin
@@ -283,10 +289,12 @@ export async function POST(req: Request) {
                 "Selected Facebook Page not found — reconnect Facebook in Settings.";
               continue;
             }
+            // This one comes from the metadata blob, which the map above
+            // never touched — so it needs decrypting on its own.
             fbProfile = {
               ...meta,
               platform_page_id: chosen.id,
-              access_token: chosen.access_token,
+              access_token: decryptToken(chosen.access_token),
             };
           }
           postId = await publishToFacebook(

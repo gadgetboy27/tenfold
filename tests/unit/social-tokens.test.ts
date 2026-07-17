@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { randomBytes } from "node:crypto";
+import { decryptToken, isEncrypted } from "@/lib/security/token-crypto";
 
 /**
  * The refresh path is the difference between a connection that keeps working
@@ -55,6 +57,11 @@ const profile = (
   ...over,
 });
 
+// The refresh layer encrypts what it stores, so it needs a key like production
+// does. Set here rather than mocked away: mocking the crypto would let a
+// plaintext write pass this suite.
+process.env.TOKEN_ENCRYPTION_KEY = randomBytes(32).toString("base64");
+
 beforeEach(() => {
   updates.length = 0;
   updateError = null;
@@ -99,14 +106,18 @@ describe("getFreshAccessToken", () => {
     expect(t).toBe("new-token");
   });
 
-  it("refreshes an expired token and persists the result", async () => {
+  it("refreshes an expired token and persists it ENCRYPTED", async () => {
     const t = await getFreshAccessToken(profile());
+    // The caller gets plaintext to send to the provider...
     expect(t).toBe("new-token");
-    expect(updates[0]).toMatchObject({
-      access_token: "new-token",
-      refresh_token: "refresh-2",
-    });
-    expect(updates[0].token_expires_at).toBeTruthy();
+    // ...but what lands in the row is ciphertext. Asserting equality here would
+    // have passed happily while storing the token in the clear.
+    const stored = updates[0] as Record<string, string>;
+    expect(stored.access_token).not.toBe("new-token");
+    expect(isEncrypted(stored.access_token)).toBe(true);
+    expect(decryptToken(stored.access_token)).toBe("new-token");
+    expect(decryptToken(stored.refresh_token)).toBe("refresh-2");
+    expect(stored.token_expires_at).toBeTruthy();
   });
 
   it("keeps the existing refresh token when none is returned", async () => {

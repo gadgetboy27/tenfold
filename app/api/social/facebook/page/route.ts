@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getInstagramAccount } from "@/lib/social/meta";
+import { encryptToken, decryptToken } from "@/lib/security/token-crypto";
 
 const schema = z.object({ pageId: z.string().min(1) });
 
@@ -39,19 +40,24 @@ export async function POST(req: Request) {
       );
     }
 
+    // The stored page token is encrypted; decrypt once for the Graph calls
+    // below, and write it back encrypted. Legacy plaintext rows pass through
+    // decryptToken untouched and get encrypted here on their next switch.
+    const pageToken = decryptToken(page.access_token);
+
     await admin
       .from("social_profiles")
       .update({
         handle: page.id,
         profile_display_name: page.name,
         platform_page_id: page.id,
-        access_token: page.access_token,
+        access_token: encryptToken(pageToken),
       })
       .eq("workspace_id", session.workspaceId)
       .eq("platform", "facebook");
 
     // Re-sync the linked Instagram account for the new page (or remove it).
-    const ig = await getInstagramAccount(page.id, page.access_token);
+    const ig = await getInstagramAccount(page.id, pageToken);
     if (ig.account) {
       await admin.from("social_profiles").upsert(
         {
@@ -61,7 +67,7 @@ export async function POST(req: Request) {
           profile_display_name: ig.account.name ?? ig.account.username,
           platform_page_id: page.id,
           platform_account_id: ig.account.id,
-          access_token: page.access_token,
+          access_token: encryptToken(pageToken),
           connected_at: new Date().toISOString(),
         },
         { onConflict: "workspace_id,platform" },

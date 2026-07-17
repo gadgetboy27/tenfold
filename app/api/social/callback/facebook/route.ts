@@ -7,6 +7,7 @@ import {
   getInstagramAccount,
 } from "@/lib/social/meta";
 import { verifyOAuthState } from "@/lib/social/oauth-state";
+import { encryptToken } from "@/lib/security/token-crypto";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -63,10 +64,13 @@ export async function GET(req: Request) {
     // every managed page (with its permanent token) in metadata so switching
     // needs no re-auth.
     const page = pages[0];
+    // Every managed page's token is stored so switching pages needs no re-auth
+    // — which means encrypting each one, not just the active page's. This blob
+    // is the largest concentration of credentials we hold.
     const facebook_pages = pages.map((p) => ({
       id: p.id,
       name: p.name,
-      access_token: p.access_token,
+      access_token: encryptToken(p.access_token),
     }));
 
     // 4. Upsert Facebook profile with permanent page access token
@@ -77,7 +81,7 @@ export async function GET(req: Request) {
         handle: page.id,
         profile_display_name: page.name,
         platform_page_id: page.id,
-        access_token: page.access_token,
+        access_token: encryptToken(page.access_token),
         metadata: { facebook_pages },
         connected_at: new Date().toISOString(),
       },
@@ -96,7 +100,7 @@ export async function GET(req: Request) {
           profile_display_name: ig.account.name ?? ig.account.username,
           platform_page_id: page.id, // needed to call the Graph API
           platform_account_id: ig.account.id, // IG Business Account ID
-          access_token: page.access_token,
+          access_token: encryptToken(page.access_token),
           connected_at: new Date().toISOString(),
         },
         { onConflict: "workspace_id,platform" },

@@ -16,7 +16,8 @@
     "test:ui": "vitest --ui",
     "test:e2e": "playwright test",
     "smoke": "tsx scripts/smoke-publish.ts",
-    "smoke:publish": "tsx scripts/smoke-publish.ts --publish"
+    "smoke:publish": "tsx scripts/smoke-publish.ts --publish",
+    "encrypt-tokens": "tsx scripts/encrypt-existing-tokens.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",

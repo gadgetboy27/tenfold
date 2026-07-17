@@ -1,5 +1,10 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getProvider, type OAuthTokens } from "@/lib/social/providers";
+import {
+  encryptToken,
+  encryptTokenOrNull,
+  decryptToken,
+} from "@/lib/security/token-crypto";
 
 /**
  * Keeps stored OAuth access tokens usable.
@@ -69,12 +74,12 @@ export async function getFreshAccessToken(
   if (!profile.access_token) throw new ReconnectRequiredError(profile.platform);
 
   // No expiry recorded = a token that does not expire (Meta Pages). Use it.
-  if (!profile.token_expires_at) return profile.access_token;
+  if (!profile.token_expires_at) return decryptToken(profile.access_token);
 
   const expiresAt = Date.parse(profile.token_expires_at);
   const stale =
     Number.isFinite(expiresAt) && expiresAt - Date.now() <= EXPIRY_SKEW_MS;
-  if (!stale) return profile.access_token;
+  if (!stale) return decryptToken(profile.access_token);
 
   const key = `${profile.workspace_id}:${profile.platform}`;
   const existing = inFlight.get(key);
@@ -95,7 +100,7 @@ async function refreshAndStore(profile: StoredProfile): Promise<string> {
 
   let tokens: OAuthTokens;
   try {
-    tokens = await provider.refresh(profile.refresh_token);
+    tokens = await provider.refresh(decryptToken(profile.refresh_token));
   } catch {
     // A rejected refresh token means revoked access or a rotation we lost —
     // either way the only fix is the user reconnecting.
@@ -106,10 +111,13 @@ async function refreshAndStore(profile: StoredProfile): Promise<string> {
   const { error } = await admin
     .from("social_profiles")
     .update({
-      access_token: tokens.accessToken,
+      access_token: encryptToken(tokens.accessToken),
       // Keep the old refresh token when the provider didn't issue a new one;
-      // overwriting it with null would break every later refresh.
-      refresh_token: tokens.refreshToken ?? profile.refresh_token,
+      // overwriting it with null would break every later refresh. It is already
+      // encrypted in that case, so re-encrypt only what the provider just gave us.
+      refresh_token: tokens.refreshToken
+        ? encryptToken(tokens.refreshToken)
+        : profile.refresh_token,
       token_expires_at: expiresAtIso(tokens),
     })
     .eq("workspace_id", profile.workspace_id)
@@ -140,8 +148,8 @@ export async function saveConnection(opts: {
     {
       workspace_id: opts.workspaceId,
       platform: opts.platform,
-      access_token: opts.tokens.accessToken,
-      refresh_token: opts.tokens.refreshToken ?? null,
+      access_token: encryptToken(opts.tokens.accessToken),
+      refresh_token: encryptTokenOrNull(opts.tokens.refreshToken),
       token_expires_at: expiresAtIso(opts.tokens),
       handle: opts.handle ?? null,
       profile_display_name: opts.displayName ?? null,
