@@ -8,9 +8,21 @@ import { createHmac, timingSafeEqual } from "crypto";
 // no extra env wiring.
 const STATE_TTL_MS = 10 * 60 * 1000; // an OAuth round-trip is seconds; 10 min is generous
 
+/**
+ * Signing key for the state parameter.
+ *
+ * This is our own CSRF token — it never leaves our round-trip and no provider
+ * verifies it — so the key just has to be a server-side secret, not Meta's in
+ * particular. It was keyed on META_APP_SECRET when Facebook was the only
+ * connect flow; Reddit and LinkedIn have no reason to require Meta's app to be
+ * configured, so prefer a dedicated secret and keep META_APP_SECRET as the
+ * fallback rather than invalidating every in-flight Facebook connect on deploy.
+ */
 function sign(payload: string): string {
-  const secret = process.env.META_APP_SECRET;
-  if (!secret) throw new Error("META_APP_SECRET is not set");
+  const secret = process.env.OAUTH_STATE_SECRET ?? process.env.META_APP_SECRET;
+  if (!secret) {
+    throw new Error("Set OAUTH_STATE_SECRET to enable social connections");
+  }
   return createHmac("sha256", secret).update(payload).digest("base64url");
 }
 
@@ -37,7 +49,8 @@ export function verifyOAuthState(state: string | null): string | null {
   }
 
   const issued = Number(issuedAt);
-  if (!Number.isFinite(issued) || Date.now() - issued > STATE_TTL_MS) return null;
+  if (!Number.isFinite(issued) || Date.now() - issued > STATE_TTL_MS)
+    return null;
 
   return workspaceId;
 }
