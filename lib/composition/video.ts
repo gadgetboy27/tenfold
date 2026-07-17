@@ -7,44 +7,18 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 const FONT = "/usr/share/fonts/ttf-dejavu/DejaVuSans.ttf";
 
 /**
- * Cinematic caption presets the user can mix over a campaign video. Higher
- * tiers unlock the more elaborate motion styles (a Business/Agency upsell).
+ * The preset LIST lives in caption-presets.ts (client-safe — this module
+ * imports node:child_process, so UI can't read it). Re-exported here so
+ * existing server importers keep working; this file owns only the drawtext
+ * filters that render each preset.
  */
-export type CaptionStyle = "none" | "fade" | "lower_third" | "crawl";
+import type { CaptionStyle } from "@/lib/composition/caption-presets";
 
-export interface CaptionPreset {
-  id: CaptionStyle;
-  label: string;
-  blurb: string;
-  proOnly: boolean;
-}
-
-export const CAPTION_PRESETS: CaptionPreset[] = [
-  {
-    id: "none",
-    label: "No caption",
-    blurb: "Video + music only.",
-    proOnly: false,
-  },
-  {
-    id: "fade",
-    label: "Fade",
-    blurb: "Caption fades in and out, centred lower.",
-    proOnly: false,
-  },
-  {
-    id: "lower_third",
-    label: "Lower third",
-    blurb: "Broadcast-style caption bar.",
-    proOnly: true,
-  },
-  {
-    id: "crawl",
-    label: "Cinematic crawl",
-    blurb: "Epic text scrolling up the frame, cinema-title style.",
-    proOnly: true,
-  },
-];
+export type {
+  CaptionStyle,
+  CaptionPreset,
+} from "@/lib/composition/caption-presets";
+export { CAPTION_PRESETS } from "@/lib/composition/caption-presets";
 
 // drawtext filter for each style. `dur` is the clip length in seconds; commas
 // inside expressions are wrapped in single quotes so the filtergraph parser

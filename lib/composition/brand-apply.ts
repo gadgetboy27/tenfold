@@ -1,5 +1,6 @@
 import {
   ASPECT_DESIGN,
+  CAPTION_LAYER_ID,
   type CompositionAspect,
   type Layer,
 } from "@/lib/composition/layers";
@@ -75,7 +76,10 @@ export function brandKitLayers(
   const mainText = caption?.trim() || tagline;
   if (mainText) {
     layers.push({
-      id: crypto.randomUUID(),
+      // Stable id, not a uuid: the caption-style presets find and replace THIS
+      // layer by id, so the compositor can restyle the caption without
+      // guessing which text layer is the caption.
+      id: CAPTION_LAYER_ID,
       kind: "text",
       text: wrapText(mainText),
       font,

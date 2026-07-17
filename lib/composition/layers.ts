@@ -404,6 +404,27 @@ export const imageLayerSchema = layerBaseSchema.extend({
   src: z.string().url(),
 });
 
+export const textAlignSchema = z.enum(["left", "center", "right"]);
+export type TextAlign = z.infer<typeof textAlignSchema>;
+
+/**
+ * Optional scrim behind a text layer. Not decoration — a white caption is
+ * illegible over bright footage, which is why the FFmpeg caption presets have
+ * always drawn `box=1:boxcolor=black@0.45` (lib/composition/video.ts).
+ *
+ * `padPx` is design-space padding around the text block, matching FFmpeg's
+ * drawtext `boxborderw` so the canvas preview and the export agree.
+ */
+export const textBackgroundSchema = z.object({
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .default("#000000"),
+  opacity: z.number().min(0).max(1).default(0.45),
+  padPx: z.number().min(0).max(200).default(20),
+});
+export type TextBackground = z.infer<typeof textBackgroundSchema>;
+
 export const textLayerSchema = layerBaseSchema.extend({
   kind: z.literal("text"),
   text: z.string().min(1).max(500),
@@ -413,12 +434,43 @@ export const textLayerSchema = layerBaseSchema.extend({
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/)
     .default("#ffffff"),
+  /**
+   * Horizontal alignment WITHIN the text block (multi-line captions); the
+   * block itself is still placed by `pos`.
+   *
+   * Optional rather than `.default("center")` on purpose: z.infer resolves a
+   * defaulted field as REQUIRED on the output type, which would force every
+   * existing Layer literal to spell it out. Same convention as `effects` —
+   * read it through alignOf() so the default lives in exactly one place.
+   */
+  align: textAlignSchema.optional(),
+  /** Scrim behind the text. Optional and absent by default, so every
+   *  composition saved before this existed still parses unchanged. */
+  bg: textBackgroundSchema.optional(),
 });
 
 export const layerSchema = z.discriminatedUnion("kind", [
   imageLayerSchema,
   textLayerSchema,
 ]);
+
+/** A text layer's effective alignment. The canvas preview and the FFmpeg
+ *  export both read through this, so the default can never diverge. */
+export function alignOf(layer: { align?: TextAlign }): TextAlign {
+  return layer.align ?? "center";
+}
+
+/**
+ * The id of the layer holding the campaign caption. Stable rather than a uuid
+ * so the caption-style presets can find and replace exactly that layer —
+ * "which text layer is the caption?" is unanswerable once a user has added
+ * their own text.
+ *
+ * Lives here, with the layer primitives, rather than in caption-presets.ts:
+ * brand-apply seeds it and caption-presets consumes it, so parking it in
+ * either one puts a cycle between them.
+ */
+export const CAPTION_LAYER_ID = "caption";
 
 export type ImageLayer = z.infer<typeof imageLayerSchema>;
 export type TextLayer = z.infer<typeof textLayerSchema>;
