@@ -139,7 +139,32 @@ async function adminOverride(
   return email && allow.includes(email) ? TIERS.agency : null;
 }
 
-/** Resolve a workspace's entitlements from its (active) subscription tier. */
+/**
+ * True while a subscription still earns its tier.
+ *
+ * `past_due` is deliberately included, but only inside its grace window. Stripe
+ * flags past_due the moment a renewal card fails — which for the customer is
+ * usually just an expired card — and honouring only active/trialing made that
+ * an INSTANT downgrade: video gone, caps tightened, mid-work, before any dunning
+ * email had even arrived. Stripe retries for days; we hold the tier for the same
+ * window and let the retries do their job. Exported for the tests, because the
+ * cost of getting either edge wrong is a real customer.
+ */
+export function isEntitled(
+  sub: { status: string | null; grace_until?: string | null } | null,
+  now: Date = new Date(),
+): boolean {
+  if (!sub) return false;
+  if (sub.status === "active" || sub.status === "trialing") return true;
+  if (sub.status !== "past_due") return false;
+  // past_due with no grace recorded gets none — fail closed rather than hand
+  // out an unbounded free ride to a subscription that predates this column.
+  if (!sub.grace_until) return false;
+  const until = Date.parse(sub.grace_until);
+  return Number.isFinite(until) && until > now.getTime();
+}
+
+/** Resolve a workspace's entitlements from its subscription tier. */
 export async function getEntitlements(
   workspaceId: string,
 ): Promise<Entitlements> {
@@ -149,11 +174,13 @@ export async function getEntitlements(
   const admin = createSupabaseAdminClient();
   const { data } = await admin
     .from("subscriptions")
-    .select("tier, status")
+    .select("tier, status, grace_until")
     .eq("workspace_id", workspaceId)
     .single();
-  const sub = data as { tier: string | null; status: string | null } | null;
-  // Only honour the tier while the subscription is active/trialing.
-  const active = sub?.status === "active" || sub?.status === "trialing";
-  return entitlementsForTier(active ? sub?.tier : "payg");
+  const sub = data as {
+    tier: string | null;
+    status: string | null;
+    grace_until: string | null;
+  } | null;
+  return entitlementsForTier(isEntitled(sub) ? sub?.tier : "payg");
 }

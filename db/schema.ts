@@ -92,6 +92,10 @@ export const subscriptions = pgTable("subscriptions", {
   creditsPerPeriod: integer("credits_per_period").notNull().default(0),
   currentPeriodStart: timestamp("current_period_start", { withTimezone: true }),
   currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+  /** While status is past_due, keep honouring the tier until this moment. Set
+   *  on invoice.payment_failed, cleared on invoice.payment_succeeded. Without
+   *  it a single failed card is an instant downgrade mid-work. */
+  graceUntil: timestamp("grace_until", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
