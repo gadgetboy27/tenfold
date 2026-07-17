@@ -335,6 +335,35 @@ export const publishRecords = pgTable(
   ],
 );
 
+// ─── PUBLISH ATTEMPTS ─────────────────────────────────────────────────────────
+// One row per (publish, platform): which backend handled it and whether it
+// landed. The record publish_records lacked — the "did this actually post, and
+// if not where did it break" that was unanswerable while publishes failed
+// silently. Server-only (no RLS policy → deny-all to the client).
+export const publishAttempts = pgTable(
+  "publish_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    publishRecordId: uuid("publish_record_id").references(
+      () => publishRecords.id,
+      { onDelete: "set null" },
+    ),
+    platform: text("platform").notNull(),
+    /** 'meta' (direct) or 'ayrshare' (fallback). */
+    backend: text("backend").notNull(),
+    ok: boolean("ok").notNull(),
+    postId: text("post_id"),
+    reason: text("reason"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("idx_publish_attempts_workspace").on(t.workspaceId)],
+);
+
 // ─── WEBHOOK LOGS ─────────────────────────────────────────────────────────────
 export const webhookLogs = pgTable(
   "webhook_logs",

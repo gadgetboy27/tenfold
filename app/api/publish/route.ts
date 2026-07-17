@@ -13,6 +13,7 @@ import { getEntitlements } from "@/lib/billing/entitlements";
 import { composeVideo } from "@/lib/composition/video";
 import { pickForPlatform } from "@/lib/composition/formats";
 import { decryptToken } from "@/lib/security/token-crypto";
+import { backendFor, type PublishOutcome } from "@/lib/social/publish-dispatch";
 import { v4 as uuidv4 } from "uuid";
 
 interface SocialProfile {
@@ -265,59 +266,80 @@ export async function POST(req: Request) {
       ? `${body.caption}\n\n${hashtags.join(" ")}`
       : body.caption;
 
-    const platformResults: Record<string, string> = {};
-    const errors: Record<string, string> = {};
+    // One structured outcome per platform. The old code kept two parallel maps
+    // (results + errors) and a hardcoded backend fork; this collects a single
+    // list so the backend choice is data, the response shapes are derived once,
+    // and every attempt can be logged the same way.
+    const outcomes: PublishOutcome[] = [];
 
     for (const platform of body.platforms) {
       // Per-platform AI caption when supplied (its hashtags are already tailored);
       // otherwise the base caption + shared hashtags.
       const platformCaption = body.platformCaptions?.[platform] ?? fullCaption;
       const platformAsset = assetForPlatform(platform);
+      const backend = backendFor(platform, metaByPlatform.has(platform));
       try {
-        const meta = metaByPlatform.get(platform);
-        let postId: string;
-        if (platform === "facebook" && meta) {
-          // Per-publish Page override: resolve the chosen Page's id + token from
-          // the stored managed-pages list. Falls back to the active page when no
-          // facebookPageId is sent (backward compatible).
-          let fbProfile = meta;
-          if (body.facebookPageId) {
-            const pages = meta.metadata?.facebook_pages ?? [];
-            const chosen = pages.find((p) => p.id === body.facebookPageId);
-            if (!chosen) {
-              errors.facebook =
-                "Selected Facebook Page not found — reconnect Facebook in Settings.";
-              continue;
+        if (backend === "meta") {
+          const meta = metaByPlatform.get(platform)!;
+          let postId: string;
+          if (platform === "facebook") {
+            // Per-publish Page override: resolve the chosen Page's id + token
+            // from the stored managed-pages list. Falls back to the active page
+            // when no facebookPageId is sent (backward compatible).
+            let fbProfile = meta;
+            if (body.facebookPageId) {
+              const pages = meta.metadata?.facebook_pages ?? [];
+              const chosen = pages.find((p) => p.id === body.facebookPageId);
+              if (!chosen) {
+                outcomes.push({
+                  platform,
+                  backend,
+                  ok: false,
+                  reason:
+                    "Selected Facebook Page not found — reconnect Facebook in Settings.",
+                });
+                continue;
+              }
+              // This one comes from the metadata blob, which the map above
+              // never touched — so it needs decrypting on its own.
+              fbProfile = {
+                ...meta,
+                platform_page_id: chosen.id,
+                access_token: decryptToken(chosen.access_token),
+              };
             }
-            // This one comes from the metadata blob, which the map above
-            // never touched — so it needs decrypting on its own.
-            fbProfile = {
-              ...meta,
-              platform_page_id: chosen.id,
-              access_token: decryptToken(chosen.access_token),
-            };
+            postId = await publishToFacebook(
+              fbProfile,
+              platformAsset,
+              platformCaption,
+            );
+          } else {
+            postId = await publishToInstagram(
+              meta,
+              platformAsset,
+              platformCaption,
+            );
           }
-          postId = await publishToFacebook(
-            fbProfile,
-            platformAsset,
-            platformCaption,
-          );
-        } else if (platform === "instagram" && meta) {
-          postId = await publishToInstagram(
-            meta,
-            platformAsset,
-            platformCaption,
-          );
+          outcomes.push({ platform, backend, ok: true, postId });
         } else {
-          // Everything else goes through Ayrshare (Pro).
+          // Ayrshare (Pro) — the fallback for everything without a direct adapter.
           if (!ent.isPro) {
-            errors[platform] =
-              "Publishing beyond Facebook & Instagram is a Pro feature — upgrade to reach this network.";
+            outcomes.push({
+              platform,
+              backend,
+              ok: false,
+              reason:
+                "Publishing beyond Facebook & Instagram is a Pro feature — upgrade to reach this network.",
+            });
             continue;
           }
           if (!ayrshareKey) {
-            errors[platform] =
-              "Connect your accounts in Settings → Social first.";
+            outcomes.push({
+              platform,
+              backend,
+              ok: false,
+              reason: "Connect your accounts in Settings → Social first.",
+            });
             continue;
           }
           // Throws with the platform's own reason when the post doesn't land —
@@ -330,15 +352,55 @@ export async function POST(req: Request) {
             mediaUrls: [platformAsset.url],
             ...(body.scheduledAt ? { scheduleDate: body.scheduledAt } : {}),
           });
-          postId = result.id;
+          outcomes.push({ platform, backend, ok: true, postId: result.id });
         }
-        platformResults[platform] = postId;
       } catch (err) {
-        errors[platform] = err instanceof Error ? err.message : "Unknown error";
+        outcomes.push({
+          platform,
+          backend,
+          ok: false,
+          reason: err instanceof Error ? err.message : "Unknown error",
+        });
       }
     }
 
+    // Derive the existing response shapes from the outcomes, so nothing the
+    // client or publish_records depends on changes.
+    const platformResults: Record<string, string> = {};
+    const errors: Record<string, string> = {};
+    for (const o of outcomes) {
+      if (o.ok && o.postId) platformResults[o.platform] = o.postId;
+      else if (!o.ok && o.reason) errors[o.platform] = o.reason;
+    }
+
+    // One log row per attempt — the observability that has been missing while
+    // publishes failed silently all along. Best-effort: a logging hiccup must
+    // never fail a publish that actually went out.
+    const logAttempts = async (recordId: string | null) => {
+      if (outcomes.length === 0) return;
+      await admin
+        .from("publish_attempts")
+        .insert(
+          outcomes.map((o) => ({
+            workspace_id: session.workspaceId,
+            publish_record_id: recordId,
+            platform: o.platform,
+            backend: o.backend,
+            ok: o.ok,
+            post_id: o.postId ?? null,
+            reason: o.reason ?? null,
+          })),
+        )
+        .then(({ error }) => {
+          if (error)
+            console.error("[publish] attempt log failed:", error.message);
+        });
+    };
+
     if (Object.keys(platformResults).length === 0) {
+      // Total failure: no publish_record, but the attempts are exactly what we
+      // want on record — this is the case that used to vanish without a trace.
+      await logAttempts(null);
       return NextResponse.json(
         { error: "All platforms failed to publish", errors },
         { status: 500 },
@@ -362,6 +424,8 @@ export async function POST(req: Request) {
       })
       .select()
       .single();
+
+    await logAttempts((record as { id: string } | null)?.id ?? null);
 
     if (resolvedCompositionId) {
       await admin
