@@ -14,9 +14,11 @@ import {
   Settings,
   Image as ImageIcon,
   Film,
+  CreditCard,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { creditLevel, creditFillFraction } from "@/lib/billing/credit-levels";
 
 const STEPS = [
   { id: 1 as const, label: "Create", icon: Sparkles },
@@ -38,10 +40,14 @@ export default function LeftRail() {
     setLeftDrawerOpen,
   } = useAppStore();
 
-  const MAX = 500;
-  const pct = Math.min(100, Math.round((creditBalance / MAX) * 100));
+  const pct = Math.round(creditFillFraction(creditBalance) * 100);
+  const level = creditLevel(creditBalance);
   const barColor =
-    pct < 20 ? "#EF4444" : pct < 50 ? "#F59E0B" : "var(--color-primary)";
+    level === "low"
+      ? "#EF4444"
+      : level === "warning"
+        ? "#F59E0B"
+        : "var(--color-primary)";
 
   return (
     <AnimatePresence>
@@ -147,6 +153,16 @@ export default function LeftRail() {
                     <ImageIcon className="w-4 h-4" />
                   </div>
                   <span>Gallery</span>
+                </Link>
+                <Link
+                  href={`/${workspaceSlug}/settings/billing`}
+                  onClick={() => setLeftDrawerOpen(false)}
+                  className="flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-all"
+                >
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center border-2 border-border bg-card shrink-0">
+                    <CreditCard className="w-4 h-4" />
+                  </div>
+                  <span>Plan &amp; billing</span>
                 </Link>
                 <Link
                   href={`/${workspaceSlug}/settings/social`}
