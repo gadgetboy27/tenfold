@@ -26,6 +26,7 @@ export const createJobSchema = z.object({
     "upscale",
     "video_5s",
     "video_10s",
+    "video_15s",
     "video_30s",
     "music_generation",
     "script_generation",

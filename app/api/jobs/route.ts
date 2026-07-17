@@ -35,12 +35,19 @@ function buildFalInput(
       seed: params.seed as number | undefined,
     };
   }
-  if (type === "video_5s" || type === "video_10s" || type === "video_30s") {
-    // Kling v3 seconds PER CALL. 5s/10s are single calls; 30s renders as 2× 15s
-    // segments (see the video_30s enqueue below), so its per-segment duration is 15.
+  if (
+    type === "video_5s" ||
+    type === "video_10s" ||
+    type === "video_15s" ||
+    type === "video_30s"
+  ) {
+    // Kling v3 seconds PER CALL, capped at 15. 5s/10s/15s are single calls; 30s
+    // renders as 2× 15s segments (see the video_30s enqueue below), so its
+    // per-segment duration is also 15.
     const durationMap: Record<string, number> = {
       video_5s: 5,
       video_10s: 10,
+      video_15s: 15,
       video_30s: 15,
     };
     const style = (params.videoStyle as VideoStyle) ?? "Cinematic";
@@ -101,9 +108,10 @@ export async function POST(req: Request) {
     if (
       body.type === "video_5s" ||
       body.type === "video_10s" ||
+      body.type === "video_15s" ||
       body.type === "video_30s"
     ) {
-      const seconds = Number(body.type.replace(/\D/g, "")); // 5 | 10 | 30
+      const seconds = Number(body.type.replace(/\D/g, "")); // 5 | 10 | 15 | 30
       if (!ent.videoDurations.includes(seconds)) {
         return NextResponse.json(
           {

@@ -52,6 +52,8 @@ export const VIDEO_DURATION_PROMPTS: Record<string, string> = {
     "ultra-short social hook, one striking beat, instant attention-grab, snappy motion",
   video_10s:
     "short punchy social media clip, fast-paced, attention-grabbing, snappy motion",
+  video_15s:
+    "complete social story in one take, hook then payoff, confident pacing, reel-ready",
   video_30s:
     "dynamic narrative sequence, building story arc, engaging pacing, social content",
 };

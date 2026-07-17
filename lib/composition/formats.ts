@@ -210,7 +210,11 @@ export const PLATFORM_DURATION: Record<
 
 /** Video-gen tiers our engine can actually produce (fal.ai Kling v3) — mirrors
  *  the video_5s / video_10s / video_30s credit costs (30s = 2×15s stitched). */
-export const VIDEO_GEN_TIERS = [5, 10, 30] as const;
+/** Lengths we can actually generate. 15s is Kling v3's longest single call;
+ *  30s is two of those stitched (lib/composition/concat.ts). Without 15 here,
+ *  Pinterest's 15s sweet spot snapped down to 10 and Instagram's viral 7–15s
+ *  window had no tier at all. */
+export const VIDEO_GEN_TIERS = [5, 10, 15, 30] as const;
 export type VideoGenTier = (typeof VIDEO_GEN_TIERS)[number];
 
 /** Nearest producible gen tier to a target length. */

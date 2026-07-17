@@ -24,11 +24,17 @@ describe("credit level", () => {
   });
 
   it("stays anchored to what the credits actually buy", () => {
-    // The thresholds are only meaningful relative to real costs. If a 30s video
-    // ever costs more than the warning line, "warning" stops meaning "you're
-    // within one big render of empty" and the numbers need rethinking.
+    // The thresholds are only meaningful relative to real costs. This caught
+    // the video reprice (30s: 100 → 169) pushing the priciest action ABOVE a
+    // hardcoded 150 warning line — the gauge would have read green to someone
+    // who could no longer afford the thing they came to make. CREDIT_WARNING
+    // now derives from the costs, so it can't drift again.
     expect(CREDIT_LOW).toBeLessThan(CREDIT_COSTS.video_30s);
-    expect(CREDIT_WARNING).toBeGreaterThanOrEqual(CREDIT_COSTS.video_30s);
+    expect(CREDIT_WARNING).toBeGreaterThanOrEqual(
+      Math.max(...Object.values(CREDIT_COSTS)),
+    );
+    // "Low" must mean you can't start a real piece of work — not even a 10s clip.
+    expect(CREDIT_LOW).toBeLessThan(CREDIT_COSTS.video_10s);
   });
 
   it("reports the specific balances that used to render two colours at once", () => {

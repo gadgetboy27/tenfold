@@ -65,20 +65,35 @@ describe("margin reality check", () => {
   const markup = (type: keyof typeof CREDIT_COSTS) =>
     (CREDIT_COSTS[type] * sub) / PROVIDER_COST_USD[type];
 
-  it("documents that video does NOT hit the 10x the model assumes", () => {
-    // CLAUDE.md §1: "Every generative action costs credits at a 10x markup on
-    // raw inference cost." It is not true for the flagship product, and this
-    // test exists so that stays visible rather than being rediscovered.
-    expect(markup("video_10s")).toBeLessThan(2);
-    expect(markup("video_5s")).toBeLessThan(2);
-    expect(markup("video_30s")).toBeLessThan(2.5);
-    expect(markup("image_generation")).toBeLessThan(3);
+  it("prices every video length at ~3x inference", () => {
+    // Video was repriced to ~3x after the flat-rate bug was fixed exposed it
+    // running at 1.3–1.8x. It is deliberately NOT the 10x of CLAUDE.md §1:
+    // 10x on a 10s clip is 188 credits — ONE video a month on Creator — or
+    // Creator at NZD 218. The 10x model only holds where inference is ~free
+    // (script 25x, music 20x); it cannot hold on the product we sell.
+    for (const t of [
+      "video_5s",
+      "video_10s",
+      "video_15s",
+      "video_30s",
+    ] as const) {
+      expect(markup(t)).toBeGreaterThan(2.5);
+      expect(markup(t)).toBeLessThan(3.5);
+    }
   });
 
-  it("flags if video is ever repriced to a healthy markup", () => {
-    // Deliberately inverted: when video_10s clears 3x this fails, telling
-    // whoever repriced it to update the assertion above and CLAUDE.md with it.
-    expect(markup("video_10s")).toBeLessThan(3);
+  it("keeps video length priced proportionally to its seconds", () => {
+    // Kling bills per second, so credits must too — otherwise one length
+    // quietly subsidises another. 15s should cost ~1.5x a 10s clip.
+    const ratio = CREDIT_COSTS.video_15s / CREDIT_COSTS.video_10s;
+    expect(ratio).toBeGreaterThan(1.4);
+    expect(ratio).toBeLessThan(1.6);
+  });
+
+  it("keeps the cheap actions where the 10x model does hold", () => {
+    // These are the ones that fund the thin-margin video.
+    expect(markup("script_generation")).toBeGreaterThan(10);
+    expect(markup("music_generation")).toBeGreaterThan(10);
   });
 
   it("confirms a free signup's COGS ceiling is bounded", () => {

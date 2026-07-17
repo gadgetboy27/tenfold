@@ -58,7 +58,9 @@ const TIERS: Record<Tier, Entitlements> = {
     tier: "creator",
     label: "Creator",
     isPro: true,
-    videoDurations: [5, 10, 30],
+    // 15s is the longest single Kling call and the viral Reels length; 30s
+    // needs two calls stitched, so it stays a Business/Agency feature.
+    videoDurations: [5, 10, 15],
     dailyGenerationCap: 100,
     maxVariations: 4,
     hdExport: false,
@@ -72,7 +74,7 @@ const TIERS: Record<Tier, Entitlements> = {
     tier: "business",
     label: "Business",
     isPro: true,
-    videoDurations: [5, 10, 30],
+    videoDurations: [5, 10, 15, 30],
     dailyGenerationCap: 300,
     maxVariations: 6,
     hdExport: true,
@@ -86,7 +88,7 @@ const TIERS: Record<Tier, Entitlements> = {
     tier: "agency",
     label: "Agency",
     isPro: true,
-    videoDurations: [5, 10, 30],
+    videoDurations: [5, 10, 15, 30],
     // Uncapped: they pay per credit and credits are the limit.
     dailyGenerationCap: null,
     maxVariations: 8,

@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { ASPECT_DESIGN } from "@/lib/composition/layers";
+import { CREDIT_COSTS } from "@/lib/credits/costs";
+import { PROVIDER_COST_USD } from "@/lib/costs/rates";
+import { entitlementsForTier } from "@/lib/billing/entitlements";
 import {
   PLATFORM_FORMATS,
   formatsForPlatforms,
@@ -15,6 +18,7 @@ import {
   recommendVideoDuration,
   overLengthPlatforms,
   GENERIC_RAIL,
+  VIDEO_GEN_TIERS,
   type NormRect,
 } from "@/lib/composition/formats";
 
@@ -174,8 +178,10 @@ describe("video length guidance", () => {
     expect(recommendVideoDuration(["tiktok", "instagram"])).toBe(30);
     // YouTube's ~55 sweet spot → snaps to 30 (max producible tier).
     expect(recommendVideoDuration(["youtube"])).toBe(30);
-    // Mixed: Pinterest's 15 is shortest → snaps to 10.
-    expect(recommendVideoDuration(["pinterest", "tiktok"])).toBe(10);
+    // Mixed: Pinterest's 15 is shortest → lands EXACTLY on the 15s tier.
+    // Before 15s existed this snapped down to 10, quietly shipping Pinterest a
+    // clip a third shorter than its own sweet spot.
+    expect(recommendVideoDuration(["pinterest", "tiktok"])).toBe(15);
     // Nothing recognised → 30 default.
     expect(recommendVideoDuration([])).toBe(30);
   });
@@ -227,5 +233,32 @@ describe("intersectionArea", () => {
         { x: 0.25, y: 0.25, w: 0.5, h: 0.5 },
       ),
     ).toBeCloseTo(0.0625); // 0.25 * 0.25
+  });
+});
+
+describe("video tiers stay wired end to end", () => {
+  it("prices every generatable length", () => {
+    // A tier with no credit cost would crash at the debit; a cost with no tier
+    // is unreachable. 15s existed as neither until it was added to both.
+    for (const t of VIDEO_GEN_TIERS) {
+      expect(
+        CREDIT_COSTS[`video_${t}s` as keyof typeof CREDIT_COSTS],
+      ).toBeGreaterThan(0);
+      expect(PROVIDER_COST_USD[`video_${t}s`]).toBeGreaterThan(0);
+    }
+  });
+
+  it("offers every tier to at least one plan", () => {
+    // A length nobody can select is dead code with a price tag.
+    for (const t of VIDEO_GEN_TIERS) {
+      const reachable = (
+        ["payg", "creator", "business", "agency"] as const
+      ).some((tier) => entitlementsForTier(tier).videoDurations.includes(t));
+      expect(reachable, `no plan can generate ${t}s`).toBe(true);
+    }
+  });
+
+  it("keeps the free tier off video entirely", () => {
+    expect(entitlementsForTier("payg").videoDurations).toEqual([]);
   });
 });

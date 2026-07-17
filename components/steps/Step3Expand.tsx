@@ -18,6 +18,11 @@ import { motion } from "framer-motion";
 import toast from "react-hot-toast";
 import { api } from "@/lib/api";
 import { CREDIT_COSTS } from "@/lib/credits/costs";
+import { VIDEO_GEN_TIERS } from "@/lib/composition/formats";
+
+/** `video_5s` | `video_10s` | `video_15s` | `video_30s`, derived from the tier
+ *  list so a new length can never be half-wired again. */
+type VideoJobType = `video_${(typeof VIDEO_GEN_TIERS)[number]}s`;
 import { MUSIC_GENRES, type VideoStyle } from "@/lib/fal/prompts";
 
 type ExpandType = "video" | "music" | "script";
@@ -37,7 +42,7 @@ export default function Step3Expand() {
     scriptTone,
     variationDirection,
   } = expandDrafts;
-  const setVideoDuration = (v: 5 | 10 | 30) =>
+  const setVideoDuration = (v: (typeof VIDEO_GEN_TIERS)[number]) =>
     patchExpandDrafts({ videoDuration: v });
   const setVideoStyle = (v: VideoStyle) => patchExpandDrafts({ videoStyle: v });
   const setMusicGenre = (v: string) => patchExpandDrafts({ musicGenre: v });
@@ -93,10 +98,7 @@ export default function Step3Expand() {
 
       const jobType =
         type === "video"
-          ? (`video_${videoDuration}s` as
-              | "video_5s"
-              | "video_10s"
-              | "video_30s")
+          ? (`video_${videoDuration}s` as VideoJobType)
           : type === "music"
             ? "music_generation"
             : "script_generation";
@@ -338,8 +340,8 @@ export default function Step3Expand() {
           <FormatCard
             type="video"
             title="Video"
-            subtitle="5, 10 or 30-second clip"
-            cost={`${CREDIT_COSTS[`video_${videoDuration}s` as "video_5s" | "video_10s" | "video_30s"]} cr`}
+            subtitle={`${VIDEO_GEN_TIERS.join(", ")}-second clip`}
+            cost={`${CREDIT_COSTS[`video_${videoDuration}s` as VideoJobType]} cr`}
             icon={Film}
             onGenerate={() => handleGenerate("video")}
             onRefresh={() => handleRefresh("video")}
@@ -348,7 +350,7 @@ export default function Step3Expand() {
           >
             <div className="space-y-3">
               <div className="flex flex-col gap-1.5">
-                {([5, 10, 30] as const).map((t) => {
+                {VIDEO_GEN_TIERS.map((t) => {
                   const locked = ent ? !ent.videoDurations.includes(t) : false;
                   return (
                     <button

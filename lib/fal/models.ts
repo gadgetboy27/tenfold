@@ -6,6 +6,8 @@ export const FAL_MODELS = {
   // video_30s renders as 2× 15s segments concatenated (see webhooks/fal + jobs).
   video_5s: "fal-ai/kling-video/v3/pro/image-to-video",
   video_10s: "fal-ai/kling-video/v3/pro/image-to-video",
+  // 15s is the longest single call Kling allows — one request, no concat.
+  video_15s: "fal-ai/kling-video/v3/pro/image-to-video",
   video_30s: "fal-ai/kling-video/v3/pro/image-to-video",
   music_generation: "fal-ai/stable-audio",
 } as const;

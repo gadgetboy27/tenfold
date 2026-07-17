@@ -31,7 +31,10 @@ type Expansions = { video?: Expansion; music?: Expansion; script?: Expansion };
 // component state) so they SURVIVE navigating away to Compose and back — users
 // must not lose prompts they typed.
 export interface ExpandDrafts {
-  videoDuration: 5 | 10 | 30;
+  /** Mirrors VIDEO_GEN_TIERS (lib/composition/formats.ts) — the lengths Kling
+   *  can actually produce. Spelled out rather than imported to keep the store
+   *  free of composition deps; the tests pin the two together. */
+  videoDuration: 5 | 10 | 15 | 30;
   videoStyle: string;
   musicGenre: string;
   musicModel: string;

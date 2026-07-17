@@ -12,6 +12,7 @@ const COST_ROWS: { key: keyof typeof CREDIT_COSTS; label: string }[] = [
   { key: "upscale", label: "Upscale to high resolution" },
   { key: "video_5s", label: "5-second video" },
   { key: "video_10s", label: "10-second video" },
+  { key: "video_15s", label: "15-second video" },
   { key: "video_30s", label: "30-second video" },
   { key: "music_generation", label: "Music track" },
   { key: "script_generation", label: "Script or caption" },
