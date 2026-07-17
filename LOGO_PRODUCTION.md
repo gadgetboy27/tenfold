@@ -62,7 +62,17 @@ campaign assets.
 that's Option A and it's a fraction of the work. If it's "design a brand logo
 from a prompt", that's Option B. Pick one and note it here before starting.
 
-> DECISION: _(fill in)_ — chosen approach and one line of why.
+> **DECISION: Option B — a standalone from-scratch logo *generator*.** "Build
+> from scratch" = generate a new logo from a prompt, the product's own prompt →
+> image DNA. Not an overlay of an existing logo.
+>
+> **But it reuses the existing generation pipeline, not a parallel one.** A logo
+> is an image-generation job with logo-specific prompt engineering. So logos
+> flow through the SAME jobs → fal → webhook → assets → realtime path (the
+> webhook already saves any image-producing job as an `image` asset). The only
+> genuinely new code is the prompt engineering (`lib/logo/prompts.ts`) and the
+> UI. Logo assets live in a per-workspace "Logos" holding campaign so they have
+> a home and show up in the gallery / brand kit like any other asset.
 
 ---
 

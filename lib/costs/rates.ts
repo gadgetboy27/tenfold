@@ -26,6 +26,7 @@ export const PROVIDER_COST_USD: Record<string, number> = {
   // fal.ai — Bria Product Shot (~estimate, tune when billed)
   product_shot: 0.06,
   // fal.ai — Stable Audio
+  logo_generation: 0.2, // 4 x FLUX Pro @ ~$0.05
   music_generation: 0.02,
   // Anthropic — claude-sonnet-4-6 (~200 in + 100 out tokens typical)
   script_generation: 0.002,

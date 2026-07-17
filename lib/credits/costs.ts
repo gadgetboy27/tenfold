@@ -12,6 +12,8 @@ export const CREDIT_COSTS = {
   auto_caption: 5,
   hook_variants: 2,
   product_shot: 6,
+  // 4 logo candidates via FLUX Pro (~$0.05 each). Reuses the image pipeline.
+  logo_generation: 10,
   music_generation: 8,
   script_generation: 1,
   layout_autofix: 3,
