@@ -5,7 +5,7 @@ import {
   NZD_USD_RATE,
   type CreditSource,
 } from "./rates";
-import { PACKS } from "@/lib/billing/plans";
+import { PACKS, PLANS } from "@/lib/billing/plans";
 
 /**
  * What this workspace's credits were actually worth: money genuinely collected,
@@ -29,39 +29,66 @@ async function creditRateFor(
 ): Promise<{ rate: number; source: CreditSource }> {
   const admin = createSupabaseAdminClient();
 
-  const { data: sub } = await admin
-    .from("subscriptions")
-    .select("tier, status")
-    .eq("workspace_id", workspaceId)
-    .maybeSingle();
-  const s = sub as { tier: string | null; status: string | null } | null;
-  const active = s?.status === "active" || s?.status === "trialing";
-  const tier = (active && s?.tier ? s.tier : "payg") as CreditSource;
-
   const { data: rows } = await admin
     .from("credit_transactions")
-    .select("type, amount")
+    .select("type, amount, description")
     .eq("workspace_id", workspaceId);
-  const txns = (rows ?? []) as { type: string; amount: number }[];
+  const txns = (rows ?? []) as {
+    type: string;
+    amount: number;
+    description: string | null;
+  }[];
 
   let usdIn = 0;
   let creditsIn = 0;
+  let paidTier: CreditSource | null = null;
   for (const t of txns) {
     if (t.amount <= 0) continue; // spends and refunds aren't acquisitions
     creditsIn += t.amount;
-    if (t.type === "purchase") usdIn += packRevenueUsd(t.amount);
-    // Subscription credits arrive as a grant on the tier's rate.
-    else if (t.type === "grant" && tier !== "payg") {
-      usdIn += t.amount * creditValueUsd(tier);
+    if (t.type === "purchase") {
+      usdIn += packRevenueUsd(t.amount);
+      continue;
     }
-    // Everything else — welcome credits, promos, admin top-ups — is free.
+    // A grant is valued by what it WAS, read from the transaction itself — not
+    // by the account's current tier. Valuing by current tier was wrong twice
+    // over: a churned subscriber's paid grants read $0 (they're "payg" now),
+    // and a live subscriber's free welcome grant read as paid (both are type
+    // 'grant'). subscriptionGrantTier looks at the description + amount, so a
+    // grant's value survives the account changing plan or cancelling.
+    const grantTier = subscriptionGrantTier(t.type, t.description, t.amount);
+    if (grantTier) {
+      usdIn += t.amount * creditValueUsd(grantTier);
+      paidTier = grantTier;
+    }
+    // Welcome credits, promos, admin top-ups: free, contribute $0.
   }
 
   if (creditsIn === 0) return { rate: 0, source: "grant" };
   const rate = usdIn / creditsIn;
-  // Report the SOURCE by what actually funded them, not what they signed up as.
-  const source: CreditSource = usdIn === 0 ? "grant" : tier;
+  // Report the source by what actually funded the credits.
+  const source: CreditSource = usdIn === 0 ? "grant" : (paidTier ?? "payg");
   return { rate, source };
+}
+
+/**
+ * The paid tier a grant transaction represents, or null if it was free.
+ *
+ * grantCredits() (lib/stripe/webhooks.ts) stamps subscription grants with the
+ * description "Monthly subscription credits" and an amount equal to that tier's
+ * monthly allowance. Both together identify it: the description rules out
+ * welcome/promo/admin grants that happen to share an amount, and the amount
+ * names the tier. Historical, so it's correct even after the account churns.
+ */
+export function subscriptionGrantTier(
+  type: string,
+  description: string | null,
+  amount: number,
+): Exclude<CreditSource, "grant" | "payg"> | null {
+  if (type !== "grant") return null;
+  if (!/subscription/i.test(description ?? "")) return null;
+  const plan = PLANS.find((p) => p.creditsPerMonth === amount);
+  if (!plan || plan.id === "payg") return null;
+  return plan.id as Exclude<CreditSource, "grant" | "payg">;
 }
 
 /** USD a top-up of N credits brought in, matched to the pack that sells N. */

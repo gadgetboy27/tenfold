@@ -111,3 +111,58 @@ describe("margin reality check", () => {
     expect(CREDIT_COSTS.talking_video).toBeGreaterThan(WELCOME);
   });
 });
+
+describe("valuing a grant by what it was, not the current tier", () => {
+  it("prices a subscription grant by its amount, regardless of account status", async () => {
+    const { subscriptionGrantTier } = await import("@/lib/costs/tracker");
+    // The fix for churned subscribers: a paid subscription grant is identified
+    // by its description + amount, so it keeps its value after the account
+    // cancels (and reads "payg" now). 350 = Creator, 1000 = Business.
+    expect(
+      subscriptionGrantTier("grant", "Monthly subscription credits", 350),
+    ).toBe("creator");
+    expect(
+      subscriptionGrantTier("grant", "Monthly subscription credits", 1000),
+    ).toBe("business");
+    expect(
+      subscriptionGrantTier("grant", "Monthly subscription credits", 3000),
+    ).toBe("agency");
+  });
+
+  it("treats a free welcome grant as free even at a plan-sized amount", async () => {
+    const { subscriptionGrantTier } = await import("@/lib/costs/tracker");
+    // The welcome grant and a subscription grant are BOTH type 'grant'; only the
+    // description separates them. Without that guard a 50-credit welcome grant
+    // (or an admin top-up that happens to be 350) would be counted as revenue.
+    expect(
+      subscriptionGrantTier("grant", "Welcome credits for abc", 50),
+    ).toBeNull();
+    expect(
+      subscriptionGrantTier(
+        "grant",
+        "Admin test top-up (founder live testing)",
+        350,
+      ),
+    ).toBeNull();
+    expect(
+      subscriptionGrantTier("grant", "Provisioned credits", 500),
+    ).toBeNull();
+  });
+
+  it("ignores purchases and spends here (those are valued elsewhere)", async () => {
+    const { subscriptionGrantTier } = await import("@/lib/costs/tracker");
+    expect(
+      subscriptionGrantTier("purchase", "Credit pack purchase", 300),
+    ).toBeNull();
+    expect(subscriptionGrantTier("spend", "image generation", 12)).toBeNull();
+  });
+
+  it("returns null for a subscription grant whose amount matches no plan", async () => {
+    const { subscriptionGrantTier } = await import("@/lib/costs/tracker");
+    // A prorated or partial grant we can't attribute to a tier is safer as $0
+    // than guessed — under-counting revenue beats inventing it.
+    expect(
+      subscriptionGrantTier("grant", "Monthly subscription credits", 175),
+    ).toBeNull();
+  });
+});

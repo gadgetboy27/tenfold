@@ -12,7 +12,7 @@ import { ayrsharePost } from "@/lib/ayrshare/client";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { composeVideo } from "@/lib/composition/video";
 import { pickForPlatform } from "@/lib/composition/formats";
-import { decryptToken } from "@/lib/security/token-crypto";
+import { decryptTokenOrNull } from "@/lib/security/token-crypto";
 import { backendFor, type PublishOutcome } from "@/lib/social/publish-dispatch";
 import { v4 as uuidv4 } from "uuid";
 
@@ -239,12 +239,15 @@ export async function POST(req: Request) {
     //    Ayrshare profile key + its linked socials).
     // Decrypt at the boundary, once, so nothing downstream has to remember to.
     // Tokens written before encryption existed pass through untouched.
+    // decryptTokenOrNull, not decryptToken: the column is nullable and a null
+    // token here would otherwise throw while BUILDING the map — 500-ing the
+    // whole publish for every platform, not just the one missing a token.
     const metaByPlatform = new Map<string, SocialProfile>(
       (profiles ?? []).map((p) => {
         const row = p as SocialProfile;
         return [
           row.platform,
-          { ...row, access_token: decryptToken(row.access_token) },
+          { ...row, access_token: decryptTokenOrNull(row.access_token) ?? "" },
         ];
       }),
     );
@@ -305,7 +308,7 @@ export async function POST(req: Request) {
               fbProfile = {
                 ...meta,
                 platform_page_id: chosen.id,
-                access_token: decryptToken(chosen.access_token),
+                access_token: decryptTokenOrNull(chosen.access_token) ?? "",
               };
             }
             postId = await publishToFacebook(

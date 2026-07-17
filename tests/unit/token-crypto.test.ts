@@ -165,10 +165,14 @@ describe("every token path is wired", () => {
     expect(s).toMatch(/facebook_pages\s*=\s*pages\.map[\s\S]*?encryptToken/);
   });
 
-  it("decrypts before handing a token to Meta", () => {
+  it("decrypts before handing a token to Meta, null-safely", () => {
     const s = src("app/api/publish/route.ts");
-    expect(s).toContain("decryptToken(row.access_token)");
+    // decryptTokenOrNull, not decryptToken: the column is nullable and the bare
+    // form throws on null while BUILDING the map, 500-ing the whole publish.
+    expect(s).toContain("decryptTokenOrNull(row.access_token)");
     // The Page override reads from metadata, which the map above never touched.
-    expect(s).toContain("decryptToken(chosen.access_token)");
+    expect(s).toContain("decryptTokenOrNull(chosen.access_token)");
+    // And never the crash-prone bare form on a nullable column.
+    expect(s).not.toContain("decryptToken(row.access_token)");
   });
 });
