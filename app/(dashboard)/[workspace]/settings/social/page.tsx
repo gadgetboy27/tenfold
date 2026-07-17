@@ -1069,6 +1069,22 @@ export default function SocialSettingsPage() {
         .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
         .join(" & ");
       toast.success(`${label} connected successfully`);
+
+      // Facebook connected but Instagram didn't come with it. Say why — landing
+      // on "Facebook connected" with Instagram mysteriously absent is
+      // indistinguishable from the product being broken.
+      const igReason = searchParams.get("instagram");
+      if (igReason === "not_linked") {
+        toast(
+          "No Instagram found on that Page. Link an Instagram Business account to it in Meta Business settings, then reconnect.",
+          { icon: "📷", duration: 8000 },
+        );
+      } else if (igReason === "graph_error") {
+        toast.error(
+          "Couldn't read Instagram for that Page. Try reconnecting — if it persists, the Page's permissions may need re-granting.",
+          { duration: 8000 },
+        );
+      }
     }
     if (oauthError === "facebook_denied")
       toast.error("Facebook connection cancelled");

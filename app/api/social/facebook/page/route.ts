@@ -52,21 +52,24 @@ export async function POST(req: Request) {
 
     // Re-sync the linked Instagram account for the new page (or remove it).
     const ig = await getInstagramAccount(page.id, page.access_token);
-    if (ig) {
+    if (ig.account) {
       await admin.from("social_profiles").upsert(
         {
           workspace_id: session.workspaceId,
           platform: "instagram",
-          handle: ig.username,
-          profile_display_name: ig.name ?? ig.username,
+          handle: ig.account.username,
+          profile_display_name: ig.account.name ?? ig.account.username,
           platform_page_id: page.id,
-          platform_account_id: ig.id,
+          platform_account_id: ig.account.id,
           access_token: page.access_token,
           connected_at: new Date().toISOString(),
         },
         { onConflict: "workspace_id,platform" },
       );
-    } else {
+    } else if (ig.reason === "not_linked") {
+      // The new Page genuinely has no Instagram attached, so the old row is
+      // stale — drop it. Deliberately NOT on graph_error: a transient API
+      // failure must not disconnect a working Instagram account.
       await admin
         .from("social_profiles")
         .delete()
@@ -77,7 +80,10 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ok: true,
       page: { id: page.id, name: page.name },
-      instagram: ig?.username ?? null,
+      instagram: ig.account?.username ?? null,
+      // Why there's no Instagram, so the picker can say so instead of just
+      // showing nothing.
+      instagramReason: ig.account ? null : ig.reason,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";

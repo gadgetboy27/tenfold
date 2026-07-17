@@ -1,41 +1,48 @@
-import { NextResponse } from 'next/server';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { NextResponse } from "next/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   exchangeCodeForToken,
   getLongLivedUserToken,
   getUserPages,
   getInstagramAccount,
-} from '@/lib/social/meta';
-import { verifyOAuthState } from '@/lib/social/oauth-state';
+} from "@/lib/social/meta";
+import { verifyOAuthState } from "@/lib/social/oauth-state";
 
 export async function GET(req: Request) {
-  const url         = new URL(req.url);
-  const code        = url.searchParams.get('code');
+  const url = new URL(req.url);
+  const code = url.searchParams.get("code");
   // Verify the signed state and recover the workspaceId — a forged/expired state
   // resolves to null and is treated as a denied connection (CSRF protection).
-  const workspaceId = verifyOAuthState(url.searchParams.get('state'));
-  const metaError   = url.searchParams.get('error');
+  const workspaceId = verifyOAuthState(url.searchParams.get("state"));
+  const metaError = url.searchParams.get("error");
 
   // Resolve workspace slug for redirect URL — needed before we can redirect anywhere
   const admin = createSupabaseAdminClient();
 
   async function workspaceSlug(): Promise<string | null> {
     if (!workspaceId) return null;
-    const { data, error } = await admin.from('workspaces').select('slug').eq('id', workspaceId).single();
-    if (error) console.error('[Meta OAuth] workspace lookup failed:', error.message);
+    const { data, error } = await admin
+      .from("workspaces")
+      .select("slug")
+      .eq("id", workspaceId)
+      .single();
+    if (error)
+      console.error("[Meta OAuth] workspace lookup failed:", error.message);
     return (data as { slug: string } | null)?.slug ?? null;
   }
 
   if (metaError || !code || !workspaceId) {
     const slug = await workspaceSlug();
     const base = slug ? `${process.env.APP_URL}/${slug}` : process.env.APP_URL!;
-    return NextResponse.redirect(`${base}/settings/social?error=facebook_denied`);
+    return NextResponse.redirect(
+      `${base}/settings/social?error=facebook_denied`,
+    );
   }
 
   let slug: string | null = null;
   try {
     slug = await workspaceSlug();
-    if (!slug) throw new Error('Workspace not found');
+    if (!slug) throw new Error("Workspace not found");
 
     // 1. Exchange auth code → short-lived user token
     const shortToken = await exchangeCodeForToken(code);
@@ -63,46 +70,61 @@ export async function GET(req: Request) {
     }));
 
     // 4. Upsert Facebook profile with permanent page access token
-    await admin.from('social_profiles').upsert(
+    await admin.from("social_profiles").upsert(
       {
-        workspace_id:         workspaceId,
-        platform:             'facebook',
-        handle:               page.id,
+        workspace_id: workspaceId,
+        platform: "facebook",
+        handle: page.id,
         profile_display_name: page.name,
-        platform_page_id:     page.id,
-        access_token:         page.access_token,
-        metadata:             { facebook_pages },
-        connected_at:         new Date().toISOString(),
+        platform_page_id: page.id,
+        access_token: page.access_token,
+        metadata: { facebook_pages },
+        connected_at: new Date().toISOString(),
       },
-      { onConflict: 'workspace_id,platform' },
+      { onConflict: "workspace_id,platform" },
     );
 
     // 5. Check for linked Instagram Business account on that page
-    const igAccount = await getInstagramAccount(page.id, page.access_token);
-    if (igAccount) {
+    const ig = await getInstagramAccount(page.id, page.access_token);
+    if (ig.account) {
       // Instagram uses the Facebook page's access token for all publishing calls
-      await admin.from('social_profiles').upsert(
+      await admin.from("social_profiles").upsert(
         {
-          workspace_id:         workspaceId,
-          platform:             'instagram',
-          handle:               igAccount.username,
-          profile_display_name: igAccount.name ?? igAccount.username,
-          platform_page_id:     page.id,           // needed to call the Graph API
-          platform_account_id:  igAccount.id,      // IG Business Account ID
-          access_token:         page.access_token,
-          connected_at:         new Date().toISOString(),
+          workspace_id: workspaceId,
+          platform: "instagram",
+          handle: ig.account.username,
+          profile_display_name: ig.account.name ?? ig.account.username,
+          platform_page_id: page.id, // needed to call the Graph API
+          platform_account_id: ig.account.id, // IG Business Account ID
+          access_token: page.access_token,
+          connected_at: new Date().toISOString(),
         },
-        { onConflict: 'workspace_id,platform' },
+        { onConflict: "workspace_id,platform" },
+      );
+    } else {
+      // Don't leave them guessing. Connecting Facebook and silently getting no
+      // Instagram — with no hint that the Page needs an Instagram Business
+      // account attached — is indistinguishable from the product being broken.
+      console.warn(
+        `[Meta OAuth] no Instagram for page ${page.id}: ${ig.reason}${ig.detail ? ` — ${ig.detail}` : ""}`,
       );
     }
 
-    const connected = igAccount ? 'facebook,instagram' : 'facebook';
+    const params = new URLSearchParams({
+      connected: ig.account ? "facebook,instagram" : "facebook",
+    });
+    if (!ig.account) params.set("instagram", ig.reason);
     return NextResponse.redirect(
-      `${process.env.APP_URL}/${slug}/settings/social?connected=${connected}`,
+      `${process.env.APP_URL}/${slug}/settings/social?${params}`,
     );
   } catch (err) {
-    console.error('[Meta OAuth callback]', err instanceof Error ? err.message : err);
+    console.error(
+      "[Meta OAuth callback]",
+      err instanceof Error ? err.message : err,
+    );
     const base = slug ? `${process.env.APP_URL}/${slug}` : process.env.APP_URL!;
-    return NextResponse.redirect(`${base}/settings/social?error=facebook_failed`);
+    return NextResponse.redirect(
+      `${base}/settings/social?error=facebook_failed`,
+    );
   }
 }
