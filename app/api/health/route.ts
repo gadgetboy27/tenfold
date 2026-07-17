@@ -4,103 +4,63 @@ import { workspaces } from "@/db/schema";
 import { createClient } from "@supabase/supabase-js";
 import { serverPublicEnv } from "@/lib/env/public-server";
 
+/**
+ * Public liveness probe. The Dockerfile HEALTHCHECK is the only consumer and it
+ * only reads the status code — so the body says the least it can.
+ *
+ * It used to say a great deal, to anyone who asked: the database host and
+ * username, the Supabase project URL, row counts, and every workspace slug —
+ * which are real customer names. It was a debugging endpoint (it still hunted
+ * for a hardcoded TEST_WORKSPACE_ID) that shipped and was never taken back out.
+ *
+ * The rule for anything reachable without a session: report whether the service
+ * is up, never what is inside it. Reachability is the whole question a health
+ * check asks; identity, topology and volume are answers to questions nobody
+ * asked.
+ *
+ * Always 200 while the process can respond. A failing dependency is reported in
+ * the body rather than the status, because Docker restarts the container on a
+ * failed check and restarting this app cannot fix someone else's database.
+ */
 export async function GET() {
-  const { supabaseUrl } = serverPublicEnv();
-  let dbHost = "parse-error";
-  let dbUser = "parse-error";
+  const { supabaseUrl, supabaseAnonKey } = serverPublicEnv();
+
+  // Config presence only — never the values, and never which project.
+  const configured =
+    !!supabaseUrl &&
+    !!supabaseAnonKey &&
+    !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  // Can we reach Postgres through the pooler?
+  let dbUp = false;
   try {
-    const u = new URL(process.env.DATABASE_URL ?? "");
-    dbHost = u.hostname + ":" + u.port;
-    dbUser = u.username;
-  } catch {}
+    await db.select({ id: workspaces.id }).from(workspaces).limit(1);
+    dbUp = true;
+  } catch {
+    dbUp = false;
+  }
 
-  const checks: Record<string, string> = {
-    version: "v3-admin-client",
-    db: "untested",
-    restApi: "untested",
-    dbHost,
-    dbUser,
-    SUPABASE_URL: supabaseUrl || "MISSING",
-    SUPABASE_ANON_KEY: serverPublicEnv().supabaseAnonKey ? "set" : "MISSING",
-    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY
-      ? "set"
-      : "MISSING",
-  };
-
-  // Test 1: REST API path (uses API keys, not DATABASE_URL)
+  // Can we reach it through the REST API (a different network path, so a
+  // different failure)? Count only — head:true never returns a row.
+  let restUp = false;
   try {
     const supabase = createClient(
       supabaseUrl,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
     );
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from("workspaces")
-      .select("id,slug")
-      .limit(3);
-    if (error) {
-      checks.restApi = `error: ${error.message}`;
-    } else {
-      const TEST_WORKSPACE_ID = "78141a59-d721-4207-a527-e24d4520405c";
-      const testRow = data?.find(
-        (r: { id: string }) => r.id === TEST_WORKSPACE_ID,
-      );
-      checks.restApi = "ok";
-      checks.restRowCount = String(data?.length ?? 0);
-      checks.restTestWorkspace = testRow
-        ? `FOUND (slug: ${(testRow as { slug: string }).slug})`
-        : "NOT FOUND";
-      checks.restSlugs =
-        data?.map((r: { slug: string }) => r.slug).join(", ") || "(none)";
-    }
-  } catch (err) {
-    const e = err as Error;
-    checks.restApi = `exception: ${e.message}`;
+      .select("id", { count: "exact", head: true });
+    restUp = !error;
+  } catch {
+    restUp = false;
   }
 
-  // Test 2: Direct postgres pooler path (uses DATABASE_URL)
-  try {
-    const TEST_WORKSPACE_ID = "78141a59-d721-4207-a527-e24d4520405c";
-    const rows = await db
-      .select({ id: workspaces.id, slug: workspaces.slug })
-      .from(workspaces)
-      .limit(5);
-    const testRow = rows.find((r) => r.id === TEST_WORKSPACE_ID);
-    checks.db = "ok";
-    checks.rowCount = String(rows.length);
-    checks.testWorkspace = testRow
-      ? `FOUND (slug: ${testRow.slug})`
-      : "NOT FOUND — wrong database or tables empty";
-    checks.allSlugs = rows.map((r) => r.slug).join(", ") || "(none)";
-  } catch (err) {
-    const e = err as Error & {
-      code?: string;
-      detail?: string;
-      routine?: string;
-    };
-    checks.db = `${e.message}${e.code ? ` [${e.code}]` : ""}`;
-    if (e.detail) checks.dbDetail = e.detail;
-  }
-
-  // Ayrshare config: is the API key set, and how many workspace profiles are
-  // linked? Linked profiles = the slots that count toward the Ayrshare plan
-  // (Launch: 10, Business: 30 + per-profile), so this is a quick cost gauge.
-  checks.AYRSHARE_API_KEY = process.env.AYRSHARE_API_KEY ? "set" : "MISSING";
-  try {
-    const supabase = createClient(
-      supabaseUrl,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    );
-    const { count, error } = await supabase
-      .from("workspaces")
-      .select("id", { count: "exact", head: true })
-      .not("ayrshare_profile_key", "is", null);
-    checks.ayrshareLinkedProfiles = error
-      ? `error: ${error.message}`
-      : String(count ?? 0);
-  } catch (err) {
-    checks.ayrshareLinkedProfiles = `exception: ${(err as Error).message}`;
-  }
-
-  const ok = checks.db === "ok";
-  return NextResponse.json(checks, { status: ok ? 200 : 500 });
+  const ok = configured && dbUp && restUp;
+  return NextResponse.json({
+    status: ok ? "ok" : "degraded",
+    configured,
+    db: dbUp,
+    restApi: restUp,
+  });
 }
