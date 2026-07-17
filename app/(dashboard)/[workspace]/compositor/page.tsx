@@ -17,6 +17,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { Compositor } from "@/components/compositor/Compositor";
+import { CaptionPresetRow } from "@/components/compositor/CaptionPresetRow";
+import UpgradeModal from "@/components/billing/UpgradeModal";
 import { fetchCompositionDoc } from "@/components/compositor/export-client";
 import { openCampaignForPublish } from "@/lib/campaign/publish-nav";
 import { brandKitLayers, pickKitLogo } from "@/lib/composition/brand-apply";
@@ -86,6 +88,10 @@ export default function CompositorPage() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [initialising, setInitialising] = useState(false);
   const [exportedUrl, setExportedUrl] = useState<string | null>(null);
+  const [showUpgrade, setShowUpgrade] = useState(false);
+  // The caption the presets restyle — the same store value Step 4 edits, so
+  // the two pages can't disagree about what the caption says.
+  const composeCaption = useAppStore((s) => s.composeCaption);
 
   // Campaign mode init — read ?campaign from the URL (no useSearchParams, so
   // the page needs no Suspense boundary) and build the branded default doc.
@@ -303,12 +309,22 @@ export default function CompositorPage() {
           <span className="text-sm">Loading your footage and brand kit…</span>
         </div>
       ) : doc ? (
-        <div className="min-h-0 flex-1">
-          <Compositor
-            campaignId={campaignId}
-            audioUrl={audioUrl}
-            onExported={setExportedUrl}
-          />
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
+          {/* Cinema mix, folded in as a preset: campaign mode only, since the
+              lab has no campaign caption to style. */}
+          {campaignId && (
+            <CaptionPresetRow
+              caption={composeCaption}
+              onUpgrade={() => setShowUpgrade(true)}
+            />
+          )}
+          <div className="min-h-0 flex-1">
+            <Compositor
+              campaignId={campaignId}
+              audioUrl={audioUrl}
+              onExported={setExportedUrl}
+            />
+          </div>
         </div>
       ) : campaignId ? (
         <div className="flex flex-1 items-center justify-center">
@@ -362,6 +378,13 @@ export default function CompositorPage() {
           </div>
         </div>
       )}
+
+      <UpgradeModal
+        open={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
+        feature="cinematic caption styles"
+        blurb="Lower third and cinematic crawl are part of the Pro toolset."
+      />
     </div>
   );
 }

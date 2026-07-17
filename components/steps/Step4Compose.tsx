@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Type,
-  Palette,
   RotateCcw,
   Maximize2,
   Upload,
@@ -16,7 +15,6 @@ import {
   Music,
   Film,
   ImageIcon,
-  Lock,
   Loader2,
   Wand2,
   ArrowRight,
@@ -25,18 +23,17 @@ import toast from "react-hot-toast";
 import { api } from "@/lib/api";
 import { VideoWithMusic } from "@/components/compose/VideoWithMusic";
 import AssetComments from "@/components/shared/AssetComments";
-import { useEntitlements } from "@/lib/billing/useEntitlements";
+import { cn } from "@/lib/utils";
+import { previewBoxClass } from "@/lib/util/aspect-classes";
+import type { CaptionStyle } from "@/lib/composition/caption-presets";
 import UpgradeModal from "@/components/billing/UpgradeModal";
 
-// Mirror of the server CAPTION_PRESETS (kept inline — the composition lib imports
-// node:child_process and can't be pulled into a client component).
-const CINEMA_PRESETS = [
-  { id: "none", label: "None", proOnly: false },
-  { id: "fade", label: "Fade", proOnly: false },
-  { id: "lower_third", label: "Lower third", proOnly: true },
-  { id: "crawl", label: "Cinematic crawl", proOnly: true },
-] as const;
-type CinemaStyle = (typeof CINEMA_PRESETS)[number]["id"];
+/**
+ * The style the auto-render uses when someone goes straight to Publish without
+ * opening the compositor. Not a picker any more: choosing a style is what the
+ * compositor's preset row is for, and this keeps the fast path fast.
+ */
+const DEFAULT_CAPTION_STYLE: CaptionStyle = "fade";
 
 function RedoRow({
   label,
@@ -84,7 +81,6 @@ export default function Step4Compose() {
     setComposeCaption,
   } = useAppStore();
 
-  const ent = useEntitlements();
   // Caption lives in the store so it survives the round-trip to the
   // compositor (and step navigation); seed it from the AI script once.
   const caption = composeCaption;
@@ -102,11 +98,7 @@ export default function Step4Compose() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
-  // Cinema mix (non-destructive: re-render with different layers anytime)
-  const [captionStyle, setCaptionStyle] = useState<CinemaStyle>("fade");
-  const [useMusic, setUseMusic] = useState(true);
   const [rendering, setRendering] = useState(false);
-  const [filmUrl, setFilmUrl] = useState<string | null>(null);
   const [filmCompositionId, setFilmCompositionId] = useState<string | null>(
     null,
   );
@@ -138,6 +130,9 @@ export default function Step4Compose() {
       .catch(() => {});
   }, [workspaceSlug]);
 
+  // The fast path's automatic render: no UI, fires from handleContinue when
+  // someone publishes a film without opening the compositor. Music is always
+  // layered in — turning it off, like restyling the caption, is a compositor job.
   const handleRenderFilm = async (): Promise<string | null> => {
     setRendering(true);
     try {
@@ -146,8 +141,8 @@ export default function Step4Compose() {
         body: JSON.stringify({
           campaignId: currentCampaignId,
           caption,
-          captionStyle,
-          useMusic,
+          captionStyle: DEFAULT_CAPTION_STYLE,
+          useMusic: true,
           logoUrl,
         }),
         workspaceSlug,
@@ -163,7 +158,6 @@ export default function Step4Compose() {
       };
       if (!res.ok || !data.url)
         throw new Error(data.error ?? "Could not render your film");
-      setFilmUrl(data.url);
       setFilmCompositionId(data.compositionId ?? null);
       setOutputKind("video");
       toast.success("Film rendered — your layers are mixed into one video.");
@@ -260,12 +254,9 @@ export default function Step4Compose() {
     }
   };
 
-  // Editing the caption/style/music invalidates a previously rendered film, so
-  // the published film always matches what's on screen.
-  const invalidateFilm = () => {
-    setFilmUrl(null);
-    setFilmCompositionId(null);
-  };
+  // Editing the caption or logo invalidates a previously rendered film, so the
+  // published film always matches what's on screen.
+  const invalidateFilm = () => setFilmCompositionId(null);
 
   // Publish the chosen output. For a film, ensure it's rendered and carry THAT
   // composition forward — never silently fall back to the image.
@@ -285,90 +276,125 @@ export default function Step4Compose() {
     <div className="h-full flex flex-col md:flex-row gap-5 md:gap-6 p-4 sm:p-6 overflow-y-auto">
       {/* ── Left: image + video + music ── */}
       <div className="flex-1 flex flex-col gap-4 min-w-0">
-        {/* Static image preview */}
-        <div className="bg-card border border-border rounded-xl flex items-center justify-center p-4">
-          {anchor ? (
-            <div className="relative w-full max-w-xs aspect-square bg-background shadow-2xl rounded-xl overflow-hidden mx-auto">
-              <Image
-                src={anchor.url}
-                alt="Preview"
-                fill
-                className="object-cover"
-                sizes="(max-width: 768px) 100vw, 320px"
-              />
-              {/* Caption overlay */}
-              {caption && (
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-5 pt-10">
-                  <p className="text-white text-sm font-medium drop-shadow-md line-clamp-3">
-                    {caption}
-                  </p>
-                </div>
-              )}
-              {/* Logo — click to upload */}
-              <button
-                onClick={() => logoInputRef.current?.click()}
-                title="Click to upload your logo"
-                className="absolute top-3 right-3 w-10 h-10 bg-white/90 hover:bg-white rounded-lg flex items-center justify-center shadow-md transition-all group"
-              >
-                {logoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={logoUrl}
-                    alt="Logo"
-                    className="w-8 h-8 object-contain rounded"
-                  />
-                ) : (
-                  <>
-                    <span className="text-black font-bold text-[10px] group-hover:hidden">
-                      LOGO
-                    </span>
-                    <Upload className="w-4 h-4 text-primary hidden group-hover:block" />
-                  </>
+        {/* Still and film sit SIDE BY SIDE once both exist. Stacked, they each
+            got a thin horizontal slice of a ~940px column while two thirds of
+            the width sat empty; paired, they use the width and each gets more
+            height. Alone, the still takes the full column. */}
+        <div className={cn("grid gap-4", video && "lg:grid-cols-2")}>
+          {/* Static image preview */}
+          <div className="bg-card border border-border rounded-xl flex items-center justify-center p-4">
+            {anchor ? (
+              <div
+                className={cn(
+                  "relative bg-background shadow-2xl rounded-xl overflow-hidden mx-auto",
+                  // The anchor's OWN ratio, not a hardcoded square. With
+                  // object-cover a square box centre-cropped every portrait
+                  // anchor, so this preview showed a shape that would never be
+                  // published — and put the caption and logo in the wrong place.
+                  previewBoxClass(anchor.aspectRatio),
                 )}
-              </button>
-              <input
-                ref={logoInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleLogoUpload}
-              />
-            </div>
-          ) : (
-            <p className="text-muted-foreground text-sm p-8">
-              No anchor image selected.
-            </p>
-          )}
-        </div>
-
-        {/* Video player */}
-        {video && (
-          <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
-              <span className="text-xs font-semibold text-foreground">
-                Generated Video
-              </span>
-              <button
-                onClick={() => setIsFullscreen(true)}
-                className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded"
-                title="Fullscreen"
               >
-                <Maximize2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            <VideoWithMusic
-              videoUrl={video}
-              musicUrl={useMusic ? music : null}
-              className="w-full max-h-64 bg-black"
-            />
-            {music && useMusic && (
-              <p className="px-4 py-1.5 text-[11px] text-muted-foreground border-t border-border">
-                ♪ Playing with your music layered in — exactly how the rendered
-                film will sound.
+                <Image
+                  src={anchor.url}
+                  alt="Preview"
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 1024px) 100vw, 448px"
+                />
+                {/* Caption overlay */}
+                {caption && (
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-5 pt-10">
+                    <p className="text-white text-sm font-medium drop-shadow-md line-clamp-3">
+                      {caption}
+                    </p>
+                  </div>
+                )}
+                {/* Logo — click to upload. The single logo control now that the
+                    duplicate sidebar card is gone, so it carries that card's
+                    spinner and brand-kit hint too. */}
+                <button
+                  onClick={() => logoInputRef.current?.click()}
+                  disabled={logoUploading}
+                  title={
+                    logoUploading
+                      ? "Uploading your logo…"
+                      : logoFromKit
+                        ? "Your brand kit logo — click to replace it for this campaign"
+                        : logoUrl
+                          ? "Click to replace your logo"
+                          : "Click to upload your logo"
+                  }
+                  className="absolute top-3 right-3 w-10 h-10 bg-white/90 hover:bg-white rounded-lg flex items-center justify-center shadow-md transition-all group"
+                >
+                  {logoUploading ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                  ) : logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={logoUrl}
+                      alt="Logo"
+                      className="w-8 h-8 object-contain rounded"
+                    />
+                  ) : (
+                    <>
+                      <span className="text-black font-bold text-[10px] group-hover:hidden">
+                        LOGO
+                      </span>
+                      <Upload className="w-4 h-4 text-primary hidden group-hover:block" />
+                    </>
+                  )}
+                </button>
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleLogoUpload}
+                />
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-sm p-8">
+                No anchor image selected.
               </p>
             )}
           </div>
-        )}
+
+          {/* Video player */}
+          {video && (
+            <div className="bg-card border border-border rounded-xl overflow-hidden flex flex-col">
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
+                <span className="text-xs font-semibold text-foreground">
+                  Generated Video
+                </span>
+                <button
+                  onClick={() => setIsFullscreen(true)}
+                  className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded"
+                  title="Fullscreen"
+                >
+                  <Maximize2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              {/* Same 28rem height budget as the still, so the pair reads as one
+                  row. Sized by max-* with auto dimensions rather than w-full: a
+                  <video> is a replaced element, so it keeps its own aspect under
+                  max constraints — the box hugs the clip instead of pillarboxing
+                  it, and we never need to know the ratio here. */}
+              <div className="flex-1 flex items-center justify-center bg-black p-2">
+                <VideoWithMusic
+                  videoUrl={video}
+                  musicUrl={music}
+                  className="max-w-full max-h-[28rem] w-auto h-auto"
+                />
+              </div>
+              {music && (
+                <p className="px-4 py-1.5 text-[11px] text-muted-foreground border-t border-border">
+                  ♪ Playing with your music layered in — exactly how the
+                  rendered film will sound.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Music player */}
         {music && (
@@ -402,112 +428,23 @@ export default function Step4Compose() {
           />
         </div>
 
-        {/* Cinema mix — layer existing video + music + caption into one film */}
-        <div className="bg-card border border-border rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-1 text-sm font-semibold text-foreground">
-            <Film className="w-4 h-4 text-primary" /> Cinema mix
-          </div>
-          {video ? (
-            <>
-              <p className="text-[11px] text-green-400/90 mb-3">
-                ✓ Mixes your existing video, music, caption & logo — no extra
-                credits. New generations (Steps 2–3) are what cost credits.
-              </p>
+        {/* The one way to finish a film. Cinema mix used to sit here as a second,
+            parallel render with its own caption-style picker and Render button;
+            its styles are now presets inside the compositor, so there's a single
+            path instead of two peers and no guess about which to use.
 
-              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
-                Caption style
-              </p>
-              <div className="flex flex-wrap gap-1.5 mb-3">
-                {CINEMA_PRESETS.map((p) => {
-                  const locked = p.proOnly && !ent?.isPro;
-                  const active = captionStyle === p.id && !locked;
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() =>
-                        locked
-                          ? setShowUpgrade(true)
-                          : (setCaptionStyle(p.id), invalidateFilm())
-                      }
-                      className={`px-2.5 py-1 rounded-md text-xs transition-all flex items-center gap-1 border ${active ? "bg-primary/20 text-primary border-primary/40" : "text-muted-foreground hover:text-foreground border-transparent"} ${locked ? "opacity-70" : ""}`}
-                    >
-                      {locked && <Lock className="w-3 h-3" />}
-                      {p.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {music && (
-                <label className="flex items-center gap-2 mb-3 text-xs text-foreground cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={useMusic}
-                    onChange={(e) => {
-                      setUseMusic(e.target.checked);
-                      invalidateFilm();
-                    }}
-                    className="accent-primary"
-                  />
-                  Add background music layer
-                </label>
-              )}
-
-              <Button
-                onClick={handleRenderFilm}
-                disabled={rendering}
-                variant="outline"
-                className="w-full gap-2"
-              >
-                {rendering ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" /> Rendering film…
-                  </>
-                ) : (
-                  <>
-                    <Film className="w-4 h-4" /> Render film
-                  </>
-                )}
-              </Button>
-
-              {filmUrl && (
-                <div className="mt-3">
-                  <video
-                    src={filmUrl}
-                    controls
-                    className="w-full rounded-lg bg-black"
-                  />
-                  <a
-                    href={filmUrl}
-                    target="_blank"
-                    rel="noopener"
-                    className="mt-1.5 inline-block text-xs text-primary hover:underline"
-                  >
-                    Download film
-                  </a>
-                </div>
-              )}
-            </>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Generate a video in Step 3 to mix it with music and a caption
-              here.
-            </p>
-          )}
-        </div>
-
-        {/* Full layered compositor — drag your logo anywhere, blend modes,
-            timed fades, then export a branded film for the publish step. */}
+            Continuing straight to Publish still renders a film automatically
+            with the default style (see handleContinue) — the compositor is for
+            when you want to shape it, not a toll gate on publishing. */}
         {video && (
           <div className="bg-card border border-primary/30 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-1 text-sm font-semibold text-foreground">
               <Wand2 className="w-4 h-4 text-primary" /> Finish with your brand
             </div>
             <p className="text-[11px] text-muted-foreground mb-3">
-              Open the full compositor: your footage as the base, brand kit
-              pre-applied — drag the logo anywhere, pick blend modes, time the
-              fades, and export a film ready to publish.
+              Your footage, music, caption and logo — layered and ready. Pick a
+              caption style, drag the logo anywhere, time the fades, then export
+              a film ready to publish.
             </p>
             <Button
               onClick={() =>
@@ -520,6 +457,9 @@ export default function Step4Compose() {
             >
               Open compositor <ArrowRight className="w-4 h-4" />
             </Button>
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              Free — mixing what you&apos;ve already generated costs no credits.
+            </p>
           </div>
         )}
 
@@ -530,38 +470,11 @@ export default function Step4Compose() {
           </div>
         )}
 
-        {/* Logo upload */}
-        <div className="bg-card border border-border rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-3 text-sm font-semibold text-foreground">
-            <Palette className="w-4 h-4 text-primary" /> Logo
-          </div>
-          <button
-            onClick={() => logoInputRef.current?.click()}
-            disabled={logoUploading}
-            className="w-full border-2 border-dashed border-border rounded-lg p-4 flex flex-col items-center gap-2 hover:border-primary/50 hover:bg-primary/5 transition-all"
-          >
-            {logoUploading ? (
-              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-            ) : logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoUrl} alt="Logo" className="h-10 object-contain" />
-            ) : (
-              <>
-                <Upload className="w-5 h-5 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">
-                  Upload your logo — layered into the top-right of your film
-                </span>
-              </>
-            )}
-          </button>
-          {logoUrl && (
-            <p className="mt-2 text-[11px] text-muted-foreground">
-              {logoFromKit
-                ? "Using your brand kit logo — it'll be baked into the rendered film. Click to replace."
-                : "This logo will be baked into the rendered film, top-right."}
-            </p>
-          )}
-        </div>
+        {/* The Logo card that used to live here was a second door onto the same
+            handleLogoUpload as the LOGO button on the preview — and the two
+            described different behaviour ("top-right of your film" vs the
+            compositor's "drag it anywhere"). The preview button wins: it shows
+            you where the logo actually lands. */}
 
         {/* Redo anything */}
         <div className="bg-card border border-border rounded-xl p-4">
@@ -655,7 +568,7 @@ export default function Step4Compose() {
         >
           <VideoWithMusic
             videoUrl={video}
-            musicUrl={useMusic ? music : null}
+            musicUrl={music}
             autoPlay
             className="max-w-full max-h-[90vh] rounded-xl"
             onClick={(e) => e.stopPropagation()}

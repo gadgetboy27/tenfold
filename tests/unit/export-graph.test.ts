@@ -167,3 +167,52 @@ describe("buildFilterGraph", () => {
     expect(graph).not.toContain("rotate");
   });
 });
+
+describe("text scrim + alignment", () => {
+  const withText = (
+    extra: Partial<Extract<CompositionDoc["layers"][number], { kind: "text" }>>,
+  ): CompositionDoc => ({
+    ...doc,
+    layers: [
+      { ...doc.layers[0], ...extra } as CompositionDoc["layers"][number],
+    ],
+  });
+
+  const graphFor = (d: CompositionDoc) =>
+    buildFilterGraph(d, 10, {
+      imageInputIdx: new Map(),
+      textFile: new Map([["tagline", "/tmp/t.txt"]]),
+    }).graph;
+
+  it("emits no box when the layer has no scrim", () => {
+    // Every composition saved before `bg` existed must render exactly as before.
+    expect(graphFor(withText({}))).not.toContain("box=1");
+  });
+
+  it("draws the scrim as drawtext's own box, in FFmpeg colour syntax", () => {
+    const g = graphFor(
+      withText({ bg: { color: "#000000", opacity: 0.45, padPx: 20 } }),
+    );
+    // 0x not # — a # is misread inside a filtergraph string.
+    expect(g).toContain("box=1:boxcolor=0x000000@0.45");
+    expect(g).toContain("boxborderw=20");
+  });
+
+  it("scales the scrim padding with the layer, matching fontsize", () => {
+    // The graph bakes scale into fontsize instead of scaling the layer, so
+    // padding must scale too or the preview's scrim and the MP4's diverge.
+    const g = graphFor(
+      withText({ scale: 2, bg: { color: "#000000", opacity: 0.5, padPx: 20 } }),
+    );
+    expect(g).toContain("boxborderw=40");
+    expect(g).toContain("fontsize=120"); // sizePx 60 * scale 2
+  });
+
+  it("defaults alignment to centre for layers predating `align`", () => {
+    expect(graphFor(withText({}))).toContain("text_align=center");
+  });
+
+  it("honours an explicit alignment", () => {
+    expect(graphFor(withText({ align: "left" }))).toContain("text_align=left");
+  });
+});

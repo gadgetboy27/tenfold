@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
+  alignOf,
   anchorAxes,
   ASPECT_DESIGN,
   ASPECT_TO_FORMAT,
@@ -206,13 +207,26 @@ export function buildFilterGraph(
       const alpha = fx.alpha
         ? `clip(${layer.opacity}*(${fx.alpha}),0,1)`
         : `${layer.opacity}`;
-      // Multi-line captions: centre-aligned lines with the same 1.25 line
-      // height as the canvas (line_spacing is the EXTRA space per line).
+      // Multi-line captions: same 1.25 line height as the canvas
+      // (line_spacing is the EXTRA space per line).
       const lineSpacing = Math.round(fontSize * 0.25);
+      // Scrim: drawtext's own box, whose boxborderw is the canvas's padPx —
+      // both grow the text block equally on all four sides, so the preview and
+      // the MP4 land the same rectangle. padPx is multiplied by scale because
+      // this filter bakes scale into fontSize rather than scaling the layer,
+      // while the canvas applies ctx.scale() and gets it for free.
+      //
+      // box + an alpha expression is exactly the pairing the shipped `fade`
+      // caption preset already uses (lib/composition/video.ts), so the
+      // interaction between the two is known-good rather than assumed.
+      const box = layer.bg
+        ? `:box=1:boxcolor=${layer.bg.color.replace("#", "0x")}@${layer.bg.opacity}` +
+          `:boxborderw=${Math.round(layer.bg.padPx * layer.scale)}`
+        : "";
       const draw =
         `drawtext=fontfile=${fontFileFor(layer.font)}:textfile=${tf}` +
         `:fontsize=${fontSize}:fontcolor=${layer.color.replace("#", "0x")}` +
-        `:line_spacing=${lineSpacing}:text_align=center` +
+        `:line_spacing=${lineSpacing}:text_align=${alignOf(layer)}${box}` +
         `:${tx}:${ty}:alpha='${alpha}'`;
 
       if (layer.blend === "normal") {

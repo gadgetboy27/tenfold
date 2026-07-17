@@ -1,4 +1,5 @@
 import {
+  alignOf,
   ASPECT_DESIGN,
   blendToCanvas,
   effectiveLayer,
@@ -123,14 +124,38 @@ function drawLayer(
     }
   } else {
     ctx.font = `${layer.sizePx}px "${layer.font}", sans-serif`;
-    ctx.fillStyle = layer.color;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    // Multi-line: centre the block on the anchor, one line per \n.
     const lines = layer.text.split("\n");
     const lineHeight = layer.sizePx * TEXT_LINE_HEIGHT;
+    const blockW = Math.max(...lines.map((l) => ctx.measureText(l).width), 1);
+    const blockH = lines.length * lineHeight;
+
+    // Scrim first, behind the glyphs. Geometry mirrors FFmpeg drawtext's box:
+    // the text block grown by boxborderw on every side.
+    if (layer.bg) {
+      const p = layer.bg.padPx;
+      ctx.save();
+      ctx.globalAlpha = motion.alpha * layer.bg.opacity;
+      ctx.fillStyle = layer.bg.color;
+      ctx.fillRect(
+        -blockW / 2 - p,
+        -blockH / 2 - p,
+        blockW + p * 2,
+        blockH + p * 2,
+      );
+      ctx.restore();
+    }
+
+    const align = alignOf(layer);
+    ctx.fillStyle = layer.color;
+    ctx.textAlign = align;
+    ctx.textBaseline = "middle";
+    // Multi-line: centre the block on the anchor, one line per \n. textAlign
+    // shifts each line's origin to the block's edge so alignment happens
+    // WITHIN the block rather than moving the block itself.
+    const originX =
+      align === "left" ? -blockW / 2 : align === "right" ? blockW / 2 : 0;
     lines.forEach((line, i) => {
-      ctx.fillText(line, 0, (i - (lines.length - 1) / 2) * lineHeight);
+      ctx.fillText(line, originX, (i - (lines.length - 1) / 2) * lineHeight);
     });
   }
   ctx.restore();
