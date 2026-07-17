@@ -312,13 +312,17 @@ export async function POST(req: Request) {
               "Connect your accounts in Settings → Social first.";
             continue;
           }
+          // Throws with the platform's own reason when the post doesn't land —
+          // Ayrshare answers 200 on failure, so this used to fall through to
+          // the request's tracking id and report a green tick for a post that
+          // was never made.
           const result = await ayrsharePost(ayrshareKey, {
             post: platformCaption,
             platforms: [platform],
             mediaUrls: [platformAsset.url],
             ...(body.scheduledAt ? { scheduleDate: body.scheduledAt } : {}),
           });
-          postId = result.postIds?.[0]?.id ?? result.id ?? "posted";
+          postId = result.id;
         }
         platformResults[platform] = postId;
       } catch (err) {
