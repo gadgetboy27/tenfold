@@ -10,6 +10,7 @@ import { getMusicModel } from "@/lib/fal/models";
 import { generateScript } from "@/lib/claude/script";
 import { getWorkspaceBrandVoice } from "@/lib/claude/brand-voice";
 import { getEntitlements } from "@/lib/billing/entitlements";
+import { checkRateLimit, generationLimitKey } from "@/lib/security/rate-limit";
 import {
   IMAGE_STYLE_SUFFIXES,
   MUSIC_GENRE_PROMPTS,
@@ -99,6 +100,37 @@ export async function POST(req: Request) {
 
     if (!(body.type in CREDIT_COSTS)) {
       return NextResponse.json({ error: "Unknown job type" }, { status: 400 });
+    }
+
+    // Burst limit BEFORE any work. This is the endpoint that spends fal.ai
+    // money and it had no rate limit at all (it uses getSession, not
+    // withWorkspace). Keyed by workspace, not IP — the workspace is the
+    // accountable, spend-bearing unit, and IP is shareable and spoofable. The
+    // daily cap bounds the day; this bounds a burst within it.
+    const rl = await checkRateLimit(
+      generationLimitKey(session.workspaceId),
+      30,
+      60_000,
+    );
+    if (!rl.allowed) {
+      return NextResponse.json(
+        {
+          error: "You're generating too fast — give it a moment and try again.",
+        },
+        {
+          status: 429,
+          headers: rl.resetAt
+            ? {
+                "Retry-After": String(
+                  Math.max(
+                    1,
+                    Math.ceil((rl.resetAt.getTime() - Date.now()) / 1000),
+                  ),
+                ),
+              }
+            : undefined,
+        },
+      );
     }
 
     const ent = await getEntitlements(session.workspaceId);

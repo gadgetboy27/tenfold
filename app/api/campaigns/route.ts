@@ -6,6 +6,7 @@ import { debitCreditsAmount } from "@/lib/credits/debit";
 import { refundCredits } from "@/lib/credits/refund";
 import { enqueueWithFallback } from "@/lib/fal/queue";
 import { getImageModel, imageFallbackEndpoints } from "@/lib/fal/models";
+import { checkRateLimit, generationLimitKey } from "@/lib/security/rate-limit";
 import { validatePrompt } from "@/lib/fal/prompt-validator";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { v4 as uuidv4 } from "uuid";
@@ -142,6 +143,24 @@ export async function POST(req: Request) {
     const session = await getSession(req);
     const body = createCampaignSchema.parse(await req.json());
     const admin = createSupabaseAdminClient();
+
+    // Same burst guard as /api/jobs — a campaign fires up to four fal image
+    // requests, so it's the heaviest single-request COGS on the platform and
+    // had no rate limit. Shares the workspace's generation bucket by design:
+    // hammering campaigns and jobs together shouldn't dodge the limit.
+    const rl = await checkRateLimit(
+      generationLimitKey(session.workspaceId),
+      30,
+      60_000,
+    );
+    if (!rl.allowed) {
+      return NextResponse.json(
+        {
+          error: "You're generating too fast — give it a moment and try again.",
+        },
+        { status: 429 },
+      );
+    }
 
     // Pro perk: paid tiers get more distinct anchor directions (6–8) than the
     // free 4 — same base credit cost, a deliberately premium commercial-tier feel.

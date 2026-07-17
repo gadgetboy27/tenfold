@@ -155,10 +155,27 @@ export function withWorkspace<P = Record<string, never>>(
       const limit = options.rateLimit;
       if (limit !== false) {
         const max = typeof limit === "number" ? limit : 60;
-        if (!checkRateLimit(getRateLimitKey(req), max, 60_000)) {
+        const rl = await checkRateLimit(
+          `ip:${getRateLimitKey(req)}`,
+          max,
+          60_000,
+        );
+        if (!rl.allowed) {
           return NextResponse.json(
             { error: "Too many requests" },
-            { status: 429 },
+            {
+              status: 429,
+              headers: rl.resetAt
+                ? {
+                    "Retry-After": String(
+                      Math.max(
+                        1,
+                        Math.ceil((rl.resetAt.getTime() - Date.now()) / 1000),
+                      ),
+                    ),
+                  }
+                : undefined,
+            },
           );
         }
       }

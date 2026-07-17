@@ -90,7 +90,10 @@ vi.mock("@/lib/auth/session", () => ({
 }));
 vi.mock("@/lib/security/rate-limit", () => ({
   getRateLimitKey: () => "test",
-  checkRateLimit: () => true,
+  // Returns the RateLimitResult shape (async in prod); the object is what
+  // withWorkspace now reads .allowed off.
+  checkRateLimit: async () => ({ allowed: true, remaining: 60, resetAt: null }),
+  generationLimitKey: (id: string) => `gen:${id}`,
 }));
 
 // Claude vision — configurable per test (resolve adjustments or throw).
