@@ -12,6 +12,8 @@ import { ayrsharePost } from "@/lib/ayrshare/client";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { composeVideo } from "@/lib/composition/video";
 import { pickForPlatform } from "@/lib/composition/formats";
+import { ensureWatermarked } from "@/lib/composition/watermark";
+import { isVideoAsset } from "@/lib/util/asset-kind";
 import { v4 as uuidv4 } from "uuid";
 
 interface SocialProfile {
@@ -28,16 +30,6 @@ interface Asset {
   id: string;
   url: string;
   type: string;
-}
-
-// Recognise a video by type OR extension — the cinema mix saves as
-// "composed_video" (not "video"), which was being posted as a photo (a still).
-function isVideoAsset(asset: Asset): boolean {
-  return (
-    asset.type === "video" ||
-    asset.type === "composed_video" ||
-    asset.url.toLowerCase().split("?")[0].endsWith(".mp4")
-  );
 }
 
 async function publishToFacebook(
@@ -252,6 +244,22 @@ export async function POST(req: Request) {
         ?.ayrshare_profile_key ?? null;
     const ent = await getEntitlements(session.workspaceId);
 
+    // Free tiers publish with the "built with tenfold" corner mark. Memoised by
+    // source asset id so a post fanned out to 13 platforms stamps once rather
+    // than 13 times. Scope is this request only — the client's image and video
+    // publishes are separate calls, so a cold cache can render the same asset
+    // twice. That costs a duplicate row, not correctness, so it's left alone.
+    const wmCache = new Map<string, Promise<Asset>>();
+    const deliverable = (a: Asset): Promise<Asset> => {
+      if (ent.watermarkFree) return Promise.resolve(a);
+      let pending = wmCache.get(a.id);
+      if (!pending) {
+        pending = ensureWatermarked(a, session.workspaceId, isVideoAsset(a));
+        wmCache.set(a.id, pending);
+      }
+      return pending;
+    };
+
     const hashtags = body.hashtags.map((h) =>
       h.startsWith("#") ? h : `#${h}`,
     );
@@ -266,8 +274,8 @@ export async function POST(req: Request) {
       // Per-platform AI caption when supplied (its hashtags are already tailored);
       // otherwise the base caption + shared hashtags.
       const platformCaption = body.platformCaptions?.[platform] ?? fullCaption;
-      const platformAsset = assetForPlatform(platform);
       try {
+        const platformAsset = await deliverable(assetForPlatform(platform));
         const meta = metaByPlatform.get(platform);
         let postId: string;
         if (platform === "facebook" && meta) {

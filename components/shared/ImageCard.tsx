@@ -11,19 +11,14 @@ import { Button } from "@/components/ui/button";
 import { useEntitlements } from "@/lib/billing/useEntitlements";
 import UpgradeModal from "@/components/billing/UpgradeModal";
 import { api } from "@/lib/api";
+import { downloadAsset } from "@/lib/util/download-asset";
+import { aspectClass } from "@/lib/util/aspect-classes";
 import toast from "react-hot-toast";
 
 interface ImageCardProps {
   asset: Asset;
   index: number;
 }
-
-const ASPECT_CLASSES: Record<string, string> = {
-  "1:1": "aspect-square",
-  "4:5": "aspect-[4/5]",
-  "16:9": "aspect-video",
-  "9:16": "aspect-[9/16]",
-};
 
 const STYLE_FILTERS: Record<string, string> = {
   Photorealistic: "none",
@@ -83,23 +78,17 @@ export default function ImageCard({ asset, index }: ImageCardProps) {
   }
 
   async function handleDownload() {
-    try {
-      const res = await fetch(asset.url);
-      const blob = await res.blob();
-      const href = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = href;
-      a.download = `tenfold-${asset.id}.jpg`;
-      a.click();
-      URL.revokeObjectURL(href);
-    } catch {
-      window.open(asset.url, "_blank", "noopener");
-    }
+    await downloadAsset({
+      assetId: asset.id,
+      url: asset.url,
+      filename: `tenfold-${asset.id}.jpg`,
+      workspaceSlug,
+    });
   }
 
   const ratio = asset.aspectRatio ?? "1:1";
+  const aspectBox = aspectClass(ratio);
   const style = asset.style ?? "Photorealistic";
-  const aspectClass = ASPECT_CLASSES[ratio] ?? "aspect-square";
   const filter = STYLE_FILTERS[style] ?? "none";
   const labelColor = STYLE_LABEL_COLORS[style] ?? "bg-slate-500/80";
 
@@ -110,7 +99,7 @@ export default function ImageCard({ asset, index }: ImageCardProps) {
       transition={{ duration: 0.4, delay: index * 0.06 }}
       onClick={() => setAnchorId(asset.id)}
       className={cn(
-        `relative ${aspectClass} rounded-xl overflow-hidden cursor-pointer group transition-all duration-200`,
+        `relative ${aspectBox} rounded-xl overflow-hidden cursor-pointer group transition-all duration-200`,
         isSelected
           ? "ring-2 ring-primary shadow-[inset_0_0_20px_rgba(124,92,252,0.3)]"
           : "hover:scale-[1.02] hover:ring-1 ring-border hover:ring-white/20",

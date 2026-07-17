@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { api } from "@/lib/api";
+import { useEntitlements } from "@/lib/billing/useEntitlements";
 
 interface SocialProfile {
   id: string;
@@ -225,6 +226,7 @@ export default function Step5Publish() {
   const [isPublishing, setIsPublishing] = useState(false);
   const [results, setResults] = useState<PostResult[] | null>(null);
   const [adapting, setAdapting] = useState(false);
+  const ent = useEntitlements();
 
   const handleAdaptCaptions = async () => {
     if (!caption.trim()) {
@@ -800,8 +802,8 @@ export default function Step5Publish() {
                       {cardDone ? (
                         <p className="flex items-center gap-1.5 text-[11px] font-medium text-primary">
                           <Check className="w-3.5 h-3.5" /> Baked onto the{" "}
-                          {cardDone === "intro" ? "start" : "end"} of your video —
-                          it publishes with the video.
+                          {cardDone === "intro" ? "start" : "end"} of your video
+                          — it publishes with the video.
                         </p>
                       ) : (
                         <>
@@ -894,30 +896,43 @@ export default function Step5Publish() {
                 </button>
                 {(() => {
                   const fb = profiles.find((p) => p.platform === "facebook");
+                  if (!selectedPlatforms.includes("facebook")) return null;
                   const pages = fb?.availablePages ?? [];
-                  if (
-                    pages.length <= 1 ||
-                    !selectedPlatforms.includes("facebook")
-                  )
-                    return null;
-                  return (
-                    <div>
-                      <label className="block text-[11px] text-muted-foreground mb-1">
-                        Facebook Page — publishing to:
-                      </label>
-                      <select
-                        value={facebookPageId}
-                        onChange={(e) => setFacebookPageId(e.target.value)}
-                        className="w-full text-sm rounded-lg border border-border bg-background text-foreground px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                      >
-                        {pages.map((pg) => (
-                          <option key={pg.id} value={pg.id}>
-                            {pg.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  );
+                  // Always show where the post is going. With more than one
+                  // managed Page, make it a picker; with a single Page, show it
+                  // as a plain confirmation so the target is never a surprise.
+                  const targetName =
+                    pages.find((pg) => pg.id === facebookPageId)?.name ??
+                    fb?.profile_display_name ??
+                    null;
+                  if (pages.length > 1) {
+                    return (
+                      <div>
+                        <label className="block text-[11px] text-muted-foreground mb-1">
+                          Facebook Page — publishing to:
+                        </label>
+                        <select
+                          value={facebookPageId}
+                          onChange={(e) => setFacebookPageId(e.target.value)}
+                          className="w-full text-sm rounded-lg border border-border bg-background text-foreground px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        >
+                          {pages.map((pg) => (
+                            <option key={pg.id} value={pg.id}>
+                              {pg.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  }
+                  return targetName ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      <span aria-hidden>📘</span> Facebook — publishing to{" "}
+                      <span className="font-medium text-foreground">
+                        {targetName}
+                      </span>
+                    </p>
+                  ) : null;
                 })()}
               </>
             )}
@@ -1077,6 +1092,20 @@ export default function Step5Publish() {
 
         {/* Sticky publish button */}
         <div className="p-4 border-t border-border shrink-0">
+          {ent && !ent.watermarkFree && (
+            // Say it BEFORE they post, not after — finding our mark on a client's
+            // feed unannounced is how a free tier turns into a support ticket.
+            <p className="text-xs text-muted-foreground text-center mb-2">
+              Posts include a small{" "}
+              <span className="text-foreground">built with tenfold</span> mark.{" "}
+              <Link
+                href={`/${workspaceSlug}/settings/billing`}
+                className="text-primary hover:underline"
+              >
+                Upgrade to remove
+              </Link>
+            </p>
+          )}
           {overLimit && tightPlatform && (
             <p className="text-xs text-destructive text-center mb-2">
               Over {minLimit.toLocaleString()}-char limit for{" "}

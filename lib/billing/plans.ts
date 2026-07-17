@@ -31,6 +31,7 @@ export const PLANS: Plan[] = [
     priceId: process.env.STRIPE_PRICE_CREATOR_MONTHLY ?? null,
     features: [
       "350 credits / month",
+      "No tenfold watermark",
       "Image generation",
       "Music & captions",
       "Brand kit",

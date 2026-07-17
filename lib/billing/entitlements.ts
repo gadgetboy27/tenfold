@@ -14,7 +14,13 @@ export interface Entitlements {
   maxVariations: number;
   /** High-resolution / print-ready upscaled exports. */
   hdExport: boolean;
-  /** Export without the tenfold watermark / branded frame. */
+  /** Publish without the "built with tenfold" corner mark. Any paid plan. */
+  watermarkFree: boolean;
+  /**
+   * Full white-label: the workspace's own branding on the client-facing
+   * surfaces (social-connect page, reports). Distinct from watermarkFree —
+   * this is the Agency differentiator, not just a clean asset.
+   */
   whiteLabel: boolean;
   /** Jobs jump the generation queue. */
   priorityQueue: boolean;
@@ -34,6 +40,7 @@ const TIERS: Record<Tier, Entitlements> = {
     videoDurations: [5, 10],
     maxVariations: 4,
     hdExport: false,
+    watermarkFree: false,
     whiteLabel: false,
     priorityQueue: false,
     apiAccess: false,
@@ -47,6 +54,7 @@ const TIERS: Record<Tier, Entitlements> = {
     videoDurations: [5, 10, 30],
     maxVariations: 4,
     hdExport: false,
+    watermarkFree: true,
     whiteLabel: false,
     priorityQueue: false,
     apiAccess: false,
@@ -60,6 +68,7 @@ const TIERS: Record<Tier, Entitlements> = {
     videoDurations: [5, 10, 30],
     maxVariations: 6,
     hdExport: true,
+    watermarkFree: true,
     whiteLabel: false,
     priorityQueue: true,
     apiAccess: false,
@@ -73,6 +82,7 @@ const TIERS: Record<Tier, Entitlements> = {
     videoDurations: [5, 10, 30],
     maxVariations: 8,
     hdExport: true,
+    watermarkFree: true,
     whiteLabel: true,
     priorityQueue: true,
     apiAccess: true,

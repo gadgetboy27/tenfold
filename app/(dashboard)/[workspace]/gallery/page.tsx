@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAppStore } from "@/store/useAppStore";
 import { api } from "@/lib/api";
+import { downloadAsset } from "@/lib/util/download-asset";
 import {
   ImageIcon,
   Download,
@@ -95,19 +96,13 @@ export default function GalleryPage() {
       .finally(() => setLoading(false));
   }, [slug]);
 
-  const download = async (a: GalleryAsset) => {
-    try {
-      const res = await fetch(a.url);
-      const href = URL.createObjectURL(await res.blob());
-      const el = document.createElement("a");
-      el.href = href;
-      el.download = `tenfold-${a.id}.jpg`;
-      el.click();
-      URL.revokeObjectURL(href);
-    } catch {
-      window.open(a.url, "_blank", "noopener");
-    }
-  };
+  const download = (a: GalleryAsset) =>
+    downloadAsset({
+      assetId: a.id,
+      url: a.url,
+      filename: `tenfold-${a.id}.jpg`,
+      workspaceSlug: slug,
+    });
 
   return (
     <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6">

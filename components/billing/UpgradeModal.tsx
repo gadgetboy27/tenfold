@@ -19,7 +19,7 @@ interface UpgradeModalProps {
 const DEFAULT_PERKS = [
   "Longer video (30s & 60s)",
   "HD / print-ready exports",
-  "White-label, watermark-free assets",
+  "Watermark-free posts",
   "Priority generation queue",
   "Multiple brand workspaces",
 ];

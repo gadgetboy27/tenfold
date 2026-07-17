@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useAppStore } from "@/store/useAppStore";
 import { api } from "@/lib/api";
 import { openCampaignForPublish } from "@/lib/campaign/publish-nav";
+import { downloadAsset } from "@/lib/util/download-asset";
 import { Film, Download, ArrowLeft, Loader2, Send } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -43,19 +44,13 @@ export default function ProductionsPage() {
       .finally(() => setLoading(false));
   }, [slug]);
 
-  const download = async (p: Production) => {
-    try {
-      const res = await fetch(p.url);
-      const href = URL.createObjectURL(await res.blob());
-      const el = document.createElement("a");
-      el.href = href;
-      el.download = `${p.campaignName.replace(/[^\w-]+/g, "-")}-${p.id}.mp4`;
-      el.click();
-      URL.revokeObjectURL(href);
-    } catch {
-      window.open(p.url, "_blank", "noopener");
-    }
-  };
+  const download = (p: Production) =>
+    downloadAsset({
+      assetId: p.id,
+      url: p.url,
+      filename: `${p.campaignName.replace(/[^\w-]+/g, "-")}-${p.id}.mp4`,
+      workspaceSlug: slug,
+    });
 
   // Open this production's campaign at the Publish step and go — the publish
   // flow posts the campaign's finished video to social, as before.
