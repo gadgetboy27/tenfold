@@ -6,6 +6,7 @@ import { LogoBrief } from "./LogoBrief";
 import { LogoConceptGrid, type LogoAsset } from "./LogoConceptGrid";
 import { LogoRefine } from "./LogoRefine";
 import { LogoEditor } from "./LogoEditor";
+import { LogoLibrary, type LogoProjectSummary } from "./LogoLibrary";
 import type { LogoBrief as LogoBriefType } from "@/lib/logo/brief";
 
 // The studio orchestrator. Holds the one piece of durable state — the project
@@ -47,8 +48,45 @@ export function LogoStudio() {
   const workspaceSlug =
     typeof params?.workspace === "string" ? params.workspace : "";
   const [brandPalette, setBrandPalette] = useState<string[]>([]);
+  const [projects, setProjects] = useState<LogoProjectSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // The "your logos" list, for re-opening past projects. Refreshed whenever we
+  // return to the landing (no active project) so a just-finished logo appears.
+  const loadProjects = useCallback(async () => {
+    const res = await fetch("/api/logo");
+    if (!res.ok) return;
+    const data = (await res.json()) as { projects: LogoProjectSummary[] };
+    setProjects(data.projects ?? []);
+  }, []);
+
+  useEffect(() => {
+    // Defer to a microtask so the state update lands in a callback, not
+    // synchronously in the effect body.
+    if (!projectId) queueMicrotask(() => void loadProjects());
+  }, [projectId, loadProjects]);
+
+  // Re-open a past project: reset per-project UI state, then point at it — the
+  // poll effect rehydrates concepts/refine/final from server state.
+  function openProject(id: string) {
+    setEditing(false);
+    setBundle(null);
+    setBrandApplied(false);
+    setExpectedMockups(0);
+    setState(null);
+    setError(null);
+    setProjectId(id);
+  }
+
+  function backToLibrary() {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    setProjectId(null);
+    setState(null);
+  }
 
   // The workspace brand palette powers "apply brand palette" in the editor.
   // Fetched once from the existing brand-kit endpoint; absent kit → no button.
@@ -243,12 +281,38 @@ export function LogoStudio() {
     </div>
   );
 
-  // Phase 1: brief.
-  if (!projectId || !state) {
+  // A back link, shown in every in-project view, to return to "your logos".
+  const backBar = (
+    <div className="mx-auto mb-4 max-w-3xl">
+      <button
+        type="button"
+        onClick={backToLibrary}
+        className="text-sm text-muted-foreground underline"
+      >
+        ← Your logos
+      </button>
+    </div>
+  );
+
+  // Landing: past logos + the new-logo brief.
+  if (!projectId) {
     return (
       <div className="px-4 py-10">
         {banner}
+        <LogoLibrary projects={projects} onOpen={openProject} />
         <LogoBrief onSubmit={startGeneration} submitting={submitting} />
+      </div>
+    );
+  }
+
+  // A project is selected but its state is still loading (e.g. just re-opened).
+  if (!state) {
+    return (
+      <div className="px-4 py-10">
+        {backBar}
+        <p className="py-10 text-center text-sm text-muted-foreground">
+          Loading your logo…
+        </p>
       </div>
     );
   }
@@ -293,6 +357,7 @@ export function LogoStudio() {
     return (
       <div className="px-4 py-10">
         {banner}
+        {backBar}
         <LogoRefine
           anchor={anchorAsset}
           refined={state.refined}
@@ -320,6 +385,7 @@ export function LogoStudio() {
   return (
     <div className="px-4 py-10">
       {banner}
+      {backBar}
       <LogoConceptGrid
         concepts={state.concepts}
         expected={expected}

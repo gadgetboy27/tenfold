@@ -50,8 +50,74 @@ export async function ensureLogoCampaign(
     status: "ready",
     created_by: userId,
   });
-  if (error) throw new Error(`Could not create logo campaign: ${error.message}`);
+  if (error)
+    throw new Error(`Could not create logo campaign: ${error.message}`);
   return id;
+}
+
+// GET /api/logo — list this workspace's logo projects (newest first) with a
+// representative thumbnail, so the studio can offer "your logos" to re-open,
+// re-edit and re-download. Tenant-scoped.
+export async function GET(req: Request) {
+  if (!isEnabled("logoBuilder")) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  try {
+    const session = await getSession(req);
+    const admin = createSupabaseAdminClient();
+
+    const { data: projects } = await admin
+      .from("logo_projects")
+      .select("id, brief, status, final_asset_id, anchor_asset_id, created_at")
+      .eq("workspace_id", session.workspaceId)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    const rows = (projects ?? []) as Array<{
+      id: string;
+      brief: { businessName?: string } | null;
+      status: string;
+      final_asset_id: string | null;
+      anchor_asset_id: string | null;
+      created_at: string;
+    }>;
+
+    // One query resolves every thumbnail: prefer the finalized mark, else the
+    // chosen anchor. Missing (still-generating) projects simply have no thumb.
+    const thumbIds = rows
+      .map((r) => r.final_asset_id ?? r.anchor_asset_id)
+      .filter((id): id is string => !!id);
+    const thumbById = new Map<string, string>();
+    if (thumbIds.length > 0) {
+      const { data: assets } = await admin
+        .from("assets")
+        .select("id, url")
+        .eq("workspace_id", session.workspaceId)
+        .in("id", thumbIds);
+      for (const a of (assets ?? []) as Array<{ id: string; url: string }>) {
+        thumbById.set(a.id, a.url);
+      }
+    }
+
+    const list = rows.map((r) => ({
+      id: r.id,
+      businessName: r.brief?.businessName ?? "Untitled logo",
+      status: r.status,
+      thumbnailUrl:
+        thumbById.get(r.final_asset_id ?? "") ??
+        thumbById.get(r.anchor_asset_id ?? "") ??
+        null,
+      createdAt: r.created_at,
+    }));
+
+    return NextResponse.json({ projects: list });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json(
+      { error: msg },
+      { status: msg === "Unauthorized" ? 401 : 500 },
+    );
+  }
 }
 
 export async function POST(req: Request) {
@@ -75,7 +141,11 @@ export async function POST(req: Request) {
     const cost = CREDIT_COSTS.logo_concepts;
 
     // Debit BEFORE any work (CLAUDE.md §1/§3). 402 on empty wallet.
-    const debit = await debitCredits(session.workspaceId, jobId, "logo_concepts");
+    const debit = await debitCredits(
+      session.workspaceId,
+      jobId,
+      "logo_concepts",
+    );
     if (!debit.success) {
       return NextResponse.json(
         { error: "Insufficient credits" },
