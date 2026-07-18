@@ -34,6 +34,11 @@ export function LogoStudio() {
   const [submitting, setSubmitting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [packaging, setPackaging] = useState(false);
+  const [bundle, setBundle] = useState<{
+    downloadUrl: string;
+    fileCount: number;
+  } | null>(null);
   const [brandPalette, setBrandPalette] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -164,6 +169,24 @@ export function LogoStudio() {
     }
   }
 
+  async function packageLogo() {
+    if (!projectId) return;
+    setPackaging(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/logo/${projectId}/package`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Packaging failed");
+      setBundle({ downloadUrl: data.downloadUrl, fileCount: data.fileCount });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong");
+    } finally {
+      setPackaging(false);
+    }
+  }
+
   const banner = error && (
     <div className="mx-auto mb-4 max-w-3xl rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
       {error}
@@ -228,6 +251,9 @@ export function LogoStudio() {
           onFinalize={finalize}
           onReanchor={anchor}
           onEdit={() => setEditing(true)}
+          onPackage={packageLogo}
+          packaging={packaging}
+          bundle={bundle}
           busy={busy}
         />
       </div>

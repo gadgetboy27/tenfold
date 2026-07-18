@@ -18,6 +18,9 @@ interface LogoRefineProps {
   onFinalize: () => void;
   onReanchor: (assetId: string) => void;
   onEdit: () => void;
+  onPackage: () => void;
+  packaging: boolean;
+  bundle: { downloadUrl: string; fileCount: number } | null;
   busy: boolean;
 }
 
@@ -29,6 +32,9 @@ export function LogoRefine({
   onFinalize,
   onReanchor,
   onEdit,
+  onPackage,
+  packaging,
+  bundle,
   busy,
 }: LogoRefineProps) {
   const [instruction, setInstruction] = useState("");
@@ -49,11 +55,33 @@ export function LogoRefine({
           <Button variant="outline" onClick={onEdit}>
             Customise (free)
           </Button>
-          <Button asChild>
+          <Button asChild variant="outline">
             <a href={finalized.url} download>
               Download SVG
             </a>
           </Button>
+        </div>
+
+        <div className="border-t pt-6">
+          {bundle ? (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Brand package ready — {bundle.fileCount} files, and your palette
+                was saved to your brand kit.
+              </p>
+              <Button asChild>
+                <a href={bundle.downloadUrl} download>
+                  Download brand package (.zip)
+                </a>
+              </Button>
+            </div>
+          ) : (
+            <Button className="w-full" disabled={packaging} onClick={onPackage}>
+              {packaging
+                ? "Building your package…"
+                : "Get the full brand package (10 credits)"}
+            </Button>
+          )}
         </div>
       </div>
     );

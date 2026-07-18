@@ -264,3 +264,58 @@ describe("applyBrandPalette", () => {
     expect(applyBrandPalette(FIXTURE, [])).toBe(FIXTURE);
   });
 });
+
+describe("brand package builder", () => {
+  it("produces the full deliverable set with valid buffers", async () => {
+    const { buildLogoBundle } = await import("@/lib/logo/package");
+    const files = await buildLogoBundle(FIXTURE);
+    const paths = files.map((f) => f.path);
+
+    // Representative files from each group are present.
+    expect(paths).toContain("png/logo-1024-transparent.png");
+    expect(paths).toContain("png/logo-2048-dark.png");
+    expect(paths).toContain("jpg/logo-1024-white.jpg");
+    expect(paths).toContain("variants/logo-black.png");
+    expect(paths).toContain("svg/logo-mono.svg");
+    expect(paths).toContain("favicon/favicon.ico");
+    expect(paths).toContain("pdf/logo.pdf");
+    expect(paths).toContain("README.txt");
+    expect(paths.some((p) => p.startsWith("social/"))).toBe(true);
+
+    const byPath = (p: string) => files.find((f) => f.path === p)!.buffer;
+    // ICO magic: reserved=0, type=1.
+    const ico = byPath("favicon/favicon.ico");
+    expect(ico.readUInt16LE(0)).toBe(0);
+    expect(ico.readUInt16LE(2)).toBe(1);
+    // PDF + PNG headers.
+    expect(byPath("pdf/logo.pdf").subarray(0, 5).toString()).toBe("%PDF-");
+    expect(
+      byPath("png/logo-1024-transparent.png").subarray(1, 4).toString(),
+    ).toBe("PNG");
+    // The black variant SVG really recoloured to black.
+    expect(byPath("svg/logo-black.svg").toString()).toContain(
+      'fill="rgb(0,0,0)"',
+    );
+  }, 30000);
+
+  it("extracts the palette as hex, excluding the background", async () => {
+    const { paletteFromSvg } = await import("@/lib/logo/package");
+    const palette = paletteFromSvg(FIXTURE);
+    expect(palette).toContain("#1d3557");
+    expect(palette).toContain("#e63946");
+    expect(palette).not.toContain("#f8f8f6"); // background excluded
+  });
+});
+
+describe("social sizes", () => {
+  it("has positive, uniquely-keyed dimensions", async () => {
+    const { SOCIAL_SIZES } = await import("@/lib/logo/socialSizes");
+    const keys = SOCIAL_SIZES.map((s) => s.key);
+    expect(new Set(keys).size).toBe(keys.length);
+    for (const s of SOCIAL_SIZES) {
+      expect(s.width).toBeGreaterThan(0);
+      expect(s.height).toBeGreaterThan(0);
+    }
+    expect(SOCIAL_SIZES.some((s) => s.kind === "cover")).toBe(true);
+  });
+});
