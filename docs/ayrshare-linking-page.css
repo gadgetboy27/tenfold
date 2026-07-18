@@ -1,0 +1,138 @@
+/* ───────────────────────────────────────────────────────────────────────────
+   Tenfold — Ayrshare Social Link page skin
+   Upload in the Ayrshare dashboard: Custom CSS (Max Pack feature).
+   Colours/fonts mirror tenfold.nz's dark theme (app/globals.css):
+     bg #0a0a0a · card #121212 · text #f0f0f0 · primary #7a59fc · success #22c55e
+   Ayrshare doesn't publish stable class names, so this uses broad selectors +
+   !important. If a specific element resists, inspect the live page and add a
+   targeted rule at the bottom.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+:root {
+  --tf-bg: #0a0a0a;
+  --tf-card: #121212;
+  --tf-text: #f0f0f0;
+  --tf-muted: #878787;
+  --tf-primary: #7a59fc;
+  --tf-primary-hover: #6a47f0;
+  --tf-success: #22c55e;
+  --tf-border: rgba(255, 255, 255, 0.08);
+  --tf-radius: 8px;
+}
+
+/* Page canvas + typography */
+html,
+body {
+  background: var(--tf-bg) !important;
+  color: var(--tf-text) !important;
+  font-family: "Inter", -apple-system, system-ui, sans-serif !important;
+}
+
+* {
+  font-family: "Inter", -apple-system, system-ui, sans-serif !important;
+}
+
+/* Headings / body text */
+h1,
+h2,
+h3,
+h4,
+p,
+span,
+label,
+li {
+  color: var(--tf-text) !important;
+}
+
+small,
+.subtitle,
+[class*="sub"],
+[class*="muted"],
+[class*="help"] {
+  color: var(--tf-muted) !important;
+}
+
+a {
+  color: var(--tf-primary) !important;
+}
+
+/* Cards / panels / list rows — anything that looks like a container */
+.card,
+.panel,
+.container,
+[class*="card"],
+[class*="panel"],
+[class*="box"],
+[class*="row"],
+[class*="account"],
+[class*="network"],
+[class*="platform"] {
+  background: var(--tf-card) !important;
+  border: 1px solid var(--tf-border) !important;
+  border-radius: var(--tf-radius) !important;
+}
+
+/* Primary buttons (Connect / Link / Continue) */
+button,
+.btn,
+[role="button"],
+[class*="button"],
+input[type="submit"],
+input[type="button"] {
+  background: var(--tf-primary) !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: var(--tf-radius) !important;
+  font-weight: 600 !important;
+  transition: background 0.15s ease !important;
+}
+
+button:hover,
+.btn:hover,
+[role="button"]:hover,
+[class*="button"]:hover {
+  background: var(--tf-primary-hover) !important;
+}
+
+/* Secondary / "disconnect" / ghost buttons — keep them subtle, not solid purple */
+[class*="secondary"],
+[class*="ghost"],
+[class*="disconnect"],
+[class*="unlink"],
+[class*="remove"] {
+  background: transparent !important;
+  color: var(--tf-muted) !important;
+  border: 1px solid var(--tf-border) !important;
+}
+
+/* Connected / success state */
+[class*="connected"],
+[class*="success"],
+[class*="active"] {
+  color: var(--tf-success) !important;
+}
+
+/* Inputs */
+input,
+select,
+textarea {
+  background: var(--tf-card) !important;
+  color: var(--tf-text) !important;
+  border: 1px solid var(--tf-border) !important;
+  border-radius: var(--tf-radius) !important;
+}
+
+/* Footer / fine print */
+footer,
+[class*="footer"] {
+  color: var(--tf-muted) !important;
+  border-top: 1px solid var(--tf-border) !important;
+}
+
+/* ── Targeted overrides ──────────────────────────────────────────────────────
+   After you see the live page, inspect any element that didn't take the theme
+   and add its exact selector here, e.g.:
+   .some-ayrshare-class { background: var(--tf-card) !important; }
+   ─────────────────────────────────────────────────────────────────────────── */

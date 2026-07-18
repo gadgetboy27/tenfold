@@ -300,6 +300,54 @@ export default function Step5Publish() {
     fetchProfiles();
   }, [fetchProfiles]);
 
+  // Coming back from a native-OAuth or Ayrshare tab → re-check what's connected.
+  useEffect(() => {
+    const onFocus = () => {
+      if (document.visibilityState === "visible") fetchProfiles();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [fetchProfiles]);
+
+  // Facebook & Instagram connect natively (free) — start Meta OAuth in place.
+  const connectMeta = () => {
+    window.location.href = `/api/social/connect/facebook?workspace=${workspaceSlug}`;
+  };
+
+  // Everything else links through Ayrshare's (Tenfold-branded) page — opened in
+  // a new tab so a broken Close can't strand the user; this tab re-checks on
+  // refocus. Tab opened synchronously on click so popup blockers allow it.
+  const [connectingMore, setConnectingMore] = useState(false);
+  const connectMoreNetworks = async () => {
+    setConnectingMore(true);
+    const tab = window.open("about:blank", "_blank");
+    try {
+      const res = await api("/api/social/connect", { workspaceSlug });
+      const data = (await res.json().catch(() => ({}))) as {
+        connectUrl?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.connectUrl)
+        throw new Error(data.error ?? "Could not start the connection");
+      if (tab) tab.location.href = data.connectUrl;
+      else window.location.href = data.connectUrl;
+    } catch (err) {
+      tab?.close();
+      const msg = (err as Error).message ?? "";
+      toast.error(
+        /business plan|\b167\b/i.test(msg)
+          ? "Connecting more networks needs the Ayrshare Business Plan."
+          : msg || "Could not connect — try again",
+      );
+    } finally {
+      setConnectingMore(false);
+    }
+  };
+
   const disconnectPlatform = async (platform: string, label: string) => {
     if (
       !window.confirm(
@@ -612,75 +660,143 @@ export default function Step5Publish() {
 
   // ── Connect-your-socials step — always shown before the publish page ───────
   if (connectGate) {
+    const isConn = (p: string) => profiles.some((pr) => pr.platform === p);
+    const profileFor = (p: string) => profiles.find((pr) => pr.platform === p);
+    const connectedList = ALL_PLATFORMS.filter(isConn);
+    const metaOpen = ["facebook", "instagram"].filter((p) => !isConn(p));
+
+    const Badge = ({ p }: { p: string }) => {
+      const meta = PLATFORM_META[p];
+      const initials = meta.label.replace(/\s.*/, "").slice(0, 2).toUpperCase();
+      return (
+        <div
+          className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${meta.bg}`}
+        >
+          <span className="text-[10px] font-bold" style={{ color: meta.color }}>
+            {initials}
+          </span>
+        </div>
+      );
+    };
+
     return (
       <div className="h-full flex flex-col">
         <div className="p-6 border-b border-border shrink-0">
           <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
-            <Send className="w-5 h-5 text-primary" /> Connect your social
-            accounts
+            <Send className="w-5 h-5 text-primary" /> Your connected accounts
           </h2>
           <p className="text-sm text-muted-foreground mt-1 max-w-lg">
-            Link the platforms you want this project sent to. You only connect
-            once — accounts stay linked for every project.
+            Here&apos;s what this project can publish to. Connect any
+            you&apos;re missing — accounts stay linked for every future project.
           </p>
         </div>
         <div className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-md mx-auto space-y-2">
+          <div className="max-w-md mx-auto space-y-6">
             {loadingProfiles ? (
               <div className="flex items-center gap-2 text-muted-foreground text-sm py-4 justify-center">
                 <Loader2 className="w-4 h-4 animate-spin" /> Checking your
                 accounts…
               </div>
             ) : (
-              ALL_PLATFORMS.map((p) => {
-                const meta = PLATFORM_META[p];
-                const connected = profiles.some((pr) => pr.platform === p);
-                const initials = meta.label
-                  .replace(/\s.*/, "")
-                  .slice(0, 2)
-                  .toUpperCase();
-                return (
-                  <div
-                    key={p}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl border border-border bg-card"
-                  >
-                    <div
-                      className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${meta.bg}`}
-                    >
-                      <span
-                        className="text-[10px] font-bold"
-                        style={{ color: meta.color }}
+              <>
+                {/* Connected board */}
+                {connectedList.length > 0 && (
+                  <section className="space-y-2">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Connected
+                    </h3>
+                    {connectedList.map((p) => {
+                      const meta = PLATFORM_META[p];
+                      const name = profileFor(p)?.profile_display_name;
+                      return (
+                        <div
+                          key={p}
+                          className="w-full flex items-center gap-3 p-3 rounded-xl border border-success/25 bg-success/5"
+                        >
+                          <Badge p={p} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground">
+                              {meta.label}
+                            </p>
+                            {name && (
+                              <p className="text-xs text-muted-foreground truncate">
+                                {name}
+                              </p>
+                            )}
+                          </div>
+                          <span className="flex items-center gap-1 text-xs font-medium text-success shrink-0">
+                            <Check className="w-3.5 h-3.5" /> Connected
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => disconnectPlatform(p, meta.label)}
+                            className="text-xs font-medium text-muted-foreground hover:text-destructive shrink-0"
+                          >
+                            Disconnect
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </section>
+                )}
+
+                {/* Facebook & Instagram — native, free */}
+                {metaOpen.length > 0 && (
+                  <section className="space-y-2">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Facebook &amp; Instagram — free
+                    </h3>
+                    {metaOpen.map((p) => (
+                      <div
+                        key={p}
+                        className="w-full flex items-center gap-3 p-3 rounded-xl border border-border bg-card"
                       >
-                        {initials}
-                      </span>
-                    </div>
-                    <p className="flex-1 min-w-0 text-sm font-medium text-foreground">
-                      {meta.label}
-                    </p>
-                    {connected ? (
-                      <div className="flex items-center gap-3 shrink-0">
-                        <span className="flex items-center gap-1 text-xs font-medium text-success">
-                          <Check className="w-3.5 h-3.5" /> Connected
-                        </span>
+                        <Badge p={p} />
+                        <p className="flex-1 min-w-0 text-sm font-medium text-foreground">
+                          {PLATFORM_META[p].label}
+                        </p>
                         <button
                           type="button"
-                          onClick={() => disconnectPlatform(p, meta.label)}
-                          className="text-xs font-medium text-muted-foreground hover:text-destructive"
+                          onClick={connectMeta}
+                          className="text-xs font-medium text-primary hover:underline shrink-0"
                         >
-                          Disconnect
+                          Connect
                         </button>
                       </div>
-                    ) : (
-                      <Link
-                        href={`/${workspaceSlug}/settings/social`}
-                        className="text-xs font-medium text-primary hover:underline shrink-0"
-                      >
-                        Connect
-                      </Link>
-                    )}
-                  </div>
-                );
-              })
+                    ))}
+                  </section>
+                )}
+
+                {/* Everything else — one branded Ayrshare page */}
+                <section className="space-y-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    More networks
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={connectMoreNetworks}
+                    disabled={connectingMore}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl border border-border bg-card hover:border-primary/40 transition-colors text-left disabled:opacity-60"
+                  >
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-primary/15">
+                      {connectingMore ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                      ) : (
+                        <ExternalLink className="w-4 h-4 text-primary" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">
+                        Connect X, LinkedIn, TikTok, YouTube, Pinterest &amp;
+                        more
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        One secure step — you&apos;ll come straight back here.
+                      </p>
+                    </div>
+                  </button>
+                </section>
+              </>
             )}
           </div>
         </div>
