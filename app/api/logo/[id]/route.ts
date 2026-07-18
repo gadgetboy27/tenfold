@@ -19,9 +19,7 @@ export async function GET(
 
     const { data: project } = await admin
       .from("logo_projects")
-      .select(
-        "id, brief, anchor_asset_id, final_asset_id, status, created_at",
-      )
+      .select("id, brief, anchor_asset_id, final_asset_id, status, created_at")
       .eq("id", id)
       .eq("workspace_id", session.workspaceId)
       .maybeSingle();
@@ -52,6 +50,8 @@ export async function GET(
       finalized: rows.filter((a) => a.metadata?.logo_stage === "logo_finalize"),
       // Free client-side edits saved as new versions (Phase 2).
       edited: rows.filter((a) => a.metadata?.logo_stage === "logo_edit"),
+      // Contextual mockup scenes (Phase 3b).
+      mockups: rows.filter((a) => a.metadata?.logo_stage === "logo_mockups"),
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";

@@ -206,7 +206,8 @@ async function handleSuccess(
 
   // Normalize the two Recraft result shapes: text-to-vector returns `images[]`,
   // vectorize returns a single `image`. Everything downstream uses `images`.
-  const images = payload.images ?? (payload.image ? [payload.image] : undefined);
+  const images =
+    payload.images ?? (payload.image ? [payload.image] : undefined);
 
   if (images) {
     for (const img of images) {
@@ -238,7 +239,8 @@ async function handleSuccess(
         height_px: img.height,
         metadata: isLogo
           ? {
-              kind: "logo_svg",
+              // Mockups are raster (JPG) scenes; the rest are SVG marks.
+              kind: ext === "svg" ? "logo_svg" : "logo_raster",
               logo_project_id: logoProjectId,
               logo_stage: job.type, // logo_concepts | logo_refine | logo_finalize | logo_vectorize
               request_id: direction?.requestId ?? job.fal_request_id,

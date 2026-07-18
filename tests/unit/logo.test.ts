@@ -307,6 +307,44 @@ describe("brand package builder", () => {
   });
 });
 
+describe("brand guideline pdf", () => {
+  it("renders a valid one-page PDF from logo + palette (no network)", async () => {
+    const { buildGuidelinePdf } = await import("@/lib/logo/guideline");
+    const pdf = await buildGuidelinePdf({
+      businessName: "Acme",
+      svg: FIXTURE,
+      palette: ["#1d3557", "#e63946"],
+      fonts: { heading: "Montserrat", body: "Inter", rationale: "test" },
+      usageText: "Keep clear space around the mark. Avoid busy backgrounds.",
+    });
+    expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(pdf.length).toBeGreaterThan(1000);
+  }, 20000);
+
+  it("renders macron names (te reo Māori) without throwing", async () => {
+    const { buildGuidelinePdf } = await import("@/lib/logo/guideline");
+    // pdf-lib StandardFonts can't encode ō — must be transliterated, not crash.
+    const pdf = await buildGuidelinePdf({
+      businessName: "Kōwhai Coffee",
+      svg: FIXTURE,
+      palette: ["#1d3557"],
+      fonts: null,
+      usageText: "Keep clear space around the Kōwhai mark.",
+    });
+    expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
+  }, 20000);
+});
+
+describe("font pairing", () => {
+  it("only recommends compositor-supported fonts", async () => {
+    const { SUPPORTED_FONTS } = await import("@/lib/logo/fonts");
+    // These must stay in lockstep with brand-apply's BRAND_FONTS.
+    expect(SUPPORTED_FONTS).toContain("Inter");
+    expect(SUPPORTED_FONTS).toContain("Montserrat");
+    expect(SUPPORTED_FONTS.length).toBe(5);
+  });
+});
+
 describe("social sizes", () => {
   it("has positive, uniquely-keyed dimensions", async () => {
     const { SOCIAL_SIZES } = await import("@/lib/logo/socialSizes");

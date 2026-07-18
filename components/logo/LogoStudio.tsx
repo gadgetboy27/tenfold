@@ -23,6 +23,7 @@ interface ProjectState {
   refined: LogoAsset[];
   finalized: LogoAsset[];
   edited: LogoAsset[];
+  mockups: LogoAsset[];
 }
 
 const POLL_MS = 2500;
@@ -35,6 +36,7 @@ export function LogoStudio() {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [packaging, setPackaging] = useState(false);
+  const [expectedMockups, setExpectedMockups] = useState(0);
   const [bundle, setBundle] = useState<{
     downloadUrl: string;
     fileCount: number;
@@ -83,12 +85,17 @@ export function LogoStudio() {
     };
   }, [projectId, refresh]);
 
+  // Stop polling once the project is fully settled: finalized, and any
+  // requested mockups have all arrived. Before finalize (concepts/refine) it
+  // keeps polling for new assets.
   useEffect(() => {
-    if (state?.finalized.length && pollRef.current) {
+    if (!state || !pollRef.current) return;
+    const mockupsDone = state.mockups.length >= expectedMockups;
+    if (state.finalized.length > 0 && mockupsDone) {
       clearInterval(pollRef.current);
       pollRef.current = null;
     }
-  }, [state?.finalized.length]);
+  }, [state, expectedMockups]);
 
   async function startGeneration(brief: LogoBriefType) {
     setSubmitting(true);
@@ -187,6 +194,27 @@ export function LogoStudio() {
     }
   }
 
+  async function runMockups() {
+    if (!projectId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/logo/${projectId}/mockups`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed");
+      setExpectedMockups(data.mockups ?? 4);
+      // Mockup scenes arrive via webhook — resume polling for them.
+      if (!pollRef.current)
+        pollRef.current = setInterval(() => void refresh(projectId), POLL_MS);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const banner = error && (
     <div className="mx-auto mb-4 max-w-3xl rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
       {error}
@@ -254,6 +282,9 @@ export function LogoStudio() {
           onPackage={packageLogo}
           packaging={packaging}
           bundle={bundle}
+          onMockups={runMockups}
+          mockups={state.mockups}
+          expectedMockups={expectedMockups}
           busy={busy}
         />
       </div>

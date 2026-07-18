@@ -8,7 +8,8 @@ import { CREDIT_COSTS } from "@/lib/credits/costs";
 import { debitCredits } from "@/lib/credits/debit";
 import { refundCredits } from "@/lib/credits/refund";
 import { ensureLogoCampaign } from "@/app/api/logo/route";
-import { buildLogoBundle, paletteFromSvg } from "@/lib/logo/package";
+import { assembleBrandPackage } from "@/lib/logo/assemble";
+import { logoBriefSchema } from "@/lib/logo/brief";
 
 // POST /api/logo/:id/package — the brand package. Debit brand_package (10cr),
 // rasterize the finalized SVG into every deliverable, zip it, store it, and
@@ -28,7 +29,7 @@ export async function POST(
 
     const { data: project } = await admin
       .from("logo_projects")
-      .select("id, final_asset_id")
+      .select("id, final_asset_id, brief")
       .eq("id", id)
       .eq("workspace_id", session.workspaceId)
       .maybeSingle();
@@ -76,8 +77,14 @@ export async function POST(
     }
 
     try {
-      // Build + zip every deliverable.
-      const files = await buildLogoBundle(svg);
+      // Build every deliverable + the AI extras (font pairing, guideline PDF).
+      const brief = logoBriefSchema.parse(
+        (project as { brief: unknown }).brief ?? {},
+      );
+      const { files, palette, fonts } = await assembleBrandPackage({
+        svg,
+        brief,
+      });
       const zip = new JSZip();
       for (const f of files) zip.file(f.path, f.buffer);
       const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
@@ -112,15 +119,15 @@ export async function POST(
         },
       });
 
-      // Write the logo's palette into the workspace brand kit.
-      const palette = paletteFromSvg(svg);
-      if (palette.length > 0) {
+      // Write the logo's palette + recommended heading font into the brand kit.
+      if (palette.length > 0 || fonts) {
         await admin.from("brand_kits").upsert(
           {
             workspace_id: session.workspaceId,
-            primary_color: palette[0],
+            ...(palette[0] ? { primary_color: palette[0] } : {}),
             ...(palette[1] ? { secondary_color: palette[1] } : {}),
             ...(palette[2] ? { accent_color: palette[2] } : {}),
+            ...(fonts ? { font_family: fonts.heading } : {}),
             updated_at: new Date().toISOString(),
           },
           { onConflict: "workspace_id" },
@@ -137,6 +144,7 @@ export async function POST(
           downloadUrl: urlData.publicUrl,
           fileCount: files.length,
           palette,
+          fonts,
           creditCost: CREDIT_COSTS.brand_package,
         },
         { status: 201 },

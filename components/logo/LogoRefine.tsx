@@ -21,6 +21,9 @@ interface LogoRefineProps {
   onPackage: () => void;
   packaging: boolean;
   bundle: { downloadUrl: string; fileCount: number } | null;
+  onMockups: () => void;
+  mockups: LogoAsset[];
+  expectedMockups: number;
   busy: boolean;
 }
 
@@ -35,6 +38,9 @@ export function LogoRefine({
   onPackage,
   packaging,
   bundle,
+  onMockups,
+  mockups,
+  expectedMockups,
   busy,
 }: LogoRefineProps) {
   const [instruction, setInstruction] = useState("");
@@ -81,6 +87,46 @@ export function LogoRefine({
                 ? "Building your package…"
                 : "Get the full brand package (10 credits)"}
             </Button>
+          )}
+        </div>
+
+        <div className="space-y-3 border-t pt-6">
+          {mockups.length === 0 && expectedMockups === 0 ? (
+            <Button
+              variant="outline"
+              className="w-full"
+              disabled={busy}
+              onClick={onMockups}
+            >
+              See it in the real world — 4 mockups (2 credits)
+            </Button>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                {mockups.length < expectedMockups
+                  ? `Creating mockups… ${mockups.length} of ${expectedMockups}`
+                  : "Your logo in the wild"}
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                {mockups.map((m) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={m.id}
+                    src={m.url}
+                    alt="Logo mockup"
+                    className="aspect-square w-full rounded-lg border object-cover"
+                  />
+                ))}
+                {Array.from({
+                  length: Math.max(0, expectedMockups - mockups.length),
+                }).map((_, i) => (
+                  <div
+                    key={`m-pending-${i}`}
+                    className="aspect-square w-full animate-pulse rounded-lg border border-dashed bg-muted"
+                  />
+                ))}
+              </div>
+            </>
           )}
         </div>
       </div>
