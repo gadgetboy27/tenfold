@@ -4,14 +4,15 @@ import { getSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { unlinkAyrshareSocial } from "@/lib/ayrshare/profiles";
 
-// POST /api/social/disconnect — remove a connected social from the workspace.
+// POST /api/social/disconnect — fully remove a connected social from the
+// workspace. A platform can be linked in BOTH systems at once (e.g. Facebook via
+// native Meta OAuth AND via Ayrshare from earlier testing), and the profiles
+// endpoint surfaces either — so a disconnect that only clears one leaves it
+// showing "Connected". Clear both, always.
 //
-// Facebook/Instagram are native (Meta OAuth) — delete their social_profiles
-// row. Disconnecting Facebook also removes Instagram, since IG publishes on the
-// Facebook Page's token and can't stand alone. Everything else lives in
-// Ayrshare, so unlink it there.
+// Facebook drags Instagram with it (IG publishes on the Facebook Page's token
+// and can't stand alone); every other platform removes just itself.
 const bodySchema = z.object({ platform: z.string().min(1) });
-const NATIVE = new Set(["facebook", "instagram"]);
 
 export async function POST(req: Request) {
   try {
@@ -23,20 +24,19 @@ export async function POST(req: Request) {
     const { platform } = parsed.data;
     const admin = createSupabaseAdminClient();
 
-    if (NATIVE.has(platform)) {
-      // Facebook drags Instagram with it; Instagram alone removes just itself.
-      const toRemove =
-        platform === "facebook" ? ["facebook", "instagram"] : ["instagram"];
-      const { error } = await admin
-        .from("social_profiles")
-        .delete()
-        .eq("workspace_id", session.workspaceId)
-        .in("platform", toRemove);
-      if (error) throw new Error(error.message);
-      return NextResponse.json({ ok: true, removed: toRemove });
-    }
+    const targets =
+      platform === "facebook" ? ["facebook", "instagram"] : [platform];
 
-    // Ayrshare-managed platform — unlink on their side using the workspace key.
+    // 1. Native side: drop any social_profiles rows for these platforms.
+    const { error: delErr } = await admin
+      .from("social_profiles")
+      .delete()
+      .eq("workspace_id", session.workspaceId)
+      .in("platform", targets);
+    if (delErr) throw new Error(delErr.message);
+
+    // 2. Ayrshare side: unlink the same platforms (best-effort; Ayrshare returns
+    // 200 even when a platform isn't linked, so this is safe and idempotent).
     const { data: workspace } = await admin
       .from("workspaces")
       .select("ayrshare_profile_key")
@@ -45,12 +45,17 @@ export async function POST(req: Request) {
     const profileKey = (
       workspace as { ayrshare_profile_key: string | null } | null
     )?.ayrshare_profile_key;
-    if (!profileKey) {
-      // No profile → nothing linked through Ayrshare; treat as already gone.
-      return NextResponse.json({ ok: true, removed: [platform] });
+    if (profileKey) {
+      await Promise.all(
+        targets.map((p) =>
+          unlinkAyrshareSocial(profileKey, p).catch(() => {
+            // One platform failing to unlink shouldn't block the rest.
+          }),
+        ),
+      );
     }
-    await unlinkAyrshareSocial(profileKey, platform);
-    return NextResponse.json({ ok: true, removed: [platform] });
+
+    return NextResponse.json({ ok: true, removed: targets });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json(
