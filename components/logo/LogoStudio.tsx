@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { LogoBrief } from "./LogoBrief";
 import { LogoConceptGrid, type LogoAsset } from "./LogoConceptGrid";
 import { LogoRefine } from "./LogoRefine";
+import { LogoEditor } from "./LogoEditor";
 import type { LogoBrief as LogoBriefType } from "@/lib/logo/brief";
 
 // The studio orchestrator. Holds the one piece of durable state — the project
@@ -21,6 +22,7 @@ interface ProjectState {
   concepts: LogoAsset[];
   refined: LogoAsset[];
   finalized: LogoAsset[];
+  edited: LogoAsset[];
 }
 
 const POLL_MS = 2500;
@@ -31,8 +33,30 @@ export function LogoStudio() {
   const [state, setState] = useState<ProjectState | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [brandPalette, setBrandPalette] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // The workspace brand palette powers "apply brand palette" in the editor.
+  // Fetched once from the existing brand-kit endpoint; absent kit → no button.
+  useEffect(() => {
+    fetch("/api/brand-kit")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((kit) => {
+        if (!kit) return;
+        const palette = [
+          kit.primary_color,
+          kit.secondary_color,
+          kit.accent_color,
+        ].filter(
+          (c): c is string =>
+            typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c),
+        );
+        setBrandPalette(palette);
+      })
+      .catch(() => {});
+  }, []);
 
   const refresh = useCallback(async (id: string) => {
     const res = await fetch(`/api/logo/${id}`);
@@ -42,10 +66,13 @@ export function LogoStudio() {
 
   // Poll while a project exists and isn't finalized. Cleared on unmount and
   // when the project reaches a terminal state so we don't hammer the endpoint.
+  // Prime via microtask so the state update lands in a callback, not
+  // synchronously in the effect body.
   useEffect(() => {
     if (!projectId) return;
-    void refresh(projectId);
-    pollRef.current = setInterval(() => void refresh(projectId), POLL_MS);
+    const tick = () => void refresh(projectId);
+    queueMicrotask(tick);
+    pollRef.current = setInterval(tick, POLL_MS);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
@@ -158,7 +185,37 @@ export function LogoStudio() {
     state.refined.find((r) => r.id === state.project.anchor_asset_id) ??
     null;
 
-  // Phase 3: an anchor is chosen — refine / finalize.
+  const finalAsset = state.finalized[0] ?? null;
+
+  // Free editor (Phase 2): opened from the finished logo. Edits its SVG in the
+  // browser and saves versions — no credits.
+  if (editing && finalAsset) {
+    return (
+      <div className="px-4 py-10">
+        {banner}
+        <LogoEditor
+          projectId={projectId}
+          sourceUrl={finalAsset.url}
+          brandPalette={brandPalette}
+          onSaved={() => {
+            setEditing(false);
+            void refresh(projectId);
+          }}
+        />
+        <div className="mt-6 text-center">
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            className="text-sm text-muted-foreground underline"
+          >
+            Back to logo
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // An anchor is chosen — refine / finalize / (once final) customise.
   if (anchorAsset) {
     return (
       <div className="px-4 py-10">
@@ -166,10 +223,11 @@ export function LogoStudio() {
         <LogoRefine
           anchor={anchorAsset}
           refined={state.refined}
-          finalized={state.finalized[0] ?? null}
+          finalized={finalAsset}
           onRefine={refine}
           onFinalize={finalize}
           onReanchor={anchor}
+          onEdit={() => setEditing(true)}
           busy={busy}
         />
       </div>

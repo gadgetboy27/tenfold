@@ -50,6 +50,8 @@ export async function GET(
       concepts: rows.filter((a) => a.metadata?.logo_stage === "logo_concepts"),
       refined: rows.filter((a) => a.metadata?.logo_stage === "logo_refine"),
       finalized: rows.filter((a) => a.metadata?.logo_stage === "logo_finalize"),
+      // Free client-side edits saved as new versions (Phase 2).
+      edited: rows.filter((a) => a.metadata?.logo_stage === "logo_edit"),
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";

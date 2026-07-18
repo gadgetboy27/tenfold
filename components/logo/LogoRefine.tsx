@@ -17,6 +17,7 @@ interface LogoRefineProps {
   onRefine: (instruction: string) => void;
   onFinalize: () => void;
   onReanchor: (assetId: string) => void;
+  onEdit: () => void;
   busy: boolean;
 }
 
@@ -27,6 +28,7 @@ export function LogoRefine({
   onRefine,
   onFinalize,
   onReanchor,
+  onEdit,
   busy,
 }: LogoRefineProps) {
   const [instruction, setInstruction] = useState("");
@@ -43,11 +45,16 @@ export function LogoRefine({
             className="h-full w-full object-contain p-6"
           />
         </div>
-        <Button asChild>
-          <a href={finalized.url} download>
-            Download SVG
-          </a>
-        </Button>
+        <div className="flex justify-center gap-3">
+          <Button variant="outline" onClick={onEdit}>
+            Customise (free)
+          </Button>
+          <Button asChild>
+            <a href={finalized.url} download>
+              Download SVG
+            </a>
+          </Button>
+        </div>
       </div>
     );
   }
