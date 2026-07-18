@@ -323,12 +323,24 @@ export async function POST(req: Request) {
         platformResults[platform] = postId;
       } catch (err) {
         errors[platform] = err instanceof Error ? err.message : "Unknown error";
+        // Surface the real reason server-side — the client only shows a generic
+        // failure, so without this the actual cause (bad token, media, etc.) is
+        // invisible.
+        console.error(`[publish] ${platform} failed:`, errors[platform]);
       }
     }
 
     if (Object.keys(platformResults).length === 0) {
+      // Return the per-platform reasons so the UI can show WHY each failed
+      // (Pro-gate vs auth vs media) instead of a single generic message.
       return NextResponse.json(
-        { error: "All platforms failed to publish", errors },
+        {
+          error: "All platforms failed to publish",
+          errors,
+          message: Object.entries(errors)
+            .map(([p, m]) => `${p}: ${m}`)
+            .join(" · "),
+        },
         { status: 500 },
       );
     }
