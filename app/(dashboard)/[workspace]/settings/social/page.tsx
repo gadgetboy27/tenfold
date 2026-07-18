@@ -29,6 +29,8 @@ interface SocialProfile {
   handle: string | null;
   profile_display_name: string | null;
   connected_at: string | null;
+  /** How it was linked: direct Meta OAuth ("native") or Ayrshare's hosted flow. */
+  source?: "native" | "ayrshare";
   /** Facebook only: which Page is active + all managed Pages for the picker. */
   activePageId?: string | null;
   availablePages?: { id: string; name: string }[];
@@ -646,11 +648,15 @@ function PlatformCard({
                     <p className="text-sm font-medium text-success">
                       Connected
                     </p>
-                    {(profile?.profile_display_name ?? profile?.handle) && (
+                    {(profile?.profile_display_name ?? profile?.handle) ? (
                       <p className="text-xs text-muted-foreground font-mono mt-0.5">
                         {profile?.profile_display_name ?? profile?.handle}
                       </p>
-                    )}
+                    ) : profile?.source === "ayrshare" ? (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Linked and ready to publish
+                      </p>
+                    ) : null}
                   </div>
                   <Button
                     variant="outline"
@@ -1057,6 +1063,21 @@ export default function SocialSettingsPage() {
     fetchProfiles();
   }, [fetchProfiles]);
 
+  // Re-check connections whenever the user returns to this tab. Ayrshare linking
+  // happens in a separate tab, so on refocus we quietly re-fetch to reflect what
+  // they just linked — no more "did it actually connect?" limbo.
+  useEffect(() => {
+    const onFocus = () => {
+      if (document.visibilityState === "visible") fetchProfiles(true);
+    };
+    document.addEventListener("visibilitychange", onFocus);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", onFocus);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [fetchProfiles]);
+
   // Handle Meta OAuth redirect params (?connected=... or ?error=...)
   useEffect(() => {
     const connected = searchParams.get("connected");
@@ -1101,6 +1122,11 @@ export default function SocialSettingsPage() {
   // profile on first use, then returns an SSO URL to connect socials).
   const handleAyrshareConnect = async () => {
     setAyrshareLoading(true);
+    // Open the tab synchronously on the click so popup blockers allow it; we set
+    // its URL once the connect endpoint returns. Linking in a separate tab means
+    // Ayrshare's unreliable "Close" button can't strand the user — their Tenfold
+    // tab stays put and re-checks connections on refocus.
+    const linkTab = window.open("about:blank", "_blank");
     try {
       const res = await api("/api/social/connect", { workspaceSlug });
       const data = (await res.json().catch(() => ({}))) as {
@@ -1109,8 +1135,10 @@ export default function SocialSettingsPage() {
       };
       if (!res.ok || !data.connectUrl)
         throw new Error(data.error ?? "Could not start the connection");
-      window.location.href = data.connectUrl;
+      if (linkTab) linkTab.location.href = data.connectUrl;
+      else window.location.href = data.connectUrl; // popup blocked → same tab
     } catch (err) {
+      linkTab?.close();
       const msg = (err as Error).message ?? "";
       // Ayrshare returns 403 code 167 when the account isn't on the Business Plan.
       if (/business plan|\b167\b/i.test(msg)) {
@@ -1371,22 +1399,28 @@ export default function SocialSettingsPage() {
               );
             })}
           </div>
-          {fbProfile?.availablePages && fbProfile.availablePages.length > 1 && (
+          {fbProfile?.availablePages && fbProfile.availablePages.length > 0 && (
             <div className="mt-3 flex items-center gap-2 border-t border-success/20 pt-3">
               <span className="text-xs text-muted-foreground shrink-0">
-                Facebook Page:
+                Publishing to Page:
               </span>
-              <select
-                value={fbProfile.activePageId ?? ""}
-                onChange={(e) => switchFbPage(e.target.value)}
-                className="text-xs rounded-lg border border-border bg-background px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/50"
-              >
-                {fbProfile.availablePages.map((pg) => (
-                  <option key={pg.id} value={pg.id}>
-                    {pg.name}
-                  </option>
-                ))}
-              </select>
+              {fbProfile.availablePages.length > 1 ? (
+                <select
+                  value={fbProfile.activePageId ?? ""}
+                  onChange={(e) => switchFbPage(e.target.value)}
+                  className="text-xs rounded-lg border border-border bg-background px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                >
+                  {fbProfile.availablePages.map((pg) => (
+                    <option key={pg.id} value={pg.id}>
+                      {pg.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="text-xs font-medium">
+                  {fbProfile.availablePages[0].name}
+                </span>
+              )}
             </div>
           )}
           <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-success/20 pt-3">
