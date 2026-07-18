@@ -471,6 +471,7 @@ function PlatformCard({
   onConnect,
   connecting,
   onSwitchPage,
+  onDisconnect,
 }: {
   platform: PlatformGuide;
   profile: SocialProfile | undefined;
@@ -481,6 +482,7 @@ function PlatformCard({
   onConnect: () => void;
   connecting: boolean;
   onSwitchPage?: (pageId: string) => void;
+  onDisconnect: () => void;
 }) {
   const connected = !!profile;
   const requiredItems = platform.checklist.filter((i) => i.required);
@@ -661,16 +663,27 @@ function PlatformCard({
                         </p>
                       ) : null}
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={onConnect}
-                      disabled={connecting}
-                      className="gap-1.5 text-xs"
-                    >
-                      <ArrowUpRight className="w-3.5 h-3.5" />
-                      Manage
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={onConnect}
+                        disabled={connecting}
+                        className="gap-1.5 text-xs"
+                      >
+                        <ArrowUpRight className="w-3.5 h-3.5" />
+                        Manage
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={onDisconnect}
+                        className="gap-1.5 text-xs text-muted-foreground hover:text-destructive"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        Disconnect
+                      </Button>
+                    </div>
                   </div>
                   {/* Facebook Page picker — publish to the Page you choose. */}
                   {profile?.availablePages &&
@@ -1185,6 +1198,29 @@ export default function SocialSettingsPage() {
     }
   };
 
+  // Disconnect a platform: native (FB/IG) drops the row, others unlink from
+  // Ayrshare. Confirm first — it revokes publishing to that account.
+  const disconnectPlatform = async (platformId: string, label: string) => {
+    if (
+      !window.confirm(
+        `Disconnect ${label}? Tenfold will no longer be able to publish to it until you reconnect.`,
+      )
+    )
+      return;
+    try {
+      const res = await api("/api/social/disconnect", {
+        method: "POST",
+        body: JSON.stringify({ platform: platformId }),
+        workspaceSlug,
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
+      toast.success(`${label} disconnected`);
+      fetchProfiles(true);
+    } catch (err) {
+      toast.error((err as Error).message ?? "Could not disconnect");
+    }
+  };
+
   // Switch which Facebook Page tenfold publishes to (no re-auth — pages were
   // stored at connect time).
   const switchFbPage = async (pageId: string) => {
@@ -1565,6 +1601,9 @@ export default function SocialSettingsPage() {
               connecting={connecting === platform.id}
               onSwitchPage={
                 platform.id === "facebook" ? switchFbPage : undefined
+              }
+              onDisconnect={() =>
+                disconnectPlatform(platform.id, platform.label)
               }
             />
           </motion.div>

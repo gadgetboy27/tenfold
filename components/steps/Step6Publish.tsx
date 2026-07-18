@@ -300,6 +300,27 @@ export default function Step5Publish() {
     fetchProfiles();
   }, [fetchProfiles]);
 
+  const disconnectPlatform = async (platform: string, label: string) => {
+    if (
+      !window.confirm(
+        `Disconnect ${label}? Tenfold won't be able to publish to it until you reconnect.`,
+      )
+    )
+      return;
+    try {
+      const res = await api("/api/social/disconnect", {
+        method: "POST",
+        body: JSON.stringify({ platform }),
+        workspaceSlug,
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
+      toast.success(`${label} disconnected`);
+      fetchProfiles();
+    } catch (err) {
+      toast.error((err as Error).message ?? "Could not disconnect");
+    }
+  };
+
   const addHashtag = (raw: string) => {
     const tag = raw.replace(/^#+/, "").trim().replace(/\s+/g, "_");
     if (!tag || hashtags.includes(tag) || hashtags.length >= 30) return;
@@ -637,9 +658,18 @@ export default function Step5Publish() {
                       {meta.label}
                     </p>
                     {connected ? (
-                      <span className="flex items-center gap-1 text-xs font-medium text-success">
-                        <Check className="w-3.5 h-3.5" /> Connected
-                      </span>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="flex items-center gap-1 text-xs font-medium text-success">
+                          <Check className="w-3.5 h-3.5" /> Connected
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => disconnectPlatform(p, meta.label)}
+                          className="text-xs font-medium text-muted-foreground hover:text-destructive"
+                        >
+                          Disconnect
+                        </button>
+                      </div>
                     ) : (
                       <Link
                         href={`/${workspaceSlug}/settings/social`}
@@ -800,8 +830,8 @@ export default function Step5Publish() {
                       {cardDone ? (
                         <p className="flex items-center gap-1.5 text-[11px] font-medium text-primary">
                           <Check className="w-3.5 h-3.5" /> Baked onto the{" "}
-                          {cardDone === "intro" ? "start" : "end"} of your video —
-                          it publishes with the video.
+                          {cardDone === "intro" ? "start" : "end"} of your video
+                          — it publishes with the video.
                         </p>
                       ) : (
                         <>

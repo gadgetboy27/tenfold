@@ -1,4 +1,4 @@
-const AYRSHARE_BASE = 'https://app.ayrshare.com/api';
+const AYRSHARE_BASE = "https://app.ayrshare.com/api";
 
 interface AyrshareProfileResponse {
   profileKey: string;
@@ -13,12 +13,14 @@ interface AyrshareSocialConnectResponse {
   url: string;
 }
 
-export async function createAyrshareProfile(title: string): Promise<{ profileKey: string }> {
+export async function createAyrshareProfile(
+  title: string,
+): Promise<{ profileKey: string }> {
   const res = await fetch(`${AYRSHARE_BASE}/profiles`, {
-    method: 'POST',
+    method: "POST",
     headers: {
       Authorization: `Bearer ${process.env.AYRSHARE_API_KEY}`,
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({ title }),
   });
@@ -32,11 +34,37 @@ export async function createAyrshareProfile(title: string): Promise<{ profileKey
   return { profileKey: data.profileKey };
 }
 
-export async function getConnectedPlatforms(profileKey: string): Promise<string[]> {
+/**
+ * Unlink a single social network from a workspace's Ayrshare profile
+ * (DELETE /api/profiles/social, verified against Ayrshare docs). Returns 200
+ * even if the platform wasn't linked, so this is safe to call idempotently.
+ */
+export async function unlinkAyrshareSocial(
+  profileKey: string,
+  platform: string,
+): Promise<void> {
+  const res = await fetch(`${AYRSHARE_BASE}/profiles/social`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${process.env.AYRSHARE_API_KEY}`,
+      "Profile-Key": profileKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ platform }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Ayrshare unlink error ${res.status}: ${body}`);
+  }
+}
+
+export async function getConnectedPlatforms(
+  profileKey: string,
+): Promise<string[]> {
   const res = await fetch(`${AYRSHARE_BASE}/user`, {
     headers: {
       Authorization: `Bearer ${process.env.AYRSHARE_API_KEY}`,
-      'Profile-Key': profileKey,
+      "Profile-Key": profileKey,
     },
   });
 
@@ -55,17 +83,17 @@ export async function generateSocialConnectUrl(
 ): Promise<string> {
   const domain = process.env.AYRSHARE_DOMAIN;
   // PEM stored in env with literal \n — restore real newlines.
-  const privateKey = process.env.AYRSHARE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  const privateKey = process.env.AYRSHARE_PRIVATE_KEY?.replace(/\\n/g, "\n");
   if (!domain || !privateKey) {
     throw new Error(
-      'Ayrshare hosted connect is not set up yet. In the Ayrshare dashboard (Business Plan) → User Profiles, generate a JWT key pair + domain, then set AYRSHARE_DOMAIN and AYRSHARE_PRIVATE_KEY.',
+      "Ayrshare hosted connect is not set up yet. In the Ayrshare dashboard (Business Plan) → User Profiles, generate a JWT key pair + domain, then set AYRSHARE_DOMAIN and AYRSHARE_PRIVATE_KEY.",
     );
   }
   const res = await fetch(`${AYRSHARE_BASE}/profiles/generateJWT`, {
-    method: 'POST',
+    method: "POST",
     headers: {
       Authorization: `Bearer ${process.env.AYRSHARE_API_KEY}`,
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
       domain,
