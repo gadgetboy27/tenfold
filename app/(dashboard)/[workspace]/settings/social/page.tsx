@@ -470,6 +470,7 @@ function PlatformCard({
   onCheckItem,
   onConnect,
   connecting,
+  onSwitchPage,
 }: {
   platform: PlatformGuide;
   profile: SocialProfile | undefined;
@@ -479,6 +480,7 @@ function PlatformCard({
   onCheckItem: (key: string, value: boolean) => void;
   onConnect: () => void;
   connecting: boolean;
+  onSwitchPage?: (pageId: string) => void;
 }) {
   const connected = !!profile;
   const requiredItems = platform.checklist.filter((i) => i.required);
@@ -643,31 +645,60 @@ function PlatformCard({
 
               {/* Connect / connected state */}
               {connected ? (
-                <div className="flex items-center justify-between p-3 rounded-lg bg-success/5 border border-success/20">
-                  <div>
-                    <p className="text-sm font-medium text-success">
-                      Connected
-                    </p>
-                    {(profile?.profile_display_name ?? profile?.handle) ? (
-                      <p className="text-xs text-muted-foreground font-mono mt-0.5">
-                        {profile?.profile_display_name ?? profile?.handle}
+                <div className="rounded-lg bg-success/5 border border-success/20">
+                  <div className="flex items-center justify-between p-3">
+                    <div>
+                      <p className="text-sm font-medium text-success">
+                        Connected
                       </p>
-                    ) : profile?.source === "ayrshare" ? (
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Linked and ready to publish
-                      </p>
-                    ) : null}
+                      {(profile?.profile_display_name ?? profile?.handle) ? (
+                        <p className="text-xs text-muted-foreground font-mono mt-0.5">
+                          {profile?.profile_display_name ?? profile?.handle}
+                        </p>
+                      ) : profile?.source === "ayrshare" ? (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Linked and ready to publish
+                        </p>
+                      ) : null}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={onConnect}
+                      disabled={connecting}
+                      className="gap-1.5 text-xs"
+                    >
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                      Manage
+                    </Button>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onConnect}
-                    disabled={connecting}
-                    className="gap-1.5 text-xs"
-                  >
-                    <ArrowUpRight className="w-3.5 h-3.5" />
-                    Manage
-                  </Button>
+                  {/* Facebook Page picker — publish to the Page you choose. */}
+                  {profile?.availablePages &&
+                    profile.availablePages.length > 0 && (
+                      <div className="flex flex-col gap-1 border-t border-success/20 px-3 py-2.5">
+                        <span className="text-xs text-muted-foreground">
+                          Publishing to this Page:
+                        </span>
+                        {profile.availablePages.length > 1 ? (
+                          <select
+                            value={profile.activePageId ?? ""}
+                            onChange={(e) => onSwitchPage?.(e.target.value)}
+                            className="text-xs rounded-lg border border-border bg-background px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                          >
+                            {profile.availablePages.map((pg) => (
+                              <option key={pg.id} value={pg.id}>
+                                {pg.name}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="text-xs font-medium">
+                            {profile.availablePages[0].name} — reconnect and
+                            tick more Pages in Facebook to switch
+                          </span>
+                        )}
+                      </div>
+                    )}
                 </div>
               ) : readyToConnect ? (
                 <Button
@@ -1532,6 +1563,9 @@ export default function SocialSettingsPage() {
               }
               onConnect={() => handleConnect(platform.id)}
               connecting={connecting === platform.id}
+              onSwitchPage={
+                platform.id === "facebook" ? switchFbPage : undefined
+              }
             />
           </motion.div>
         ))}
