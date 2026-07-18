@@ -24,6 +24,9 @@ interface LogoRefineProps {
   onMockups: () => void;
   mockups: LogoAsset[];
   expectedMockups: number;
+  onUseAsBrand: () => void;
+  brandApplied: boolean;
+  newCampaignHref: string;
   busy: boolean;
 }
 
@@ -41,6 +44,9 @@ export function LogoRefine({
   onMockups,
   mockups,
   expectedMockups,
+  onUseAsBrand,
+  brandApplied,
+  newCampaignHref,
   busy,
 }: LogoRefineProps) {
   const [instruction, setInstruction] = useState("");
@@ -66,6 +72,37 @@ export function LogoRefine({
               Download SVG
             </a>
           </Button>
+        </div>
+
+        {/* Phase 4 bridge: make this the brand mark, then launch a campaign. */}
+        <div className="space-y-3 rounded-xl border bg-muted/40 p-4">
+          {brandApplied ? (
+            <>
+              <p className="text-sm font-medium">
+                ✓ Set as your brand logo — it&apos;ll stamp on every campaign.
+              </p>
+              <Button asChild className="w-full">
+                <a href={newCampaignHref}>
+                  Launch a campaign with your new brand →
+                </a>
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Use this as your brand logo and it&apos;ll appear automatically
+                on every video and post you create.
+              </p>
+              <Button
+                variant="outline"
+                className="w-full"
+                disabled={busy}
+                onClick={onUseAsBrand}
+              >
+                Use as my brand logo (free)
+              </Button>
+            </>
+          )}
         </div>
 
         <div className="border-t pt-6">

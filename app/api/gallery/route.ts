@@ -13,8 +13,11 @@ export const GET = withWorkspace(async (_req, { db }) => {
     .order("created_at", { ascending: false })
     .limit(300);
 
-  const assets = (data ?? []).filter(
-    (a) => !(a.metadata as { hd?: boolean } | null)?.hd,
-  );
+  const assets = (data ?? []).filter((a) => {
+    const meta = a.metadata as { hd?: boolean; kind?: string } | null;
+    // Exclude derived HD upscales and logo brand-package zips (stored as
+    // image-type asset rows but not viewable images).
+    return !meta?.hd && meta?.kind !== "logo_bundle";
+  });
   return NextResponse.json({ assets });
 });

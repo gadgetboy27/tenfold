@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useParams } from "next/navigation";
 import { LogoBrief } from "./LogoBrief";
 import { LogoConceptGrid, type LogoAsset } from "./LogoConceptGrid";
 import { LogoRefine } from "./LogoRefine";
@@ -37,10 +38,14 @@ export function LogoStudio() {
   const [editing, setEditing] = useState(false);
   const [packaging, setPackaging] = useState(false);
   const [expectedMockups, setExpectedMockups] = useState(0);
+  const [brandApplied, setBrandApplied] = useState(false);
   const [bundle, setBundle] = useState<{
     downloadUrl: string;
     fileCount: number;
   } | null>(null);
+  const params = useParams();
+  const workspaceSlug =
+    typeof params?.workspace === "string" ? params.workspace : "";
   const [brandPalette, setBrandPalette] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -194,6 +199,23 @@ export function LogoStudio() {
     }
   }
 
+  async function useAsBrand() {
+    if (!projectId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/logo/${projectId}/use-as-brand`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
+      setBrandApplied(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function runMockups() {
     if (!projectId) return;
     setBusy(true);
@@ -285,6 +307,9 @@ export function LogoStudio() {
           onMockups={runMockups}
           mockups={state.mockups}
           expectedMockups={expectedMockups}
+          onUseAsBrand={useAsBrand}
+          brandApplied={brandApplied}
+          newCampaignHref={workspaceSlug ? `/${workspaceSlug}/new` : "#"}
           busy={busy}
         />
       </div>

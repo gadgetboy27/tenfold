@@ -9,6 +9,7 @@ import { debitCredits } from "@/lib/credits/debit";
 import { refundCredits } from "@/lib/credits/refund";
 import { ensureLogoCampaign } from "@/app/api/logo/route";
 import { assembleBrandPackage } from "@/lib/logo/assemble";
+import { applyLogoToBrandKit } from "@/lib/logo/brandBridge";
 import { logoBriefSchema } from "@/lib/logo/brief";
 
 // POST /api/logo/:id/package — the brand package. Debit brand_package (10cr),
@@ -132,6 +133,14 @@ export async function POST(
           },
           { onConflict: "workspace_id" },
         );
+      }
+
+      // Adopt the logo as the workspace brand mark so it auto-stamps on every
+      // campaign (Phase 4 bridge). Best-effort — the paid zip already shipped.
+      try {
+        await applyLogoToBrandKit(admin, session.workspaceId, svg);
+      } catch {
+        // Brand adoption failed; the package download is unaffected.
       }
 
       await admin
