@@ -12,6 +12,13 @@ export const CREDIT_COSTS = {
   auto_caption: 5,
   hook_variants: 2,
   product_shot: 6,
+  // ── Logo Studio (Recraft V4.1). All async via the fal webhook pipeline. ──
+  logo_concepts: 5, // 6 × Recraft V4.1 text-to-vector @ $0.08 = $0.48 raw
+  logo_refine: 1, // 1 × Recraft v3 image-to-image variation
+  logo_finalize: 3, // 1 × Recraft V4.1 Pro text-to-vector @ $0.30 raw
+  logo_vectorize: 1, // raster upload → SVG @ $0.01 raw
+  logo_mockups: 2, // 4 × FLUX contextual mockups @ $0.03 = $0.12 (Phase 3)
+  brand_package: 10, // export bundle + brand kit generation (Phase 3)
   music_generation: 8,
   script_generation: 1,
   layout_autofix: 3,

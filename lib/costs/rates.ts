@@ -26,6 +26,13 @@ export const PROVIDER_COST_USD: Record<string, number> = {
   // fal.ai — Bria Product Shot (~estimate, tune when billed)
   product_shot: 0.06,
   // fal.ai — Stable Audio
+  // Logo Studio raw provider costs (fal Recraft).
+  logo_concepts: 0.48, // 6 × V4.1 text-to-vector @ $0.08
+  logo_refine: 0.08, // v3 image-to-image
+  logo_finalize: 0.3, // V4.1 Pro text-to-vector
+  logo_vectorize: 0.01, // vectorize
+  logo_mockups: 0.12, // 4 × FLUX
+  brand_package: 0.05, // Claude copy for guidelines/fonts
   music_generation: 0.02,
   // Anthropic — claude-sonnet-4-6 (~200 in + 100 out tokens typical)
   script_generation: 0.002,

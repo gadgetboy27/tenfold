@@ -56,7 +56,7 @@ export async function POST(req: Request) {
   // fal.ai may nest results under 'payload' or 'output' depending on model/version.
   // Prefer whichever wrapper actually contains media — empty {} is truthy and would mask real output.
   const hasMedia = (d: typeof payload.payload) =>
-    !!(d?.images?.length || d?.video || d?.audio_file);
+    !!(d?.images?.length || d?.image || d?.video || d?.audio_file);
   const resultData = hasMedia(payload.payload)
     ? payload.payload
     : (payload.output ?? payload.payload);
@@ -166,13 +166,19 @@ export async function POST(req: Request) {
   return NextResponse.json({ ok: true });
 }
 
+type ResultImage = {
+  url: string;
+  width?: number;
+  height?: number;
+  content_type?: string;
+};
+
 type ResultData = {
-  images?: Array<{
-    url: string;
-    width?: number;
-    height?: number;
-    content_type?: string;
-  }>;
+  images?: ResultImage[];
+  // Recraft's vectorize endpoint returns a SINGLE `image`, not an `images`
+  // array (verified live) — coalesced into `images` below so one code path
+  // saves every logo result.
+  image?: ResultImage;
   video?: { url: string; content_type?: string };
   audio_file?: { url: string; content_type?: string };
 };
@@ -191,10 +197,25 @@ async function handleSuccess(
   const admin = createSupabaseAdminClient();
   const assetInserts: Record<string, unknown>[] = [];
 
-  if (payload.images) {
-    for (const img of payload.images) {
+  // Logo Studio jobs return SVG (image/svg+xml). The Recraft endpoints all
+  // start "logo_"; their assets get a .svg extension and a logo_svg marker so
+  // the studio can find them and the client-side SVG editor knows they're SVG.
+  const isLogo = job.type.startsWith("logo_");
+  const logoProjectId =
+    (job.input_params?.logoProjectId as string | undefined) ?? null;
+
+  // Normalize the two Recraft result shapes: text-to-vector returns `images[]`,
+  // vectorize returns a single `image`. Everything downstream uses `images`.
+  const images =
+    payload.images ?? (payload.image ? [payload.image] : undefined);
+
+  if (images) {
+    for (const img of images) {
       const assetId = uuidv4();
-      const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.jpg`;
+      // Extension from the real content type — a logo SVG saved as .jpg would be
+      // served with the wrong type and break the SVG editor.
+      const ext = (img.content_type ?? "").includes("svg") ? "svg" : "jpg";
+      const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.${ext}`;
 
       const imgRes = await fetch(img.url);
       const buffer = await imgRes.arrayBuffer();
@@ -216,20 +237,28 @@ async function handleSuccess(
         storage_path: storagePath,
         width_px: img.width,
         height_px: img.height,
-        metadata: direction
+        metadata: isLogo
           ? {
-              direction: direction.label,
-              direction_index: direction.index,
-              prompt: direction.prompt,
-              request_id: direction.requestId,
+              // Mockups are raster (JPG) scenes; the rest are SVG marks.
+              kind: ext === "svg" ? "logo_svg" : "logo_raster",
+              logo_project_id: logoProjectId,
+              logo_stage: job.type, // logo_concepts | logo_refine | logo_finalize | logo_vectorize
+              request_id: direction?.requestId ?? job.fal_request_id,
             }
-          : job.type === "upscale"
+          : direction
             ? {
-                hd: true,
-                source_asset_id: job.input_params?.source_asset_id ?? null,
-                upscale_factor: 2,
+                direction: direction.label,
+                direction_index: direction.index,
+                prompt: direction.prompt,
+                request_id: direction.requestId,
               }
-            : {},
+            : job.type === "upscale"
+              ? {
+                  hd: true,
+                  source_asset_id: job.input_params?.source_asset_id ?? null,
+                  upscale_factor: 2,
+                }
+              : {},
       });
     }
   }
@@ -333,6 +362,24 @@ async function handleSuccess(
 
   if (assetInserts.length > 0) {
     await admin.from("assets").insert(assetInserts);
+  }
+
+  // Advance the logo project as its assets land. Idempotent — a repeated concept
+  // webhook just re-sets 'selecting'; finalize records the chosen SVG.
+  if (isLogo && logoProjectId && assetInserts.length > 0) {
+    const patch: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+    if (job.type === "logo_finalize" || job.type === "logo_vectorize") {
+      // Both are one-shot SVGs that ARE the deliverable.
+      patch.final_asset_id = assetInserts[0].id;
+      patch.status = "finalized";
+    } else if (job.type === "logo_concepts") {
+      patch.status = "selecting";
+    } else if (job.type === "logo_refine") {
+      patch.status = "refining";
+    }
+    await admin.from("logo_projects").update(patch).eq("id", logoProjectId);
   }
 
   // Multi-image generation (4 directions, one fal request each) completes only
