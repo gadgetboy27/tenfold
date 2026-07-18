@@ -13,6 +13,11 @@ export function getMetaOAuthUrl(state: string): string {
     ].join(","),
     state,
     response_type: "code",
+    // Force Facebook to re-show the permission + Page-selection step instead of
+    // silently reusing a prior grant. Without this, a user who first authorized
+    // only one Page keeps getting that cached single-Page grant back from
+    // /me/accounts even after ticking more Pages on a reconnect.
+    auth_type: "rerequest",
   });
   return `https://www.facebook.com/v21.0/dialog/oauth?${params}`;
 }

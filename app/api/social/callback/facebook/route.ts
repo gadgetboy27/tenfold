@@ -53,6 +53,14 @@ export async function GET(req: Request) {
 
     // 3. Discover all Facebook Pages this user manages
     const pages = await getUserPages(userToken);
+    // Diagnostic (ids/names only, never tokens): if this logs fewer Pages than
+    // the user ticked in Facebook, the grant didn't propagate — a Meta-side
+    // caching / Business-Manager scope issue, not our storage.
+    console.error(
+      "[Meta OAuth] pages from /me/accounts:",
+      pages.length,
+      pages.map((p) => `${p.name}(${p.id})`).join(", "),
+    );
     if (pages.length === 0) {
       return NextResponse.redirect(
         `${process.env.APP_URL}/${slug}/settings/social?error=facebook_no_pages`,
