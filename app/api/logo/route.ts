@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
-import { z } from "zod";
 import { getSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isEnabled } from "@/lib/flags";
@@ -8,24 +7,26 @@ import { CREDIT_COSTS } from "@/lib/credits/costs";
 import { debitCredits } from "@/lib/credits/debit";
 import { refundCredits } from "@/lib/credits/refund";
 import { enqueueJob } from "@/lib/fal/queue";
-import { buildLogoPrompt, isLogoStyle, LOGO_STYLES } from "@/lib/logo/prompts";
+import { logoBriefSchema } from "@/lib/logo/brief";
+import { composeLogoPrompt } from "@/lib/logo/promptComposer";
 
-// POST /api/logo — generate 4 logo candidates from a prompt.
+// POST /api/logo — start a logo project: create it from the brief, debit
+// logo_concepts, and fan out 6 concept generations.
 //
-// Gated behind FEATURE_LOGO_BUILDER: a real 404 when off, so the endpoint is
-// absent in production until launch. Reuses the whole async image pipeline —
-// one fal image job (num_images: 4) whose results the existing webhook saves as
-// image assets. The only logo-specific bit is the prompt (lib/logo/prompts.ts).
+// Recraft V4.1 text-to-vector has no num_images, so 6 concepts = 6 fal
+// requests sharing one creative_jobs row via input_params.directions — the
+// exact pattern the campaigns route and the webhook already use. Each request's
+// SVG lands via the existing webhook (?j=jobId&d=index).
 
-const bodySchema = z.object({
-  brandName: z.string().trim().min(1).max(60),
-  style: z.enum(LOGO_STYLES),
-  brief: z.string().trim().max(300).optional(),
-});
+const CONCEPT_COUNT = 6;
 
-/** One holding campaign per workspace keeps logo assets in the gallery/brand
- *  kit like anything else, without inventing a campaign per attempt. */
-async function ensureLogoCampaign(
+/**
+ * A per-workspace "Logos" holding campaign. creative_jobs and assets both
+ * require a non-null campaign_id, so logo jobs hang off this one campaign — the
+ * webhook then saves logo SVGs as assets with zero changes. Project-level state
+ * lives in logo_projects; assets are tagged metadata.logoProjectId to filter.
+ */
+export async function ensureLogoCampaign(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   workspaceId: string,
   userId: string,
@@ -45,98 +46,36 @@ async function ensureLogoCampaign(
     id,
     workspace_id: workspaceId,
     name: "Logos",
-    prompt: "Logo builder",
+    prompt: "Logo Studio",
     status: "ready",
     created_by: userId,
   });
-  if (error)
-    throw new Error(`Could not create logo campaign: ${error.message}`);
+  if (error) throw new Error(`Could not create logo campaign: ${error.message}`);
   return id;
-}
-
-// GET /api/logo?jobId=… — poll a generation's status + its logo images. The
-// webhook saves candidates as image assets tagged with this job_id, so the UI
-// polls here until they land.
-export async function GET(req: Request) {
-  if (!isEnabled("logoBuilder")) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-  try {
-    const session = await getSession(req);
-    const jobId = new URL(req.url).searchParams.get("jobId");
-    if (!jobId) {
-      return NextResponse.json({ error: "jobId required" }, { status: 400 });
-    }
-    const admin = createSupabaseAdminClient();
-
-    const { data: job } = await admin
-      .from("creative_jobs")
-      .select("status, error_message")
-      .eq("id", jobId)
-      .eq("workspace_id", session.workspaceId) // tenant scope
-      .maybeSingle();
-    if (!job) {
-      return NextResponse.json({ error: "Job not found" }, { status: 404 });
-    }
-
-    const { data: assets } = await admin
-      .from("assets")
-      .select("id, url")
-      .eq("job_id", jobId)
-      .eq("workspace_id", session.workspaceId)
-      .eq("type", "image");
-
-    const j = job as { status: string; error_message: string | null };
-    return NextResponse.json({
-      status: j.status,
-      error: j.error_message,
-      images: (assets ?? []) as { id: string; url: string }[],
-    });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json(
-      { error: msg },
-      { status: msg === "Unauthorized" ? 401 : 500 },
-    );
-  }
 }
 
 export async function POST(req: Request) {
   if (!isEnabled("logoBuilder")) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-
   try {
     const session = await getSession(req);
-    const parsed = bodySchema.safeParse(await req.json());
+    const parsed = logoBriefSchema.safeParse(await req.json());
     if (!parsed.success) {
       return NextResponse.json(
-        { error: "Invalid request", issues: parsed.error.issues },
+        { error: "Invalid brief", issues: parsed.error.issues },
         { status: 400 },
       );
     }
-    const { brandName, style, brief } = parsed.data;
-    if (!isLogoStyle(style)) {
-      return NextResponse.json({ error: "Unknown style" }, { status: 400 });
-    }
-
+    const brief = parsed.data;
     const admin = createSupabaseAdminClient();
-    const campaignId = await ensureLogoCampaign(
-      admin,
-      session.workspaceId,
-      session.userId,
-    );
 
+    const projectId = uuidv4();
     const jobId = uuidv4();
-    const cost = CREDIT_COSTS.logo_generation;
+    const cost = CREDIT_COSTS.logo_concepts;
 
-    // Debit first, atomically with the job (CLAUDE.md §1). 402 on empty wallet
-    // BEFORE any fal call.
-    const debit = await debitCredits(
-      session.workspaceId,
-      jobId,
-      "logo_generation",
-    );
+    // Debit BEFORE any work (CLAUDE.md §1/§3). 402 on empty wallet.
+    const debit = await debitCredits(session.workspaceId, jobId, "logo_concepts");
     if (!debit.success) {
       return NextResponse.json(
         { error: "Insufficient credits" },
@@ -144,48 +83,75 @@ export async function POST(req: Request) {
       );
     }
 
-    const { prompt, negativePrompt } = buildLogoPrompt({
-      brandName,
-      style,
+    const { prompt, colors } = composeLogoPrompt(brief);
+    const falInput: Record<string, unknown> = {
+      prompt,
+      image_size: "square_hd",
+      ...(colors ? { colors } : {}),
+    };
+
+    // The project + the concepts job. The 6 concepts share this one job via
+    // directions (each a fal request, saved by the webhook as it lands).
+    const { error: projErr } = await admin.from("logo_projects").insert({
+      id: projectId,
+      workspace_id: session.workspaceId,
+      created_by: session.userId,
       brief,
+      status: "generating",
     });
+    if (projErr) {
+      await refundCredits(jobId);
+      throw new Error(projErr.message);
+    }
+
+    const directions = Array.from({ length: CONCEPT_COUNT }, (_, i) => ({
+      index: i,
+      label: `Concept ${i + 1}`,
+      prompt,
+    }));
+
+    const campaignId = await ensureLogoCampaign(
+      admin,
+      session.workspaceId,
+      session.userId,
+    );
 
     const { error: jobErr } = await admin.from("creative_jobs").insert({
       id: jobId,
       campaign_id: campaignId,
       workspace_id: session.workspaceId,
-      type: "logo_generation",
+      type: "logo_concepts",
       status: "queued",
-      input_params: { brandName, style, brief: brief ?? null, prompt },
+      input_params: { logoProjectId: projectId, prompt, colors, directions },
       credits_charged: cost,
     });
     if (jobErr) {
-      // Debited but no job row — refund, or the credits vanish (a job that
-      // never existed can't fail-refund later).
       await refundCredits(jobId);
       throw new Error(jobErr.message);
     }
 
-    const webhookUrl = `${process.env.APP_URL}/api/webhooks/fal?j=${jobId}`;
-    try {
-      const { requestId } = await enqueueJob(
-        "image_generation",
-        {
-          prompt,
-          negative_prompt: negativePrompt,
-          image_size: "square_hd",
-          num_images: 4,
-        },
-        webhookUrl,
-      );
+    type Submitted = { index: number; label: string; requestId: string };
+    const results = await Promise.all(
+      directions.map(async (d): Promise<Submitted | null> => {
+        const webhookUrl = `${process.env.APP_URL}/api/webhooks/fal?j=${jobId}&d=${d.index}`;
+        try {
+          const { requestId } = await enqueueJob(
+            "logo_concepts",
+            falInput,
+            webhookUrl,
+          );
+          return { index: d.index, label: d.label, requestId };
+        } catch {
+          return null; // partial success is fine — others may land
+        }
+      }),
+    );
+    const submitted = results.filter((r): r is Submitted => r !== null);
+
+    if (submitted.length === 0) {
       await admin
         .from("creative_jobs")
-        .update({ fal_request_id: requestId, status: "processing" })
-        .eq("id", jobId);
-    } catch {
-      await admin
-        .from("creative_jobs")
-        .update({ status: "failed", error_message: "Logo submission failed" })
+        .update({ status: "failed", error_message: "No concept submitted" })
         .eq("id", jobId);
       await refundCredits(jobId);
       return NextResponse.json(
@@ -194,13 +160,32 @@ export async function POST(req: Request) {
       );
     }
 
+    await admin
+      .from("creative_jobs")
+      .update({
+        fal_request_id: submitted[0].requestId,
+        status: "processing",
+        input_params: {
+          logoProjectId: projectId,
+          prompt,
+          colors,
+          directions: submitted,
+          // The webhook's completion gate waits for this many images before
+          // marking the job done (finalizeMultiImage).
+          expected_images: submitted.length,
+        },
+      })
+      .eq("id", jobId);
+
     return NextResponse.json(
-      { jobId, campaignId, creditCost: cost },
+      { projectId, jobId, concepts: submitted.length, creditCost: cost },
       { status: 201 },
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
-    const status = msg === "Unauthorized" ? 401 : 500;
-    return NextResponse.json({ error: msg }, { status });
+    return NextResponse.json(
+      { error: msg },
+      { status: msg === "Unauthorized" ? 401 : 500 },
+    );
   }
 }

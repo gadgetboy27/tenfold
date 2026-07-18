@@ -443,3 +443,38 @@ export const assetComments = pgTable(
     ),
   ],
 );
+
+// ─── LOGO PROJECTS (Logo Studio) ──────────────────────────────────────────────
+// State machine for a logo build. Logo ASSETS live in `assets`
+// (type 'image', metadata.kind 'logo_svg'); only project state lives here.
+export const logoProjects = pgTable(
+  "logo_projects",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    createdBy: uuid("created_by").notNull(),
+    brief: jsonb("brief").notNull().default("{}"),
+    anchorAssetId: uuid("anchor_asset_id").references(() => assets.id, {
+      onDelete: "set null",
+    }),
+    finalAssetId: uuid("final_asset_id").references(() => assets.id, {
+      onDelete: "set null",
+    }),
+    status: text("status").notNull().default("briefing"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("idx_logo_projects_workspace").on(t.workspaceId),
+    check(
+      "logo_project_status_check",
+      sql`${t.status} IN ('briefing','generating','selecting','refining','finalized','packaged')`,
+    ),
+  ],
+);

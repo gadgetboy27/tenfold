@@ -16,11 +16,14 @@ export const falWebhookPayloadSchema = z.object({
   status: z.string(),
   payload: z.object({
     images:     z.array(falMediaObject).optional(),
+    // Recraft vectorize returns a single `image`, not an array (verified live).
+    image:      falMediaObject.optional(),
     video:      falMediaObject.optional(),
     audio_file: falMediaObject.optional(),
   }).passthrough().optional(),
   output: z.object({
     images:     z.array(falMediaObject).optional(),
+    image:      falMediaObject.optional(),
     video:      falMediaObject.optional(),
     audio_file: falMediaObject.optional(),
   }).passthrough().optional(),

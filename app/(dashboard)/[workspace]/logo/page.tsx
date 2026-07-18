@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { isEnabled } from "@/lib/flags";
-import { LogoBuilder } from "@/components/logo/LogoBuilder";
+import { LogoStudio } from "@/components/logo/LogoStudio";
 
 /**
  * The logo builder's route — a SERVER component so the flag gate runs before
@@ -13,5 +13,5 @@ import { LogoBuilder } from "@/components/logo/LogoBuilder";
  */
 export default function LogoBuilderPage() {
   if (!isEnabled("logoBuilder")) notFound();
-  return <LogoBuilder />;
+  return <LogoStudio />;
 }

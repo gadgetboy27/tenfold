@@ -8,6 +8,17 @@ export const FAL_MODELS = {
   video_10s: "fal-ai/kling-video/v3/pro/image-to-video",
   video_30s: "fal-ai/kling-video/v3/pro/image-to-video",
   music_generation: "fal-ai/stable-audio",
+  // ── Logo Studio (Recraft V4.1). Endpoint IDs verified against fal.ai/models
+  // at build time (the spec's v4/text-to-image was wrong — text-to-VECTOR is the
+  // one returning true SVG, and its $0.08 price matches the spec's cost table).
+  logo_concepts: "fal-ai/recraft/v4.1/text-to-vector", // SVG; no style/num_images
+  // Refine is text-to-vector too, NOT image-to-image: image-to-image rejects an
+  // SVG anchor with 422 (verified live), and its output is raster — off-model
+  // for an all-SVG deliverable. "More like this" regenerates a vector from the
+  // brief plus the user's adjustment, keeping the result a true SVG.
+  logo_refine: "fal-ai/recraft/v4.1/text-to-vector",
+  logo_finalize: "fal-ai/recraft/v4.1/pro/text-to-vector", // premium SVG
+  logo_vectorize: "fal-ai/recraft/vectorize", // raster upload → single SVG `image`
 } as const;
 
 // v2.1 uses the same path for queue status/result as submission — no alias needed
