@@ -2,6 +2,10 @@ import { notFound } from "next/navigation";
 import { isEnabled } from "@/lib/flags";
 import { LogoStudio } from "@/components/logo/LogoStudio";
 
+// Request-time only: the flag gate reads server env, and LogoStudio reads
+// searchParams (returnTo) — both require dynamic rendering, not prerender.
+export const dynamic = "force-dynamic";
+
 /**
  * The logo builder's route — a SERVER component so the flag gate runs before
  * anything renders. When FEATURE_LOGO_BUILDER isn't "1" this route is a genuine

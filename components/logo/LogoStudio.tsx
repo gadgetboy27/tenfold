@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { LogoBrief } from "./LogoBrief";
 import { LogoConceptGrid, type LogoAsset } from "./LogoConceptGrid";
 import { LogoRefine } from "./LogoRefine";
@@ -47,6 +47,14 @@ export function LogoStudio() {
   const params = useParams();
   const workspaceSlug =
     typeof params?.workspace === "string" ? params.workspace : "";
+  // When the compositor sends the user here to make a logo, it passes a return
+  // path. Only honour an internal same-workspace path (no open redirects).
+  const searchParams = useSearchParams();
+  const rawReturnTo = searchParams.get("returnTo") ?? "";
+  const returnHref =
+    workspaceSlug && rawReturnTo.startsWith(`/${workspaceSlug}/`)
+      ? rawReturnTo
+      : "";
   const [brandPalette, setBrandPalette] = useState<string[]>([]);
   const [projects, setProjects] = useState<LogoProjectSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -375,6 +383,7 @@ export function LogoStudio() {
           onUseAsBrand={useAsBrand}
           brandApplied={brandApplied}
           newCampaignHref={workspaceSlug ? `/${workspaceSlug}/new` : "#"}
+          returnHref={returnHref}
           busy={busy}
         />
       </div>

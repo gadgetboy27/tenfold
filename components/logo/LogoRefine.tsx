@@ -27,6 +27,8 @@ interface LogoRefineProps {
   onUseAsBrand: () => void;
   brandApplied: boolean;
   newCampaignHref: string;
+  /** When set, the user came from the compositor — offer a trip back. */
+  returnHref?: string;
   busy: boolean;
 }
 
@@ -47,6 +49,7 @@ export function LogoRefine({
   onUseAsBrand,
   brandApplied,
   newCampaignHref,
+  returnHref,
   busy,
 }: LogoRefineProps) {
   const [instruction, setInstruction] = useState("");
@@ -81,11 +84,22 @@ export function LogoRefine({
               <p className="text-sm font-medium">
                 ✓ Set as your brand logo — it&apos;ll stamp on every campaign.
               </p>
-              <Button asChild className="w-full">
-                <a href={newCampaignHref}>
-                  Launch a campaign with your new brand →
-                </a>
-              </Button>
+              {returnHref ? (
+                <>
+                  <Button asChild className="w-full">
+                    <a href={returnHref}>← Back to your composition</a>
+                  </Button>
+                  <Button asChild variant="outline" className="w-full">
+                    <a href={newCampaignHref}>Or launch a new campaign →</a>
+                  </Button>
+                </>
+              ) : (
+                <Button asChild className="w-full">
+                  <a href={newCampaignHref}>
+                    Launch a campaign with your new brand →
+                  </a>
+                </Button>
+              )}
             </>
           ) : (
             <>

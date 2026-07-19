@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import {
   Play,
@@ -84,6 +84,7 @@ export function Compositor({
   const resetOverride = useCompositorStore((s) => s.resetOverride);
 
   const params = useParams<{ workspace?: string }>();
+  const router = useRouter();
   const canvasRef = useRef<CompositorCanvasHandle>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLInputElement>(null);
@@ -208,8 +209,14 @@ export function Compositor({
       const kit = (await res.json().catch(() => ({}))) as BrandKitInfo;
       const logoSrc = pickKitLogo(kit);
       if (!logoSrc) {
-        toast.error(
-          "No brand logo yet — create one in Logo Studio and tap “Use as my brand logo”.",
+        // No brand logo yet — don't dead-end. Take them into Logo Studio to
+        // build one, carrying a return path so finishing brings them back here.
+        toast("Let’s create your logo first — I’ll bring you right back.", {
+          icon: "🎨",
+        });
+        const returnTo = window.location.pathname + window.location.search;
+        router.push(
+          `/${params.workspace}/logo?returnTo=${encodeURIComponent(returnTo)}`,
         );
         return;
       }
