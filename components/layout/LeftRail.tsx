@@ -163,7 +163,7 @@ export default function LeftRail() {
                   <div className="w-8 h-8 rounded-full flex items-center justify-center border-2 border-border bg-card shrink-0">
                     <Shapes className="w-4 h-4" />
                   </div>
-                  <span>Logo Studio</span>
+                  <span>Add a Logo</span>
                 </Link>
                 <Link
                   href={`/${workspaceSlug}/settings/billing`}
