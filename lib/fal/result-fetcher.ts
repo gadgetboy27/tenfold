@@ -21,6 +21,8 @@ interface FalResult {
     }>;
     video?: { url: string; content_type?: string };
     audio_file?: { url: string; content_type?: string };
+    // ACE-Step (vocals) returns `audio` rather than `audio_file`.
+    audio?: { url: string; content_type?: string };
   };
   requestId: string;
 }
@@ -140,20 +142,21 @@ export async function fetchAndProcessFalJob(job: StuckJob): Promise<boolean> {
       });
     }
 
-    if (result.data?.audio_file) {
+    const audioResult = result.data?.audio_file ?? result.data?.audio;
+    if (audioResult) {
       const assetId = uuidv4();
       const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.mp3`;
-      let publicUrl = result.data.audio_file.url;
+      let publicUrl = audioResult.url;
       let storedPath: string | null = null;
       try {
-        const audioRes = await fetch(result.data.audio_file.url, {
+        const audioRes = await fetch(audioResult.url, {
           signal: AbortSignal.timeout(60_000),
         });
         const buffer = await audioRes.arrayBuffer();
         const { error: upErr } = await admin.storage
           .from("assets")
           .upload(storagePath, buffer, {
-            contentType: result.data.audio_file.content_type ?? "audio/mpeg",
+            contentType: audioResult.content_type ?? "audio/mpeg",
           });
         if (!upErr) {
           const { data: urlData } = admin.storage

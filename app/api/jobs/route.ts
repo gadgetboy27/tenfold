@@ -9,6 +9,7 @@ import { enqueueJob, enqueueFirstOf } from "@/lib/fal/queue";
 import { getMusicModel } from "@/lib/fal/models";
 import { generateScript } from "@/lib/claude/script";
 import { getWorkspaceBrandVoice } from "@/lib/claude/brand-voice";
+import { generateJingleLyrics } from "@/lib/claude/jingle";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import {
   IMAGE_STYLE_SUFFIXES,
@@ -254,8 +255,40 @@ export async function POST(req: Request) {
         endpoint.includes("lyria")
           ? { prompt: musicPrompt }
           : (falInput as Record<string, unknown>);
-      const attempts =
-        chosen.id === stableAudio.id
+      const aceStepInput = async (): Promise<Record<string, unknown>> => {
+        const genre = (body.params.genre as string) ?? "Lo-fi Chill";
+        const requested = Number(body.params.durationSec);
+        const seconds =
+          Number.isFinite(requested) && requested > 0 ? requested : 30;
+        let lyrics = (body.params.lyrics as string | undefined)?.trim() ?? "";
+        if (!lyrics) {
+          try {
+            const brandVoice = await getWorkspaceBrandVoice(
+              session.workspaceId,
+            );
+            lyrics = await generateJingleLyrics({
+              topic: prompt,
+              genre,
+              brandVoice,
+            });
+          } catch {
+            lyrics = ""; // ACE-Step with empty lyrics = instrumental (graceful)
+          }
+        }
+        return { tags: genre, lyrics, duration: seconds };
+      };
+      // Vocals (ACE-Step): different schema — `tags` (genre) + `lyrics`. Use the
+      // user's lyrics, or auto-write a short jingle so it actually sings. Always
+      // falls back to Stable Audio (instrumental) if the vocals model won't take.
+      const attempts = chosen.vocals
+        ? [
+            { endpoint: chosen.endpoint, input: await aceStepInput() },
+            {
+              endpoint: stableAudio.endpoint,
+              input: inputFor(stableAudio.endpoint),
+            },
+          ]
+        : chosen.id === stableAudio.id
           ? [{ endpoint: chosen.endpoint, input: inputFor(chosen.endpoint) }]
           : [
               { endpoint: chosen.endpoint, input: inputFor(chosen.endpoint) },

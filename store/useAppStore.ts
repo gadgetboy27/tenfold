@@ -35,6 +35,8 @@ export interface ExpandDrafts {
   videoStyle: string;
   musicGenre: string;
   musicModel: string;
+  /** Optional lyrics for the Vocals (ace-step) music model; auto-written if blank. */
+  musicLyrics: string;
   scriptPlatform: string;
   scriptTone: string;
   variationDirection: Record<string, string>;
@@ -64,6 +66,7 @@ const DEFAULT_EXPAND_DRAFTS: ExpandDrafts = {
   videoStyle: "Cinematic",
   musicGenre: "Lo-fi Chill",
   musicModel: "stable-audio",
+  musicLyrics: "",
   scriptPlatform: "IG",
   scriptTone: "Pro",
   variationDirection: { video: "", music: "", script: "" },

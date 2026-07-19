@@ -175,6 +175,9 @@ export interface MusicModel {
   label: string;
   endpoint: string;
   blurb: string;
+  /** Sings lyrics (ACE-Step) rather than instrumental — takes a different input
+   *  schema (tags + lyrics), handled in the jobs route. */
+  vocals?: boolean;
 }
 
 export const DEFAULT_MUSIC_MODEL = "stable-audio";
@@ -191,6 +194,16 @@ export const MUSIC_MODELS: MusicModel[] = [
     label: "Natural",
     endpoint: "fal-ai/lyria2",
     blurb: "Richer, more natural instrumental sound.",
+  },
+  {
+    // ACE-Step: text-to-song with real vocals. Input is `tags` (genre) + `lyrics`
+    // ([inst] = instrumental). Verified schema Jul 2026 — output is `audio.url`,
+    // normalized to audio_file in the fal webhook.
+    id: "ace-step",
+    label: "Vocals",
+    endpoint: "fal-ai/ace-step",
+    blurb: "Sings a jingle — real vocals from your lyrics (or auto-written).",
+    vocals: true,
   },
 ];
 

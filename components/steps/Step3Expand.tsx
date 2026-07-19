@@ -33,6 +33,7 @@ export default function Step3Expand() {
   const {
     musicGenre,
     musicModel,
+    musicLyrics,
     scriptPlatform,
     scriptTone,
     variationDirection,
@@ -42,6 +43,7 @@ export default function Step3Expand() {
   const setVideoStyle = (v: VideoStyle) => patchExpandDrafts({ videoStyle: v });
   const setMusicGenre = (v: string) => patchExpandDrafts({ musicGenre: v });
   const setMusicModel = (v: string) => patchExpandDrafts({ musicModel: v });
+  const setMusicLyrics = (v: string) => patchExpandDrafts({ musicLyrics: v });
   const setScriptPlatform = (v: string) =>
     patchExpandDrafts({ scriptPlatform: v });
   const setScriptTone = (v: string) => patchExpandDrafts({ scriptTone: v });
@@ -111,6 +113,9 @@ export default function Step3Expand() {
         // the model's max (~47s) server-side, so the track fits the clip.
         params.durationSec = videoDuration;
         params.musicModel = musicModel;
+        if (musicModel === "ace-step" && musicLyrics.trim()) {
+          params.lyrics = musicLyrics.trim();
+        }
         if (variationDirection.music) {
           params.variationDirection = variationDirection.music;
         }
@@ -447,11 +452,12 @@ export default function Step3Expand() {
               <div className="flex items-center gap-1.5">
                 <span className="flex items-center gap-1 text-[10px] text-muted-foreground uppercase tracking-wider mr-1">
                   Engine
-                  <InfoHint text="Balanced = fast & flexible (Stable Audio). Natural = richer, more organic instrumental (Lyria 2)." />
+                  <InfoHint text="Balanced = fast & flexible (Stable Audio). Natural = richer, more organic instrumental (Lyria 2). Vocals = a sung jingle (ACE-Step)." />
                 </span>
                 {[
                   { id: "stable-audio", label: "Balanced" },
                   { id: "lyria2", label: "Natural" },
+                  { id: "ace-step", label: "Vocals" },
                 ].map((m) => (
                   <button
                     key={m.id}
@@ -467,6 +473,15 @@ export default function Step3Expand() {
                   </button>
                 ))}
               </div>
+              {musicModel === "ace-step" && (
+                <textarea
+                  rows={3}
+                  placeholder="Lyrics to sing (optional) — leave blank and we'll write a short jingle from your brand."
+                  value={musicLyrics}
+                  onChange={(e) => setMusicLyrics(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
+                />
+              )}
               <input
                 type="text"
                 placeholder="What direction? (e.g., 'add more energy', 'faster tempo')"

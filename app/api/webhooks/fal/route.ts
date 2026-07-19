@@ -56,10 +56,15 @@ export async function POST(req: Request) {
   // fal.ai may nest results under 'payload' or 'output' depending on model/version.
   // Prefer whichever wrapper actually contains media — empty {} is truthy and would mask real output.
   const hasMedia = (d: typeof payload.payload) =>
-    !!(d?.images?.length || d?.image || d?.video || d?.audio_file);
-  const resultData = hasMedia(payload.payload)
+    !!(d?.images?.length || d?.image || d?.video || d?.audio_file || d?.audio);
+  const rawResult = hasMedia(payload.payload)
     ? payload.payload
     : (payload.output ?? payload.payload);
+  // ACE-Step (vocals) returns `audio`; the save path below reads `audio_file`.
+  const resultData =
+    rawResult && rawResult.audio && !rawResult.audio_file
+      ? { ...rawResult, audio_file: rawResult.audio }
+      : rawResult;
 
   // 3. Locate the job — prefer lookup by ?j=jobId (more secure) then fall back to fal_request_id
   const jobId = new URL(req.url).searchParams.get("j");

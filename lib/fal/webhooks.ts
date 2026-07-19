@@ -20,12 +20,16 @@ export const falWebhookPayloadSchema = z.object({
     image:      falMediaObject.optional(),
     video:      falMediaObject.optional(),
     audio_file: falMediaObject.optional(),
+    // ACE-Step (vocals) returns `audio`, not `audio_file` — normalized downstream.
+    audio:      falMediaObject.optional(),
   }).passthrough().optional(),
   output: z.object({
     images:     z.array(falMediaObject).optional(),
     image:      falMediaObject.optional(),
     video:      falMediaObject.optional(),
     audio_file: falMediaObject.optional(),
+    // ACE-Step (vocals) returns `audio`, not `audio_file` — normalized downstream.
+    audio:      falMediaObject.optional(),
   }).passthrough().optional(),
   error: z.unknown().optional(),
 }).passthrough();
