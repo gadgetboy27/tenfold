@@ -610,7 +610,12 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
           <textarea
             autoFocus
             value={editingLayer.text}
-            rows={editingLayer.text.split("\n").length}
+            // Grow to fit the text instead of scrolling inside fixed rows.
+            ref={(el) => {
+              if (!el) return;
+              el.style.height = "auto";
+              el.style.height = `${el.scrollHeight}px`;
+            }}
             onChange={(e) => updateLayer(editing.id, { text: e.target.value })}
             onFocus={(e) => e.target.select()}
             onBlur={() => setEditing(null)}
@@ -626,7 +631,7 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
               color: editingLayer.color,
               fontFamily: `"${editingLayer.font}", sans-serif`,
             }}
-            className="absolute z-10 -translate-x-1/2 -translate-y-1/2 resize-none rounded-lg border border-primary/70 bg-black/40 p-1 text-center outline-none backdrop-blur-[2px]"
+            className="absolute z-10 -translate-x-1/2 -translate-y-1/2 resize-none overflow-hidden rounded-lg border border-primary/70 bg-black/40 p-1 text-center outline-none backdrop-blur-[2px]"
           />
         )}
       </div>

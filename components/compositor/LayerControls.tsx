@@ -112,9 +112,15 @@ export function LayerControls({ layer }: { layer: Layer }) {
             <Textarea
               value={layer.text}
               onChange={(e) => set({ text: e.target.value })}
-              rows={3}
-              className="min-h-0 resize-y bg-background text-sm"
-              placeholder="One line per row — press Enter to wrap"
+              // Auto-grow to fit the text — never a fixed, scrolling box. Sizing
+              // the text on the canvas is done by dragging the layer's handles.
+              ref={(el) => {
+                if (!el) return;
+                el.style.height = "auto";
+                el.style.height = `${el.scrollHeight}px`;
+              }}
+              className="min-h-0 resize-none overflow-hidden bg-background text-sm"
+              placeholder="Type your text — the box grows to fit"
             />
           </Row>
           <Row label="Font">
