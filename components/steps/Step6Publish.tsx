@@ -478,10 +478,19 @@ export default function Step5Publish() {
           error?: string;
         };
         if (!res.ok && !data.platformResults) {
+          // A 401 means the whole request wasn't authenticated (expired login),
+          // not that each platform rejected it — say so plainly so the user
+          // refreshes instead of blaming the networks.
+          const msg =
+            res.status === 401
+              ? "Your session expired — refresh the page and sign in again, then republish."
+              : (data.error ?? `Publish failed (${res.status})`);
+          if (res.status === 401)
+            toast.error("Your session expired — refresh and sign in again.");
           return platforms.map((platform) => ({
             platform,
             status: "error",
-            error: data.error ?? `Publish failed (${res.status})`,
+            error: msg,
           }));
         }
         const tag = kind === "video" ? "🎬" : "📷";
@@ -535,6 +544,7 @@ export default function Step5Publish() {
       (r) => r.status !== "success" && r.status !== "sent",
     );
     const allGood = failures.length === 0;
+    const noneGood = failures.length === results.length;
 
     return (
       <motion.div
@@ -572,7 +582,11 @@ export default function Step5Publish() {
             />
           </div>
           <h2 className="font-serif text-3xl font-bold text-foreground mb-2">
-            {allGood ? "Content published!" : "Partially published"}
+            {allGood
+              ? "Content published!"
+              : noneGood
+                ? "Publishing failed"
+                : "Partially published"}
           </h2>
           <p className="text-muted-foreground text-sm mb-8">
             {scheduleMode === "later" && scheduledAt
