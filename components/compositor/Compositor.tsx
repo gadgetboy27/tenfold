@@ -47,6 +47,7 @@ import {
 } from "./CompositorCanvas";
 import { LayerList } from "./LayerList";
 import { LayerControls } from "./LayerControls";
+import { AssetsTray } from "./AssetsTray";
 import { FormatRail } from "./FormatRail";
 
 const ASPECTS: CompositionAspect[] = ["9:16", "1:1", "16:9"];
@@ -55,11 +56,20 @@ function fmt(t: number): string {
   return `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
 }
 
+export interface CampaignAssetBundle {
+  imageUrl: string | null;
+  videoUrl: string | null;
+  audioUrl: string | null;
+  caption: string;
+}
+
 export interface CompositorProps {
   /** Campaign context: exports persist as a campaign asset for publishing. */
   campaignId?: string | null;
   /** Campaign music, layered under the exported film. */
   audioUrl?: string | null;
+  /** Every asset the campaign generated — surfaced in the assets tray. */
+  assets?: CampaignAssetBundle;
   onExported?: (url: string) => void;
 }
 
@@ -71,6 +81,7 @@ export interface CompositorProps {
 export function Compositor({
   campaignId,
   audioUrl,
+  assets,
   onExported,
 }: CompositorProps = {}) {
   const doc = useCompositorStore((s) => s.doc);
@@ -294,6 +305,44 @@ export function Compositor({
       disappearAt: null,
       fadeSec: 0.5,
     });
+  };
+
+  // Drop a campaign asset onto the canvas from the assets tray.
+  const addAnchorImageLayer = (src: string) => {
+    addLayer({
+      id: crypto.randomUUID(),
+      kind: "image",
+      src,
+      pos: { mode: "fraction", nx: 0.5, ny: 0.5 },
+      scale: 0.6,
+      rotationDeg: 0,
+      opacity: 1,
+      blend: "normal",
+      appearAt: 0,
+      disappearAt: null,
+      fadeSec: 0,
+    });
+    toast.success("Image added — drag to place, corner-drag to size.");
+  };
+
+  const addCaptionLayer = (text: string) => {
+    addLayer({
+      id: crypto.randomUUID(),
+      kind: "text",
+      text,
+      font: "Inter",
+      sizePx: 56,
+      color: "#ffffff",
+      pos: { mode: "fraction", nx: 0.5, ny: 0.85 },
+      scale: 1,
+      rotationDeg: 0,
+      opacity: 1,
+      blend: "normal",
+      appearAt: 0,
+      disappearAt: null,
+      fadeSec: 0.5,
+    });
+    toast.success("Caption added as a text layer.");
   };
 
   // Everything a layer keeps when its kind is switched: position, transform,
@@ -802,6 +851,13 @@ export function Compositor({
               }}
             />
             <LayerList />
+            {assets && (
+              <AssetsTray
+                assets={assets}
+                onAddImage={addAnchorImageLayer}
+                onAddText={addCaptionLayer}
+              />
+            )}
           </div>
 
           {selected ? (

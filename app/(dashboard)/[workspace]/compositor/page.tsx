@@ -27,6 +27,7 @@ import { useCompositorStore } from "@/store/useCompositorStore";
 import { useAppStore } from "@/store/useAppStore";
 
 interface CampaignAsset {
+  id: string;
   type: string;
   url: string;
   created_at: string;
@@ -66,6 +67,15 @@ function logoWidth(src: string): Promise<number | null> {
   });
 }
 
+/** Everything the campaign generated, gathered so the compositor can surface and
+ *  hand every paid-for asset back to the user — never silently dropping any. */
+export interface CampaignAssetBundle {
+  imageUrl: string | null; // the anchor static image
+  videoUrl: string | null;
+  audioUrl: string | null;
+  caption: string;
+}
+
 /**
  * Compositor page. Two modes:
  * - Lab (no query param): pick local files, preview-only experiments.
@@ -89,9 +99,18 @@ export default function CompositorPage() {
   const [initialising, setInitialising] = useState(false);
   const [exportedUrl, setExportedUrl] = useState<string | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  // Every asset the campaign paid for — surfaced in the compositor so none is
+  // lost (the anchor image + caption were previously dropped here).
+  const [campaignAssets, setCampaignAssets] = useState<CampaignAssetBundle>({
+    imageUrl: null,
+    videoUrl: null,
+    audioUrl: null,
+    caption: "",
+  });
   // The caption the presets restyle — the same store value Step 4 edits, so
   // the two pages can't disagree about what the caption says.
   const composeCaption = useAppStore((s) => s.composeCaption);
+  const setComposeCaption = useAppStore((s) => s.setComposeCaption);
 
   // Campaign mode init — read ?campaign from the URL (no useSearchParams, so
   // the page needs no Suspense boundary) and build the branded default doc.
@@ -109,19 +128,42 @@ export default function CompositorPage() {
         if (!res.ok) throw new Error("Campaign not found");
         const campaign = (await res.json()) as {
           assets?: CampaignAsset[];
+          anchor_asset_id?: string | null;
           expansion_data?: {
             video?: { url?: string | null };
             music?: { url?: string | null };
+            script?: { content?: string | null };
           };
           latestCompositionId?: string | null;
         };
         const assets = campaign.assets ?? [];
-        // Music is needed for a re-export whether or not we restore a save.
-        setAudioUrl(
+        // Gather EVERY paid-for asset up front so none is dropped, whether we
+        // restore a saved composition or build fresh. Caption comes from the DB
+        // (expansion_data) — the in-memory store is empty on a fresh page load,
+        // which is exactly how the caption used to vanish here.
+        const audio =
           latest(assets, "audio") ??
-            campaign.expansion_data?.music?.url ??
-            null,
-        );
+          campaign.expansion_data?.music?.url ??
+          null;
+        const captionText =
+          campaign.expansion_data?.script?.content ??
+          useAppStore.getState().composeCaption ??
+          "";
+        const anchorImg = campaign.anchor_asset_id
+          ? (assets.find((a) => a.id === campaign.anchor_asset_id)?.url ?? null)
+          : latest(assets, "image");
+        const vid =
+          latest(assets, "video") ??
+          campaign.expansion_data?.video?.url ??
+          null;
+        setAudioUrl(audio);
+        if (captionText) setComposeCaption(captionText);
+        setCampaignAssets({
+          imageUrl: anchorImg,
+          videoUrl: vid,
+          audioUrl: audio,
+          caption: captionText,
+        });
 
         // Restore a previously saved layered composition (with its per-format
         // overrides) if one exists — otherwise build a fresh branded doc below.
@@ -136,13 +178,7 @@ export default function CompositorPage() {
           }
         }
 
-        // Same source order as Step 4's preview: the assets table first, then
-        // the campaign's expansion_data (older/demo campaigns only have the
-        // latter) — so the two pages can never disagree about a video.
-        const videoUrl =
-          latest(assets, "video") ??
-          campaign.expansion_data?.video?.url ??
-          null;
+        const videoUrl = vid;
         if (!videoUrl) throw new Error("Generate a video first (Step 3).");
 
         const meta = await videoMeta(videoUrl);
@@ -196,7 +232,7 @@ export default function CompositorPage() {
           meta.aspect,
           meta.duration,
           logoSrc ? await logoWidth(logoSrc) : null,
-          useAppStore.getState().composeCaption || null,
+          captionText || null,
         );
 
         load({
@@ -216,7 +252,7 @@ export default function CompositorPage() {
       }
     })();
     return () => reset();
-  }, [params.workspace, load, reset]);
+  }, [params.workspace, load, reset, setComposeCaption]);
 
   const continueToPublish = async () => {
     // Load the campaign into the app store AT the Publish step, then navigate —
@@ -360,6 +396,7 @@ export default function CompositorPage() {
             <Compositor
               campaignId={campaignId}
               audioUrl={audioUrl}
+              assets={campaignAssets}
               onExported={setExportedUrl}
             />
           </div>
