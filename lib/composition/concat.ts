@@ -73,27 +73,26 @@ export async function concatVideos(
       ]);
     } catch {
       // Re-encode fallback: normalize via the concat filter (handles differing
-      // params). Assumes video+audio (Kling v3 has native audio).
+      // params). Video-only on purpose — segments may have NO audio track (we run
+      // Kling with generate_audio off and compose our own music track later), and
+      // mapping [i:a] would hard-fail when it's absent. Dropping any native audio
+      // in this rare fallback is fine because the music is added downstream.
       const inputs = segPaths.flatMap((p) => ["-i", p]);
       const n = segPaths.length;
-      const streams = segPaths.map((_, i) => `[${i}:v][${i}:a]`).join("");
+      const streams = segPaths.map((_, i) => `[${i}:v]`).join("");
       await run("ffmpeg", [
         "-y",
         ...inputs,
         "-filter_complex",
-        `${streams}concat=n=${n}:v=1:a=1[v][a]`,
+        `${streams}concat=n=${n}:v=1:a=0[v]`,
         "-map",
         "[v]",
-        "-map",
-        "[a]",
         "-c:v",
         "libx264",
         "-preset",
         "veryfast",
         "-pix_fmt",
         "yuv420p",
-        "-c:a",
-        "aac",
         outPath,
       ]);
     }
