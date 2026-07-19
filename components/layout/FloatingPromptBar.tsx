@@ -17,6 +17,12 @@ interface ModelOption {
   locked: boolean;
 }
 
+interface VarietyModelOption {
+  id: string;
+  label: string;
+  picks: number;
+}
+
 const ASPECT_RATIOS = [
   { label: "1:1", value: "1:1" },
   { label: "4:5", value: "4:5" },
@@ -111,6 +117,7 @@ export default function FloatingPromptBar() {
   // models (2 each) so the user picks the look they prefer. Overrides `model`.
   const [variety, setVariety] = useState(false);
   const [models, setModels] = useState<ModelOption[]>([]);
+  const [varietyModels, setVarietyModels] = useState<VarietyModelOption[]>([]);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -140,9 +147,17 @@ export default function FloatingPromptBar() {
   useEffect(() => {
     api("/api/models", { workspaceSlug })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d: { models?: ModelOption[] } | null) => {
-        if (d?.models) setModels(d.models);
-      })
+      .then(
+        (
+          d: {
+            models?: ModelOption[];
+            varietyModels?: VarietyModelOption[];
+          } | null,
+        ) => {
+          if (d?.models) setModels(d.models);
+          if (d?.varietyModels) setVarietyModels(d.varietyModels);
+        },
+      )
       .catch(() => {});
   }, [workspaceSlug]);
 
@@ -484,6 +499,20 @@ export default function FloatingPromptBar() {
                   >
                     <Sparkles className="w-3 h-3" /> Variety pack
                   </button>
+                  {variety &&
+                    (() => {
+                      const top = [...varietyModels]
+                        .filter((m) => m.picks > 0)
+                        .sort((a, b) => b.picks - a.picks)[0];
+                      return top ? (
+                        <span
+                          className="text-xs text-[#666]"
+                          data-testid="text-variety-popular"
+                        >
+                          Most picked: {top.label}
+                        </span>
+                      ) : null;
+                    })()}
                 </>
               )}
               {score !== null && (
