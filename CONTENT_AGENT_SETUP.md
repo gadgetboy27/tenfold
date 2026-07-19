@@ -224,6 +224,27 @@ curl -X GET http://localhost:3000/api/cron/analytics \
 
 ---
 
+## 🗓️ Monthly Model Review
+
+`/api/cron/model-review` emails the operator the current model registries
+(image variety, music, captions) plus how often users pick each variety-pack
+model, so we can refresh the lists as fal.ai / Anthropic ship better models.
+Verify any new endpoint live before wiring it. Requires `CRON_SECRET`; sends to
+`MODEL_REVIEW_EMAIL` if set (otherwise returns the JSON report only).
+
+Schedule monthly (1st of the month, 09:00):
+```json
+{ "crons": [ { "path": "/api/cron/model-review", "schedule": "0 9 1 * *" } ] }
+```
+
+Test locally:
+```bash
+curl -X GET http://localhost:3000/api/cron/model-review \
+  -H "Authorization: Bearer dev-secret"
+```
+
+---
+
 ## 🐛 Troubleshooting
 
 ### Pipeline stuck on "analyse"
