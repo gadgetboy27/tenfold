@@ -30,7 +30,7 @@ export async function POST(
 
     const { data: project } = await admin
       .from("logo_projects")
-      .select("id, brief")
+      .select("id, brief, anchor_asset_id")
       .eq("id", id)
       .eq("workspace_id", session.workspaceId)
       .maybeSingle();
@@ -42,6 +42,23 @@ export async function POST(
     const brief = logoBriefSchema.parse(
       (project as { brief: unknown }).brief ?? {},
     );
+
+    // Finalize the LOOK the user picked: re-use the chosen concept's aesthetic
+    // prompt (saved on the raster concept) so the Pro SVG matches it. Falls back
+    // to the base brief prompt if no concept was anchored (older projects).
+    const anchorId = (project as { anchor_asset_id: string | null })
+      .anchor_asset_id;
+    let anchorPrompt: string | null = null;
+    if (anchorId) {
+      const { data: anchor } = await admin
+        .from("assets")
+        .select("metadata")
+        .eq("id", anchorId)
+        .maybeSingle();
+      const p = (anchor as { metadata?: { prompt?: unknown } } | null)?.metadata
+        ?.prompt;
+      anchorPrompt = typeof p === "string" && p.trim() ? p : null;
+    }
 
     const jobId = uuidv4();
     const cost = CREDIT_COSTS.logo_finalize;
@@ -63,7 +80,9 @@ export async function POST(
       session.workspaceId,
       session.userId,
     );
-    const { prompt, colors } = composeLogoPrompt(brief);
+    const composed = composeLogoPrompt(brief);
+    const prompt = anchorPrompt ?? composed.prompt;
+    const colors = composed.colors;
 
     const { error: jobErr } = await admin.from("creative_jobs").insert({
       id: jobId,

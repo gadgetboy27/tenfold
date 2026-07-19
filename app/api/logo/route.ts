@@ -20,6 +20,19 @@ import { composeLogoPrompt } from "@/lib/logo/promptComposer";
 
 const CONCEPT_COUNT = 6;
 
+// Six distinct aesthetic directions so the concept grid gives genuinely
+// different looks to choose from — not six seed-variants of one prompt. Each is
+// appended to the brief-composed prompt; the CHOSEN one is carried into finalize
+// so the SVG deliverable matches the look that was picked.
+const CONCEPT_STYLES = [
+  "minimalist, flat, simple geometric shapes, generous negative space",
+  "bold and modern, strong solid shapes, high contrast",
+  "clean monoline line-art, single consistent stroke weight",
+  "friendly and rounded, soft approachable shapes",
+  "elegant and refined, premium balanced proportions",
+  "dynamic and abstract, creative use of negative space",
+];
+
 /**
  * A per-workspace "Logos" holding campaign. creative_jobs and assets both
  * require a non-null campaign_id, so logo jobs hang off this one campaign — the
@@ -177,7 +190,8 @@ export async function POST(req: Request) {
     const directions = Array.from({ length: CONCEPT_COUNT }, (_, i) => ({
       index: i,
       label: `Concept ${i + 1}`,
-      prompt,
+      // Each concept gets its own aesthetic direction so the six genuinely differ.
+      prompt: `${prompt}, ${CONCEPT_STYLES[i % CONCEPT_STYLES.length]}`,
     }));
 
     const campaignId = await ensureLogoCampaign(
@@ -207,7 +221,7 @@ export async function POST(req: Request) {
         try {
           const { requestId } = await enqueueJob(
             "logo_concepts",
-            falInput,
+            { ...falInput, prompt: d.prompt },
             webhookUrl,
           );
           return { index: d.index, label: d.label, requestId };

@@ -15,16 +15,15 @@ export const FAL_MODELS = {
   video_15s: DEFAULT_VIDEO_ENDPOINT,
   video_30s: DEFAULT_VIDEO_ENDPOINT,
   music_generation: "fal-ai/stable-audio",
-  // ── Logo Studio (Recraft V4.1). Endpoint IDs verified against fal.ai/models
-  // at build time (the spec's v4/text-to-image was wrong — text-to-VECTOR is the
-  // one returning true SVG, and its $0.08 price matches the spec's cost table).
-  logo_concepts: "fal-ai/recraft/v4.1/text-to-vector", // SVG; no style/num_images
-  // Refine is text-to-vector too, NOT image-to-image: image-to-image rejects an
-  // SVG anchor with 422 (verified live), and its output is raster — off-model
-  // for an all-SVG deliverable. "More like this" regenerates a vector from the
-  // brief plus the user's adjustment, keeping the result a true SVG.
-  logo_refine: "fal-ai/recraft/v4.1/text-to-vector",
-  logo_finalize: "fal-ai/recraft/v4.1/pro/text-to-vector", // premium SVG
+  // ── Logo Studio (Recraft V4.1). Endpoint IDs verified live against fal.ai.
+  // CONCEPTS + REFINE are the fast RASTER path (text-to-image, $0.035, verified
+  // Jul 2026): the browse/pick phase doesn't need true SVG, and raster generates
+  // far quicker than text-to-vector — so 6 previews land fast. The winner is
+  // rendered as a real SVG at FINALIZE (Pro text-to-vector), which re-generates
+  // from the CHOSEN concept's prompt so the deliverable matches what was picked.
+  logo_concepts: "fal-ai/recraft/v4.1/text-to-image", // fast raster previews
+  logo_refine: "fal-ai/recraft/v4.1/text-to-image", // "more like this" (raster)
+  logo_finalize: "fal-ai/recraft/v4.1/pro/text-to-vector", // premium SVG (the deliverable)
   logo_vectorize: "fal-ai/recraft/vectorize", // raster upload → single SVG `image`
 } as const;
 

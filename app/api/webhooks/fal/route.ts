@@ -246,11 +246,14 @@ async function handleSuccess(
         height_px: img.height,
         metadata: isLogo
           ? {
-              // Mockups are raster (JPG) scenes; the rest are SVG marks.
+              // Concepts/refine are now raster (fast); finalize/vectorize are SVG.
               kind: ext === "svg" ? "logo_svg" : "logo_raster",
               logo_project_id: logoProjectId,
               logo_stage: job.type, // logo_concepts | logo_refine | logo_finalize | logo_vectorize
               request_id: direction?.requestId ?? job.fal_request_id,
+              // The concept's own aesthetic prompt — finalize re-uses the picked
+              // one so the SVG deliverable matches the chosen look.
+              ...(direction?.prompt ? { prompt: direction.prompt } : {}),
             }
           : direction
             ? {
