@@ -150,7 +150,45 @@ export default function CompositorPage() {
           workspaceSlug: params.workspace,
         });
         const kit = kitRes.ok ? await kitRes.json() : {};
-        const logoSrc = pickKitLogo(kit);
+        let logoSrc = pickKitLogo(kit);
+        // Ensure the logo always shows here: if no brand logo is set yet but the
+        // user has a finalized Logo Studio logo, adopt it (rasterised, so it
+        // exports). Non-destructive — only runs when the brand kit has none.
+        if (!logoSrc) {
+          try {
+            const listRes = await api("/api/logo", {
+              workspaceSlug: params.workspace,
+            });
+            if (listRes.ok) {
+              const { projects } = (await listRes.json()) as {
+                projects?: { id: string; status: string }[];
+              };
+              const finalized = (projects ?? []).find(
+                (p) => p.status === "finalized" || p.status === "packaged",
+              );
+              if (finalized) {
+                const adoptRes = await api(
+                  `/api/logo/${finalized.id}/use-as-brand`,
+                  { method: "POST", workspaceSlug: params.workspace },
+                );
+                if (adoptRes.ok) {
+                  const adopted = (await adoptRes.json()) as {
+                    logo_url?: string;
+                    logo_dark_url?: string;
+                  };
+                  logoSrc = adopted.logo_url ?? null;
+                  // brandKitLayers re-reads the logo from `kit` via pickKitLogo,
+                  // so patch the freshly-adopted URLs onto it too.
+                  if (adopted.logo_url) kit.logo_url = adopted.logo_url;
+                  if (adopted.logo_dark_url)
+                    kit.logo_dark_url = adopted.logo_dark_url;
+                }
+              }
+            }
+          } catch {
+            // No Logo Studio logo (or feature off) — carry on without one.
+          }
+        }
         // The Step 4 caption (AI script draft) carries through to the
         // compositor as the main text layer.
         const layers = brandKitLayers(
