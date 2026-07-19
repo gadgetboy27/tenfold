@@ -1,12 +1,19 @@
+// Single source for the current default video endpoint — the VIDEO_MODELS
+// registry below owns model identity; FAL_MODELS keeps the duration-tier keys
+// (video_5s/10s/30s) pointing at it so enqueueJob() keeps resolving by tier.
+const DEFAULT_VIDEO_ENDPOINT = "fal-ai/kling-video/v3/pro/image-to-video";
+
 export const FAL_MODELS = {
   image_generation: "fal-ai/flux-pro/v1.1-ultra",
   image_variation: "fal-ai/flux-pro/kontext",
   upscale: "fal-ai/clarity-upscaler",
-  // Kling v3 Pro (image-to-video): 3–15s per call, native audio, sharper motion.
-  // video_30s renders as 2× 15s segments concatenated (see webhooks/fal + jobs).
-  video_5s: "fal-ai/kling-video/v3/pro/image-to-video",
-  video_10s: "fal-ai/kling-video/v3/pro/image-to-video",
-  video_30s: "fal-ai/kling-video/v3/pro/image-to-video",
+  // Kling v3 Pro (image-to-video): 3–15s per call. video_30s renders as 2× 15s
+  // segments concatenated (see webhooks/fal + jobs). Input schema + field names
+  // come from VIDEO_MODELS / videoInputFor — NOT hand-built (see the bug history
+  // there: it's start_image_url, duration as a STRING, generate_audio off).
+  video_5s: DEFAULT_VIDEO_ENDPOINT,
+  video_10s: DEFAULT_VIDEO_ENDPOINT,
+  video_30s: DEFAULT_VIDEO_ENDPOINT,
   music_generation: "fal-ai/stable-audio",
   // ── Logo Studio (Recraft V4.1). Endpoint IDs verified against fal.ai/models
   // at build time (the spec's v4/text-to-image was wrong — text-to-VECTOR is the
@@ -163,6 +170,89 @@ export function imageFallbackEndpoints(chosenId: string): string[] {
     .map((id) => getImageModel(id).endpoint)
     .filter((ep) => ep !== chosen.endpoint);
   return [...new Set([chosen.endpoint, ...reliable])];
+}
+
+/**
+ * Video models (image-to-video). Kling v3 Pro is the default — cinematic motion,
+ * 3–15s per call. Endpoints + schemas verified LIVE (Jul 2026). CRITICAL: each
+ * model's input fields differ, so build inputs via videoInputFor() — never by
+ * hand. Kling wants `start_image_url` (NOT image_url), `duration` as a STRING
+ * ("3"–"15"), and `generate_audio` defaults true (we compose our own music, so
+ * we turn it OFF — ~35% faster + cheaper: $0.112 vs $0.168 per second). Refresh
+ * on the monthly model review; add a model here + a videoInputFor branch to wire.
+ */
+export interface VideoModel {
+  id: string;
+  label: string;
+  endpoint: string;
+  blurb: string;
+  /** Longest clip this model renders per call (seconds). */
+  maxDurationSec: number;
+  /** Whether it's wired into generation today (vs. registered for review only). */
+  wired: boolean;
+}
+
+export const DEFAULT_VIDEO_MODEL = "kling-v3-pro";
+
+export const VIDEO_MODELS: VideoModel[] = [
+  {
+    id: "kling-v3-pro",
+    label: "Kling v3 Pro",
+    endpoint: "fal-ai/kling-video/v3/pro/image-to-video",
+    blurb: "Cinematic motion, sharp detail. Our default (3–15s/call).",
+    maxDurationSec: 15,
+    wired: true,
+  },
+  {
+    id: "veo-3.1-fast",
+    label: "Veo 3.1 Fast",
+    endpoint: "fal-ai/veo3.1/fast/image-to-video",
+    blurb: "Faster renders, strong realism — ~8s clips, different schema.",
+    maxDurationSec: 8,
+    wired: false,
+  },
+];
+
+export function getVideoModel(id: string | undefined | null): VideoModel {
+  return (
+    VIDEO_MODELS.find((m) => m.id === id) ??
+    VIDEO_MODELS.find((m) => m.id === DEFAULT_VIDEO_MODEL)!
+  );
+}
+
+export interface VideoInputOpts {
+  imageUrl: string;
+  prompt: string;
+  durationSec: number;
+  negativePrompt?: string;
+  /** Native audio off by default — the app composes its own music track. */
+  generateAudio?: boolean;
+}
+
+/** Build a video model's fal input, mapping common fields onto its own schema. */
+export function videoInputFor(
+  model: VideoModel,
+  opts: VideoInputOpts,
+): Record<string, unknown> {
+  const seconds = Math.min(opts.durationSec, model.maxDurationSec);
+  const generateAudio = opts.generateAudio ?? false;
+  if (model.id.startsWith("veo")) {
+    // Veo: image_url + duration with a trailing "s" (verified live).
+    return {
+      image_url: opts.imageUrl,
+      prompt: opts.prompt,
+      duration: `${seconds}s`,
+      generate_audio: generateAudio,
+    };
+  }
+  // Kling v3 family (verified live): start_image_url + string duration.
+  return {
+    start_image_url: opts.imageUrl,
+    prompt: opts.prompt,
+    duration: String(seconds),
+    negative_prompt: opts.negativePrompt ?? "blur, distort, and low quality",
+    generate_audio: generateAudio,
+  };
 }
 
 /**

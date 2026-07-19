@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { VARIETY_IMAGE_MODELS } from "@/lib/fal/models";
 import { MUSIC_MODELS } from "@/lib/fal/models";
+import { VIDEO_MODELS } from "@/lib/fal/models";
 import { CAPTION_MODELS } from "@/lib/claude/caption-models";
 
 /**
@@ -14,6 +15,13 @@ import { CAPTION_MODELS } from "@/lib/claude/caption-models";
 export interface ModelReviewReport {
   generatedAt: string;
   imageModels: { id: string; label: string; endpoint: string; picks: number }[];
+  videoModels: {
+    id: string;
+    label: string;
+    endpoint: string;
+    maxDurationSec: number;
+    wired: boolean;
+  }[];
   musicModels: {
     id: string;
     label: string;
@@ -47,6 +55,13 @@ export async function buildModelReviewReport(
   return {
     generatedAt: new Date().toISOString(),
     imageModels,
+    videoModels: VIDEO_MODELS.map((m) => ({
+      id: m.id,
+      label: m.label,
+      endpoint: m.endpoint,
+      maxDurationSec: m.maxDurationSec,
+      wired: m.wired,
+    })),
     musicModels: MUSIC_MODELS.map((m) => ({
       id: m.id,
       label: m.label,
@@ -70,6 +85,12 @@ function renderReviewHtml(report: ModelReviewReport): string {
         `<tr><td>${m.label}</td><td><code>${m.endpoint}</code></td><td>${m.picks}</td></tr>`,
     )
     .join("");
+  const videoRows = report.videoModels
+    .map(
+      (m) =>
+        `<tr><td>${m.label}${m.wired ? "" : " (not wired)"}</td><td><code>${m.endpoint}</code></td><td>${m.maxDurationSec}s</td></tr>`,
+    )
+    .join("");
   const musicRows = report.musicModels
     .map(
       (m) =>
@@ -90,6 +111,12 @@ refresh the registries (<code>lib/fal/models.ts</code>,
 <table border="1" cellpadding="6" cellspacing="0">
 <tr><th>Model</th><th>Endpoint</th><th>Picks</th></tr>
 ${imgRows}
+</table>
+
+<h2>Video models</h2>
+<table border="1" cellpadding="6" cellspacing="0">
+<tr><th>Model</th><th>Endpoint</th><th>Max/call</th></tr>
+${videoRows}
 </table>
 
 <h2>Music models</h2>

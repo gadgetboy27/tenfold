@@ -6,7 +6,12 @@ import { debitCredits } from "@/lib/credits/debit";
 import { refundCredits } from "@/lib/credits/refund";
 import { CREDIT_COSTS, type CreditCostKey } from "@/lib/credits/costs";
 import { enqueueJob, enqueueFirstOf } from "@/lib/fal/queue";
-import { getMusicModel } from "@/lib/fal/models";
+import {
+  getMusicModel,
+  getVideoModel,
+  DEFAULT_VIDEO_MODEL,
+  videoInputFor,
+} from "@/lib/fal/models";
 import { generateScript } from "@/lib/claude/script";
 import { getWorkspaceBrandVoice } from "@/lib/claude/brand-voice";
 import { generateJingleLyrics } from "@/lib/claude/jingle";
@@ -55,12 +60,18 @@ function buildFalInput(
       variationDir ? `with ${variationDir}` : "",
     ].filter(Boolean);
     const composedPrompt = composedParts.join(", ");
-    return {
-      image_url: params.imageUrl as string,
+    // Field names + types come from the registry (start_image_url, string
+    // duration, generate_audio off) — hand-building this was the timeout bug.
+    const model = getVideoModel(
+      (params.videoModel as string) ?? DEFAULT_VIDEO_MODEL,
+    );
+    return videoInputFor(model, {
+      imageUrl: params.imageUrl as string,
       prompt: composedPrompt,
-      duration: durationMap[type],
-      negative_prompt: VIDEO_STYLE_PROMPTS[style].negativePrompt,
-    };
+      durationSec: durationMap[type],
+      negativePrompt: VIDEO_STYLE_PROMPTS[style].negativePrompt,
+      generateAudio: params.generateAudio === true,
+    });
   }
   if (type === "music_generation") {
     const genre = (params.genre as string) ?? "Lo-fi Chill";
