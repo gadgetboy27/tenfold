@@ -128,7 +128,7 @@ export default function Step5Review() {
       }
 
       toast.success("Ready to publish!");
-    } catch (err) {
+    } catch {
       toast.error("Failed to save — please try again");
     } finally {
       setIsSaving(false);

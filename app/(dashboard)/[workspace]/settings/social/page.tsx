@@ -1150,6 +1150,7 @@ export default function SocialSettingsPage() {
   }, []);
 
   const handleConnect = (platformId: string) => {
+    setConnecting(platformId);
     // Facebook and Instagram use direct Meta OAuth — navigate to the connect route.
     // The route redirects to Meta, which redirects back to /api/social/callback/facebook.
     if (platformId === "facebook" || platformId === "instagram") {
@@ -1159,7 +1160,7 @@ export default function SocialSettingsPage() {
     }
 
     // Every other network connects through Ayrshare.
-    handleAyrshareConnect();
+    handleAyrshareConnect().finally(() => setConnecting(null));
   };
 
   // Open Ayrshare's hosted linking page (creates the workspace's Ayrshare

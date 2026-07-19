@@ -1,15 +1,17 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { AnalysisOutput, PipelineTone } from './types';
+import Anthropic from "@anthropic-ai/sdk";
+import { AnalysisOutput } from "./types";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-export async function analyzeTranscript(transcript: string): Promise<AnalysisOutput> {
+export async function analyzeTranscript(
+  transcript: string,
+): Promise<AnalysisOutput> {
   const message = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: "claude-sonnet-4-6",
     max_tokens: 1024,
     messages: [
       {
-        role: 'user',
+        role: "user",
         content: `Analyze this content transcript and extract key information for repurposing across social media.
 
 TRANSCRIPT:
@@ -53,21 +55,27 @@ Ensure:
   });
 
   const block = message.content[0];
-  if (block.type !== 'text') throw new Error('No text response from Claude');
+  if (block.type !== "text") throw new Error("No text response from Claude");
 
   const match = block.text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('Could not parse JSON from Claude response');
+  if (!match) throw new Error("Could not parse JSON from Claude response");
 
   const parsed = JSON.parse(match[0]) as AnalysisOutput;
 
   if (!Array.isArray(parsed.keyInsights) || parsed.keyInsights.length !== 5) {
-    throw new Error('Analysis must include exactly 5 keyInsights');
+    throw new Error("Analysis must include exactly 5 keyInsights");
   }
   if (!Array.isArray(parsed.hooks) || parsed.hooks.length !== 10) {
-    throw new Error('Analysis must include exactly 10 hooks');
+    throw new Error("Analysis must include exactly 10 hooks");
   }
-  if (!['professional', 'casual', 'educational', 'entertaining'].includes(parsed.tone)) {
-    throw new Error('Tone must be one of: professional, casual, educational, entertaining');
+  if (
+    !["professional", "casual", "educational", "entertaining"].includes(
+      parsed.tone,
+    )
+  ) {
+    throw new Error(
+      "Tone must be one of: professional, casual, educational, entertaining",
+    );
   }
 
   return parsed;
