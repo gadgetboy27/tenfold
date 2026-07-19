@@ -74,6 +74,8 @@ export interface CampaignAssetBundle {
   videoUrl: string | null;
   audioUrl: string | null;
   caption: string;
+  logoUrl?: string | null; // brand logo, for the PDF one-pager
+  brandName?: string | null;
 }
 
 /**
@@ -158,11 +160,24 @@ export default function CompositorPage() {
           null;
         setAudioUrl(audio);
         if (captionText) setComposeCaption(captionText);
+
+        // Brand kit fetched once here — it powers both the on-canvas logo layer
+        // and the PDF one-pager (logo + brand name in the assets tray).
+        const kitRes = await api("/api/brand-kit", {
+          workspaceSlug: params.workspace,
+        });
+        const kit = kitRes.ok ? await kitRes.json() : {};
+        let logoSrc = pickKitLogo(kit);
+        const brandName =
+          (kit as { brand_name?: string | null }).brand_name ?? null;
+
         setCampaignAssets({
           imageUrl: anchorImg,
           videoUrl: vid,
           audioUrl: audio,
           caption: captionText,
+          logoUrl: logoSrc,
+          brandName,
         });
 
         // Restore a previously saved layered composition (with its per-format
@@ -182,11 +197,6 @@ export default function CompositorPage() {
         if (!videoUrl) throw new Error("Generate a video first (Step 3).");
 
         const meta = await videoMeta(videoUrl);
-        const kitRes = await api("/api/brand-kit", {
-          workspaceSlug: params.workspace,
-        });
-        const kit = kitRes.ok ? await kitRes.json() : {};
-        let logoSrc = pickKitLogo(kit);
         // Ensure the logo always shows here: if no brand logo is set yet but the
         // user has a finalized Logo Studio logo, adopt it (rasterised, so it
         // exports). Non-destructive — only runs when the brand kit has none.

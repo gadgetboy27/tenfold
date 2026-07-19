@@ -9,10 +9,12 @@ import {
   Download,
   Plus,
   Package,
+  FileText,
   Loader2,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button } from "@/components/ui/button";
+import { downloadCampaignPdf } from "@/lib/compositor/campaign-pdf";
 import type { CampaignAssetBundle } from "./Compositor";
 
 interface AssetsTrayProps {
@@ -62,7 +64,24 @@ const EXT: Record<string, string> = {
  */
 export function AssetsTray({ assets, onAddImage, onAddText }: AssetsTrayProps) {
   const [zipping, setZipping] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
   const { imageUrl, videoUrl, audioUrl, caption } = assets;
+
+  const makePdf = async () => {
+    setPdfBusy(true);
+    try {
+      await downloadCampaignPdf({
+        imageUrl,
+        caption,
+        logoUrl: assets.logoUrl,
+        brandName: assets.brandName,
+      });
+    } catch {
+      toast.error("Couldn't build the PDF — try again.");
+    } finally {
+      setPdfBusy(false);
+    }
+  };
 
   const rows: {
     key: string;
@@ -128,20 +147,39 @@ export function AssetsTray({ assets, onAddImage, onAddText }: AssetsTrayProps) {
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Campaign assets
         </h3>
-        <button
-          type="button"
-          onClick={downloadAll}
-          disabled={zipping}
-          className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-[11px] hover:border-primary/50 disabled:opacity-60"
-          data-testid="button-download-all"
-        >
-          {zipping ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : (
-            <Package className="h-3 w-3" />
+        <div className="flex items-center gap-1.5">
+          {(imageUrl || (caption && caption.trim())) && (
+            <button
+              type="button"
+              onClick={makePdf}
+              disabled={pdfBusy}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-[11px] hover:border-primary/50 disabled:opacity-60"
+              title="Branded one-pager: image + caption + logo"
+              data-testid="button-pdf"
+            >
+              {pdfBusy ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <FileText className="h-3 w-3" />
+              )}
+              PDF
+            </button>
           )}
-          Download all
-        </button>
+          <button
+            type="button"
+            onClick={downloadAll}
+            disabled={zipping}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-[11px] hover:border-primary/50 disabled:opacity-60"
+            data-testid="button-download-all"
+          >
+            {zipping ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Package className="h-3 w-3" />
+            )}
+            Download all
+          </button>
+        </div>
       </div>
       <ul className="flex flex-col gap-1.5">
         {present.map((r) => {

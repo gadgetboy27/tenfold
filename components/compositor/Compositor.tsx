@@ -61,6 +61,9 @@ export interface CampaignAssetBundle {
   videoUrl: string | null;
   audioUrl: string | null;
   caption: string;
+  /** For the branded PDF one-pager. */
+  logoUrl?: string | null;
+  brandName?: string | null;
 }
 
 export interface CompositorProps {
