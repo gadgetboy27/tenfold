@@ -30,6 +30,20 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
     return NextResponse.json({ error: "Image not found" }, { status: 404 });
   }
 
+  // A logo is a brand element, not campaign content — starting a campaign from
+  // it would turn the mark into a video with music and a script. Refuse it and
+  // point to where a logo actually belongs: the compositor, as a layer.
+  const kind = (source.metadata?.kind as string | undefined) ?? "";
+  if (kind.startsWith("logo")) {
+    return NextResponse.json(
+      {
+        error:
+          "That's a brand logo — add it to a video in the compositor (Add logo), not as a campaign on its own.",
+      },
+      { status: 400 },
+    );
+  }
+
   // Carry over the original prompt/style for context (best-effort).
   const { data: srcCampaign } = await db
     .from("campaigns")
