@@ -91,6 +91,68 @@ export function getImageModel(id: string | undefined | null): ImageModel {
 }
 
 /**
+ * "Variety pack": the current top image models, so an anchor set can span three
+ * models (2 images each) instead of one. Endpoints + params verified LIVE
+ * (Jul 2026) — each takes a different size param, so imageInputFor() maps the
+ * campaign's FLUX-style image_size onto each model's own knob. Refresh this
+ * list on the monthly model review.
+ */
+export interface VarietyModel {
+  id: string;
+  label: string;
+  endpoint: string;
+  /** Which aspect knob this model uses (verified live). */
+  sizeParam: "image_size" | "aspect_ratio";
+}
+
+export const VARIETY_IMAGE_MODELS: VarietyModel[] = [
+  {
+    id: "flux-2-pro",
+    label: "FLUX.2 Pro",
+    endpoint: "fal-ai/flux-2-pro",
+    sizeParam: "image_size",
+  },
+  {
+    id: "nano-banana-2",
+    label: "Nano Banana 2",
+    endpoint: "fal-ai/nano-banana-2",
+    sizeParam: "aspect_ratio",
+  },
+  {
+    id: "seedream-4.5",
+    label: "Seedream 4.5",
+    endpoint: "fal-ai/bytedance/seedream/v4.5/text-to-image",
+    sizeParam: "image_size",
+  },
+];
+
+/** FLUX image_size value → the aspect_ratio string models like Nano Banana use. */
+const IMAGE_SIZE_TO_ASPECT: Record<string, string> = {
+  square_hd: "1:1",
+  square: "1:1",
+  portrait_16_9: "9:16",
+  portrait_4_3: "3:4",
+  landscape_16_9: "16:9",
+  landscape_4_3: "4:3",
+};
+
+/** Build a model's fal input from the shared prompt + campaign image_size. */
+export function imageInputFor(
+  model: VarietyModel,
+  prompt: string,
+  imageSize: string,
+): Record<string, unknown> {
+  if (model.sizeParam === "aspect_ratio") {
+    return {
+      prompt,
+      aspect_ratio: IMAGE_SIZE_TO_ASPECT[imageSize] ?? "1:1",
+      num_images: 1,
+    };
+  }
+  return { prompt, image_size: imageSize, num_images: 1 };
+}
+
+/**
  * Ordered fallback endpoints for image generation, used when the chosen model
  * fails to submit (fal queue error / bad call). Try the chosen model first,
  * then progressively more reliable ones, always ending at FLUX Pro.
