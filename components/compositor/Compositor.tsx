@@ -106,6 +106,28 @@ export function Compositor({
   // Connected social platforms drive the format rail (empty → generic aspects).
   const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([]);
 
+  // Autosave: persist the editable doc as it changes so leaving the compositor
+  // never loses work — the campaign reloads it on reopen. Debounced, so a drag
+  // (many doc updates) coalesces into one write once the user pauses. The first
+  // save also persists a freshly-built doc that was never exported.
+  const lastSavedRef = useRef<string>("");
+  useEffect(() => {
+    if (!doc || !campaignId) return;
+    const serialized = JSON.stringify(doc);
+    if (serialized === lastSavedRef.current) return;
+    const t = setTimeout(() => {
+      lastSavedRef.current = serialized;
+      void api("/api/compositions/save", {
+        method: "POST",
+        body: JSON.stringify({ doc, campaignId }),
+        workspaceSlug: params.workspace,
+      }).catch(() => {
+        lastSavedRef.current = ""; // let the next change retry
+      });
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [doc, campaignId, params.workspace]);
+
   useEffect(() => {
     const slug = params.workspace;
     if (!slug) return;
