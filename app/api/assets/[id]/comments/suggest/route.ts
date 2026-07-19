@@ -70,6 +70,7 @@ export const POST = withWorkspace<{ id: string }>(
         maxWords: body.maxWords ?? 40,
         variationDirection: body.direction,
         brandVoice,
+        captionModel: body.captionModel,
       });
 
       await admin

@@ -144,4 +144,6 @@ export const suggestCommentSchema = z.object({
   maxWords: z.number().int().positive().max(200).optional(),
   direction: z.string().max(500).optional(),
   context: z.string().max(1000).optional(),
+  // Which caption model to write with (see lib/claude/caption-models.ts).
+  captionModel: z.string().max(40).optional(),
 });

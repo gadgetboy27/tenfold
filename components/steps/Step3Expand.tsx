@@ -36,6 +36,7 @@ export default function Step3Expand() {
     musicLyrics,
     scriptPlatform,
     scriptTone,
+    scriptModel,
     variationDirection,
   } = expandDrafts;
   const setVideoDuration = (v: 5 | 10 | 30) =>
@@ -47,6 +48,7 @@ export default function Step3Expand() {
   const setScriptPlatform = (v: string) =>
     patchExpandDrafts({ scriptPlatform: v });
   const setScriptTone = (v: string) => patchExpandDrafts({ scriptTone: v });
+  const setScriptModel = (v: string) => patchExpandDrafts({ scriptModel: v });
   const setVariationDirection = (v: Record<string, string>) =>
     patchExpandDrafts({ variationDirection: v });
 
@@ -129,6 +131,7 @@ export default function Step3Expand() {
           PLATFORM_MAP[scriptPlatform] ?? scriptPlatform.toLowerCase();
         params.tone = TONE_MAP[scriptTone] ?? scriptTone.toLowerCase();
         params.imageDescription = anchor.prompt;
+        params.captionModel = scriptModel;
         if (variationDirection.script) {
           params.variationDirection = variationDirection.script;
         }
@@ -547,6 +550,31 @@ export default function Step3Expand() {
                       }`}
                     >
                       {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-2 items-center">
+                <span className="flex items-center gap-1 text-[10px] text-muted-foreground uppercase w-12">
+                  Writer
+                  <InfoHint text="Studio = most polished, best brand-voice match. Rapid = faster, punchier copy." />
+                </span>
+                <div className="flex gap-1">
+                  {[
+                    { id: "studio", label: "Studio" },
+                    { id: "rapid", label: "Rapid" },
+                  ].map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setScriptModel(m.id)}
+                      className={`px-2 py-1 text-[10px] rounded border transition-colors ${
+                        scriptModel === m.id
+                          ? "border-primary/50 text-primary bg-primary/10"
+                          : "border-border bg-background hover:border-primary/50"
+                      }`}
+                    >
+                      {m.label}
                     </button>
                   ))}
                 </div>

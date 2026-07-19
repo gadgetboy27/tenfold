@@ -1,10 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { getCaptionModel } from "./caption-models";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-// claude-sonnet-4-6 pricing per 1M tokens (USD)
-const INPUT_COST_PER_M = 3.0;
-const OUTPUT_COST_PER_M = 15.0;
 
 interface GenerateScriptParams {
   imageDescription: string;
@@ -15,6 +12,8 @@ interface GenerateScriptParams {
   variationDirection?: string;
   /** Workspace brand-voice style guide; when present the caption must match it. */
   brandVoice?: string;
+  /** Which caption model to write with (see caption-models.ts). Defaults to Studio. */
+  captionModel?: string;
 }
 
 export interface ScriptResult {
@@ -35,8 +34,9 @@ export async function generateScript(
   const voiceBlock = params.brandVoice
     ? `\n\nMATCH THIS BRAND VOICE EXACTLY (overrides the generic tone above):\n${params.brandVoice}`
     : "";
+  const captionModel = getCaptionModel(params.captionModel);
   const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    model: captionModel.model,
     max_tokens: 512,
     system: `You are an award-winning social media copywriter who writes scroll-stopping captions that convert. You know each platform's native voice cold and never sound like a corporate press release.
 
@@ -66,8 +66,8 @@ Return only the caption — no preamble, no quotes, no "Caption:" label, no opti
   const inputTokens = message.usage.input_tokens;
   const outputTokens = message.usage.output_tokens;
   const actualCostUsd =
-    (inputTokens / 1_000_000) * INPUT_COST_PER_M +
-    (outputTokens / 1_000_000) * OUTPUT_COST_PER_M;
+    (inputTokens / 1_000_000) * captionModel.inputCostPerM +
+    (outputTokens / 1_000_000) * captionModel.outputCostPerM;
 
   return {
     text: block.text.trim(),

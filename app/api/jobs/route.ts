@@ -153,6 +153,7 @@ export async function POST(req: Request) {
           maxWords: (body.params.maxWords as number) ?? 50,
           variationDirection: (body.params.variationDirection as string) ?? "",
           brandVoice,
+          captionModel: body.params.captionModel as string | undefined,
         });
 
         await admin

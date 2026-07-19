@@ -39,6 +39,8 @@ export interface ExpandDrafts {
   musicLyrics: string;
   scriptPlatform: string;
   scriptTone: string;
+  /** Which caption model to write with (see lib/claude/caption-models.ts). */
+  scriptModel: string;
   variationDirection: Record<string, string>;
 }
 export interface TalkingDraft {
@@ -69,6 +71,7 @@ const DEFAULT_EXPAND_DRAFTS: ExpandDrafts = {
   musicLyrics: "",
   scriptPlatform: "IG",
   scriptTone: "Pro",
+  scriptModel: "studio",
   variationDirection: { video: "", music: "", script: "" },
 };
 const DEFAULT_TALKING_DRAFT: TalkingDraft = {
