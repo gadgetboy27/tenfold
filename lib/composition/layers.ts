@@ -396,6 +396,11 @@ const layerBaseSchema = z.object({
   fadeSec: z.number().min(0).max(10).default(0),
   /** Entrance / exit / ambient animation (the effects suite). */
   effects: layerEffectsSchema.optional(),
+  /** Edit-time lock (Photoshop-style): a locked layer is click-through on the
+   *  canvas (can't be selected, moved, scaled or rotated) — but still renders in
+   *  the export. Optional (like `effects`) so older layer literals parse and
+   *  build unchanged; absent/undefined means unlocked. */
+  locked: z.boolean().optional(),
 });
 
 export const imageLayerSchema = layerBaseSchema.extend({

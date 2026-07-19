@@ -9,6 +9,7 @@ import {
   ImagePlus,
   Type,
   Layers,
+  Shapes,
   Sparkles,
   Download,
   Maximize2,
@@ -196,6 +197,41 @@ export function Compositor({
     }
   };
 
+  // Drop the brand logo in as a plain, centred layer the user positions and
+  // sizes freely (unlike applyBrandKit's end-card preset). It's a normal image
+  // layer — same move/scale/rotate/blend/lock as any other.
+  const addBrandLogoLayer = async () => {
+    try {
+      const res = await api("/api/brand-kit", {
+        workspaceSlug: params.workspace,
+      });
+      const kit = (await res.json().catch(() => ({}))) as BrandKitInfo;
+      const logoSrc = pickKitLogo(kit);
+      if (!logoSrc) {
+        toast.error(
+          "No brand logo yet — create one in Logo Studio and tap “Use as my brand logo”.",
+        );
+        return;
+      }
+      addLayer({
+        id: crypto.randomUUID(),
+        kind: "image",
+        src: logoSrc,
+        pos: { mode: "fraction", nx: 0.5, ny: 0.5 },
+        scale: 0.4,
+        rotationDeg: 0,
+        opacity: 1,
+        blend: "normal",
+        appearAt: 0,
+        disappearAt: null,
+        fadeSec: 0,
+      });
+      toast.success("Brand logo added — drag to place, corner-drag to size.");
+    } catch {
+      toast.error("Couldn't load your brand logo.");
+    }
+  };
+
   const addImageLayer = (file: File) => {
     addLayer({
       id: crypto.randomUUID(),
@@ -244,6 +280,7 @@ export function Compositor({
     disappearAt: l.disappearAt,
     fadeSec: l.fadeSec,
     effects: l.effects,
+    locked: l.locked,
   });
 
   const convertToText = () => {
@@ -511,6 +548,16 @@ export function Compositor({
                     <Sparkles className="h-3.5 w-3.5" />
                   )}
                   Apply brand kit
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={addBrandLogoLayer}
+                  title="Drop your brand logo in as a movable, sizable layer"
+                  className="h-7 gap-1.5 px-3 text-xs"
+                >
+                  <Shapes className="h-3.5 w-3.5" />
+                  Add logo
                 </Button>
                 <Button
                   size="sm"

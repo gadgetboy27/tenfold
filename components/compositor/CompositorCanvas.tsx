@@ -395,10 +395,10 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
       if (!ctx || !doc) return;
       const p = toDesign(e);
 
-      // Edge/corner of the SELECTED layer → start a resize.
+      // Edge/corner of the SELECTED layer → start a resize (locked layers don't).
       const sel = doc.layers.find((l) => l.id === selectedLayerId);
-      const selZone = sel ? zoneFor(ctx, sel, p.x, p.y) : null;
-      if (sel && selZone && selZone !== "move") {
+      const selZone = sel && !sel.locked ? zoneFor(ctx, sel, p.x, p.y) : null;
+      if (sel && !sel.locked && selZone && selZone !== "move") {
         const selEff = eff(sel);
         let raw: string | undefined;
         let avgCharW: number | undefined;
@@ -434,7 +434,8 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
       const hit = hitTestLayer(ctx, doc, p.x, p.y, imagesRef.current);
       const wasSelected = hit?.id === selectedLayerId;
       selectLayer(hit?.id ?? null);
-      if (hit) {
+      // A locked layer can be SELECTED (to unlock it), but never moved.
+      if (hit && !hit.locked) {
         const hitCentre = layerCenter(
           ctx,
           eff(hit),
@@ -466,11 +467,13 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
         // Hover feedback: pull cursor on the selected layer's edge line,
         // grab inside any layer, default elsewhere.
         const sel = doc.layers.find((l) => l.id === selectedLayerId);
-        const selZone = sel ? zoneFor(ctx, sel, p.x, p.y) : null;
+        // Locked layers show no resize/grab affordance — they can't be moved.
+        const selZone = sel && !sel.locked ? zoneFor(ctx, sel, p.x, p.y) : null;
         hoverEdge.current = !!selZone && selZone !== "move";
+        const hovered = hitTestLayer(ctx, doc, p.x, p.y, imagesRef.current);
         if (selZone && selZone !== "move") setCursor(ZONE_CURSOR[selZone]);
-        else if (hitTestLayer(ctx, doc, p.x, p.y, imagesRef.current))
-          setCursor("grab");
+        else if (hovered && !hovered.locked) setCursor("grab");
+        else if (hovered?.locked) setCursor("default");
         else setCursor("default");
         return;
       }

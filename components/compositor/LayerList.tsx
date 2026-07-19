@@ -1,15 +1,24 @@
 "use client";
 
-import { ImageIcon, Type, ChevronUp, ChevronDown, Trash2 } from "lucide-react";
+import {
+  ImageIcon,
+  Type,
+  ChevronUp,
+  ChevronDown,
+  Trash2,
+  Lock,
+  LockOpen,
+} from "lucide-react";
 import { useCompositorStore } from "@/store/useCompositorStore";
 
-/** Layer stack, front-most first. Select, reorder, delete. */
+/** Layer stack, front-most first. Select, reorder, lock, delete. */
 export function LayerList() {
   const doc = useCompositorStore((s) => s.doc);
   const selectedLayerId = useCompositorStore((s) => s.selectedLayerId);
   const selectLayer = useCompositorStore((s) => s.selectLayer);
   const moveLayer = useCompositorStore((s) => s.moveLayer);
   const removeLayer = useCompositorStore((s) => s.removeLayer);
+  const updateLayer = useCompositorStore((s) => s.updateLayer);
 
   if (!doc) return null;
   if (doc.layers.length === 0) {
@@ -45,9 +54,30 @@ export function LayerList() {
               ) : (
                 <Type className="h-3.5 w-3.5 shrink-0" />
               )}
-              <span className="truncate">
+              <span
+                className={`truncate ${layer.locked ? "text-muted-foreground" : ""}`}
+              >
                 {layer.kind === "text" ? layer.text : "Image / logo"}
               </span>
+            </button>
+            <button
+              onClick={() => updateLayer(layer.id, { locked: !layer.locked })}
+              title={
+                layer.locked
+                  ? "Unlock layer"
+                  : "Lock layer (can't be moved on canvas)"
+              }
+              className={
+                layer.locked
+                  ? "text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              }
+            >
+              {layer.locked ? (
+                <Lock className="h-3.5 w-3.5" />
+              ) : (
+                <LockOpen className="h-3.5 w-3.5" />
+              )}
             </button>
             <button
               onClick={() => moveLayer(layer.id, "up")}

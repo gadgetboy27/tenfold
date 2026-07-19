@@ -300,6 +300,9 @@ export function hitTestLayer(
 ): Layer | null {
   for (let i = doc.layers.length - 1; i >= 0; i--) {
     const master = doc.layers[i];
+    // Locked layers are click-through on the canvas — manage them in the layer
+    // list. (They still render; lock is an edit-time affordance only.)
+    if (master.locked) continue;
     // Hit-test the box as it renders in this aspect (overrides applied)…
     const layer = effectiveLayer(master, doc.aspect, doc.overrides);
     // Centre uses the rotated extents (anchor lockstep with the export); the hit
