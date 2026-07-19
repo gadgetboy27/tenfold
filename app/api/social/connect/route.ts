@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getEntitlements } from "@/lib/billing/entitlements";
 import {
   createAyrshareProfile,
   generateSocialConnectUrl,
@@ -9,6 +10,22 @@ import {
 export async function GET(req: Request) {
   try {
     const session = await getSession(req);
+
+    // Ayrshare (every network beyond Facebook/Instagram) is Pro-only. Gate the
+    // connect here so free users get a clear upgrade prompt instead of linking
+    // an account they can never publish to. 402 = upgrade required.
+    const ent = await getEntitlements(session.workspaceId);
+    if (!ent.isPro) {
+      return NextResponse.json(
+        {
+          error:
+            "Connecting X, LinkedIn, TikTok, YouTube & more is a Pro feature. Facebook & Instagram are free.",
+          upgradeRequired: true,
+        },
+        { status: 402 },
+      );
+    }
+
     const admin = createSupabaseAdminClient();
 
     const { data: workspace } = await admin

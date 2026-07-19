@@ -313,6 +313,15 @@ export default function Step5Publish() {
     };
   }, [fetchProfiles]);
 
+  // Plan gate: everything beyond Facebook/Instagram (Ayrshare) is Pro-only.
+  const [isPro, setIsPro] = useState<boolean | null>(null);
+  useEffect(() => {
+    api("/api/entitlements", { workspaceSlug })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((e: { isPro?: boolean } | null) => setIsPro(e?.isPro ?? false))
+      .catch(() => setIsPro(false));
+  }, [workspaceSlug]);
+
   // Facebook & Instagram connect natively (free) — start Meta OAuth in place.
   const connectMeta = () => {
     window.location.href = `/api/social/connect/facebook?workspace=${workspaceSlug}`;
@@ -781,34 +790,58 @@ export default function Step5Publish() {
                   </section>
                 )}
 
-                {/* Everything else — one branded Ayrshare page */}
+                {/* Everything else — Pro-only, one branded Ayrshare page */}
                 <section className="space-y-2">
                   <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     More networks
                   </h3>
-                  <button
-                    type="button"
-                    onClick={connectMoreNetworks}
-                    disabled={connectingMore}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl border border-border bg-card hover:border-primary/40 transition-colors text-left disabled:opacity-60"
-                  >
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-primary/15">
-                      {connectingMore ? (
-                        <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                      ) : (
-                        <ExternalLink className="w-4 h-4 text-primary" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground">
-                        Connect X, LinkedIn, TikTok, YouTube, Pinterest &amp;
-                        more
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        One secure step — you&apos;ll come straight back here.
-                      </p>
-                    </div>
-                  </button>
+                  {isPro === false ? (
+                    // Free tier — upgrade gate instead of a dead-end connect.
+                    <Link
+                      href={`/${workspaceSlug}/settings/billing`}
+                      className="w-full flex items-center gap-3 p-3 rounded-xl border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors text-left"
+                    >
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-primary/15">
+                        <Sparkles className="w-4 h-4 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground">
+                          Reach X, LinkedIn, TikTok, YouTube &amp; more
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          A Pro feature — upgrade to publish everywhere.
+                          Facebook &amp; Instagram stay free.
+                        </p>
+                      </div>
+                      <span className="text-xs font-semibold text-primary shrink-0">
+                        Upgrade
+                      </span>
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={connectMoreNetworks}
+                      disabled={connectingMore}
+                      className="w-full flex items-center gap-3 p-3 rounded-xl border border-border bg-card hover:border-primary/40 transition-colors text-left disabled:opacity-60"
+                    >
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-primary/15">
+                        {connectingMore ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                        ) : (
+                          <ExternalLink className="w-4 h-4 text-primary" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground">
+                          Connect X, LinkedIn, TikTok, YouTube, Pinterest &amp;
+                          more
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          One secure step — you&apos;ll come straight back here.
+                        </p>
+                      </div>
+                    </button>
+                  )}
                 </section>
               </>
             )}
