@@ -10,6 +10,7 @@ import {
   Plus,
   Package,
   FileText,
+  Wand2,
   Loader2,
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -23,6 +24,8 @@ interface AssetsTrayProps {
   onAddImage: (url: string) => void;
   /** Drop the caption onto the canvas as a text layer. */
   onAddText: (text: string) => void;
+  /** Start a new campaign from the anchor image (remix). Absent = hidden. */
+  onRemix?: () => void;
 }
 
 /** Fetch a remote asset and save it as a file (not just open it in a tab). */
@@ -62,7 +65,12 @@ const EXT: Record<string, string> = {
  * downloadable on its own, the image and caption can be dropped onto the canvas
  * as layers, and "Download all" bundles everything into a zip.
  */
-export function AssetsTray({ assets, onAddImage, onAddText }: AssetsTrayProps) {
+export function AssetsTray({
+  assets,
+  onAddImage,
+  onAddText,
+  onRemix,
+}: AssetsTrayProps) {
   const [zipping, setZipping] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const { imageUrl, videoUrl, audioUrl, caption } = assets;
@@ -208,6 +216,17 @@ export function AssetsTray({ assets, onAddImage, onAddText }: AssetsTrayProps) {
                   title="Add to the canvas as a layer"
                 >
                   <Plus className="h-3 w-3" /> Add
+                </Button>
+              )}
+              {r.kind === "image" && r.url && onRemix && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 gap-1 px-2 text-[11px]"
+                  onClick={onRemix}
+                  title="Start a new campaign from this image"
+                >
+                  <Wand2 className="h-3 w-3" /> Remix
                 </Button>
               )}
               {r.kind === "caption" && r.text && (

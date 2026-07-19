@@ -58,6 +58,7 @@ function fmt(t: number): string {
 
 export interface CampaignAssetBundle {
   imageUrl: string | null;
+  imageAssetId?: string | null; // anchor asset id — used to remix a new campaign
   videoUrl: string | null;
   audioUrl: string | null;
   caption: string;
@@ -346,6 +347,43 @@ export function Compositor({
       fadeSec: 0.5,
     });
     toast.success("Caption added as a text layer.");
+  };
+
+  // Remix: start a NEW campaign seeded with the anchor image (no credits) and
+  // open it at the expand step to generate fresh video/music/caption from it.
+  const remixFromImage = async () => {
+    if (!assets?.imageAssetId) return;
+    try {
+      const res = await api("/api/campaigns/from-asset", {
+        method: "POST",
+        body: JSON.stringify({ assetId: assets.imageAssetId }),
+        workspaceSlug: params.workspace,
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        campaignId?: string;
+        campaignName?: string;
+        asset?: Parameters<
+          ReturnType<typeof useAppStore.getState>["loadCampaign"]
+        >[0]["imageAssets"][number];
+        error?: string;
+      };
+      if (!res.ok || !data.campaignId || !data.asset) {
+        throw new Error(data.error ?? "Couldn't start a remix");
+      }
+      useAppStore.getState().loadCampaign({
+        id: data.campaignId,
+        name: data.campaignName ?? "Remix",
+        current_step: 3,
+        anchor_asset_id: data.asset.id,
+        expansion_data: {},
+        imageAssets: [data.asset],
+        compositionId: null,
+      });
+      toast.success("New campaign started from your image — generate away.");
+      router.push(`/${params.workspace}`);
+    } catch (err) {
+      toast.error((err as Error).message ?? "Remix failed");
+    }
   };
 
   // Everything a layer keeps when its kind is switched: position, transform,
@@ -859,6 +897,7 @@ export function Compositor({
                 assets={assets}
                 onAddImage={addAnchorImageLayer}
                 onAddText={addCaptionLayer}
+                onRemix={assets.imageAssetId ? remixFromImage : undefined}
               />
             )}
           </div>

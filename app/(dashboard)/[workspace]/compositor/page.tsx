@@ -71,6 +71,7 @@ function logoWidth(src: string): Promise<number | null> {
  *  hand every paid-for asset back to the user — never silently dropping any. */
 export interface CampaignAssetBundle {
   imageUrl: string | null; // the anchor static image
+  imageAssetId?: string | null; // its asset id — used to remix a new campaign
   videoUrl: string | null;
   audioUrl: string | null;
   caption: string;
@@ -151,9 +152,13 @@ export default function CompositorPage() {
           campaign.expansion_data?.script?.content ??
           useAppStore.getState().composeCaption ??
           "";
-        const anchorImg = campaign.anchor_asset_id
-          ? (assets.find((a) => a.id === campaign.anchor_asset_id)?.url ?? null)
-          : latest(assets, "image");
+        const anchorAsset = campaign.anchor_asset_id
+          ? assets.find((a) => a.id === campaign.anchor_asset_id)
+          : assets
+              .filter((a) => a.type === "image")
+              .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+        const anchorImg = anchorAsset?.url ?? null;
+        const anchorImgId = anchorAsset?.id ?? null;
         const vid =
           latest(assets, "video") ??
           campaign.expansion_data?.video?.url ??
@@ -173,6 +178,7 @@ export default function CompositorPage() {
 
         setCampaignAssets({
           imageUrl: anchorImg,
+          imageAssetId: anchorImgId,
           videoUrl: vid,
           audioUrl: audio,
           caption: captionText,
