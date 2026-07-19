@@ -31,7 +31,7 @@ type Expansions = { video?: Expansion; music?: Expansion; script?: Expansion };
 // component state) so they SURVIVE navigating away to Compose and back — users
 // must not lose prompts they typed.
 export interface ExpandDrafts {
-  videoDuration: 5 | 10 | 30;
+  videoDuration: 10 | 15 | 30;
   videoStyle: string;
   musicGenre: string;
   musicModel: string;

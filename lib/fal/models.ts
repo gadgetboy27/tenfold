@@ -1,18 +1,18 @@
 // Single source for the current default video endpoint — the VIDEO_MODELS
 // registry below owns model identity; FAL_MODELS keeps the duration-tier keys
-// (video_5s/10s/30s) pointing at it so enqueueJob() keeps resolving by tier.
+// (video_10s/15s/30s) pointing at it so enqueueJob() keeps resolving by tier.
 const DEFAULT_VIDEO_ENDPOINT = "fal-ai/kling-video/v3/pro/image-to-video";
 
 export const FAL_MODELS = {
   image_generation: "fal-ai/flux-pro/v1.1-ultra",
   image_variation: "fal-ai/flux-pro/kontext",
   upscale: "fal-ai/clarity-upscaler",
-  // Kling v3 Pro (image-to-video): 3–15s per call. video_30s renders as 2× 15s
-  // segments concatenated (see webhooks/fal + jobs). Input schema + field names
-  // come from VIDEO_MODELS / videoInputFor — NOT hand-built (see the bug history
-  // there: it's start_image_url, duration as a STRING, generate_audio off).
-  video_5s: DEFAULT_VIDEO_ENDPOINT,
+  // Kling v3 Pro (image-to-video): 3–15s per call. 10s/15s are single calls;
+  // video_30s renders as 2× 15s segments concatenated (see webhooks/fal + jobs).
+  // Input schema + field names come from VIDEO_MODELS / videoInputFor — NOT
+  // hand-built (it's start_image_url, duration as a STRING, generate_audio off).
   video_10s: DEFAULT_VIDEO_ENDPOINT,
+  video_15s: DEFAULT_VIDEO_ENDPOINT,
   video_30s: DEFAULT_VIDEO_ENDPOINT,
   music_generation: "fal-ai/stable-audio",
   // ── Logo Studio (Recraft V4.1). Endpoint IDs verified against fal.ai/models
