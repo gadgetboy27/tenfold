@@ -97,7 +97,41 @@ export async function concatVideos(
       ]);
     }
 
-    const buffer = await readFile(outPath);
+    // Size guard. The stream-copied 30s (2× 15s Kling) lands ~40–60 MB, over
+    // Supabase's project-global 50 MB upload cap (a bucket limit can't exceed the
+    // global one, so raising the bucket alone doesn't help). Re-encode with a
+    // bitrate ceiling so the upload always fits — 6 Mbit/s × 30s ≈ 22 MB. Quality
+    // stays strong for social. Only pay this cost when the fast copy is too big.
+    let uploadPath = outPath;
+    const SAFE_BYTES = 45 * 1024 * 1024;
+    if ((await readFile(outPath)).length > SAFE_BYTES) {
+      const compressed = join(dir, "out-fit.mp4");
+      await run("ffmpeg", [
+        "-y",
+        "-i",
+        outPath,
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "26",
+        "-maxrate",
+        "6M",
+        "-bufsize",
+        "12M",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac", // harmless when the clip has no audio track
+        "-movflags",
+        "+faststart",
+        compressed,
+      ]);
+      uploadPath = compressed;
+    }
+
+    const buffer = await readFile(uploadPath);
     const admin = createSupabaseAdminClient();
     const storagePath = `${input.workspaceId}/${input.campaignId}/video-${input.name}.mp4`;
     const { error } = await admin.storage
