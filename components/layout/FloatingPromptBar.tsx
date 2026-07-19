@@ -107,6 +107,9 @@ export default function FloatingPromptBar() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [model, setModel] = useState("flux-pro");
+  // Variety pack: instead of one model, generate the anchor set across the top
+  // models (2 each) so the user picks the look they prefer. Overrides `model`.
+  const [variety, setVariety] = useState(false);
   const [models, setModels] = useState<ModelOption[]>([]);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -162,6 +165,7 @@ export default function FloatingPromptBar() {
           aspectRatio,
           style,
           model,
+          variety,
           name: campaignName,
         }),
         workspaceSlug,
@@ -466,6 +470,20 @@ export default function FloatingPromptBar() {
                       {m.label}
                     </button>
                   ))}
+                  <div className="w-px h-4 bg-white/10 mx-1" />
+                  <button
+                    type="button"
+                    title="Generate 6 anchors across the top 3 models (2 each) so you can pick the look you prefer. Pro."
+                    onClick={() => setVariety((v) => !v)}
+                    className={`px-2.5 py-1 rounded-md text-xs transition-all flex items-center gap-1 border ${
+                      variety
+                        ? "bg-[#7C5CFC]/20 text-[#7C5CFC] border-[#7C5CFC]/40"
+                        : "text-[#888] hover:text-[#F0F0F0] border-transparent"
+                    }`}
+                    data-testid="button-variety-pack"
+                  >
+                    <Sparkles className="w-3 h-3" /> Variety pack
+                  </button>
                 </>
               )}
               {score !== null && (

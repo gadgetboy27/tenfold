@@ -7,6 +7,10 @@ export const createCampaignSchema = z.object({
   aspectRatio: z.enum(["1:1", "4:5", "16:9", "9:16"]).optional(),
   style: z.string().max(100).optional(),
   model: z.string().max(40).optional(),
+  /** Variety pack: spread the anchor set across the top image models (2 each)
+   *  instead of one, so the user picks the look they like — and we learn which
+   *  models they prefer. Pro-only (uses premium models). */
+  variety: z.boolean().optional(),
   parameters: z
     .object({
       aspectRatio: z

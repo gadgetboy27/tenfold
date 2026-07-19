@@ -85,6 +85,7 @@ export async function POST(req: Request) {
           label: string;
           prompt?: string;
           requestId?: string;
+          modelId?: string;
         }>
       | undefined) ?? [];
   // Video_30s ties two segment fal requests to one job (like directions).
@@ -191,6 +192,7 @@ async function handleSuccess(
     label: string;
     prompt?: string;
     requestId?: string;
+    modelId?: string;
   } | null = null,
   segIndex: number | null = null,
 ) {
@@ -251,6 +253,8 @@ async function handleSuccess(
                 direction_index: direction.index,
                 prompt: direction.prompt,
                 request_id: direction.requestId,
+                // Variety pack: which model made this image — the pick signal.
+                ...(direction.modelId ? { model: direction.modelId } : {}),
               }
             : job.type === "upscale"
               ? {

@@ -5,7 +5,13 @@ import { createCampaignSchema } from "@/lib/validation/schemas";
 import { debitCreditsAmount } from "@/lib/credits/debit";
 import { refundCredits } from "@/lib/credits/refund";
 import { enqueueWithFallback } from "@/lib/fal/queue";
-import { getImageModel, imageFallbackEndpoints } from "@/lib/fal/models";
+import {
+  getImageModel,
+  imageFallbackEndpoints,
+  VARIETY_IMAGE_MODELS,
+  imageInputFor,
+} from "@/lib/fal/models";
+import { CREDIT_COSTS } from "@/lib/credits/costs";
 import { validatePrompt } from "@/lib/fal/prompt-validator";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { v4 as uuidv4 } from "uuid";
@@ -160,6 +166,20 @@ export async function POST(req: Request) {
       );
     }
 
+    // Variety pack: the anchor set spans the top models (2 each) so the user
+    // picks the look they prefer — Pro-only (premium models).
+    const variety = body.variety === true;
+    if (variety && !ent.isPro) {
+      return NextResponse.json(
+        {
+          error:
+            "The variety pack (top models, side by side) is a Pro feature — upgrade to use it.",
+          upgrade: true,
+        },
+        { status: 403 },
+      );
+    }
+
     // 0. Validate prompt quality before touching credits. The validator assists
     //    rather than blocks: a weak prompt is auto-upgraded to the AI-refined
     //    version and generation proceeds. We only hard-reject when there is
@@ -192,7 +212,7 @@ export async function POST(req: Request) {
 
     const campaignId = uuidv4();
     const jobId = uuidv4();
-    const cost = imageModel.creditCost;
+    const cost = variety ? CREDIT_COSTS.image_variety : imageModel.creditCost;
 
     // 1. Debit credits before anything else (per-model cost)
     const debit = await debitCreditsAmount(
@@ -212,14 +232,32 @@ export async function POST(req: Request) {
       ASPECT_TO_IMAGE_SIZE[body.aspectRatio ?? "1:1"] ?? "square_hd";
     const styleSuffix = STYLE_SUFFIXES[body.style ?? ""] ?? "";
 
-    // Four DISTINCT creative directions (AI-generated, hardcoded-lens fallback)
-    // so the anchor set genuinely contrasts instead of being near-duplicates.
-    // Still 4 images total, so the credit cost is unchanged.
-    const directions = validation.directions.map((d, i) => ({
-      index: i,
-      label: d.label,
-      prompt: styleSuffix ? `${d.prompt}, ${styleSuffix}` : d.prompt,
-    }));
+    // Normal: N distinct creative directions from ONE model. Variety pack: the
+    // top 3 models each render the same 2 directions (2 images per model = 6),
+    // so the six differ by MODEL and the user picks the look they prefer. Each
+    // variety direction carries its own modelId so the webhook can tag the
+    // asset — that tag is what powers the "which model do users pick" signal.
+    interface Direction {
+      index: number;
+      label: string;
+      prompt: string;
+      modelId?: string;
+    }
+    const withStyle = (p: string) => (styleSuffix ? `${p}, ${styleSuffix}` : p);
+    const directions: Direction[] = variety
+      ? VARIETY_IMAGE_MODELS.flatMap((m, mi) =>
+          validation.directions.slice(0, 2).map((d, di) => ({
+            index: mi * 2 + di,
+            label: `${m.label} · ${d.label}`,
+            prompt: withStyle(d.prompt),
+            modelId: m.id,
+          })),
+        )
+      : validation.directions.map((d, i) => ({
+          index: i,
+          label: d.label,
+          prompt: withStyle(d.prompt),
+        }));
 
     // 2. Create campaign row
     const { error: campErr } = await admin.from("campaigns").insert({
@@ -263,19 +301,28 @@ export async function POST(req: Request) {
       label: string;
       prompt: string;
       requestId: string;
+      modelId?: string;
     };
-    // Fire all four fal submits in parallel (not sequentially) so campaign start
-    // is ~4x faster. A direction that fails is dropped; the rest still run.
-    // Strategic fallback: try the chosen model, then fall through to more
-    // reliable fal endpoints if it hard-fails at submit (fal stumbles / bad call).
+    // Fire all fal submits in parallel so campaign start is fast. A direction
+    // that fails is dropped; the rest still run.
+    // - Normal: try the chosen model, then fall through to reliable endpoints.
+    // - Variety: each direction is pinned to ITS model (no cross-model fallback,
+    //   so the tag stays accurate) with that model's own params.
     const fallbackEndpoints = imageFallbackEndpoints(imageModel.id);
     const results = await Promise.all(
       directions.map(async (d): Promise<Submitted | null> => {
         const webhookUrl = `${process.env.APP_URL}/api/webhooks/fal?j=${jobId}&d=${d.index}`;
+        const vm = d.modelId
+          ? VARIETY_IMAGE_MODELS.find((m) => m.id === d.modelId)
+          : undefined;
+        const endpoints = vm ? [vm.endpoint] : fallbackEndpoints;
+        const input = vm
+          ? imageInputFor(vm, d.prompt, imageSize)
+          : { prompt: d.prompt, image_size: imageSize, num_images: 1 };
         try {
           const { requestId } = await enqueueWithFallback(
-            fallbackEndpoints,
-            { prompt: d.prompt, image_size: imageSize, num_images: 1 },
+            endpoints,
+            input,
             webhookUrl,
           );
           return { ...d, requestId };

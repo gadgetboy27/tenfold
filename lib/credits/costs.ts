@@ -1,5 +1,8 @@
 export const CREDIT_COSTS = {
   image_generation: 12,
+  // Variety pack: 6 anchors across 3 premium models (2 each) — pricier raw
+  // inference than a single-model set, and a Pro upsell.
+  image_variety: 20,
   image_variation: 3,
   upscale: 2,
   // Kling v3: 5s/10s are single calls; 30s is a real 2×15s render (drives the
