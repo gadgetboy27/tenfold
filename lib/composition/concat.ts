@@ -97,13 +97,14 @@ export async function concatVideos(
       ]);
     }
 
-    // Size guard. The stream-copied 30s (2× 15s Kling) lands ~40–60 MB, over
-    // Supabase's project-global 50 MB upload cap (a bucket limit can't exceed the
-    // global one, so raising the bucket alone doesn't help). Re-encode with a
-    // bitrate ceiling so the upload always fits — 6 Mbit/s × 30s ≈ 22 MB. Quality
-    // stays strong for social. Only pay this cost when the fast copy is too big.
+    // Size guard / last resort. The storage ceiling is now 500 MB (bucket +
+    // project-global both raised), and a stream-copied 30s HD render is ~40–80 MB,
+    // so it stores at FULL quality with no re-encode. We only re-encode as an
+    // emergency when a clip approaches the ceiling (e.g. a much longer/high-bitrate
+    // future render) — a hard bitrate ceiling then guarantees the upload still
+    // fits. Keep this comfortably below the 500 MB cap.
     let uploadPath = outPath;
-    const SAFE_BYTES = 45 * 1024 * 1024;
+    const SAFE_BYTES = 400 * 1024 * 1024;
     if ((await readFile(outPath)).length > SAFE_BYTES) {
       const compressed = join(dir, "out-fit.mp4");
       await run("ffmpeg", [
