@@ -516,7 +516,7 @@ export function Compositor({
         className={
           isPreview
             ? "fixed inset-0 z-50 flex flex-col gap-3 bg-black/95 p-4 sm:p-6"
-            : "flex min-h-0 flex-1 flex-col gap-3"
+            : "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto"
         }
       >
         <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
@@ -755,7 +755,10 @@ export function Compositor({
           />
         )}
 
-        <div className="min-h-0 flex-1">
+        {/* Guarantee a large canvas — at least ~58% of the viewport — so the
+            video is a comfortable size to layer on, matching the Compose
+            preview. The column scrolls if the floor pushes past the height. */}
+        <div className="min-h-[58vh] flex-1">
           <CompositorCanvas
             ref={canvasRef}
             playing={playing}
