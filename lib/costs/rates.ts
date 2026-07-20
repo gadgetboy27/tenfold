@@ -9,6 +9,8 @@ export const PROVIDER_COST_USD: Record<string, number> = {
   image_variation: 0.04,
   // fal.ai — Clarity Upscaler
   upscale: 0.012,
+  // fal.ai — BiRefNet v2 background removal
+  bg_remove: 0.02,
   // fal.ai — Kling v3 Pro (charged per second of output, ~$0.095/s). 30s renders
   // as 2× 15s segments, so ~2× the 15s cost. Tune against live fal pricing.
   video_10s: 0.95,

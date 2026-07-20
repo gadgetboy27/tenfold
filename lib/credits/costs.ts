@@ -5,6 +5,7 @@ export const CREDIT_COSTS = {
   image_variety: 20,
   image_variation: 3,
   upscale: 2,
+  bg_remove: 3, // Pro effect — BiRefNet cutout (~$0.02 raw)
   // Kling v3: 10s/15s are single calls; 30s is a real 2×15s render (drives the
   // higher cost — genuine 30s of footage is ~3× the inference of a 10s clip).
   video_10s: 25,

@@ -270,7 +270,13 @@ async function handleSuccess(
                   source_asset_id: job.input_params?.source_asset_id ?? null,
                   upscale_factor: 2,
                 }
-              : {},
+              : job.type === "bg_remove"
+                ? {
+                    effect: "bg_removed",
+                    transparent: true,
+                    source_asset_id: job.input_params?.source_asset_id ?? null,
+                  }
+                : {},
       });
     }
   }

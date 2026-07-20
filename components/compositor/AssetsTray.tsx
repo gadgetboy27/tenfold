@@ -11,15 +11,18 @@ import {
   Package,
   FileText,
   Wand2,
+  Scissors,
   Loader2,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button } from "@/components/ui/button";
 import { downloadCampaignPdf } from "@/lib/compositor/campaign-pdf";
+import { api } from "@/lib/api";
 import type { CampaignAssetBundle } from "./Compositor";
 
 interface AssetsTrayProps {
   assets: CampaignAssetBundle;
+  workspaceSlug: string;
   /** Drop the anchor image onto the canvas as a movable image layer. */
   onAddImage: (url: string) => void;
   /** Drop the caption onto the canvas as a text layer. */
@@ -67,13 +70,63 @@ const EXT: Record<string, string> = {
  */
 export function AssetsTray({
   assets,
+  workspaceSlug,
   onAddImage,
   onAddText,
   onRemix,
 }: AssetsTrayProps) {
   const [zipping, setZipping] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [bgBusy, setBgBusy] = useState(false);
   const { imageUrl, videoUrl, audioUrl, caption } = assets;
+
+  // Pro effect — remove the anchor image's background (BiRefNet) and drop the
+  // transparent cutout onto the canvas, ready to place over any backdrop.
+  const removeBackground = async () => {
+    if (!assets.imageAssetId) return;
+    setBgBusy(true);
+    const t = toast.loading("Removing background…");
+    try {
+      const res = await api(`/api/assets/${assets.imageAssetId}/bg-remove`, {
+        method: "POST",
+        workspaceSlug,
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        jobId?: string;
+        error?: string;
+        upgrade?: boolean;
+      };
+      if (!res.ok || !data.jobId) {
+        throw new Error(data.error ?? "Couldn't start background removal");
+      }
+      let url: string | null = null;
+      for (let i = 0; i < 40 && !url; i++) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const jr = await api(`/api/jobs/${data.jobId}`, { workspaceSlug });
+        if (!jr.ok) continue;
+        const job = (await jr.json()) as {
+          status: string;
+          outputUrls?: string[];
+        };
+        if (job.status === "ready" && job.outputUrls?.[0]) {
+          url = job.outputUrls[0];
+        } else if (job.status === "failed") {
+          throw new Error("Background removal failed");
+        }
+      }
+      if (!url) throw new Error("Background removal timed out");
+      onAddImage(url);
+      toast.success("Background removed — cutout added to the canvas", {
+        id: t,
+      });
+    } catch (err) {
+      toast.error((err as Error).message ?? "Background removal failed", {
+        id: t,
+      });
+    } finally {
+      setBgBusy(false);
+    }
+  };
 
   const makePdf = async () => {
     setPdfBusy(true);
@@ -216,6 +269,23 @@ export function AssetsTray({
                   title="Add to the canvas as a layer"
                 >
                   <Plus className="h-3 w-3" /> Add
+                </Button>
+              )}
+              {r.kind === "image" && r.url && assets.imageAssetId && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={bgBusy}
+                  className="h-6 gap-1 px-2 text-[11px]"
+                  onClick={removeBackground}
+                  title="Pro effect — cut the subject out of its background"
+                >
+                  {bgBusy ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Scissors className="h-3 w-3" />
+                  )}
+                  Remove BG
                 </Button>
               )}
               {r.kind === "image" && r.url && onRemix && (

@@ -7,6 +7,9 @@ export const FAL_MODELS = {
   image_generation: "fal-ai/flux-pro/v1.1-ultra",
   image_variation: "fal-ai/flux-pro/kontext",
   upscale: "fal-ai/clarity-upscaler",
+  // Pro effect — BiRefNet v2: image_url → transparent-PNG cutout (verified live
+  // Jul 2026). Output is a single `image` object, coalesced in the fal webhook.
+  bg_remove: "fal-ai/birefnet/v2",
   // Kling v3 Pro (image-to-video): 3–15s per call. 10s/15s are single calls;
   // video_30s renders as 2× 15s segments concatenated (see webhooks/fal + jobs).
   // Input schema + field names come from VIDEO_MODELS / videoInputFor — NOT

@@ -900,6 +900,7 @@ export function Compositor({
             {assets && (
               <AssetsTray
                 assets={assets}
+                workspaceSlug={params.workspace ?? ""}
                 onAddImage={addAnchorImageLayer}
                 onAddText={addCaptionLayer}
                 onRemix={assets.imageAssetId ? remixFromImage : undefined}
