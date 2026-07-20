@@ -17,10 +17,13 @@ import {
   Check,
   Loader2,
   ArrowRight,
+  Share2,
+  Crown,
 } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { Spinner } from "@/components/brand/Spinner";
 import CreditMeter from "@/components/shared/CreditMeter";
+import { useEntitlements } from "@/lib/billing/useEntitlements";
 import { useAppStore } from "@/store/useAppStore";
 import { api } from "@/lib/api";
 
@@ -59,6 +62,21 @@ const STAGE_LABELS = [
 export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
   const setWorkspaceSlug = useAppStore((s) => s.setWorkspaceSlug);
   const setCreditBalance = useAppStore((s) => s.setCreditBalance);
+  const ent = useEntitlements();
+
+  const share = async () => {
+    const url = window.location.href;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "My Tenfold campaign", url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        toast.success("Link copied to clipboard");
+      }
+    } catch {
+      /* the user dismissed the share sheet — nothing to do */
+    }
+  };
 
   const [section, setSection] = useState<SectionId>("brief");
   const [prompt, setPrompt] = useState("");
@@ -297,7 +315,29 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
           <span className="rounded-full border border-primary/40 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">
             Studio
           </span>
+          {ent && (
+            <span
+              className={`hidden items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider sm:inline-flex ${
+                ent.isPro
+                  ? "border border-amber-400/40 bg-gradient-to-r from-amber-400/25 to-amber-500/10 text-amber-400"
+                  : "border border-border text-muted-foreground"
+              }`}
+              title={`${ent.label} plan`}
+            >
+              {ent.isPro && <Crown className="h-3 w-3" />}
+              {ent.label}
+            </span>
+          )}
           <div className="ml-auto flex items-center gap-3">
+            <button
+              type="button"
+              onClick={share}
+              title="Share this campaign"
+              aria-label="Share this campaign"
+              className="hidden h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:text-foreground sm:flex"
+            >
+              <Share2 className="h-4 w-4" />
+            </button>
             <div className="hidden items-center rounded-full border border-border p-0.5 text-xs font-medium sm:flex">
               {(["simple", "cockpit"] as const).map((l) => (
                 <button
