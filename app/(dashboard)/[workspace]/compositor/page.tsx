@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { Compositor } from "@/components/compositor/Compositor";
 import { CaptionPresetRow } from "@/components/compositor/CaptionPresetRow";
+import { AppHeader } from "@/components/layout/AppHeader";
 import UpgradeModal from "@/components/billing/UpgradeModal";
 import { fetchCompositionDoc } from "@/components/compositor/export-client";
 import { openCampaignForPublish } from "@/lib/campaign/publish-nav";
@@ -324,158 +325,165 @@ export default function CompositorPage() {
   };
 
   return (
-    <div className="flex h-full flex-col gap-4 p-4 sm:p-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Clapperboard className="h-5 w-5 text-primary" />
-          <h1 className="text-lg font-semibold">
-            {campaignId ? "Finish with your brand" : "Compositor lab"}
-          </h1>
-          <span className="rounded-full border border-primary/40 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">
-            Beta
-          </span>
-        </div>
-        {campaignId ? (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={backToCompose}
-            className="gap-1.5 text-xs"
-            title="Go back to Compose to pick a different video"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" /> Back to Compose
-          </Button>
-        ) : (
-          doc && (
+    <div className="flex h-full flex-col">
+      <AppHeader
+        workspaceSlug={params.workspace}
+        backHref={`/${params.workspace}`}
+        backLabel="Dashboard"
+      />
+      <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 sm:p-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clapperboard className="h-5 w-5 text-primary" />
+            <h1 className="text-lg font-semibold">
+              {campaignId ? "Finish with your brand" : "Compositor lab"}
+            </h1>
+            <span className="rounded-full border border-primary/40 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">
+              Beta
+            </span>
+          </div>
+          {campaignId ? (
             <Button
               size="sm"
               variant="outline"
-              onClick={reset}
+              onClick={backToCompose}
               className="gap-1.5 text-xs"
+              title="Go back to Compose to pick a different video"
             >
-              <RotateCcw className="h-3.5 w-3.5" /> Start over
+              <ArrowLeft className="h-3.5 w-3.5" /> Back to Compose
             </Button>
-          )
-        )}
-      </div>
-
-      {exportedUrl && (
-        <div className="flex flex-col items-start justify-between gap-3 rounded-xl border border-primary/40 bg-primary/10 px-4 py-3 sm:flex-row sm:items-center">
-          <p className="text-sm">
-            🎬 Your finished film is rendered and saved — find it any time in{" "}
-            <Link
-              href={`/${params.workspace}/productions`}
-              className="font-medium text-primary underline"
-            >
-              Productions
-            </Link>
-            , or send it off now.
-          </p>
-          <div className="flex shrink-0 flex-wrap gap-2">
-            <a
-              href={exportedUrl}
-              target="_blank"
-              rel="noopener"
-              className="rounded-full border border-border px-4 py-1.5 text-sm hover:border-primary/50"
-            >
-              Preview
-            </a>
-            <button
-              onClick={() => downloadFile(exportedUrl)}
-              className="inline-flex items-center gap-1.5 rounded-full border border-border px-4 py-1.5 text-sm hover:border-primary/50"
-            >
-              <Download className="h-3.5 w-3.5" /> Download MP4
-            </button>
-            <Button size="sm" onClick={continueToPublish} className="gap-1.5">
-              Continue to publish <ArrowRight className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {initialising ? (
-        <div className="flex flex-1 items-center justify-center gap-3 text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          <span className="text-sm">Loading your footage and brand kit…</span>
-        </div>
-      ) : doc ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-3">
-          {/* Cinema mix, folded in as a preset: campaign mode only, since the
-              lab has no campaign caption to style. */}
-          {campaignId && (
-            <CaptionPresetRow
-              caption={composeCaption}
-              onUpgrade={() => setShowUpgrade(true)}
-            />
-          )}
-          <div className="min-h-0 flex-1">
-            <Compositor
-              campaignId={campaignId}
-              audioUrl={audioUrl}
-              assets={campaignAssets}
-              onExported={setExportedUrl}
-            />
-          </div>
-        </div>
-      ) : campaignId ? (
-        <div className="flex flex-1 items-center justify-center">
-          <p className="text-sm text-muted-foreground">
-            This campaign has no video yet — generate one in Step 3 first.
-          </p>
-        </div>
-      ) : (
-        <div className="flex flex-1 items-center justify-center">
-          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 text-center">
-            <p className="mb-1 font-semibold">Pick your background footage</p>
-            <p className="mb-6 text-sm text-muted-foreground">
-              Choose a video or image from this device, then layer your logo and
-              captions on top.
-            </p>
-            <div className="flex justify-center gap-3">
+          ) : (
+            doc && (
               <Button
-                onClick={() => videoRef.current?.click()}
-                className="gap-2"
-              >
-                <Film className="h-4 w-4" /> Video
-              </Button>
-              <Button
+                size="sm"
                 variant="outline"
-                onClick={() => imageRef.current?.click()}
-                className="gap-2"
+                onClick={reset}
+                className="gap-1.5 text-xs"
               >
-                <ImageIcon className="h-4 w-4" /> Image
+                <RotateCcw className="h-3.5 w-3.5" /> Start over
+              </Button>
+            )
+          )}
+        </div>
+
+        {exportedUrl && (
+          <div className="flex flex-col items-start justify-between gap-3 rounded-xl border border-primary/40 bg-primary/10 px-4 py-3 sm:flex-row sm:items-center">
+            <p className="text-sm">
+              🎬 Your finished film is rendered and saved — find it any time in{" "}
+              <Link
+                href={`/${params.workspace}/productions`}
+                className="font-medium text-primary underline"
+              >
+                Productions
+              </Link>
+              , or send it off now.
+            </p>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <a
+                href={exportedUrl}
+                target="_blank"
+                rel="noopener"
+                className="rounded-full border border-border px-4 py-1.5 text-sm hover:border-primary/50"
+              >
+                Preview
+              </a>
+              <button
+                onClick={() => downloadFile(exportedUrl)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-border px-4 py-1.5 text-sm hover:border-primary/50"
+              >
+                <Download className="h-3.5 w-3.5" /> Download MP4
+              </button>
+              <Button size="sm" onClick={continueToPublish} className="gap-1.5">
+                Continue to publish <ArrowRight className="h-3.5 w-3.5" />
               </Button>
             </div>
-            <input
-              ref={videoRef}
-              type="file"
-              accept="video/mp4,video/webm,video/quicktime"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) startLab(f, "video");
-              }}
-            />
-            <input
-              ref={imageRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) startLab(f, "image");
-              }}
-            />
           </div>
-        </div>
-      )}
+        )}
 
-      <UpgradeModal
-        open={showUpgrade}
-        onClose={() => setShowUpgrade(false)}
-        feature="cinematic caption styles"
-        blurb="Lower third and cinematic crawl are part of the Pro toolset."
-      />
+        {initialising ? (
+          <div className="flex flex-1 items-center justify-center gap-3 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <span className="text-sm">Loading your footage and brand kit…</span>
+          </div>
+        ) : doc ? (
+          <div className="flex min-h-0 flex-1 flex-col gap-3">
+            {/* Cinema mix, folded in as a preset: campaign mode only, since the
+              lab has no campaign caption to style. */}
+            {campaignId && (
+              <CaptionPresetRow
+                caption={composeCaption}
+                onUpgrade={() => setShowUpgrade(true)}
+              />
+            )}
+            <div className="min-h-0 flex-1">
+              <Compositor
+                campaignId={campaignId}
+                audioUrl={audioUrl}
+                assets={campaignAssets}
+                onExported={setExportedUrl}
+              />
+            </div>
+          </div>
+        ) : campaignId ? (
+          <div className="flex flex-1 items-center justify-center">
+            <p className="text-sm text-muted-foreground">
+              This campaign has no video yet — generate one in Step 3 first.
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-1 items-center justify-center">
+            <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 text-center">
+              <p className="mb-1 font-semibold">Pick your background footage</p>
+              <p className="mb-6 text-sm text-muted-foreground">
+                Choose a video or image from this device, then layer your logo
+                and captions on top.
+              </p>
+              <div className="flex justify-center gap-3">
+                <Button
+                  onClick={() => videoRef.current?.click()}
+                  className="gap-2"
+                >
+                  <Film className="h-4 w-4" /> Video
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => imageRef.current?.click()}
+                  className="gap-2"
+                >
+                  <ImageIcon className="h-4 w-4" /> Image
+                </Button>
+              </div>
+              <input
+                ref={videoRef}
+                type="file"
+                accept="video/mp4,video/webm,video/quicktime"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) startLab(f, "video");
+                }}
+              />
+              <input
+                ref={imageRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) startLab(f, "image");
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        <UpgradeModal
+          open={showUpgrade}
+          onClose={() => setShowUpgrade(false)}
+          feature="cinematic caption styles"
+          blurb="Lower third and cinematic crawl are part of the Pro toolset."
+        />
+      </div>
     </div>
   );
 }

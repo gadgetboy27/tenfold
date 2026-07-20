@@ -8,6 +8,8 @@ import { LogoRefine } from "./LogoRefine";
 import { LogoEditor } from "./LogoEditor";
 import { LogoLibrary, type LogoProjectSummary } from "./LogoLibrary";
 import type { LogoBrief as LogoBriefType } from "@/lib/logo/brief";
+import { useAppStore } from "@/store/useAppStore";
+import { api } from "@/lib/api";
 
 // The studio orchestrator. Holds the one piece of durable state — the project
 // id — and polls GET /api/logo/:id for assets as fal webhooks land them. Phases
@@ -68,6 +70,19 @@ export function LogoStudio() {
     const data = (await res.json()) as { projects: LogoProjectSummary[] };
     setProjects(data.projects ?? []);
   }, []);
+
+  // Keep the credit meter live: every logo action debits credits server-side, so
+  // pull the fresh balance after each spend — the user watches it tick down
+  // rather than being surprised when it hits zero.
+  const setCreditBalance = useAppStore((s) => s.setCreditBalance);
+  const refreshBalance = useCallback(() => {
+    api("/api/credits/balance", { workspaceSlug })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { balance?: number } | null) => {
+        if (typeof d?.balance === "number") setCreditBalance(d.balance);
+      })
+      .catch(() => {});
+  }, [workspaceSlug, setCreditBalance]);
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const deleteProject = useCallback(
@@ -185,6 +200,7 @@ export function LogoStudio() {
       if (!res.ok) throw new Error(data.error ?? "Could not start");
       setExpected(data.concepts ?? 6);
       setProjectId(data.projectId as string);
+      refreshBalance();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
@@ -222,6 +238,7 @@ export function LogoStudio() {
         body: JSON.stringify({ instruction }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
+      refreshBalance();
       // Restart polling — a new refine asset will arrive via webhook.
       if (!pollRef.current)
         pollRef.current = setInterval(() => void refresh(projectId), POLL_MS);
@@ -242,6 +259,7 @@ export function LogoStudio() {
         headers: { "Content-Type": "application/json" },
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
+      refreshBalance();
       if (!pollRef.current)
         pollRef.current = setInterval(() => void refresh(projectId), POLL_MS);
     } catch (e) {
@@ -262,6 +280,7 @@ export function LogoStudio() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Packaging failed");
       setBundle({ downloadUrl: data.downloadUrl, fileCount: data.fileCount });
+      refreshBalance();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
@@ -297,6 +316,7 @@ export function LogoStudio() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed");
       setExpectedMockups(data.mockups ?? 4);
+      refreshBalance();
       // Mockup scenes arrive via webhook — resume polling for them.
       if (!pollRef.current)
         pollRef.current = setInterval(() => void refresh(projectId), POLL_MS);
