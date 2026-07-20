@@ -242,48 +242,54 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
 
   return (
     <div className="flex h-screen bg-background text-foreground">
-      {/* ── tool rail ─────────────────────────────────────────── */}
-      <aside className="hidden w-56 shrink-0 flex-col gap-1 border-r border-border bg-card p-3 sm:flex">
-        <Link
-          href={`/${workspaceSlug}`}
-          className="mb-3 flex items-center px-2"
-        >
-          <Logo size={20} withWordmark />
-        </Link>
-        <span className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-          Build
-        </span>
-        {tools.slice(0, 5).map((t) => (
-          <ToolButton
-            key={t.id}
-            tool={t}
-            active={section === t.id}
-            onClick={() => (t.href ? undefined : setSection(t.id))}
-          />
-        ))}
-        <span className="px-2 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-          Finish
-        </span>
-        {tools.slice(5).map((t) => (
-          <ToolButton
-            key={t.id}
-            tool={t}
-            active={section === t.id}
-            onClick={() => (t.href ? undefined : setSection(t.id))}
-          />
-        ))}
-        <div className="flex-1" />
-        <div className="rounded-lg border border-border bg-background px-2.5 py-2 text-xs text-muted-foreground">
-          Studio preview — same engine, new canvas.
-        </div>
-      </aside>
+      {/* ── tool rail — Simple layout only. Cockpit puts navigation inside the
+             left input panel (true two-column workspace, no separate sidebar). ── */}
+      {layout === "simple" && (
+        <aside className="hidden w-56 shrink-0 flex-col gap-1 border-r border-border bg-card p-3 sm:flex">
+          <Link
+            href={`/${workspaceSlug}`}
+            className="mb-3 flex items-center px-2"
+          >
+            <Logo size={20} withWordmark />
+          </Link>
+          <span className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+            Build
+          </span>
+          {tools.slice(0, 5).map((t) => (
+            <ToolButton
+              key={t.id}
+              tool={t}
+              active={section === t.id}
+              onClick={() => (t.href ? undefined : setSection(t.id))}
+            />
+          ))}
+          <span className="px-2 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+            Finish
+          </span>
+          {tools.slice(5).map((t) => (
+            <ToolButton
+              key={t.id}
+              tool={t}
+              active={section === t.id}
+              onClick={() => (t.href ? undefined : setSection(t.id))}
+            />
+          ))}
+          <div className="flex-1" />
+          <div className="rounded-lg border border-border bg-background px-2.5 py-2 text-xs text-muted-foreground">
+            Studio preview — same engine, new canvas.
+          </div>
+        </aside>
+      )}
 
       {/* ── main ──────────────────────────────────────────────── */}
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center gap-3 border-b border-border px-4 py-2.5">
-          <div className="flex items-center gap-2 sm:hidden">
+          <Link
+            href={`/${workspaceSlug}`}
+            className={`items-center ${layout === "cockpit" ? "flex" : "flex sm:hidden"}`}
+          >
             <Logo size={18} withWordmark />
-          </div>
+          </Link>
           <span className="hidden text-sm font-medium sm:inline">
             {campaignId ? "Your campaign" : "New campaign"}
           </span>
@@ -331,12 +337,14 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
           </div>
         </header>
 
-        <main className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-8">
-          {layout === "cockpit" &&
-          (section === "brief" || section === "images") ? (
+        <main className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+          {layout === "cockpit" ? (
             <CockpitCreate
               workspaceSlug={workspaceSlug}
               campaignId={campaignId}
+              tools={tools}
+              section={section}
+              setSection={setSection}
               prompt={prompt}
               setPrompt={setPrompt}
               variety={variety}
@@ -624,10 +632,14 @@ function PlaceholderCanvas({
   );
 }
 
-/* ── Cockpit layout: input-left / result-right workspace ───────── */
+/* ── Cockpit: a TRUE two-column workspace — no sidebar. Navigation lives at the
+      top of the left input panel; the result sits persistently on the right. ── */
 function CockpitCreate({
   workspaceSlug,
   campaignId,
+  tools,
+  section,
+  setSection,
   prompt,
   setPrompt,
   variety,
@@ -642,6 +654,15 @@ function CockpitCreate({
 }: {
   workspaceSlug: string;
   campaignId: string | null;
+  tools: {
+    id: SectionId;
+    label: string;
+    icon: typeof PenLine;
+    done: boolean;
+    href?: string;
+  }[];
+  section: SectionId;
+  setSection: (s: SectionId) => void;
   prompt: string;
   setPrompt: (v: string) => void;
   variety: boolean;
@@ -654,7 +675,9 @@ function CockpitCreate({
   anchorId: string | null;
   onPick: (id: string) => void;
 }) {
+  const isCreate = section === "brief" || section === "images";
   const hasResult = generating || assets.length > 0;
+  const activeTool = tools.find((t) => t.id === section);
   const next = [
     { label: "Make it move", icon: Play, href: `/${workspaceSlug}` },
     {
@@ -672,113 +695,174 @@ function CockpitCreate({
   ];
 
   return (
-    <div className="grid h-full grid-cols-1 gap-5 lg:grid-cols-[minmax(300px,360px)_1fr]">
-      {/* ── input cockpit ─────────────────────────────────── */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Input</h2>
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
-            What you want
-          </span>
-        </div>
-
-        <div>
-          <label className="mb-1 block text-xs font-medium text-muted-foreground">
-            Prompt
-          </label>
-          <textarea
-            autoFocus
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={(e) => {
-              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") onGenerate();
-            }}
-            rows={4}
-            placeholder="A coffee roastery overlooking the bay at golden hour, steam rising off fresh beans…"
-            className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary/50"
-          />
-        </div>
-
-        <div>
-          <label className="mb-1 block text-xs font-medium text-muted-foreground">
-            Reference photo{" "}
-            <span className="text-muted-foreground/60">· optional</span>
-          </label>
-          <div className="flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border bg-background/50 px-3 py-5 text-center">
-            <Upload className="h-4 w-4 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">
-              Drop a product photo, or paste a URL
-            </span>
-            <span className="text-[10px] text-muted-foreground/60">
-              Bring-your-own image — coming to Studio
-            </span>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setVariety(!variety)}
-            className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${
-              variety
-                ? "border-primary/40 bg-primary/15 text-primary"
-                : "border-border text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <Sparkles className="h-3 w-3" /> Variety pack
-          </button>
-          <span className="text-[11px] text-muted-foreground/70">
-            {variety ? "20 credits" : "12 credits"}
-          </span>
-        </div>
-
-        <div className="mt-auto flex items-center gap-2 pt-1">
-          <button
-            type="button"
-            onClick={onReset}
-            className="rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Reset
-          </button>
-          <button
-            type="button"
-            onClick={onGenerate}
-            disabled={prompt.trim().length < 3 || generating}
-            className="ml-auto flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-opacity disabled:opacity-40"
-          >
-            {generating ? (
+    <div className="grid h-full grid-cols-1 gap-4 lg:grid-cols-[minmax(280px,320px)_1fr]">
+      {/* ── LEFT: navigation + input, one panel ─────────────── */}
+      <div className="flex min-h-0 flex-col gap-3 overflow-y-auto rounded-2xl border border-border bg-card p-3">
+        <nav className="flex flex-col gap-0.5">
+          {tools.map((t) => {
+            const Icon = t.icon;
+            const active = section === t.id;
+            const cls = `flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
+              active
+                ? "bg-primary/15 text-foreground"
+                : "text-muted-foreground hover:bg-background hover:text-foreground"
+            }`;
+            const inner = (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" /> Generating
+                <Icon className="h-4 w-4 shrink-0 opacity-90" />
+                <span>{t.label}</span>
+                <span
+                  className={`ml-auto h-1.5 w-1.5 rounded-full ${
+                    t.done
+                      ? "bg-emerald-500"
+                      : active
+                        ? "bg-primary"
+                        : "bg-border"
+                  }`}
+                />
               </>
+            );
+            return t.href ? (
+              <Link key={t.id} href={t.href} className={cls}>
+                {inner}
+              </Link>
             ) : (
-              <>
-                <Sparkles className="h-4 w-4" /> Generate
-                <span className="ml-1 rounded border border-white/25 px-1 text-[10px]">
-                  ⌘↵
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setSection(t.id)}
+                className={cls}
+              >
+                {inner}
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="border-t border-border" />
+
+        {isCreate ? (
+          <div className="flex min-h-0 flex-1 flex-col gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                Prompt
+              </label>
+              <textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                onKeyDown={(e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === "Enter")
+                    onGenerate();
+                }}
+                rows={4}
+                placeholder="A coffee roastery overlooking the bay at golden hour, steam rising off fresh beans…"
+                className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary/50"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                Reference photo{" "}
+                <span className="text-muted-foreground/60">· optional</span>
+              </label>
+              <div className="flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border bg-background/50 px-3 py-4 text-center">
+                <Upload className="h-4 w-4 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">
+                  Drop a product photo, or paste a URL
                 </span>
-              </>
+                <span className="text-[10px] text-muted-foreground/60">
+                  Bring-your-own image — coming to Studio
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setVariety(!variety)}
+                className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${
+                  variety
+                    ? "border-primary/40 bg-primary/15 text-primary"
+                    : "border-border text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Sparkles className="h-3 w-3" /> Variety pack
+              </button>
+              <span className="text-[11px] text-muted-foreground/70">
+                {variety ? "20 credits" : "12 credits"}
+              </span>
+            </div>
+
+            <div className="mt-auto flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={onReset}
+                className="rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                onClick={onGenerate}
+                disabled={prompt.trim().length < 3 || generating}
+                className="ml-auto flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-opacity disabled:opacity-40"
+              >
+                {generating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Generating
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4" /> Generate
+                    <span className="ml-1 rounded border border-white/25 px-1 text-[10px]">
+                      ⌘↵
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 px-2 text-center">
+            <p className="text-sm text-muted-foreground">
+              {anchorId
+                ? `${activeTool?.label} runs in the classic flow for now — same engine.`
+                : "Generate your images first — this builds on the look you pick."}
+            </p>
+            {activeTool?.href && (
+              <Link
+                href={activeTool.href}
+                className="mt-1 flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+              >
+                Open {activeTool.label} <ArrowRight className="h-4 w-4" />
+              </Link>
             )}
-          </button>
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* ── result ────────────────────────────────────────── */}
-      <div className="flex min-h-0 flex-col gap-3 rounded-2xl border border-border bg-card p-4">
+      {/* ── RIGHT: the persistent result ────────────────────── */}
+      <div className="flex min-h-0 flex-col gap-3 overflow-y-auto rounded-2xl border border-border bg-card p-4">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold">Result</h2>
-          {assets.length > 0 && !generating && (
+          {isCreate && assets.length > 0 && !generating && (
             <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-500">
               Completed
             </span>
           )}
-          {generating && (
+          {isCreate && generating && (
             <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary">
               Running
             </span>
           )}
         </div>
 
-        {!hasResult ? (
+        {!isCreate ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
+            <ImagesIcon className="h-7 w-7 opacity-30" />
+            <p className="text-sm">{activeTool?.label} preview appears here.</p>
+          </div>
+        ) : !hasResult ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
             <ImagesIcon className="h-7 w-7 opacity-40" />
             <p className="text-sm">Your options will appear here.</p>
