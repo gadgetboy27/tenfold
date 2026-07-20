@@ -276,11 +276,11 @@ export default function Step4Compose() {
     <div className="h-full flex flex-col md:flex-row gap-5 md:gap-6 p-4 sm:p-6 overflow-y-auto">
       {/* ── Left: image + video + music ── */}
       <div className="flex-1 flex flex-col gap-4 min-w-0">
-        {/* Still and film sit SIDE BY SIDE once both exist. Stacked, they each
-            got a thin horizontal slice of a ~940px column while two thirds of
-            the width sat empty; paired, they use the width and each gets more
-            height. Alone, the still takes the full column. */}
-        <div className={cn("grid gap-4", video && "lg:grid-cols-2")}>
+        {/* Still and film STACK on their own rows (all screen sizes) so each —
+            especially the film — gets the full column width. A larger video
+            makes layering a logo or caption onto it far easier to see and
+            manage than a cramped side-by-side card. */}
+        <div className="grid gap-4">
           {/* Static image preview */}
           <div className="bg-card border border-border rounded-xl flex items-center justify-center p-4">
             {anchor ? (

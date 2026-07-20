@@ -510,7 +510,7 @@ export function Compositor({
   };
 
   return (
-    <div className="flex h-full flex-col gap-4 md:flex-row">
+    <div className="flex h-full flex-col gap-4 lg:flex-row">
       {/* ── Canvas + transport (expands to a clean fullscreen preview) ── */}
       <div
         className={
@@ -818,7 +818,7 @@ export function Compositor({
 
       {/* ── Layer stack + properties (scrolls independently of the canvas) ── */}
       {!isPreview && (
-        <div className="flex w-full flex-col gap-4 md:min-h-0 md:w-80 md:shrink-0 md:overflow-y-auto md:pr-1">
+        <div className="flex w-full flex-col gap-4 lg:min-h-0 lg:w-80 lg:shrink-0 lg:overflow-y-auto lg:pr-1">
           <div className="rounded-xl border border-border bg-card p-4">
             <div className="mb-3 flex items-center justify-between">
               {/* Click "Layers +" to add — then switch its type with the
