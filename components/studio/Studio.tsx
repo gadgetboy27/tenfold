@@ -21,6 +21,8 @@ import {
   Crown,
   Scissors,
   Lock,
+  LayoutGrid,
+  List as ListIcon,
 } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { Spinner } from "@/components/brand/Spinner";
@@ -39,6 +41,7 @@ import { api } from "@/lib/api";
  */
 
 type SectionId =
+  | "projects"
   | "brief"
   | "images"
   | "video"
@@ -47,6 +50,14 @@ type SectionId =
   | "compositor"
   | "logo"
   | "publish";
+
+interface ProjectSummary {
+  id: string;
+  name: string | null;
+  status: string;
+  thumbnailUrl: string | null;
+  created_at: string;
+}
 
 interface Anchor {
   id: string;
@@ -259,6 +270,65 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
     }
   };
 
+  // Open a past project into the canvas — rehydrate its state and land on the
+  // right stage. Never leaves the surface.
+  const openProject = async (id: string) => {
+    try {
+      const res = await api(`/api/campaigns/${id}`, { workspaceSlug });
+      if (!res.ok) throw new Error("Couldn't open that project");
+      const camp = (await res.json()) as {
+        name?: string | null;
+        anchor_asset_id?: string | null;
+        assets?: {
+          id: string;
+          type: string;
+          url: string;
+          created_at: string;
+          metadata?: { model?: string; direction?: string; hd?: boolean };
+        }[];
+        expansion_data?: { video?: { url?: string | null } };
+      };
+      const list = camp.assets ?? [];
+      const imgs = list
+        .filter((a) => a.type === "image" && !a.metadata?.hd)
+        .map((a) => ({
+          id: a.id,
+          url: a.url,
+          label: a.metadata?.model ?? a.metadata?.direction ?? "",
+        }));
+      const vid =
+        list
+          .filter((a) => a.type === "video")
+          .sort((a, b) => b.created_at.localeCompare(a.created_at))[0]?.url ??
+        camp.expansion_data?.video?.url ??
+        null;
+      setCampaignId(id);
+      setCampaignName(camp.name?.trim() || randomCampaignName());
+      setAssets(imgs);
+      setAnchorId(camp.anchor_asset_id ?? null);
+      setEnhancedUrl(null);
+      setVideoUrl(vid);
+      setGenerating(false);
+      setSection(
+        camp.anchor_asset_id ? "video" : imgs.length ? "images" : "brief",
+      );
+    } catch (err) {
+      toast.error((err as Error).message ?? "Couldn't open that project");
+    }
+  };
+
+  const newProject = () => {
+    setCampaignId(null);
+    setCampaignName(randomCampaignName());
+    setPrompt("");
+    setAssets([]);
+    setAnchorId(null);
+    setEnhancedUrl(null);
+    setVideoUrl(null);
+    setGenerating(false);
+    setSection("brief");
+  };
+
   const anchor = assets.find((a) => a.id === anchorId) ?? null;
 
   // Bring the chosen still to life — the classic video pipeline (Kling), driven
@@ -420,12 +490,32 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
              left input panel (true two-column workspace, no separate sidebar). ── */}
       {layout === "simple" && (
         <aside className="hidden w-56 shrink-0 flex-col gap-1 border-r border-border bg-card p-3 sm:flex">
-          <Link
-            href={`/${workspaceSlug}`}
+          <button
+            type="button"
+            onClick={() => setSection("projects")}
+            title="Your projects"
             className="mb-3 flex items-center px-2"
           >
             <Logo size={20} withWordmark />
-          </Link>
+          </button>
+          <button
+            type="button"
+            onClick={() => setSection("projects")}
+            className={`flex items-center gap-3 rounded-lg border px-2.5 py-2 text-sm font-medium transition-colors ${
+              section === "projects"
+                ? "border-primary/40 bg-primary/15 text-foreground"
+                : "border-transparent text-muted-foreground hover:bg-background hover:text-foreground"
+            }`}
+          >
+            <ImagesIcon className="h-4 w-4 shrink-0 opacity-90" /> Projects
+          </button>
+          <button
+            type="button"
+            onClick={newProject}
+            className="mb-1 flex items-center gap-3 rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/15"
+          >
+            <Sparkles className="h-4 w-4 shrink-0" /> New campaign
+          </button>
           <span className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
             Build
           </span>
@@ -458,12 +548,14 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
       {/* ── main ──────────────────────────────────────────────── */}
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center gap-3 border-b border-border px-4 py-2.5">
-          <Link
-            href={`/${workspaceSlug}`}
+          <button
+            type="button"
+            onClick={() => setSection("projects")}
+            title="Your projects"
             className={`items-center ${layout === "cockpit" ? "flex" : "flex sm:hidden"}`}
           >
             <Logo size={18} withWordmark />
-          </Link>
+          </button>
           <input
             value={campaignName}
             onChange={(e) => setCampaignName(e.target.value)}
@@ -543,7 +635,13 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
         </header>
 
         <main className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
-          {layout === "cockpit" ? (
+          {section === "projects" ? (
+            <ProjectsCanvas
+              workspaceSlug={workspaceSlug}
+              onOpen={openProject}
+              onNew={newProject}
+            />
+          ) : layout === "cockpit" ? (
             <CockpitCreate
               workspaceSlug={workspaceSlug}
               campaignId={campaignId}
@@ -1533,6 +1631,204 @@ function VideoCanvas(props: {
             generating={props.generating}
             onGenerate={props.onGenerate}
           />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Projects: the front door — browse past campaigns in the canvas ───────── */
+function timeAgo(iso: string): string {
+  const d = new Date(iso).getTime();
+  const s = Math.max(1, Math.floor((Date.now() - d) / 1000));
+  if (s < 60) return "just now";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const days = Math.floor(h / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+const STATUS_TONE: Record<string, string> = {
+  ready: "text-emerald-500",
+  generating: "text-primary",
+  failed: "text-red-400",
+};
+
+function ProjectsCanvas({
+  workspaceSlug,
+  onOpen,
+  onNew,
+}: {
+  workspaceSlug: string;
+  onOpen: (id: string) => void;
+  onNew: () => void;
+}) {
+  const [list, setList] = useState<ProjectSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [view, setView] = useState<"grid" | "row">("grid");
+
+  useEffect(() => {
+    const saved = localStorage.getItem("tf-studio-projects-view");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time mount init
+    if (saved === "row" || saved === "grid") setView(saved);
+  }, []);
+  const chooseView = (v: "grid" | "row") => {
+    setView(v);
+    try {
+      localStorage.setItem("tf-studio-projects-view", v);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+    api("/api/campaigns", { workspaceSlug })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d: ProjectSummary[]) => {
+        if (active) setList(Array.isArray(d) ? d : []);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [workspaceSlug]);
+
+  return (
+    <div className="mx-auto flex h-full max-w-5xl flex-col gap-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">
+            Your projects
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Pick up where you left off, or start something new.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center rounded-lg border border-border p-0.5">
+            <button
+              type="button"
+              onClick={() => chooseView("grid")}
+              title="Grid"
+              aria-label="Grid view"
+              className={`rounded-md p-1.5 ${view === "grid" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => chooseView("row")}
+              title="List"
+              aria-label="List view"
+              className={`rounded-md p-1.5 ${view === "row" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              <ListIcon className="h-4 w-4" />
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={onNew}
+            className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+          >
+            <Sparkles className="h-4 w-4" /> New campaign
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex flex-1 items-center justify-center">
+          <Spinner size={40} />
+        </div>
+      ) : list.length === 0 ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center text-muted-foreground">
+          <ImagesIcon className="h-8 w-8 opacity-40" />
+          <p className="text-sm">No projects yet — let’s make your first ad.</p>
+          <button
+            type="button"
+            onClick={onNew}
+            className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+          >
+            <Sparkles className="h-4 w-4" /> New campaign
+          </button>
+        </div>
+      ) : view === "grid" ? (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {list.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onOpen(p.id)}
+              className="group flex flex-col overflow-hidden rounded-xl border border-border text-left transition-colors hover:border-primary/50"
+            >
+              <div className="flex aspect-square items-center justify-center bg-background">
+                {p.thumbnailUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={p.thumbnailUrl}
+                    alt={p.name ?? "Project"}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <ImagesIcon className="h-6 w-6 text-muted-foreground/40" />
+                )}
+              </div>
+              <div className="border-t border-border px-3 py-2">
+                <p className="truncate text-sm font-medium">
+                  {p.name || "Untitled"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  <span
+                    className={STATUS_TONE[p.status] ?? "text-muted-foreground"}
+                  >
+                    {p.status}
+                  </span>{" "}
+                  · {timeAgo(p.created_at)}
+                </p>
+              </div>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {list.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onOpen(p.id)}
+              className="flex items-center gap-3 rounded-lg border border-border px-2.5 py-2 text-left transition-colors hover:border-primary/50"
+            >
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md bg-background">
+                {p.thumbnailUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={p.thumbnailUrl}
+                    alt={p.name ?? "Project"}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <ImagesIcon className="h-4 w-4 text-muted-foreground/40" />
+                )}
+              </div>
+              <span className="flex-1 truncate text-sm font-medium">
+                {p.name || "Untitled"}
+              </span>
+              <span
+                className={`text-xs ${STATUS_TONE[p.status] ?? "text-muted-foreground"}`}
+              >
+                {p.status}
+              </span>
+              <span className="w-16 shrink-0 text-right text-xs text-muted-foreground">
+                {timeAgo(p.created_at)}
+              </span>
+            </button>
+          ))}
         </div>
       )}
     </div>
