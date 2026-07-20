@@ -24,6 +24,7 @@ import { Logo } from "@/components/brand/Logo";
 import { Spinner } from "@/components/brand/Spinner";
 import CreditMeter from "@/components/shared/CreditMeter";
 import { useEntitlements } from "@/lib/billing/useEntitlements";
+import { randomCampaignName } from "@/lib/util/campaign-name";
 import { useAppStore } from "@/store/useAppStore";
 import { api } from "@/lib/api";
 
@@ -91,6 +92,9 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
   };
 
   const [section, setSection] = useState<SectionId>("brief");
+  // Pre-fill a friendly random project name; the user can keep it, clear it, or
+  // rename it. Persisted to the campaign once one exists.
+  const [campaignName, setCampaignName] = useState(randomCampaignName);
   const [prompt, setPrompt] = useState("");
   const [variety, setVariety] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -140,6 +144,19 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
     refreshBalance();
   }, [workspaceSlug, setWorkspaceSlug, refreshBalance]);
 
+  // Persist the project name (once a campaign exists); never leave it blank.
+  const saveName = () => {
+    const name = campaignName.trim() || randomCampaignName();
+    if (name !== campaignName) setCampaignName(name);
+    if (campaignId) {
+      api(`/api/campaigns/${campaignId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name }),
+        workspaceSlug,
+      }).catch(() => {});
+    }
+  };
+
   const generate = async () => {
     if (prompt.trim().length < 3 || generating) return;
     setGenerating(true);
@@ -150,7 +167,11 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
     try {
       const res = await api("/api/campaigns", {
         method: "POST",
-        body: JSON.stringify({ prompt: prompt.trim(), variety }),
+        body: JSON.stringify({
+          prompt: prompt.trim(),
+          variety,
+          name: campaignName.trim() || randomCampaignName(),
+        }),
         workspaceSlug,
       });
       const data = (await res.json().catch(() => ({}))) as {
@@ -383,9 +404,18 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
           >
             <Logo size={18} withWordmark />
           </Link>
-          <span className="hidden text-sm font-medium sm:inline">
-            {campaignId ? "Your campaign" : "New campaign"}
-          </span>
+          <input
+            value={campaignName}
+            onChange={(e) => setCampaignName(e.target.value)}
+            onBlur={saveName}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+            }}
+            placeholder="Name your project"
+            aria-label="Project name"
+            spellCheck={false}
+            className="hidden max-w-[220px] rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-sm font-medium text-foreground outline-none transition-colors hover:border-border focus:border-primary/50 focus:bg-background sm:block"
+          />
           <span className="rounded-full border border-primary/40 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">
             Studio
           </span>
@@ -469,6 +499,8 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
                 setPrompt("");
                 setAssets([]);
                 setAnchorId(null);
+                setVideoUrl(null);
+                setCampaignName(randomCampaignName());
                 setSection("brief");
               }}
               generating={generating}
