@@ -11,11 +11,39 @@ async function submitToEndpoint(
   input: Record<string, unknown>,
   webhookUrl: string,
 ): Promise<{ requestId: string }> {
-  const result = await (fal.queue.submit as Submit)(endpoint, {
-    input,
-    webhookUrl,
-  });
-  return { requestId: result.request_id };
+  try {
+    const result = await (fal.queue.submit as Submit)(endpoint, {
+      input,
+      webhookUrl,
+    });
+    return { requestId: result.request_id };
+  } catch (err) {
+    // The fal client throws a bare "Unexpected status code: 422" and hides the
+    // validation detail on `.body`. Surface it so job.error_message tells us
+    // WHAT fal rejected instead of just the status.
+    const e = err as { status?: number; body?: unknown; message?: string };
+    let detail = "";
+    try {
+      detail =
+        typeof e.body === "string"
+          ? e.body
+          : e.body
+            ? JSON.stringify(e.body)
+            : "";
+    } catch {
+      /* body wasn't serialisable */
+    }
+    throw new Error(
+      [
+        `fal ${endpoint}`,
+        e.status ? `HTTP ${e.status}` : "",
+        detail || e.message,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+        .slice(0, 600),
+    );
+  }
 }
 
 export async function enqueueJob(
