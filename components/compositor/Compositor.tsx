@@ -744,21 +744,10 @@ export function Compositor({
           </div>
         )}
 
-        {!isPreview && (
-          <FormatRail
-            doc={doc}
-            formats={rail}
-            activeAspect={doc.aspect}
-            onPick={setAspect}
-            campaignId={campaignId}
-            workspaceSlug={params.workspace}
-          />
-        )}
-
-        {/* Guarantee a large canvas — at least ~58% of the viewport — so the
-            video is a comfortable size to layer on, matching the Compose
-            preview. The column scrolls if the floor pushes past the height. */}
-        <div className="min-h-[58vh] flex-1">
+        {/* Canvas sits right up top so it's visible without scrolling. A ~52vh
+            floor keeps it a comfortable size to layer on; the per-format
+            previews live BELOW it, and the column scrolls for the rest. */}
+        <div className="min-h-[52vh] flex-1">
           <CompositorCanvas
             ref={canvasRef}
             playing={playing}
@@ -817,6 +806,19 @@ export function Compositor({
             </Button>
           )}
         </div>
+
+        {/* Per-format previews live below the working canvas so they never push
+            it down — a secondary strip, not chrome above the video. */}
+        {!isPreview && (
+          <FormatRail
+            doc={doc}
+            formats={rail}
+            activeAspect={doc.aspect}
+            onPick={setAspect}
+            campaignId={campaignId}
+            workspaceSlug={params.workspace}
+          />
+        )}
       </div>
 
       {/* ── Layer stack + properties (scrolls independently of the canvas) ── */}

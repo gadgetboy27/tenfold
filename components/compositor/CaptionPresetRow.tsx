@@ -61,37 +61,38 @@ export function CaptionPresetRow({
   };
 
   return (
-    <div className="rounded-xl border border-border bg-card p-3">
-      <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-foreground">
-        <Film className="h-3.5 w-3.5 text-primary" /> Caption style
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        {CAPTION_PRESETS.map((p) => {
-          const locked = p.proOnly && !ent?.isPro;
-          const active = applied === p.id && !locked;
-          return (
-            <button
-              key={p.id}
-              type="button"
-              title={locked ? `${p.blurb} — Pro` : p.blurb}
-              onClick={() => (locked ? onUpgrade() : apply(p.id))}
-              className={`flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-all ${
-                active
-                  ? "border-primary/40 bg-primary/20 text-primary"
-                  : locked
-                    ? "border-transparent text-muted-foreground opacity-70"
-                    : "border-transparent text-muted-foreground hover:border-primary/40 hover:text-foreground"
-              }`}
-            >
-              {locked && <Lock className="h-3 w-3" />}
-              {p.label}
-            </button>
-          );
-        })}
-      </div>
-      <p className="mt-2 text-[11px] text-muted-foreground">
-        A starting point — drag, retime, or restyle the caption afterwards.
-      </p>
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-lg border border-border bg-card px-3 py-1.5">
+      <span
+        className="flex items-center gap-1.5 text-xs font-semibold text-foreground"
+        title="A starting point — drag, retime, or restyle the caption afterwards."
+      >
+        <Film className="h-3.5 w-3.5 text-primary" /> Caption
+      </span>
+      {CAPTION_PRESETS.map((p) => {
+        const locked = p.proOnly && !ent?.isPro;
+        const active = applied === p.id && !locked;
+        return (
+          <button
+            key={p.id}
+            type="button"
+            title={locked ? `${p.blurb} — Pro` : p.blurb}
+            onClick={() => (locked ? onUpgrade() : apply(p.id))}
+            className={`flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-all ${
+              active
+                ? "border-primary/40 bg-primary/20 text-primary"
+                : locked
+                  ? "border-transparent text-muted-foreground opacity-70"
+                  : "border-transparent text-muted-foreground hover:border-primary/40 hover:text-foreground"
+            }`}
+          >
+            {locked && <Lock className="h-3 w-3" />}
+            {p.label}
+          </button>
+        );
+      })}
+      <span className="ml-auto hidden text-[11px] text-muted-foreground md:inline">
+        drag or restyle after
+      </span>
     </div>
   );
 }

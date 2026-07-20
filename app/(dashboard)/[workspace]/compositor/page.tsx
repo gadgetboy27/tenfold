@@ -331,11 +331,11 @@ export default function CompositorPage() {
         backHref={`/${params.workspace}`}
         backLabel="Dashboard"
       />
-      <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 sm:p-6">
+      <div className="flex min-h-0 flex-1 flex-col gap-2.5 px-3 pb-3 pt-2 sm:px-4 sm:pb-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Clapperboard className="h-5 w-5 text-primary" />
-            <h1 className="text-lg font-semibold">
+            <Clapperboard className="h-4 w-4 text-primary" />
+            <h1 className="text-sm font-semibold">
               {campaignId ? "Finish with your brand" : "Compositor lab"}
             </h1>
             <span className="rounded-full border border-primary/40 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">
