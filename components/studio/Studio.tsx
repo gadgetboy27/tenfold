@@ -69,6 +69,24 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
   const [anchorId, setAnchorId] = useState<string | null>(null);
   const pollRef = useRef(false);
 
+  // Two layouts, same engine: "simple" (the calm centered canvas) and "cockpit"
+  // (fal-style input-left / result-right workspace). Simple stays the default so
+  // it's never lost; the choice persists so a flick back sticks.
+  const [layout, setLayout] = useState<"simple" | "cockpit">("simple");
+  useEffect(() => {
+    const saved = localStorage.getItem("tf-studio-layout");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time mount init from a persisted preference
+    if (saved === "cockpit" || saved === "simple") setLayout(saved);
+  }, []);
+  const chooseLayout = (l: "simple" | "cockpit") => {
+    setLayout(l);
+    try {
+      localStorage.setItem("tf-studio-layout", l);
+    } catch {
+      /* private mode — the choice just won't persist */
+    }
+  };
+
   const refreshBalance = useCallback(() => {
     api("/api/credits/balance", { workspaceSlug })
       .then((r) => (r.ok ? r.json() : null))
@@ -273,6 +291,22 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
             Studio
           </span>
           <div className="ml-auto flex items-center gap-3">
+            <div className="hidden items-center rounded-full border border-border p-0.5 text-xs font-medium sm:flex">
+              {(["simple", "cockpit"] as const).map((l) => (
+                <button
+                  key={l}
+                  type="button"
+                  onClick={() => chooseLayout(l)}
+                  className={`rounded-full px-2.5 py-1 capitalize transition-colors ${
+                    layout === l
+                      ? "bg-primary/15 text-primary"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
             <CreditMeter />
             <button
               type="button"
@@ -298,7 +332,29 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
         </header>
 
         <main className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-8">
-          {section === "brief" && (
+          {layout === "cockpit" &&
+          (section === "brief" || section === "images") ? (
+            <CockpitCreate
+              workspaceSlug={workspaceSlug}
+              campaignId={campaignId}
+              prompt={prompt}
+              setPrompt={setPrompt}
+              variety={variety}
+              setVariety={setVariety}
+              onGenerate={generate}
+              onReset={() => {
+                setPrompt("");
+                setAssets([]);
+                setAnchorId(null);
+                setSection("brief");
+              }}
+              generating={generating}
+              stage={stage}
+              assets={assets}
+              anchorId={anchorId}
+              onPick={pickAnchor}
+            />
+          ) : section === "brief" ? (
             <BriefCanvas
               prompt={prompt}
               setPrompt={setPrompt}
@@ -306,9 +362,7 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
               setVariety={setVariety}
               onGenerate={generate}
             />
-          )}
-
-          {section === "images" && (
+          ) : section === "images" ? (
             <ImagesCanvas
               generating={generating}
               stage={stage}
@@ -317,9 +371,7 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
               onPick={pickAnchor}
               onRegenerate={() => setSection("brief")}
             />
-          )}
-
-          {section !== "brief" && section !== "images" && (
+          ) : (
             <PlaceholderCanvas
               tool={tools.find((t) => t.id === section)!}
               anchorReady={anchorPicked}
@@ -568,6 +620,244 @@ function PlaceholderCanvas({
           Open {tool.label} <ArrowRight className="h-4 w-4" />
         </Link>
       )}
+    </div>
+  );
+}
+
+/* ── Cockpit layout: input-left / result-right workspace ───────── */
+function CockpitCreate({
+  workspaceSlug,
+  campaignId,
+  prompt,
+  setPrompt,
+  variety,
+  setVariety,
+  onGenerate,
+  onReset,
+  generating,
+  stage,
+  assets,
+  anchorId,
+  onPick,
+}: {
+  workspaceSlug: string;
+  campaignId: string | null;
+  prompt: string;
+  setPrompt: (v: string) => void;
+  variety: boolean;
+  setVariety: (v: boolean) => void;
+  onGenerate: () => void;
+  onReset: () => void;
+  generating: boolean;
+  stage: string;
+  assets: Anchor[];
+  anchorId: string | null;
+  onPick: (id: string) => void;
+}) {
+  const hasResult = generating || assets.length > 0;
+  const next = [
+    { label: "Make it move", icon: Play, href: `/${workspaceSlug}` },
+    {
+      label: "Write a caption",
+      icon: MessageSquare,
+      href: `/${workspaceSlug}`,
+    },
+    {
+      label: "Open compositor",
+      icon: Layers,
+      href: campaignId
+        ? `/${workspaceSlug}/compositor?campaign=${campaignId}`
+        : `/${workspaceSlug}/compositor`,
+    },
+  ];
+
+  return (
+    <div className="grid h-full grid-cols-1 gap-5 lg:grid-cols-[minmax(300px,360px)_1fr]">
+      {/* ── input cockpit ─────────────────────────────────── */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold">Input</h2>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
+            What you want
+          </span>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-xs font-medium text-muted-foreground">
+            Prompt
+          </label>
+          <textarea
+            autoFocus
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") onGenerate();
+            }}
+            rows={4}
+            placeholder="A coffee roastery overlooking the bay at golden hour, steam rising off fresh beans…"
+            className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary/50"
+          />
+        </div>
+
+        <div>
+          <label className="mb-1 block text-xs font-medium text-muted-foreground">
+            Reference photo{" "}
+            <span className="text-muted-foreground/60">· optional</span>
+          </label>
+          <div className="flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border bg-background/50 px-3 py-5 text-center">
+            <Upload className="h-4 w-4 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">
+              Drop a product photo, or paste a URL
+            </span>
+            <span className="text-[10px] text-muted-foreground/60">
+              Bring-your-own image — coming to Studio
+            </span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setVariety(!variety)}
+            className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${
+              variety
+                ? "border-primary/40 bg-primary/15 text-primary"
+                : "border-border text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Sparkles className="h-3 w-3" /> Variety pack
+          </button>
+          <span className="text-[11px] text-muted-foreground/70">
+            {variety ? "20 credits" : "12 credits"}
+          </span>
+        </div>
+
+        <div className="mt-auto flex items-center gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onReset}
+            className="rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Reset
+          </button>
+          <button
+            type="button"
+            onClick={onGenerate}
+            disabled={prompt.trim().length < 3 || generating}
+            className="ml-auto flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-opacity disabled:opacity-40"
+          >
+            {generating ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" /> Generating
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4" /> Generate
+                <span className="ml-1 rounded border border-white/25 px-1 text-[10px]">
+                  ⌘↵
+                </span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* ── result ────────────────────────────────────────── */}
+      <div className="flex min-h-0 flex-col gap-3 rounded-2xl border border-border bg-card p-4">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold">Result</h2>
+          {assets.length > 0 && !generating && (
+            <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-500">
+              Completed
+            </span>
+          )}
+          {generating && (
+            <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary">
+              Running
+            </span>
+          )}
+        </div>
+
+        {!hasResult ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
+            <ImagesIcon className="h-7 w-7 opacity-40" />
+            <p className="text-sm">Your options will appear here.</p>
+            <p className="text-xs text-muted-foreground/60">
+              Write a brief on the left and hit Generate.
+            </p>
+          </div>
+        ) : generating && assets.length === 0 ? (
+          <div className="flex flex-1 flex-col gap-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="aspect-square animate-pulse rounded-xl border border-border bg-background"
+                />
+              ))}
+            </div>
+            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" /> {stage}
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {assets.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => onPick(a.id)}
+                  className={`group relative aspect-square overflow-hidden rounded-xl border-2 transition-all ${
+                    anchorId === a.id
+                      ? "border-primary shadow-[0_0_0_3px] shadow-primary/25"
+                      : "border-border hover:border-primary/50"
+                  }`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={a.url}
+                    alt={a.label || "Option"}
+                    className="h-full w-full object-cover"
+                  />
+                  {a.label && (
+                    <span className="absolute left-1.5 top-1.5 rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-medium text-white">
+                      {a.label}
+                    </span>
+                  )}
+                  {anchorId === a.id && (
+                    <span className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded-full bg-primary text-primary-foreground">
+                      <Check className="h-3 w-3" />
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {anchorId && (
+              <div className="mt-auto rounded-xl border border-border bg-background p-3">
+                <p className="mb-2 text-xs font-medium text-muted-foreground">
+                  What would you like to do next?
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {next.map((n) => {
+                    const Icon = n.icon;
+                    return (
+                      <Link
+                        key={n.label}
+                        href={n.href}
+                        className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm transition-colors hover:border-primary/50 hover:text-primary"
+                      >
+                        <Icon className="h-3.5 w-3.5" /> {n.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
