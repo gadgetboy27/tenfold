@@ -59,6 +59,18 @@ const STAGE_LABELS = [
   [24, "Almost there…"],
 ] as const;
 
+// Established in the classic flow: 5s was dropped, so 10 / 15 / 30 (30s is Pro).
+const VIDEO_LENGTHS = [10, 15, 30] as const;
+const VIDEO_STYLES = ["Cinematic", "Fast-cut", "Dramatic", "Smooth"] as const;
+
+const VIDEO_STAGE_LABELS = [
+  [0, "Submitting your shot…"],
+  [4, "Waiting for a GPU…"],
+  [12, "Animating your scene…"],
+  [40, "Rendering the motion…"],
+  [80, "Finishing the cut…"],
+] as const;
+
 export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
   const setWorkspaceSlug = useAppStore((s) => s.setWorkspaceSlug);
   const setCreditBalance = useAppStore((s) => s.setCreditBalance);
@@ -87,6 +99,14 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
   const [assets, setAssets] = useState<Anchor[]>([]);
   const [anchorId, setAnchorId] = useState<string | null>(null);
   const pollRef = useRef(false);
+
+  // Video — same lengths + styles as the classic flow (10s / 15s / 30s).
+  const [videoDuration, setVideoDuration] = useState<10 | 15 | 30>(10);
+  const [videoStyle, setVideoStyle] =
+    useState<(typeof VIDEO_STYLES)[number]>("Cinematic");
+  const [videoGenerating, setVideoGenerating] = useState(false);
+  const [videoStage, setVideoStage] = useState("");
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
   // Two layouts, same engine: "simple" (the calm centered canvas) and "cockpit"
   // (fal-style input-left / result-right workspace). Simple stays the default so
@@ -207,8 +227,68 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
     }
   };
 
+  const anchor = assets.find((a) => a.id === anchorId) ?? null;
+
+  // Bring the chosen still to life — the classic video pipeline (Kling), driven
+  // from Studio. Same endpoint, same lengths/styles, result plays in the canvas.
+  const generateVideo = async () => {
+    if (!anchor || !campaignId || videoGenerating) return;
+    setVideoGenerating(true);
+    setVideoUrl(null);
+    setVideoStage(VIDEO_STAGE_LABELS[0][1]);
+    try {
+      const res = await api("/api/jobs", {
+        method: "POST",
+        body: JSON.stringify({
+          campaignId,
+          type: `video_${videoDuration}s`,
+          params: {
+            imageUrl: anchor.url,
+            prompt: "",
+            videoStyle,
+          },
+        }),
+        workspaceSlug,
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        jobId?: string;
+        error?: string;
+        upgrade?: boolean;
+      };
+      if (!res.ok || !data.jobId) {
+        throw new Error(data.error ?? "Couldn't start the video");
+      }
+      refreshBalance();
+      for (let i = 0; i < 160; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const elapsed = i * 2;
+        setVideoStage(
+          [...VIDEO_STAGE_LABELS].reverse().find(([t]) => elapsed >= t)?.[1] ??
+            VIDEO_STAGE_LABELS[0][1],
+        );
+        const jr = await api(`/api/jobs/${data.jobId}`, { workspaceSlug });
+        if (!jr.ok) continue;
+        const job = (await jr.json()) as {
+          status: string;
+          outputUrls?: string[];
+        };
+        if (job.status === "ready" && job.outputUrls?.[0]) {
+          setVideoUrl(job.outputUrls[0]);
+          refreshBalance();
+          toast.success("Your video is ready");
+          break;
+        }
+        if (job.status === "failed") throw new Error("Video generation failed");
+      }
+    } catch (err) {
+      toast.error((err as Error).message ?? "Video generation failed");
+    } finally {
+      setVideoGenerating(false);
+    }
+  };
+
   const anchorPicked = !!anchorId;
-  const publishReady = anchorPicked; // grows as more of the flow lands
+  const publishReady = anchorPicked || !!videoUrl; // grows as more of the flow lands
 
   const tools: {
     id: SectionId;
@@ -219,13 +299,7 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
   }[] = [
     { id: "brief", label: "Brief", icon: PenLine, done: !!campaignId },
     { id: "images", label: "Images", icon: ImagesIcon, done: anchorPicked },
-    {
-      id: "video",
-      label: "Video",
-      icon: Play,
-      done: false,
-      href: `/${workspaceSlug}`,
-    },
+    { id: "video", label: "Video", icon: Play, done: !!videoUrl },
     {
       id: "music",
       label: "Music",
@@ -402,6 +476,14 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
               assets={assets}
               anchorId={anchorId}
               onPick={pickAnchor}
+              videoDuration={videoDuration}
+              setVideoDuration={setVideoDuration}
+              videoStyle={videoStyle}
+              setVideoStyle={setVideoStyle}
+              videoGenerating={videoGenerating}
+              videoStage={videoStage}
+              videoUrl={videoUrl}
+              onGenerateVideo={generateVideo}
             />
           ) : section === "brief" ? (
             <BriefCanvas
@@ -419,6 +501,18 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
               anchorId={anchorId}
               onPick={pickAnchor}
               onRegenerate={() => setSection("brief")}
+            />
+          ) : section === "video" ? (
+            <VideoCanvas
+              hasAnchor={anchorPicked}
+              duration={videoDuration}
+              setDuration={setVideoDuration}
+              style={videoStyle}
+              setStyle={setVideoStyle}
+              generating={videoGenerating}
+              stage={videoStage}
+              url={videoUrl}
+              onGenerate={generateVideo}
             />
           ) : (
             <PlaceholderCanvas
@@ -692,6 +786,14 @@ function CockpitCreate({
   assets,
   anchorId,
   onPick,
+  videoDuration,
+  setVideoDuration,
+  videoStyle,
+  setVideoStyle,
+  videoGenerating,
+  videoStage,
+  videoUrl,
+  onGenerateVideo,
 }: {
   workspaceSlug: string;
   campaignId: string | null;
@@ -715,12 +817,26 @@ function CockpitCreate({
   assets: Anchor[];
   anchorId: string | null;
   onPick: (id: string) => void;
+  videoDuration: 10 | 15 | 30;
+  setVideoDuration: (d: 10 | 15 | 30) => void;
+  videoStyle: (typeof VIDEO_STYLES)[number];
+  setVideoStyle: (s: (typeof VIDEO_STYLES)[number]) => void;
+  videoGenerating: boolean;
+  videoStage: string;
+  videoUrl: string | null;
+  onGenerateVideo: () => void;
 }) {
   const isCreate = section === "brief" || section === "images";
+  const isVideo = section === "video";
   const hasResult = generating || assets.length > 0;
   const activeTool = tools.find((t) => t.id === section);
-  const next = [
-    { label: "Make it move", icon: Play, href: `/${workspaceSlug}` },
+  const next: {
+    label: string;
+    icon: typeof Play;
+    href?: string;
+    onSelect?: () => void;
+  }[] = [
+    { label: "Make it move", icon: Play, onSelect: () => setSection("video") },
     {
       label: "Write a caption",
       icon: MessageSquare,
@@ -863,6 +979,16 @@ function CockpitCreate({
               </button>
             </div>
           </div>
+        ) : isVideo ? (
+          <VideoInputs
+            hasAnchor={!!anchorId}
+            duration={videoDuration}
+            setDuration={setVideoDuration}
+            style={videoStyle}
+            setStyle={setVideoStyle}
+            generating={videoGenerating}
+            onGenerate={onGenerateVideo}
+          />
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 px-2 text-center">
             <p className="text-sm text-muted-foreground">
@@ -896,9 +1022,27 @@ function CockpitCreate({
               Running
             </span>
           )}
+          {isVideo && videoGenerating && (
+            <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary">
+              Running
+            </span>
+          )}
+          {isVideo && videoUrl && !videoGenerating && (
+            <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-500">
+              Completed
+            </span>
+          )}
         </div>
 
-        {!isCreate ? (
+        {isVideo ? (
+          <div className="flex flex-1 items-center justify-center">
+            <VideoResult
+              generating={videoGenerating}
+              stage={videoStage}
+              url={videoUrl}
+            />
+          </div>
+        ) : !isCreate ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
             <ImagesIcon className="h-7 w-7 opacity-30" />
             <p className="text-sm">{activeTool?.label} preview appears here.</p>
@@ -969,12 +1113,19 @@ function CockpitCreate({
                 <div className="flex flex-wrap gap-2">
                   {next.map((n) => {
                     const Icon = n.icon;
-                    return (
-                      <Link
+                    const cls =
+                      "flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm transition-colors hover:border-primary/50 hover:text-primary";
+                    return n.onSelect ? (
+                      <button
                         key={n.label}
-                        href={n.href}
-                        className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm transition-colors hover:border-primary/50 hover:text-primary"
+                        type="button"
+                        onClick={n.onSelect}
+                        className={cls}
                       >
+                        <Icon className="h-3.5 w-3.5" /> {n.label}
+                      </button>
+                    ) : (
+                      <Link key={n.label} href={n.href!} className={cls}>
                         <Icon className="h-3.5 w-3.5" /> {n.label}
                       </Link>
                     );
@@ -984,6 +1135,173 @@ function CockpitCreate({
             )}
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Video: shared controls + result, used in both Simple and Cockpit ──────── */
+function VideoInputs({
+  hasAnchor,
+  duration,
+  setDuration,
+  style,
+  setStyle,
+  generating,
+  onGenerate,
+}: {
+  hasAnchor: boolean;
+  duration: 10 | 15 | 30;
+  setDuration: (d: 10 | 15 | 30) => void;
+  style: (typeof VIDEO_STYLES)[number];
+  setStyle: (s: (typeof VIDEO_STYLES)[number]) => void;
+  generating: boolean;
+  onGenerate: () => void;
+}) {
+  if (!hasAnchor) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 px-2 text-center text-sm text-muted-foreground">
+        <Play className="h-6 w-6 opacity-40" />
+        <p>Pick an image first — the video builds from the look you choose.</p>
+      </div>
+    );
+  }
+  const chip = (active: boolean) =>
+    `rounded-full border px-3 py-1 text-xs transition-colors ${
+      active
+        ? "border-primary/40 bg-primary/15 text-primary"
+        : "border-border text-muted-foreground hover:text-foreground"
+    }`;
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+          Length
+        </label>
+        <div className="flex gap-2">
+          {VIDEO_LENGTHS.map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => setDuration(d)}
+              className={chip(duration === d)}
+            >
+              {d}s
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+          Style
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {VIDEO_STYLES.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setStyle(s)}
+              className={chip(style === s)}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onGenerate}
+        disabled={generating}
+        className="flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity disabled:opacity-40"
+      >
+        {generating ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" /> Rendering
+          </>
+        ) : (
+          <>
+            <Sparkles className="h-4 w-4" /> Generate video
+          </>
+        )}
+      </button>
+      <p className="text-center text-[11px] text-muted-foreground/70">
+        {duration === 30 ? "30s · a longer film · Pro" : `${duration}s clip`}
+      </p>
+    </div>
+  );
+}
+
+function VideoResult({
+  generating,
+  stage,
+  url,
+}: {
+  generating: boolean;
+  stage: string;
+  url: string | null;
+}) {
+  if (url) {
+    return (
+      <video
+        src={url}
+        controls
+        playsInline
+        className="max-h-full w-full rounded-xl border border-border bg-black"
+      />
+    );
+  }
+  if (generating) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
+        <Spinner size={52} />
+        <p className="text-sm text-muted-foreground">{stage}</p>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
+      <Play className="h-7 w-7 opacity-40" />
+      <p className="text-sm">Your video will appear here.</p>
+    </div>
+  );
+}
+
+function VideoCanvas(props: {
+  hasAnchor: boolean;
+  duration: 10 | 15 | 30;
+  setDuration: (d: 10 | 15 | 30) => void;
+  style: (typeof VIDEO_STYLES)[number];
+  setStyle: (s: (typeof VIDEO_STYLES)[number]) => void;
+  generating: boolean;
+  stage: string;
+  url: string | null;
+  onGenerate: () => void;
+}) {
+  return (
+    <div className="mx-auto flex h-full max-w-3xl flex-col gap-4">
+      <div>
+        <h2 className="text-base font-semibold">Bring it to life</h2>
+        <p className="text-sm text-muted-foreground">
+          Same scene, now moving — pick a length and a style.
+        </p>
+      </div>
+      <div className="rounded-xl border border-border bg-card p-4">
+        <VideoInputs
+          hasAnchor={props.hasAnchor}
+          duration={props.duration}
+          setDuration={props.setDuration}
+          style={props.style}
+          setStyle={props.setStyle}
+          generating={props.generating}
+          onGenerate={props.onGenerate}
+        />
+      </div>
+      <div className="flex min-h-[40vh] flex-1 items-center justify-center rounded-xl border border-border bg-card p-4">
+        <VideoResult
+          generating={props.generating}
+          stage={props.stage}
+          url={props.url}
+        />
       </div>
     </div>
   );
