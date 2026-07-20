@@ -69,6 +69,30 @@ export function LogoStudio() {
     setProjects(data.projects ?? []);
   }, []);
 
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const deleteProject = useCallback(
+    async (id: string) => {
+      if (
+        !window.confirm("Delete this logo and its files? This can’t be undone.")
+      ) {
+        return;
+      }
+      setDeletingId(id);
+      try {
+        const res = await fetch(`/api/logo/${id}`, { method: "DELETE" });
+        if (!res.ok) throw new Error("Delete failed");
+        // Drop it locally right away, then re-sync from the server.
+        setProjects((prev) => prev.filter((p) => p.id !== id));
+        await loadProjects();
+      } catch {
+        setError("Couldn’t delete that logo — please try again.");
+      } finally {
+        setDeletingId(null);
+      }
+    },
+    [loadProjects],
+  );
+
   useEffect(() => {
     // Defer to a microtask so the state update lands in a callback, not
     // synchronously in the effect body.
@@ -307,7 +331,12 @@ export function LogoStudio() {
     return (
       <div className="px-4 py-10">
         {banner}
-        <LogoLibrary projects={projects} onOpen={openProject} />
+        <LogoLibrary
+          projects={projects}
+          onOpen={openProject}
+          onDelete={deleteProject}
+          deletingId={deletingId}
+        />
         <LogoBrief onSubmit={startGeneration} submitting={submitting} />
       </div>
     );
