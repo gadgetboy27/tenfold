@@ -19,6 +19,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
+import { Spinner } from "@/components/brand/Spinner";
 import CreditMeter from "@/components/shared/CreditMeter";
 import { useAppStore } from "@/store/useAppStore";
 import { api } from "@/lib/api";
@@ -863,26 +864,28 @@ function CockpitCreate({
             <p className="text-sm">{activeTool?.label} preview appears here.</p>
           </div>
         ) : !hasResult ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
-            <ImagesIcon className="h-7 w-7 opacity-40" />
-            <p className="text-sm">Your options will appear here.</p>
-            <p className="text-xs text-muted-foreground/60">
-              Write a brief on the left and hit Generate.
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
+            <button
+              type="button"
+              onClick={onGenerate}
+              disabled={prompt.trim().length < 3}
+              className="flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+            >
+              <Sparkles className="h-4 w-4" /> Generate
+              <span className="ml-1 rounded border border-white/25 px-1 text-[10px]">
+                ⌘↵
+              </span>
+            </button>
+            <p className="text-xs text-muted-foreground/70">
+              {prompt.trim().length < 3
+                ? "Write a brief on the left to begin."
+                : "Your six options will appear right here."}
             </p>
           </div>
         ) : generating && assets.length === 0 ? (
-          <div className="flex flex-1 flex-col gap-3">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="aspect-square animate-pulse rounded-xl border border-border bg-background"
-                />
-              ))}
-            </div>
-            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin text-primary" /> {stage}
-            </div>
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
+            <Spinner size={52} />
+            <p className="text-sm text-muted-foreground">{stage}</p>
           </div>
         ) : (
           <>
