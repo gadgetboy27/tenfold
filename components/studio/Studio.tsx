@@ -19,6 +19,8 @@ import {
   ArrowRight,
   Share2,
   Crown,
+  Scissors,
+  Lock,
 } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { Spinner } from "@/components/brand/Spinner";
@@ -112,6 +114,11 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
   const [videoStage, setVideoStage] = useState("");
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
+  // The image being worked on in the enhance/video stage — starts as the anchor,
+  // and a Pro effect (e.g. background removal) can replace it with its result.
+  const [enhancedUrl, setEnhancedUrl] = useState<string | null>(null);
+  const [bgBusy, setBgBusy] = useState(false);
+
   // Two layouts, same engine: "simple" (the calm centered canvas) and "cockpit"
   // (fal-style input-left / result-right workspace). Simple stays the default so
   // it's never lost; the choice persists so a flick back sticks.
@@ -163,6 +170,8 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
     setStage(STAGE_LABELS[0][1]);
     setAssets([]);
     setAnchorId(null);
+    setEnhancedUrl(null);
+    setVideoUrl(null);
     setSection("images");
     try {
       const res = await api("/api/campaigns", {
@@ -237,6 +246,8 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
 
   const pickAnchor = async (id: string) => {
     setAnchorId(id);
+    setEnhancedUrl(null); // a fresh pick = a fresh working image
+    setVideoUrl(null);
     try {
       await api(`/api/campaigns/${campaignId}`, {
         method: "PATCH",
@@ -264,7 +275,7 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
           campaignId,
           type: `video_${videoDuration}s`,
           params: {
-            imageUrl: anchor.url,
+            imageUrl: enhancedUrl ?? anchor.url,
             prompt: "",
             videoStyle,
           },
@@ -305,6 +316,55 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
       toast.error((err as Error).message ?? "Video generation failed");
     } finally {
       setVideoGenerating(false);
+    }
+  };
+
+  // The still on the enhance surface — the anchor, or a Pro-effect result.
+  const workingImage = enhancedUrl ?? anchor?.url ?? null;
+
+  // Pro effect — remove the anchor's background; the cutout becomes the working
+  // still on the canvas (and the source for the video).
+  const removeBg = async () => {
+    if (!anchorId || bgBusy) return;
+    setBgBusy(true);
+    const t = toast.loading("Removing background…");
+    try {
+      const res = await api(`/api/assets/${anchorId}/bg-remove`, {
+        method: "POST",
+        workspaceSlug,
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        jobId?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.jobId) {
+        throw new Error(data.error ?? "Couldn't start background removal");
+      }
+      refreshBalance();
+      let url: string | null = null;
+      for (let i = 0; i < 40 && !url; i++) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const jr = await api(`/api/jobs/${data.jobId}`, { workspaceSlug });
+        if (!jr.ok) continue;
+        const job = (await jr.json()) as {
+          status: string;
+          outputUrls?: string[];
+        };
+        if (job.status === "ready" && job.outputUrls?.[0])
+          url = job.outputUrls[0];
+        else if (job.status === "failed")
+          throw new Error("Background removal failed");
+      }
+      if (!url) throw new Error("Background removal timed out");
+      setEnhancedUrl(url);
+      refreshBalance();
+      toast.success("Background removed", { id: t });
+    } catch (err) {
+      toast.error((err as Error).message ?? "Background removal failed", {
+        id: t,
+      });
+    } finally {
+      setBgBusy(false);
     }
   };
 
@@ -516,6 +576,10 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
               videoStage={videoStage}
               videoUrl={videoUrl}
               onGenerateVideo={generateVideo}
+              workingImage={workingImage}
+              isPro={!!ent?.isPro}
+              bgBusy={bgBusy}
+              onRemoveBg={removeBg}
             />
           ) : section === "brief" ? (
             <BriefCanvas
@@ -533,10 +597,12 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
               anchorId={anchorId}
               onPick={pickAnchor}
               onRegenerate={() => setSection("brief")}
+              onContinue={() => setSection("video")}
             />
           ) : section === "video" ? (
             <VideoCanvas
               hasAnchor={anchorPicked}
+              stillUrl={workingImage}
               duration={videoDuration}
               setDuration={setVideoDuration}
               style={videoStyle}
@@ -545,6 +611,9 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
               stage={videoStage}
               url={videoUrl}
               onGenerate={generateVideo}
+              isPro={!!ent?.isPro}
+              bgBusy={bgBusy}
+              onRemoveBg={removeBg}
             />
           ) : (
             <PlaceholderCanvas
@@ -686,6 +755,7 @@ function ImagesCanvas({
   anchorId,
   onPick,
   onRegenerate,
+  onContinue,
 }: {
   generating: boolean;
   stage: string;
@@ -693,6 +763,7 @@ function ImagesCanvas({
   anchorId: string | null;
   onPick: (id: string) => void;
   onRegenerate: () => void;
+  onContinue: () => void;
 }) {
   if (generating && assets.length === 0) {
     return (
@@ -761,11 +832,15 @@ function ImagesCanvas({
         ))}
       </div>
       {anchorId && (
-        <div className="flex items-center justify-end gap-2 text-sm">
+        <div className="flex items-center justify-end gap-3 text-sm">
           <span className="text-muted-foreground">Anchor set.</span>
-          <span className="flex items-center gap-1 font-medium text-primary">
-            Next: bring it to life <ArrowRight className="h-4 w-4" />
-          </span>
+          <button
+            type="button"
+            onClick={onContinue}
+            className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+          >
+            Continue — enhance &amp; animate <ArrowRight className="h-4 w-4" />
+          </button>
         </div>
       )}
     </div>
@@ -826,6 +901,10 @@ function CockpitCreate({
   videoStage,
   videoUrl,
   onGenerateVideo,
+  workingImage,
+  isPro,
+  bgBusy,
+  onRemoveBg,
 }: {
   workspaceSlug: string;
   campaignId: string | null;
@@ -857,6 +936,10 @@ function CockpitCreate({
   videoStage: string;
   videoUrl: string | null;
   onGenerateVideo: () => void;
+  workingImage: string | null;
+  isPro: boolean;
+  bgBusy: boolean;
+  onRemoveBg: () => void;
 }) {
   const isCreate = section === "brief" || section === "images";
   const isVideo = section === "video";
@@ -1012,15 +1095,27 @@ function CockpitCreate({
             </div>
           </div>
         ) : isVideo ? (
-          <VideoInputs
-            hasAnchor={!!anchorId}
-            duration={videoDuration}
-            setDuration={setVideoDuration}
-            style={videoStyle}
-            setStyle={setVideoStyle}
-            generating={videoGenerating}
-            onGenerate={onGenerateVideo}
-          />
+          <div className="flex min-h-0 flex-1 flex-col gap-4">
+            {anchorId && (
+              <>
+                <EffectsPanel
+                  isPro={isPro}
+                  bgBusy={bgBusy}
+                  onRemoveBg={onRemoveBg}
+                />
+                <div className="border-t border-border" />
+              </>
+            )}
+            <VideoInputs
+              hasAnchor={!!anchorId}
+              duration={videoDuration}
+              setDuration={setVideoDuration}
+              style={videoStyle}
+              setStyle={setVideoStyle}
+              generating={videoGenerating}
+              onGenerate={onGenerateVideo}
+            />
+          </div>
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 px-2 text-center">
             <p className="text-sm text-muted-foreground">
@@ -1072,6 +1167,7 @@ function CockpitCreate({
               generating={videoGenerating}
               stage={videoStage}
               url={videoUrl}
+              stillUrl={workingImage}
             />
           </div>
         ) : !isCreate ? (
@@ -1267,10 +1363,13 @@ function VideoResult({
   generating,
   stage,
   url,
+  stillUrl,
 }: {
   generating: boolean;
   stage: string;
   url: string | null;
+  /** The chosen still, shown big until a video is generated — proof it carried. */
+  stillUrl?: string | null;
 }) {
   if (url) {
     return (
@@ -1290,6 +1389,22 @@ function VideoResult({
       </div>
     );
   }
+  if (stillUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={stillUrl}
+        alt="Your chosen image"
+        className="max-h-full max-w-full rounded-xl border border-border object-contain"
+        style={{
+          backgroundImage:
+            "linear-gradient(45deg,#8882 25%,transparent 25%,transparent 75%,#8882 75%),linear-gradient(45deg,#8882 25%,transparent 25%,transparent 75%,#8882 75%)",
+          backgroundSize: "18px 18px",
+          backgroundPosition: "0 0,9px 9px",
+        }}
+      />
+    );
+  }
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
       <Play className="h-7 w-7 opacity-40" />
@@ -1298,8 +1413,80 @@ function VideoResult({
   );
 }
 
+/** Pro effects — the "AI Photoshop" menu on the enhance surface. Built effects
+ *  are live for Pro; the rest tease as "Soon". Non-Pro sees them all locked. */
+function EffectsPanel({
+  isPro,
+  bgBusy,
+  onRemoveBg,
+}: {
+  isPro: boolean;
+  bgBusy: boolean;
+  onRemoveBg: () => void;
+}) {
+  const effects = [
+    { key: "removebg", label: "Remove background", ready: true },
+    { key: "inpaint", label: "Erase & replace", ready: false },
+    { key: "blend", label: "Fade / blend", ready: false },
+    { key: "borders", label: "Borders & frames", ready: false },
+    { key: "motion", label: "Crossfade + Ken Burns", ready: false },
+  ];
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <Sparkles className="h-3.5 w-3.5 text-primary" /> Pro effects
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {effects.map((e) => {
+          const live = isPro && e.ready;
+          const busy = bgBusy && e.key === "removebg";
+          return (
+            <button
+              key={e.key}
+              type="button"
+              disabled={!live || busy}
+              onClick={live && e.key === "removebg" ? onRemoveBg : undefined}
+              title={
+                !isPro
+                  ? "A Pro effect — upgrade to unlock"
+                  : e.ready
+                    ? undefined
+                    : "Coming soon to Studio"
+              }
+              className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${
+                live
+                  ? "border-border text-foreground hover:border-primary/50 hover:text-primary"
+                  : "cursor-not-allowed border-dashed border-border text-muted-foreground/70"
+              }`}
+            >
+              {busy ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : live ? (
+                <Scissors className="h-3 w-3" />
+              ) : (
+                <Lock className="h-3 w-3" />
+              )}
+              {e.label}
+              {!isPro ? (
+                <span className="text-[9px] font-semibold uppercase text-amber-400">
+                  Pro
+                </span>
+              ) : !e.ready ? (
+                <span className="text-[9px] font-semibold uppercase text-muted-foreground/60">
+                  Soon
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function VideoCanvas(props: {
   hasAnchor: boolean;
+  stillUrl: string | null;
   duration: 10 | 15 | 30;
   setDuration: (d: 10 | 15 | 30) => void;
   style: (typeof VIDEO_STYLES)[number];
@@ -1308,33 +1495,46 @@ function VideoCanvas(props: {
   stage: string;
   url: string | null;
   onGenerate: () => void;
+  isPro: boolean;
+  bgBusy: boolean;
+  onRemoveBg: () => void;
 }) {
   return (
     <div className="mx-auto flex h-full max-w-3xl flex-col gap-4">
       <div>
-        <h2 className="text-base font-semibold">Bring it to life</h2>
+        <h2 className="text-base font-semibold">Enhance &amp; animate</h2>
         <p className="text-sm text-muted-foreground">
-          Same scene, now moving — pick a length and a style.
+          Your chosen image, ready to work on — apply an effect, or bring it to
+          life.
         </p>
       </div>
-      <div className="rounded-xl border border-border bg-card p-4">
-        <VideoInputs
-          hasAnchor={props.hasAnchor}
-          duration={props.duration}
-          setDuration={props.setDuration}
-          style={props.style}
-          setStyle={props.setStyle}
-          generating={props.generating}
-          onGenerate={props.onGenerate}
-        />
-      </div>
-      <div className="flex min-h-[40vh] flex-1 items-center justify-center rounded-xl border border-border bg-card p-4">
+      <div className="flex min-h-[42vh] flex-1 items-center justify-center rounded-xl border border-border bg-card p-4">
         <VideoResult
           generating={props.generating}
           stage={props.stage}
           url={props.url}
+          stillUrl={props.stillUrl}
         />
       </div>
+      {props.hasAnchor && (
+        <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4">
+          <EffectsPanel
+            isPro={props.isPro}
+            bgBusy={props.bgBusy}
+            onRemoveBg={props.onRemoveBg}
+          />
+          <div className="border-t border-border" />
+          <VideoInputs
+            hasAnchor={props.hasAnchor}
+            duration={props.duration}
+            setDuration={props.setDuration}
+            style={props.style}
+            setStyle={props.setStyle}
+            generating={props.generating}
+            onGenerate={props.onGenerate}
+          />
+        </div>
+      )}
     </div>
   );
 }
