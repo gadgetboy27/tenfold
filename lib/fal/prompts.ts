@@ -43,6 +43,28 @@ export const MUSIC_GENRE_PROMPTS: Record<string, string> = {
 /** Genre keys in display order — single source of truth for the picker UI. */
 export const MUSIC_GENRES = Object.keys(MUSIC_GENRE_PROMPTS);
 
+/**
+ * ACE-Step (vocals model) wants lowercase, comma-separated keyword TAGS — not a
+ * display name. stable-audio/lyria2 drive style through the prompt above; the
+ * vocals path reads these instead. Keys mirror MUSIC_GENRE_PROMPTS exactly.
+ */
+export const MUSIC_GENRE_TAGS: Record<string, string> = {
+  "Epic Cinematic": "cinematic, orchestral, epic, score",
+  "Lo-fi Chill": "lofi, chill, hiphop, mellow",
+  "Corporate Jazz": "jazz, corporate, smooth, acoustic",
+  Electronic: "electronic, edm, synth, upbeat",
+  "Acoustic Folk": "folk, acoustic, guitar, indie",
+  "Soulful Boom-bap": "boom bap, hiphop, soul, jazzy",
+  "Upbeat Pop": "pop, upbeat, catchy, radio",
+  "Funk Groove": "funk, groove, disco, bass",
+  "Ambient Calm": "ambient, calm, atmospheric, chill",
+  Synthwave: "synthwave, retro, 80s, synth",
+  "Indie Anthem": "indie rock, anthemic, uplifting, guitar",
+  "Trap Energy": "trap, 808, hiphop, hard",
+  "Latin Groove": "latin, reggaeton, dance, tropical",
+  "R&B Smooth": "rnb, smooth, soul, sensual",
+};
+
 // Appended to every music prompt to push the model toward natural instrumentation.
 export const MUSIC_NATURAL_SUFFIX =
   "high-quality, natural acoustic instrumentation, warm analog tone, rich organic texture, real played instruments, no harsh digital synths, professional studio recording";

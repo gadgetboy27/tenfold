@@ -19,6 +19,7 @@ import { getEntitlements } from "@/lib/billing/entitlements";
 import {
   IMAGE_STYLE_SUFFIXES,
   MUSIC_GENRE_PROMPTS,
+  MUSIC_GENRE_TAGS,
   MUSIC_NATURAL_SUFFIX,
   VIDEO_DURATION_PROMPTS,
   VIDEO_STYLE_PROMPTS,
@@ -208,21 +209,26 @@ export async function POST(req: Request) {
         "opening moment, establishing the scene with energy",
         "continuation, building motion toward a strong finish",
       ];
-      const segments: { index: number; requestId: string }[] = [];
+      let segments: { index: number; requestId: string }[] = [];
       try {
-        for (let i = 0; i < SEGMENTS; i++) {
-          const segWebhook = `${process.env.APP_URL}/api/webhooks/fal?j=${jobId}&seg=${i}`;
-          const segInput = {
-            ...base,
-            prompt: `${base.prompt as string}, ${hints[i]}`,
-          };
-          const { requestId: rid } = await enqueueJob(
-            "video_30s",
-            segInput,
-            segWebhook,
-          );
-          segments.push({ index: i, requestId: rid });
-        }
+        // Submit BOTH segments in parallel so fal starts rendering both a beat
+        // sooner (they already render concurrently; this removes the serial
+        // submit round-trips). Order preserved by index.
+        segments = await Promise.all(
+          Array.from({ length: SEGMENTS }, async (_, i) => {
+            const segWebhook = `${process.env.APP_URL}/api/webhooks/fal?j=${jobId}&seg=${i}`;
+            const segInput = {
+              ...base,
+              prompt: `${base.prompt as string}, ${hints[i]}`,
+            };
+            const { requestId: rid } = await enqueueJob(
+              "video_30s",
+              segInput,
+              segWebhook,
+            );
+            return { index: i, requestId: rid };
+          }),
+        );
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Submit failed";
         await admin
@@ -287,7 +293,10 @@ export async function POST(req: Request) {
             lyrics = ""; // ACE-Step with empty lyrics = instrumental (graceful)
           }
         }
-        return { tags: genre, lyrics, duration: seconds };
+        // ACE-Step wants lowercase comma-separated keyword tags, not the display
+        // name — fall back to a slugged genre if it's not in the tags map.
+        const tags = MUSIC_GENRE_TAGS[genre] ?? genre.toLowerCase();
+        return { tags, lyrics, duration: seconds };
       };
       // Vocals (ACE-Step): different schema — `tags` (genre) + `lyrics`. Use the
       // user's lyrics, or auto-write a short jingle so it actually sings. Always

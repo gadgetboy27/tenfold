@@ -48,12 +48,16 @@ export async function concatVideos(
   const dir = await mkdtemp(join(tmpdir(), "tf-concat-"));
   const outPath = join(dir, "out.mp4");
   try {
-    const segPaths: string[] = [];
-    for (let i = 0; i < input.urls.length; i++) {
-      const p = join(dir, `seg-${i}.mp4`);
-      await download(input.urls[i], p);
-      segPaths.push(p);
-    }
+    // Download every segment in PARALLEL (order preserved by index) — this runs
+    // inside the tail webhook, so serial downloads added their full latency to
+    // the user's wait. Promise.all overlaps them.
+    const segPaths = await Promise.all(
+      input.urls.map(async (url, i) => {
+        const p = join(dir, `seg-${i}.mp4`);
+        await download(url, p);
+        return p;
+      }),
+    );
 
     // concat demuxer + stream copy (fast). listfile references each segment.
     const listPath = join(dir, "list.txt");
