@@ -217,21 +217,50 @@ export const GET = withWorkspace<{ id: string }>(async (req, { db, session, para
 
 ---
 
+## 5b. Studio — the progressive-canvas surface
+
+`components/studio/Studio.tsx` (route `/[workspace]/studio`) is the unified
+redesign: a left tool rail + a large canvas that morphs per `SectionId`
+(brief → images → video → music → caption → compositor → logo → publish). The
+frame stays put; only the canvas changes. Two layouts persist to localStorage:
+**simple** (calm centered canvas) and **cockpit** (fal-style input-left /
+result-right). It drives the SAME endpoints as the classic flow — a new surface
+over existing functionality, not a new engine.
+
+- **Every nav item stays in Studio** via `setSection` — never link out. A
+  not-yet-ported section shows `PlaceholderCanvas`; only Compositor (flag-off
+  Logo) expose a deliberate `classicHref` "Open in classic" button.
+- **Pickers use `StudioSelect`** (`components/studio/StudioSelect.tsx`, built on
+  the Radix `dropdown-menu`) — the one dropdown for every choice-range control.
+  Don't reintroduce pill rows.
+- **Wired inline today:** Brief, Images, Video (Length/Style dropdowns), Music
+  (genre + engine dropdowns, track sized to video length), and Logo & Brand
+  (renders the full `LogoStudio` in the canvas when `FEATURE_LOGO_BUILDER=1`).
+- Tier gating is by capability, not layout: `ent.proEffects` drives the locked
+  "AI-Photoshop" effects; both layouts share the same engine.
+
+---
+
 ## 6. Credit System
 
+`lib/credits/costs.ts` is the single source of truth — never hardcode a cost
+elsewhere; import `CREDIT_COSTS`. Current values (keep this table in sync when
+`costs.ts` changes):
+
 ```typescript
-// lib/credits/costs.ts — single source of truth, never hardcode elsewhere
-export const CREDIT_COSTS = {
-  image_generation:  12,
-  image_variation:    3,
-  upscale:            2,
-  video_10s:         15,
-  video_30s:         40,
-  video_60s:         80,
-  music_generation:   8,
-  script_generation:  1,
-} as const satisfies Record<string, number>;
+image_generation: 12   image_variety: 20   image_variation: 3   upscale: 2
+bg_remove: 3           // Pro effect — BiRefNet cutout
+video_10s: 25   video_15s: 40   video_30s: 100   // 30s = a real 2×15s render
+talking_video: 130   virtual_tryon: 8   auto_caption: 5   hook_variants: 2
+product_shot: 6
+logo_concepts: 5   logo_refine: 1   logo_finalize: 3   logo_vectorize: 1
+logo_mockups: 2    brand_package: 10
+music_generation: 8   script_generation: 1   layout_autofix: 3
 ```
+
+Video lengths are **10 / 15 / 30s** (5s was dropped; 60s never shipped). 30s is
+Pro-gated and renders as two 15s Kling segments concatenated. Music is sized to
+the chosen video length.
 
 Rule: `debitCredits()` returns `{ success: false }` → reject with HTTP 402.
 Never create the `creative_job` row. Never call fal.ai.
