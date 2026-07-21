@@ -443,36 +443,27 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
   const anchorPicked = !!anchorId;
   const publishReady = anchorPicked || !!videoUrl; // grows as more of the flow lands
 
+  // Every nav item stays IN Studio (setSection) — no item flings you to the
+  // classic app on click. classicHref is only for the deliberate "Open in
+  // classic" button inside a not-yet-built section's placeholder.
   const tools: {
     id: SectionId;
     label: string;
     icon: typeof PenLine;
     done: boolean;
-    href?: string;
+    classicHref?: string;
   }[] = [
     { id: "brief", label: "Brief", icon: PenLine, done: !!campaignId },
     { id: "images", label: "Images", icon: ImagesIcon, done: anchorPicked },
     { id: "video", label: "Video", icon: Play, done: !!videoUrl },
-    {
-      id: "music",
-      label: "Music",
-      icon: Music,
-      done: false,
-      href: `/${workspaceSlug}`,
-    },
-    {
-      id: "caption",
-      label: "Caption",
-      icon: MessageSquare,
-      done: false,
-      href: `/${workspaceSlug}`,
-    },
+    { id: "music", label: "Music", icon: Music, done: false },
+    { id: "caption", label: "Caption", icon: MessageSquare, done: false },
     {
       id: "compositor",
       label: "Compositor",
       icon: Layers,
       done: false,
-      href: campaignId
+      classicHref: campaignId
         ? `/${workspaceSlug}/compositor?campaign=${campaignId}`
         : `/${workspaceSlug}/compositor`,
     },
@@ -481,7 +472,7 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
       label: "Logo & brand",
       icon: Shapes,
       done: false,
-      href: `/${workspaceSlug}/logo`,
+      classicHref: `/${workspaceSlug}/logo`,
     },
     { id: "publish", label: "Publish", icon: Send, done: false },
   ];
@@ -526,7 +517,7 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
               key={t.id}
               tool={t}
               active={section === t.id}
-              onClick={() => (t.href ? undefined : setSection(t.id))}
+              onClick={() => setSection(t.id)}
             />
           ))}
           <span className="px-2 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
@@ -537,7 +528,7 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
               key={t.id}
               tool={t}
               active={section === t.id}
-              onClick={() => (t.href ? undefined : setSection(t.id))}
+              onClick={() => setSection(t.id)}
             />
           ))}
           <div className="flex-1" />
@@ -654,8 +645,6 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
             />
           ) : layout === "cockpit" ? (
             <CockpitCreate
-              workspaceSlug={workspaceSlug}
-              campaignId={campaignId}
               tools={tools}
               section={section}
               setSection={setSection}
@@ -755,7 +744,6 @@ function ToolButton({
     label: string;
     icon: typeof PenLine;
     done: boolean;
-    href?: string;
   };
   active: boolean;
   onClick: () => void;
@@ -781,11 +769,7 @@ function ToolButton({
       ? "border-primary/40 bg-primary/15 text-foreground"
       : "border-transparent text-muted-foreground hover:bg-background hover:text-foreground"
   }`;
-  return tool.href ? (
-    <Link href={tool.href} className={cls}>
-      {inner}
-    </Link>
-  ) : (
+  return (
     <button type="button" onClick={onClick} className={cls}>
       {inner}
     </button>
@@ -969,20 +953,22 @@ function PlaceholderCanvas({
   tool,
   anchorReady,
 }: {
-  tool: { label: string; href?: string };
+  tool: { label: string; classicHref?: string };
   anchorReady: boolean;
 }) {
   return (
     <div className="mx-auto flex h-full max-w-md flex-col items-center justify-center gap-3 text-center">
       <h2 className="text-lg font-semibold">{tool.label}</h2>
       <p className="text-sm text-muted-foreground">
-        {anchorReady
-          ? "This step isn't wired into Studio yet — for now it opens in the classic flow, using the same engine."
-          : "Generate your images first — then this step builds on the look you pick."}
+        {tool.classicHref
+          ? "Coming to Studio soon. For now it opens in the classic flow — same engine."
+          : anchorReady
+            ? "Coming to Studio soon — this builds on the look you picked."
+            : "Generate your images first — then this step builds on the look you pick."}
       </p>
-      {tool.href && (
+      {tool.classicHref && (
         <Link
-          href={tool.href}
+          href={tool.classicHref}
           className="mt-1 flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
         >
           Open {tool.label} <ArrowRight className="h-4 w-4" />
@@ -995,8 +981,6 @@ function PlaceholderCanvas({
 /* ── Cockpit: a TRUE two-column workspace — no sidebar. Navigation lives at the
       top of the left input panel; the result sits persistently on the right. ── */
 function CockpitCreate({
-  workspaceSlug,
-  campaignId,
   tools,
   section,
   setSection,
@@ -1025,14 +1009,12 @@ function CockpitCreate({
   bgBusy,
   onRemoveBg,
 }: {
-  workspaceSlug: string;
-  campaignId: string | null;
   tools: {
     id: SectionId;
     label: string;
     icon: typeof PenLine;
     done: boolean;
-    href?: string;
+    classicHref?: string;
   }[];
   section: SectionId;
   setSection: (s: SectionId) => void;
@@ -1068,21 +1050,18 @@ function CockpitCreate({
   const next: {
     label: string;
     icon: typeof Play;
-    href?: string;
-    onSelect?: () => void;
+    onSelect: () => void;
   }[] = [
     { label: "Make it move", icon: Play, onSelect: () => setSection("video") },
     {
       label: "Write a caption",
       icon: MessageSquare,
-      href: `/${workspaceSlug}`,
+      onSelect: () => setSection("caption"),
     },
     {
       label: "Open compositor",
       icon: Layers,
-      href: campaignId
-        ? `/${workspaceSlug}/compositor?campaign=${campaignId}`
-        : `/${workspaceSlug}/compositor`,
+      onSelect: () => setSection("compositor"),
     },
   ];
 
@@ -1114,11 +1093,7 @@ function CockpitCreate({
                 />
               </>
             );
-            return t.href ? (
-              <Link key={t.id} href={t.href} className={cls}>
-                {inner}
-              </Link>
-            ) : (
+            return (
               <button
                 key={t.id}
                 type="button"
@@ -1240,13 +1215,15 @@ function CockpitCreate({
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 px-2 text-center">
             <p className="text-sm text-muted-foreground">
-              {anchorId
-                ? `${activeTool?.label} runs in the classic flow for now — same engine.`
-                : "Generate your images first — this builds on the look you pick."}
+              {activeTool?.classicHref
+                ? `${activeTool?.label} opens in the classic flow for now — same engine.`
+                : anchorId
+                  ? `${activeTool?.label} is coming to Studio soon.`
+                  : "Generate your images first — this builds on the look you pick."}
             </p>
-            {activeTool?.href && (
+            {activeTool?.classicHref && (
               <Link
-                href={activeTool.href}
+                href={activeTool.classicHref}
                 className="mt-1 flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
               >
                 Open {activeTool.label} <ArrowRight className="h-4 w-4" />
@@ -1298,21 +1275,13 @@ function CockpitCreate({
           </div>
         ) : !hasResult ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
-            <button
-              type="button"
-              onClick={onGenerate}
-              disabled={prompt.trim().length < 3}
-              className="flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
-            >
-              <Sparkles className="h-4 w-4" /> Generate
-              <span className="ml-1 rounded border border-white/25 px-1 text-[10px]">
-                ⌘↵
-              </span>
-            </button>
-            <p className="text-xs text-muted-foreground/70">
+            <div className="grid h-16 w-16 place-items-center rounded-full bg-primary/10">
+              <Sparkles className="h-7 w-7 text-primary/70" />
+            </div>
+            <p className="max-w-[16rem] text-sm text-muted-foreground">
               {prompt.trim().length < 3
-                ? "Write a brief on the left to begin."
-                : "Your six options will appear right here."}
+                ? "Write a brief on the left, then hit Generate."
+                : "Ready when you are — hit Generate on the left and your six options land right here."}
             </p>
           </div>
         ) : generating && assets.length === 0 ? (
@@ -1364,7 +1333,7 @@ function CockpitCreate({
                     const Icon = n.icon;
                     const cls =
                       "flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm transition-colors hover:border-primary/50 hover:text-primary";
-                    return n.onSelect ? (
+                    return (
                       <button
                         key={n.label}
                         type="button"
@@ -1373,10 +1342,6 @@ function CockpitCreate({
                       >
                         <Icon className="h-3.5 w-3.5" /> {n.label}
                       </button>
-                    ) : (
-                      <Link key={n.label} href={n.href!} className={cls}>
-                        <Icon className="h-3.5 w-3.5" /> {n.label}
-                      </Link>
                     );
                   })}
                 </div>
