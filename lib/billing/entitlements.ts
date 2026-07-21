@@ -24,7 +24,20 @@ export interface Entitlements {
   advancedAnalytics: boolean;
   /** Workspaces (brands/clients) the owner may run. */
   maxWorkspaces: number;
+  /** Pro "AI Photoshop" effects this tier unlocks (keys match the effects UI:
+   *  removebg, inpaint, blend, borders, motion). A higher tier unlocks more. */
+  proEffects: string[];
 }
+
+// Effect keys, ordered from most accessible to most premium. Kept in one place
+// so the tiers below and the effects UI never drift.
+export const PRO_EFFECTS = [
+  "removebg",
+  "borders",
+  "blend",
+  "inpaint",
+  "motion",
+] as const;
 
 const TIERS: Record<Tier, Entitlements> = {
   payg: {
@@ -39,6 +52,7 @@ const TIERS: Record<Tier, Entitlements> = {
     apiAccess: false,
     advancedAnalytics: false,
     maxWorkspaces: 1,
+    proEffects: [], // none — Pro effects are the upgrade nudge
   },
   creator: {
     tier: "creator",
@@ -52,6 +66,7 @@ const TIERS: Record<Tier, Entitlements> = {
     apiAccess: false,
     advancedAnalytics: false,
     maxWorkspaces: 1,
+    proEffects: ["removebg"],
   },
   business: {
     tier: "business",
@@ -65,6 +80,7 @@ const TIERS: Record<Tier, Entitlements> = {
     apiAccess: false,
     advancedAnalytics: true,
     maxWorkspaces: 3,
+    proEffects: ["removebg", "borders", "blend"],
   },
   agency: {
     tier: "agency",
@@ -78,6 +94,7 @@ const TIERS: Record<Tier, Entitlements> = {
     apiAccess: true,
     advancedAnalytics: true,
     maxWorkspaces: 5,
+    proEffects: [...PRO_EFFECTS], // every effect
   },
 };
 

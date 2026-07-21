@@ -27,6 +27,7 @@ import {
 import { Logo } from "@/components/brand/Logo";
 import { Spinner } from "@/components/brand/Spinner";
 import CreditMeter from "@/components/shared/CreditMeter";
+import UpgradeModal from "@/components/billing/UpgradeModal";
 import { useEntitlements } from "@/lib/billing/useEntitlements";
 import { randomCampaignName } from "@/lib/util/campaign-name";
 import { useAppStore } from "@/store/useAppStore";
@@ -129,6 +130,7 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
   // and a Pro effect (e.g. background removal) can replace it with its result.
   const [enhancedUrl, setEnhancedUrl] = useState<string | null>(null);
   const [bgBusy, setBgBusy] = useState(false);
+  const [showUpgrade, setShowUpgrade] = useState(false);
 
   // Two layouts, same engine: "simple" (the calm centered canvas) and "cockpit"
   // (fal-style input-left / result-right workspace). Simple stays the default so
@@ -584,6 +586,15 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
               {ent.label}
             </span>
           )}
+          {ent && ent.tier !== "agency" && (
+            <button
+              type="button"
+              onClick={() => setShowUpgrade(true)}
+              className="hidden items-center gap-1 rounded-full border border-amber-400/40 bg-amber-400/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-400 transition-colors hover:bg-amber-400/20 sm:inline-flex"
+            >
+              <Sparkles className="h-3 w-3" /> Upgrade
+            </button>
+          )}
           <div className="ml-auto flex items-center gap-3">
             <button
               type="button"
@@ -675,7 +686,8 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
               videoUrl={videoUrl}
               onGenerateVideo={generateVideo}
               workingImage={workingImage}
-              isPro={!!ent?.isPro}
+              allowedEffects={ent?.proEffects ?? []}
+              onUpgrade={() => setShowUpgrade(true)}
               bgBusy={bgBusy}
               onRemoveBg={removeBg}
             />
@@ -709,7 +721,8 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
               stage={videoStage}
               url={videoUrl}
               onGenerate={generateVideo}
-              isPro={!!ent?.isPro}
+              allowedEffects={ent?.proEffects ?? []}
+              onUpgrade={() => setShowUpgrade(true)}
               bgBusy={bgBusy}
               onRemoveBg={removeBg}
             />
@@ -721,6 +734,13 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
           )}
         </main>
       </div>
+
+      <UpgradeModal
+        open={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
+        feature="Pro effects"
+        blurb="Unlock the AI-Photoshop effects — background removal, erase & replace, borders, blends and motion — plus 30s video and HD exports."
+      />
     </div>
   );
 }
@@ -1000,7 +1020,8 @@ function CockpitCreate({
   videoUrl,
   onGenerateVideo,
   workingImage,
-  isPro,
+  allowedEffects,
+  onUpgrade,
   bgBusy,
   onRemoveBg,
 }: {
@@ -1035,7 +1056,8 @@ function CockpitCreate({
   videoUrl: string | null;
   onGenerateVideo: () => void;
   workingImage: string | null;
-  isPro: boolean;
+  allowedEffects: string[];
+  onUpgrade: () => void;
   bgBusy: boolean;
   onRemoveBg: () => void;
 }) {
@@ -1197,7 +1219,8 @@ function CockpitCreate({
             {anchorId && (
               <>
                 <EffectsPanel
-                  isPro={isPro}
+                  allowedEffects={allowedEffects}
+                  onUpgrade={onUpgrade}
                   bgBusy={bgBusy}
                   onRemoveBg={onRemoveBg}
                 />
@@ -1513,48 +1536,63 @@ function VideoResult({
 
 /** Pro effects — the "AI Photoshop" menu on the enhance surface. Built effects
  *  are live for Pro; the rest tease as "Soon". Non-Pro sees them all locked. */
+const EFFECTS = [
+  { key: "removebg", label: "Remove background", ready: true },
+  { key: "inpaint", label: "Erase & replace", ready: false },
+  { key: "blend", label: "Fade / blend", ready: false },
+  { key: "borders", label: "Borders & frames", ready: false },
+  { key: "motion", label: "Crossfade + Ken Burns", ready: false },
+] as const;
+
 function EffectsPanel({
-  isPro,
+  allowedEffects,
   bgBusy,
   onRemoveBg,
+  onUpgrade,
 }: {
-  isPro: boolean;
+  /** Effect keys the current tier unlocks (from entitlements.proEffects). */
+  allowedEffects: string[];
   bgBusy: boolean;
   onRemoveBg: () => void;
+  onUpgrade: () => void;
 }) {
-  const effects = [
-    { key: "removebg", label: "Remove background", ready: true },
-    { key: "inpaint", label: "Erase & replace", ready: false },
-    { key: "blend", label: "Fade / blend", ready: false },
-    { key: "borders", label: "Borders & frames", ready: false },
-    { key: "motion", label: "Crossfade + Ken Burns", ready: false },
-  ];
   return (
     <div>
       <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
         <Sparkles className="h-3.5 w-3.5 text-primary" /> Pro effects
       </div>
       <div className="flex flex-wrap gap-2">
-        {effects.map((e) => {
-          const live = isPro && e.ready;
+        {EFFECTS.map((e) => {
+          const allowed = allowedEffects.includes(e.key);
+          const live = allowed && e.ready; // your tier has it AND it's built
           const busy = bgBusy && e.key === "removebg";
+          // Not on your tier → upgrade nudge. On your tier but not built → Soon.
+          const onClick = live
+            ? e.key === "removebg"
+              ? onRemoveBg
+              : undefined
+            : !allowed
+              ? onUpgrade
+              : undefined;
           return (
             <button
               key={e.key}
               type="button"
-              disabled={!live || busy}
-              onClick={live && e.key === "removebg" ? onRemoveBg : undefined}
+              disabled={busy || (allowed && !e.ready)}
+              onClick={onClick}
               title={
-                !isPro
-                  ? "A Pro effect — upgrade to unlock"
-                  : e.ready
+                allowed
+                  ? e.ready
                     ? undefined
                     : "Coming soon to Studio"
+                  : "Not on your plan — upgrade to unlock"
               }
               className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${
                 live
                   ? "border-border text-foreground hover:border-primary/50 hover:text-primary"
-                  : "cursor-not-allowed border-dashed border-border text-muted-foreground/70"
+                  : !allowed
+                    ? "border-amber-400/40 text-muted-foreground hover:border-amber-400/70 hover:text-amber-400"
+                    : "cursor-not-allowed border-dashed border-border text-muted-foreground/70"
               }`}
             >
               {busy ? (
@@ -1565,9 +1603,9 @@ function EffectsPanel({
                 <Lock className="h-3 w-3" />
               )}
               {e.label}
-              {!isPro ? (
+              {!allowed ? (
                 <span className="text-[9px] font-semibold uppercase text-amber-400">
-                  Pro
+                  Upgrade
                 </span>
               ) : !e.ready ? (
                 <span className="text-[9px] font-semibold uppercase text-muted-foreground/60">
@@ -1593,7 +1631,8 @@ function VideoCanvas(props: {
   stage: string;
   url: string | null;
   onGenerate: () => void;
-  isPro: boolean;
+  allowedEffects: string[];
+  onUpgrade: () => void;
   bgBusy: boolean;
   onRemoveBg: () => void;
 }) {
@@ -1617,7 +1656,8 @@ function VideoCanvas(props: {
       {props.hasAnchor && (
         <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4">
           <EffectsPanel
-            isPro={props.isPro}
+            allowedEffects={props.allowedEffects}
+            onUpgrade={props.onUpgrade}
             bgBusy={props.bgBusy}
             onRemoveBg={props.onRemoveBg}
           />
