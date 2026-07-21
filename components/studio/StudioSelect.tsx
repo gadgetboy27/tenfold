@@ -52,7 +52,9 @@ export function StudioSelect<T extends string>({
           type="button"
           className={`flex w-full items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-left text-sm outline-none transition-colors hover:border-primary/40 focus:border-primary/50 disabled:opacity-50 ${className ?? ""}`}
         >
-          <span className={selected ? "text-foreground" : "text-muted-foreground"}>
+          <span
+            className={selected ? "text-foreground" : "text-muted-foreground"}
+          >
             {selected?.label ?? placeholder}
           </span>
           {selected?.badge && (

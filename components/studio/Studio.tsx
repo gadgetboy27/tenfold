@@ -23,13 +23,20 @@ import {
   Lock,
   LayoutGrid,
   List as ListIcon,
+  Music2,
 } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { Spinner } from "@/components/brand/Spinner";
 import CreditMeter from "@/components/shared/CreditMeter";
 import UpgradeModal from "@/components/billing/UpgradeModal";
+import {
+  StudioSelect,
+  type StudioOption,
+} from "@/components/studio/StudioSelect";
 import { useEntitlements } from "@/lib/billing/useEntitlements";
 import { randomCampaignName } from "@/lib/util/campaign-name";
+import { MUSIC_GENRES } from "@/lib/fal/prompts";
+import { MUSIC_MODELS } from "@/lib/fal/models";
 import { useAppStore } from "@/store/useAppStore";
 import { api } from "@/lib/api";
 
@@ -125,6 +132,15 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
   const [videoGenerating, setVideoGenerating] = useState(false);
   const [videoStage, setVideoStage] = useState("");
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+
+  // Music — the track is sized to the chosen video length. Genre + engine reuse
+  // the classic flow's curated lists (MUSIC_GENRES / MUSIC_MODELS).
+  const [musicGenre, setMusicGenre] = useState<string>(MUSIC_GENRES[0]);
+  const [musicModel, setMusicModel] = useState<string>(MUSIC_MODELS[0].id);
+  const [musicLyrics, setMusicLyrics] = useState("");
+  const [musicGenerating, setMusicGenerating] = useState(false);
+  const [musicStage, setMusicStage] = useState("");
+  const [musicUrl, setMusicUrl] = useState<string | null>(null);
 
   // The image being worked on in the enhance/video stage — starts as the anchor,
   // and a Pro effect (e.g. background removal) can replace it with its result.
@@ -391,6 +407,61 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
     }
   };
 
+  // Music — sized to the chosen video length (falls back to 30s if no video yet).
+  const generateMusic = async () => {
+    if (!campaignId || musicGenerating) return;
+    const isVocals = MUSIC_MODELS.find((m) => m.id === musicModel)?.vocals;
+    setMusicGenerating(true);
+    setMusicUrl(null);
+    setMusicStage("Composing your track…");
+    try {
+      const res = await api("/api/jobs", {
+        method: "POST",
+        body: JSON.stringify({
+          campaignId,
+          type: "music_generation",
+          params: {
+            genre: musicGenre,
+            musicModel,
+            durationSec: videoDuration,
+            ...(isVocals && musicLyrics.trim()
+              ? { lyrics: musicLyrics.trim() }
+              : {}),
+          },
+        }),
+        workspaceSlug,
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        jobId?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.jobId) {
+        throw new Error(data.error ?? "Couldn't start the music");
+      }
+      refreshBalance();
+      for (let i = 0; i < 80; i++) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const jr = await api(`/api/jobs/${data.jobId}`, { workspaceSlug });
+        if (!jr.ok) continue;
+        const job = (await jr.json()) as {
+          status: string;
+          outputUrls?: string[];
+        };
+        if (job.status === "ready" && job.outputUrls?.[0]) {
+          setMusicUrl(job.outputUrls[0]);
+          refreshBalance();
+          toast.success("Your track is ready");
+          break;
+        }
+        if (job.status === "failed") throw new Error("Music generation failed");
+      }
+    } catch (err) {
+      toast.error((err as Error).message ?? "Music generation failed");
+    } finally {
+      setMusicGenerating(false);
+    }
+  };
+
   // The still on the enhance surface — the anchor, or a Pro-effect result.
   const workingImage = enhancedUrl ?? anchor?.url ?? null;
 
@@ -642,6 +713,23 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
               workspaceSlug={workspaceSlug}
               onOpen={openProject}
               onNew={newProject}
+            />
+          ) : section === "music" ? (
+            // Music is a compose step, not a generate/preview split — render the
+            // same full canvas in both layouts.
+            <MusicCanvas
+              genre={musicGenre}
+              setGenre={setMusicGenre}
+              model={musicModel}
+              setModel={setMusicModel}
+              lyrics={musicLyrics}
+              setLyrics={setMusicLyrics}
+              durationSec={videoDuration}
+              hasVideo={!!videoUrl}
+              generating={musicGenerating}
+              stage={musicStage}
+              url={musicUrl}
+              onGenerate={generateMusic}
             />
           ) : layout === "cockpit" ? (
             <CockpitCreate
@@ -1380,47 +1468,42 @@ function VideoInputs({
       </div>
     );
   }
-  const chip = (active: boolean) =>
-    `rounded-full border px-3 py-1 text-xs transition-colors ${
-      active
-        ? "border-primary/40 bg-primary/15 text-primary"
-        : "border-border text-muted-foreground hover:text-foreground"
-    }`;
+  const durationOptions: StudioOption<string>[] = VIDEO_LENGTHS.map((d) => ({
+    value: String(d),
+    label: `${d} seconds`,
+    badge: d === 30 ? "Pro" : undefined,
+    blurb:
+      d === 10
+        ? "Short, punchy social clip"
+        : d === 15
+          ? "Room for a beat and a payoff"
+          : "A longer film — building story arc",
+  }));
+  const styleOptions: StudioOption<string>[] = VIDEO_STYLES.map((s) => ({
+    value: s,
+    label: s,
+  }));
   return (
     <div className="flex flex-col gap-4">
       <div>
         <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
           Length
         </label>
-        <div className="flex gap-2">
-          {VIDEO_LENGTHS.map((d) => (
-            <button
-              key={d}
-              type="button"
-              onClick={() => setDuration(d)}
-              className={chip(duration === d)}
-            >
-              {d}s
-            </button>
-          ))}
-        </div>
+        <StudioSelect
+          value={String(duration)}
+          onChange={(v) => setDuration(Number(v) as 10 | 15 | 30)}
+          options={durationOptions}
+        />
       </div>
       <div>
         <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
           Style
         </label>
-        <div className="flex flex-wrap gap-2">
-          {VIDEO_STYLES.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setStyle(s)}
-              className={chip(style === s)}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
+        <StudioSelect
+          value={style}
+          onChange={(v) => setStyle(v as (typeof VIDEO_STYLES)[number])}
+          options={styleOptions}
+        />
       </div>
       <button
         type="button"
@@ -1638,6 +1721,163 @@ function VideoCanvas(props: {
           />
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── Music: a track sized to the chosen video length ──────────────────────── */
+function MusicCanvas({
+  genre,
+  setGenre,
+  model,
+  setModel,
+  lyrics,
+  setLyrics,
+  durationSec,
+  hasVideo,
+  generating,
+  stage,
+  url,
+  onGenerate,
+}: {
+  genre: string;
+  setGenre: (g: string) => void;
+  model: string;
+  setModel: (m: string) => void;
+  lyrics: string;
+  setLyrics: (l: string) => void;
+  durationSec: 10 | 15 | 30;
+  hasVideo: boolean;
+  generating: boolean;
+  stage: string;
+  url: string | null;
+  onGenerate: () => void;
+}) {
+  const genreOptions: StudioOption<string>[] = MUSIC_GENRES.map((g) => ({
+    value: g,
+    label: g,
+  }));
+  const modelOptions: StudioOption<string>[] = MUSIC_MODELS.map((m) => ({
+    value: m.id,
+    label: m.label,
+    blurb: m.blurb,
+  }));
+  const isVocals = MUSIC_MODELS.find((m) => m.id === model)?.vocals;
+  const isNatural = model === "lyria2";
+  return (
+    <div className="mx-auto flex h-full max-w-3xl flex-col gap-4">
+      <div>
+        <h2 className="text-base font-semibold">Add a soundtrack</h2>
+        <p className="text-sm text-muted-foreground">
+          A track composed to match — sized to your{" "}
+          {hasVideo ? `${durationSec}s video` : "chosen video length"}.
+        </p>
+      </div>
+
+      {/* Result / preview */}
+      <div className="flex min-h-[30vh] flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-border bg-card p-6 text-center">
+        {generating ? (
+          <>
+            <Spinner size={48} />
+            <p className="text-sm text-muted-foreground">
+              {stage || "Composing your track…"}
+            </p>
+          </>
+        ) : url ? (
+          <div className="flex w-full max-w-md flex-col items-center gap-3">
+            <div className="grid h-14 w-14 place-items-center rounded-full bg-primary/10">
+              <Music2 className="h-7 w-7 text-primary" />
+            </div>
+            <audio controls src={url} className="w-full">
+              <track kind="captions" />
+            </audio>
+            <a
+              href={url}
+              download
+              className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+            >
+              <ArrowRight className="h-3.5 w-3.5" /> Download track
+            </a>
+          </div>
+        ) : (
+          <>
+            <div className="grid h-14 w-14 place-items-center rounded-full bg-primary/10">
+              <Music2 className="h-7 w-7 text-primary/70" />
+            </div>
+            <p className="max-w-xs text-sm text-muted-foreground">
+              Pick a style and generate — your track appears here, ready to drop
+              onto the video.
+            </p>
+          </>
+        )}
+      </div>
+
+      {/* Controls */}
+      <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              Style
+            </label>
+            <StudioSelect
+              value={genre}
+              onChange={setGenre}
+              options={genreOptions}
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              Engine
+            </label>
+            <StudioSelect
+              value={model}
+              onChange={setModel}
+              options={modelOptions}
+            />
+          </div>
+        </div>
+
+        {isVocals && (
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              Lyrics{" "}
+              <span className="text-muted-foreground/60">
+                · optional — left blank, we&apos;ll write a jingle
+              </span>
+            </label>
+            <textarea
+              value={lyrics}
+              onChange={(e) => setLyrics(e.target.value)}
+              rows={3}
+              placeholder="A short, catchy jingle about your brand…"
+              className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary/50"
+            />
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={onGenerate}
+          disabled={generating}
+          className="flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity disabled:opacity-40"
+        >
+          {generating ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" /> Composing
+            </>
+          ) : (
+            <>
+              <Sparkles className="h-4 w-4" /> Generate music
+            </>
+          )}
+        </button>
+        <p className="text-center text-[11px] text-muted-foreground/70">
+          {isNatural
+            ? "Natural renders a fixed ~30s bed"
+            : `Matched to your ${durationSec}s video`}{" "}
+          · 8 credits
+        </p>
+      </div>
     </div>
   );
 }
