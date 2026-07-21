@@ -28,6 +28,11 @@ export const FAL_MODELS = {
   logo_refine: "fal-ai/recraft/v4.1/text-to-image", // "more like this" (raster)
   logo_finalize: "fal-ai/recraft/v4.1/pro/text-to-vector", // premium SVG (the deliverable)
   logo_vectorize: "fal-ai/recraft/vectorize", // raster upload → single SVG `image`
+  // Recraft V3 text-to-image — the ONE Recraft family exposing the named `style`
+  // enum (vector_illustration/line_art, bold_stroke, engraving…). Engaged only
+  // when the user picks a Style; vector_illustration styles return SVG, so it
+  // serves BOTH styled concepts and the styled finalize. Verified live Jul 2026.
+  logo_styled: "fal-ai/recraft/v3/text-to-image",
 } as const;
 
 // v2.1 uses the same path for queue status/result as submission — no alias needed

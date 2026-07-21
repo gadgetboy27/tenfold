@@ -1,4 +1,8 @@
-import type { LogoBrief, ColorDirection } from "@/lib/logo/brief";
+import {
+  getLogoStyle,
+  type LogoBrief,
+  type ColorDirection,
+} from "@/lib/logo/brief";
 
 /**
  * Brief → Recraft prompt. Pure, no AI call — the intelligence is in the model;
@@ -23,8 +27,12 @@ const hex = (h: string): RgbColor => ({
   b: parseInt(h.slice(4, 6), 16),
 });
 
-/** A small, named palette per colour direction. "auto" → no palette. */
-const PALETTES: Record<Exclude<ColorDirection, "auto">, RgbColor[]> = {
+/**
+ * A small, named palette per colour direction. "auto" → no palette; "brand" is
+ * resolved server-side from the workspace brand-kit (not here — the composer is
+ * pure and DB-free), so it's absent from this map too.
+ */
+const PALETTES: Partial<Record<ColorDirection, RgbColor[]>> = {
   monochrome: [hex("111111"), hex("888888")],
   bold: [hex("e63946"), hex("1d3557")],
   earthy: [hex("6b705c"), hex("cb997e")],
@@ -41,20 +49,26 @@ function axis(value: number, low: string, high: string): string {
 
 /** What the logo type asks the model to produce. */
 const TYPE_CLAUSE: Record<LogoBrief["logoType"], (name: string) => string> = {
-  wordmark: (n) => `wordmark logo, the text reads exactly "${n}", spelled correctly, distinctive custom lettering, no separate icon`,
+  wordmark: (n) =>
+    `wordmark logo, the text reads exactly "${n}", spelled correctly, distinctive custom lettering, no separate icon`,
   icon: () => `a single abstract icon mark, no text, bold memorable silhouette`,
-  combination: (n) => `an icon paired with the name "${n}" in a clean sans-serif`,
-  emblem: (n) => `an emblem badge containing the name "${n}", symmetrical crest`,
+  combination: (n) =>
+    `an icon paired with the name "${n}" in a clean sans-serif`,
+  emblem: (n) =>
+    `an emblem badge containing the name "${n}", symmetrical crest`,
 };
 
 export interface ComposedLogoPrompt {
   prompt: string;
-  /** Undefined when colour direction is "auto". */
+  /** Undefined for "auto"; "brand" is filled in by the route, not here. */
   colors?: RgbColor[];
+  /** Recraft V3 `style` value when a named style was picked; else undefined. */
+  style?: string;
 }
 
 export function composeLogoPrompt(brief: LogoBrief): ComposedLogoPrompt {
   const p = brief.personality;
+  const style = getLogoStyle(brief.style);
   const descriptors = [
     axis(p.classicModern, "classic, timeless", "modern, contemporary"),
     axis(p.playfulSerious, "playful, friendly", "serious, professional"),
@@ -66,15 +80,16 @@ export function composeLogoPrompt(brief: LogoBrief): ComposedLogoPrompt {
     TYPE_CLAUSE[brief.logoType](brief.businessName.trim()),
     brief.industry.trim() ? `for a ${brief.industry.trim()} business` : "",
     descriptors.join(", "),
+    style.phrase, // the picked style's descriptor (empty for "auto")
     brief.notes.trim(),
     // The spine — flat vector logo, centred, reproducible.
     "professional brand logo, flat vector, centred, clean, high contrast, scalable, iconic, on a plain background",
   ].filter(Boolean);
 
   const composed: ComposedLogoPrompt = { prompt: parts.join(", ") };
-  if (brief.colorDirection !== "auto") {
-    composed.colors = PALETTES[brief.colorDirection];
-  }
+  const palette = PALETTES[brief.colorDirection];
+  if (palette) composed.colors = palette;
+  if (style.recraft) composed.style = style.recraft;
   return composed;
 }
 

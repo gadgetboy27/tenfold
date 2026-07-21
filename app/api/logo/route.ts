@@ -9,6 +9,7 @@ import { refundCredits } from "@/lib/credits/refund";
 import { enqueueJob } from "@/lib/fal/queue";
 import { logoBriefSchema } from "@/lib/logo/brief";
 import { composeLogoPrompt } from "@/lib/logo/promptComposer";
+import { resolveBrandColors } from "@/lib/logo/brandColors";
 
 // POST /api/logo — start a logo project: create it from the brief, debit
 // logo_concepts, and fan out 6 concept generations.
@@ -166,11 +167,21 @@ export async function POST(req: Request) {
       );
     }
 
-    const { prompt, colors } = composeLogoPrompt(brief);
+    const composed = composeLogoPrompt(brief);
+    const { prompt, style } = composed;
+    // "brand" colour direction resolves to the workspace brand-kit palette.
+    const colors =
+      brief.colorDirection === "brand"
+        ? await resolveBrandColors(admin, session.workspaceId)
+        : composed.colors;
+    // A picked style engages Recraft V3 (the style-aware family); "auto" keeps
+    // the fast V4.1 raster path. `style` is only a valid input on the V3 model.
+    const conceptModel = style ? "logo_styled" : "logo_concepts";
     const falInput: Record<string, unknown> = {
       prompt,
       image_size: "square_hd",
       ...(colors ? { colors } : {}),
+      ...(style ? { style } : {}),
     };
 
     // The project + the concepts job. The 6 concepts share this one job via
@@ -220,7 +231,7 @@ export async function POST(req: Request) {
         const webhookUrl = `${process.env.APP_URL}/api/webhooks/fal?j=${jobId}&d=${d.index}`;
         try {
           const { requestId } = await enqueueJob(
-            "logo_concepts",
+            conceptModel,
             { ...falInput, prompt: d.prompt },
             webhookUrl,
           );

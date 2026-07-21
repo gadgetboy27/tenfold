@@ -9,6 +9,7 @@ import { refundCredits } from "@/lib/credits/refund";
 import { enqueueJob } from "@/lib/fal/queue";
 import { logoBriefSchema } from "@/lib/logo/brief";
 import { composeLogoPrompt } from "@/lib/logo/promptComposer";
+import { resolveBrandColors } from "@/lib/logo/brandColors";
 import { ensureLogoCampaign } from "@/app/api/logo/route";
 
 // POST /api/logo/:id/finalize — premium SVG via Recraft V4.1 Pro text-to-vector.
@@ -82,7 +83,15 @@ export async function POST(
     );
     const composed = composeLogoPrompt(brief);
     const prompt = anchorPrompt ?? composed.prompt;
-    const colors = composed.colors;
+    const style = composed.style;
+    // Keep the picked look end-to-end: a styled brief finalizes on Recraft V3
+    // (its vector_illustration styles output SVG); "auto" uses V4.1 Pro vector.
+    // "brand" colours resolve to the workspace palette, matching the concepts.
+    const colors =
+      brief.colorDirection === "brand"
+        ? await resolveBrandColors(admin, session.workspaceId)
+        : composed.colors;
+    const finalizeModel = style ? "logo_styled" : "logo_finalize";
 
     const { error: jobErr } = await admin.from("creative_jobs").insert({
       id: jobId,
@@ -90,7 +99,7 @@ export async function POST(
       workspace_id: session.workspaceId,
       type: "logo_finalize",
       status: "queued",
-      input_params: { logoProjectId: id, prompt, colors },
+      input_params: { logoProjectId: id, prompt, colors, style },
       credits_charged: cost,
     });
     if (jobErr) {
@@ -101,8 +110,13 @@ export async function POST(
     const webhookUrl = `${process.env.APP_URL}/api/webhooks/fal?j=${jobId}`;
     try {
       const { requestId } = await enqueueJob(
-        "logo_finalize",
-        { prompt, image_size: "square_hd", ...(colors ? { colors } : {}) },
+        finalizeModel,
+        {
+          prompt,
+          image_size: "square_hd",
+          ...(colors ? { colors } : {}),
+          ...(style ? { style } : {}),
+        },
         webhookUrl,
       );
       await admin

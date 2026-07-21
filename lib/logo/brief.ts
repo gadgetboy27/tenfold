@@ -8,7 +8,12 @@ import { z } from "zod";
  * Stored as-is in logo_projects.brief (jsonb), and re-read on refine/finalize.
  */
 
-export const LOGO_TYPES = ["wordmark", "icon", "combination", "emblem"] as const;
+export const LOGO_TYPES = [
+  "wordmark",
+  "icon",
+  "combination",
+  "emblem",
+] as const;
 export type LogoType = (typeof LOGO_TYPES)[number];
 
 /**
@@ -18,6 +23,7 @@ export type LogoType = (typeof LOGO_TYPES)[number];
  */
 export const COLOR_DIRECTIONS = [
   "auto",
+  "brand", // pull the workspace brand-kit palette (resolved server-side)
   "monochrome",
   "bold",
   "earthy",
@@ -25,6 +31,65 @@ export const COLOR_DIRECTIONS = [
   "vibrant",
 ] as const;
 export type ColorDirection = (typeof COLOR_DIRECTIONS)[number];
+
+/**
+ * Named aesthetic styles → Recraft V3's `style` enum (the vector_illustration
+ * family — the design/logo-grade one). "auto" engages the default V4.1 path (no
+ * style param); any other engages V3 text-to-image, which honours the style AND
+ * returns SVG. `phrase` is folded into the prompt so the look reads even on the
+ * fallback path. Verified live against Recraft V3's style enum (Jul 2026).
+ */
+export const LOGO_STYLES = [
+  { id: "auto", label: "Auto", recraft: null, phrase: "" },
+  {
+    id: "line_art",
+    label: "Line art",
+    recraft: "vector_illustration/line_art",
+    phrase: "clean single-weight line art, minimal strokes",
+  },
+  {
+    id: "bold_stroke",
+    label: "Bold stroke",
+    recraft: "vector_illustration/bold_stroke",
+    phrase: "thick confident strokes, high-impact",
+  },
+  {
+    id: "flat",
+    label: "Flat",
+    recraft: "vector_illustration/roundish_flat",
+    phrase: "soft rounded flat shapes, friendly",
+  },
+  {
+    id: "engraving",
+    label: "Engraving",
+    recraft: "vector_illustration/engraving",
+    phrase: "fine engraved detail, premium heritage feel",
+  },
+  {
+    id: "linocut",
+    label: "Linocut",
+    recraft: "vector_illustration/linocut",
+    phrase: "hand-carved linocut texture, organic",
+  },
+  {
+    id: "editorial",
+    label: "Editorial",
+    recraft: "vector_illustration/editorial",
+    phrase: "editorial illustration, sophisticated",
+  },
+  {
+    id: "marker",
+    label: "Marker",
+    recraft: "vector_illustration/marker_outline",
+    phrase: "hand-drawn marker outline, casual",
+  },
+] as const;
+export type LogoStyleId = (typeof LOGO_STYLES)[number]["id"];
+
+/** Look up a style by id (defaults to "auto"). */
+export function getLogoStyle(id: string | undefined | null) {
+  return LOGO_STYLES.find((s) => s.id === id) ?? LOGO_STYLES[0];
+}
 
 /**
  * Four personality axes, 0–100. 0 is the first word, 100 the second. Defaults
@@ -42,6 +107,9 @@ export const logoBriefSchema = z.object({
   businessName: z.string().trim().min(1).max(60),
   industry: z.string().trim().max(60).optional().default(""),
   logoType: z.enum(LOGO_TYPES).default("combination"),
+  style: z
+    .enum(LOGO_STYLES.map((s) => s.id) as [LogoStyleId, ...LogoStyleId[]])
+    .default("auto"),
   colorDirection: z.enum(COLOR_DIRECTIONS).default("auto"),
   personality: z
     .object({

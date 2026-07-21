@@ -8,9 +8,11 @@ import { Slider } from "@/components/ui/slider";
 import {
   LOGO_TYPES,
   COLOR_DIRECTIONS,
+  LOGO_STYLES,
   type LogoBrief as LogoBriefType,
   type LogoType,
   type ColorDirection,
+  type LogoStyleId,
 } from "@/lib/logo/brief";
 
 // Step 1 of the studio: the brief. Every field is skippable — only the business
@@ -37,6 +39,7 @@ const TYPE_LABELS: Record<LogoType, string> = {
 
 const COLOR_LABELS: Record<ColorDirection, string> = {
   auto: "Let AI choose",
+  brand: "Brand colours",
   monochrome: "Monochrome",
   bold: "Bold",
   earthy: "Earthy",
@@ -53,6 +56,7 @@ export function LogoBrief({ onSubmit, submitting }: LogoBriefProps) {
   const [businessName, setBusinessName] = useState("");
   const [industry, setIndustry] = useState("");
   const [logoType, setLogoType] = useState<LogoType>("combination");
+  const [style, setStyle] = useState<LogoStyleId>("auto");
   const [colorDirection, setColorDirection] = useState<ColorDirection>("auto");
   const [notes, setNotes] = useState("");
   const [personality, setPersonality] = useState({
@@ -118,6 +122,30 @@ export function LogoBrief({ onSubmit, submitting }: LogoBriefProps) {
       </div>
 
       <div className="space-y-2">
+        <label className="text-sm font-medium">Style</label>
+        <p className="text-xs text-muted-foreground">
+          Auto lets the AI choose. Pick a look to steer every concept — and the
+          final SVG — toward it.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {LOGO_STYLES.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => setStyle(s.id)}
+              className={`rounded-full border px-4 py-1.5 text-sm transition ${
+                style === s.id
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border hover:bg-muted"
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-2">
         <label className="text-sm font-medium">Colour direction</label>
         <div className="flex flex-wrap gap-2">
           {COLOR_DIRECTIONS.map((c) => (
@@ -160,7 +188,8 @@ export function LogoBrief({ onSubmit, submitting }: LogoBriefProps) {
 
       <div className="space-y-2">
         <label className="text-sm font-medium">
-          Anything else? <span className="text-muted-foreground">(optional)</span>
+          Anything else?{" "}
+          <span className="text-muted-foreground">(optional)</span>
         </label>
         <Textarea
           value={notes}
@@ -179,6 +208,7 @@ export function LogoBrief({ onSubmit, submitting }: LogoBriefProps) {
             businessName: businessName.trim(),
             industry: industry.trim(),
             logoType,
+            style,
             colorDirection,
             personality,
             notes: notes.trim(),
