@@ -33,6 +33,7 @@ import {
   StudioSelect,
   type StudioOption,
 } from "@/components/studio/StudioSelect";
+import { LogoStudio } from "@/components/logo/LogoStudio";
 import { useEntitlements } from "@/lib/billing/useEntitlements";
 import { randomCampaignName } from "@/lib/util/campaign-name";
 import { MUSIC_GENRES } from "@/lib/fal/prompts";
@@ -93,7 +94,13 @@ const VIDEO_STAGE_LABELS = [
   [80, "Finishing the cut…"],
 ] as const;
 
-export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
+export function Studio({
+  workspaceSlug,
+  logoEnabled = false,
+}: {
+  workspaceSlug: string;
+  logoEnabled?: boolean;
+}) {
   const setWorkspaceSlug = useAppStore((s) => s.setWorkspaceSlug);
   const setCreditBalance = useAppStore((s) => s.setCreditBalance);
   const ent = useEntitlements();
@@ -543,7 +550,9 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
       label: "Logo & brand",
       icon: Shapes,
       done: false,
-      classicHref: `/${workspaceSlug}/logo`,
+      // Renders the full Logo & Brand studio inline when enabled; only falls
+      // back to the classic page if the builder flag is off.
+      ...(logoEnabled ? {} : { classicHref: `/${workspaceSlug}/logo` }),
     },
     { id: "publish", label: "Publish", icon: Send, done: false },
   ];
@@ -731,6 +740,13 @@ export function Studio({ workspaceSlug }: { workspaceSlug: string }) {
               url={musicUrl}
               onGenerate={generateMusic}
             />
+          ) : section === "logo" && logoEnabled ? (
+            // The full world-class Logo & Brand studio, delivered into the big
+            // canvas — its own multi-phase flow (brief → concepts → refine →
+            // vectorize → brand kit), same engine as the classic page.
+            <div className="mx-auto h-full max-w-5xl">
+              <LogoStudio />
+            </div>
           ) : layout === "cockpit" ? (
             <CockpitCreate
               tools={tools}
