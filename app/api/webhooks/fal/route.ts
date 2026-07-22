@@ -158,9 +158,7 @@ export async function POST(req: Request) {
       segIndex,
     );
   } else {
-    const errMsg =
-      typeof payload.error === "string" ? payload.error : "fal.ai job failed";
-    await handleFailure(job, errMsg, resultData);
+    await handleFailure(job, extractFalError(payload), resultData);
   }
 
   // 4. Mark processed
@@ -170,6 +168,32 @@ export async function POST(req: Request) {
     .eq("event_id", requestId);
 
   return NextResponse.json({ ok: true });
+}
+
+/**
+ * Pull the human-readable reason out of a fal failure. fal nests validation
+ * errors under `payload.detail[].msg` (e.g. "File size exceeds the maximum…"),
+ * while `payload.error` is only the bare status ("Unexpected status code: 422").
+ * Surface the detail so error_message is self-explanatory without the raw log.
+ */
+function extractFalError(payload: {
+  error?: unknown;
+  payload?: unknown;
+}): string {
+  const detail = (
+    payload.payload as
+      | { detail?: Array<{ msg?: unknown; type?: unknown }> }
+      | undefined
+  )?.detail;
+  if (Array.isArray(detail) && detail.length > 0) {
+    const first = detail[0];
+    const msg = typeof first?.msg === "string" ? first.msg : "";
+    const type = typeof first?.type === "string" ? first.type : "";
+    if (msg) return (type ? `${msg} (${type})` : msg).slice(0, 400);
+  }
+  return typeof payload.error === "string"
+    ? payload.error
+    : "fal.ai job failed";
 }
 
 type ResultImage = {

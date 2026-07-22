@@ -16,6 +16,7 @@ import { generateScript } from "@/lib/claude/script";
 import { getWorkspaceBrandVoice } from "@/lib/claude/brand-voice";
 import { generateJingleLyrics } from "@/lib/claude/jingle";
 import { getEntitlements } from "@/lib/billing/entitlements";
+import { prepareVideoStartImage } from "@/lib/composition/video-image";
 import {
   IMAGE_STYLE_SUFFIXES,
   MUSIC_GENRE_PROMPTS,
@@ -139,6 +140,23 @@ export async function POST(req: Request) {
     }
 
     const prompt = (body.params.prompt as string) ?? "";
+
+    // Kling caps the start image at 10 MB; FLUX Ultra anchors often exceed it,
+    // causing an intermittent 422 file_too_large. Normalize to a safe JPEG here
+    // so the stored input_params + every segment use the same in-bounds frame.
+    if (
+      body.type === "video_10s" ||
+      body.type === "video_15s" ||
+      body.type === "video_30s"
+    ) {
+      const src = body.params.imageUrl;
+      if (typeof src === "string" && src) {
+        body.params.imageUrl = await prepareVideoStartImage(
+          src,
+          session.workspaceId,
+        );
+      }
+    }
 
     const { error: jobErr } = await admin.from("creative_jobs").insert({
       id: jobId,
