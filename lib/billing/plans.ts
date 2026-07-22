@@ -47,6 +47,7 @@ export const PLANS: Plan[] = [
       "All formats incl. video",
       "Priority queue",
       "Analytics",
+      "AI image blending — available as an add-on",
     ],
     popular: true,
   },
@@ -61,6 +62,7 @@ export const PLANS: Plan[] = [
       "All formats",
       "Up to 5 workspaces",
       "White-label exports",
+      "Full image compositing suite — cutout, inpaint, relight, blend, depth",
     ],
   },
 ];

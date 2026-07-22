@@ -17,6 +17,7 @@ import {
   Sparkles,
   ExternalLink,
   FileText,
+  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -38,6 +39,14 @@ interface Pack {
   priceNzd: number;
   priceId: string | null;
   popular?: boolean;
+}
+
+interface Addon {
+  key: string;
+  name: string;
+  priceNzd: number;
+  priceId: string | null;
+  blurb: string;
 }
 
 interface Subscription {
@@ -64,6 +73,8 @@ interface BillingData {
   transactions: Transaction[];
   plans: Plan[];
   packs: Pack[];
+  addons: Addon[];
+  activeAddons: string[];
 }
 
 const TIER_LABELS: Record<string, string> = {
@@ -150,14 +161,15 @@ export default function BillingPage() {
       if (cancelled) return;
       const d = await loadBilling();
       tries += 1;
-      if (recentPurchase(d)) {
-        toast.success("Payment successful — credits added to your account!");
+      // A credit pack/plan purchase shows up as a transaction; an add-on
+      // purchase (e.g. Blend Package) never does — it just activates a
+      // capability, so check activeAddons too instead of assuming credits.
+      if (recentPurchase(d) || (d?.activeAddons.length ?? 0) > 0) {
+        toast.success("Payment successful — your account has been updated!");
         return;
       }
       if (tries >= 8) {
-        toast.success(
-          "Payment received — your credits will appear here in a moment.",
-        );
+        toast.success("Payment received — this will appear here shortly.");
         return;
       }
       setTimeout(tick, 1500);
@@ -432,6 +444,101 @@ export default function BillingPage() {
           })}
         </div>
       </section>
+
+      {/* Add-ons — Business can unlock extra capabilities without a full Agency
+          upgrade. Agency already has everything bundled, so nothing to sell it;
+          payg/creator can't use these at any tier, so nothing to show them. */}
+      {tier === "business" && data.addons.length > 0 && (
+        <section>
+          <h2 className="text-base font-semibold text-foreground mb-1">
+            Add-ons
+          </h2>
+          <p className="text-sm text-muted-foreground mb-5">
+            Extra capabilities for your Business plan.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {data.addons.map((addon) => {
+              const isActive = data.activeAddons.includes(addon.key);
+              const isConfigured = addon.priceId !== null;
+              const isLoading =
+                purchasing !== null && purchasing === addon.priceId;
+              return (
+                <div
+                  key={addon.key}
+                  className={cn(
+                    "relative rounded-2xl border p-6 flex flex-col gap-4 bg-card",
+                    isActive ? "border-success/40" : "border-border",
+                  )}
+                >
+                  {isActive && (
+                    <div className="absolute top-3 right-3">
+                      <span className="bg-success/10 text-success text-[10px] font-semibold px-2 py-0.5 rounded-full border border-success/20">
+                        Active
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                      <Layers className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-foreground">
+                        {addon.name}
+                      </p>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-xl font-bold text-foreground">
+                          ${addon.priceNzd}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          /mo
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground flex-1">
+                    {addon.blurb}
+                  </p>
+                  {isActive ? (
+                    <Button
+                      onClick={handleManageSubscription}
+                      disabled={portalLoading}
+                      variant="outline"
+                      size="sm"
+                      className="w-full gap-2"
+                    >
+                      {portalLoading ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      )}
+                      Manage
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={() => handlePurchase(addon.priceId, addon.name)}
+                      disabled={isLoading || !isConfigured}
+                      variant="default"
+                      className={cn(
+                        "w-full gap-2",
+                        isConfigured &&
+                          "bg-primary hover:bg-primary/90 text-white",
+                      )}
+                      size="sm"
+                    >
+                      {isLoading && (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      )}
+                      {isConfigured
+                        ? `Add for $${addon.priceNzd}/mo`
+                        : "Coming soon"}
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* Redeem a promo / friends-and-family code */}
       <section>
