@@ -12,6 +12,7 @@
 
 A business inputs a text prompt. The platform generates 6 images via fal.ai.
 The user picks one image (the "anchor"). From that anchor they can branch into:
+
 - 10–60 second video (fal.ai / Kling)
 - Music track (fal.ai)
 - AI-written script or caption (Claude API)
@@ -199,13 +200,20 @@ The service-role admin client (`lib/supabase/admin.ts`) bypasses RLS, so tenant
 isolation cannot rely on RLS alone — it depends on every query filtering by
 `workspace_id`. To make that automatic, **new App Router API routes use
 `withWorkspace` (`lib/api/with-workspace.ts`)** instead of calling `getSession()`
-+ admin client by hand:
+
+- admin client by hand:
 
 ```typescript
-export const GET = withWorkspace<{ id: string }>(async (req, { db, session, params }) => {
-  const { data } = await db.from('campaigns').select('*').eq('id', params.id).single();
-  return NextResponse.json(data); // workspace_id filter already applied
-});
+export const GET = withWorkspace<{ id: string }>(
+  async (req, { db, session, params }) => {
+    const { data } = await db
+      .from("campaigns")
+      .select("*")
+      .eq("id", params.id)
+      .single();
+    return NextResponse.json(data); // workspace_id filter already applied
+  },
+);
 ```
 
 - `db` auto-applies `.eq('workspace_id', …)` on reads and injects it on writes for
@@ -280,6 +288,30 @@ Client: Supabase Realtime `postgres_changes` on `creative_jobs` table.
 
 ---
 
+## 7b. Model Adoption Gate — riding fal's newest models safely
+
+We want to be at the forefront as fal ships new models, but a newer model is not
+automatically an upgrade — it can drop a capability or simply not be better. So a
+candidate **never silently replaces the incumbent**. It must clear three rules,
+encoded (and tested) in `lib/fal/model-adoption.ts` so the check is executable:
+
+1. **It works** — verified to submit + return successfully against fal
+   (`verifiedWorkingAt` set). Always verify endpoint + schema LIVE first.
+2. **It covers** — its capabilities are a superset of the incumbent's: same
+   output, ≥ the durations, ⊇ the input contract (`coversIncumbent()`).
+3. **It improves** — a recorded, concrete win in speed / quality / cost
+   (`improvement` set).
+
+Only when all three hold may `canPromote()` return ok. **The former model is
+never deleted — mark it `retired` so a revert is one flag flip.** The live record
+is `lib/fal/model-ledger.ts` (`MODEL_LEDGER` + `promotionReport()`), updated at
+the monthly model review; `lib/fal/models.ts` stays the runtime source of truth
+for what's actually called. Worked example: Veo 3.1 Fast is a registered
+_candidate_ the gate deliberately blocks — it can't cover Kling's 15s clips
+(caps at ~8s), which is exactly why we didn't swap the default.
+
+---
+
 ## 8. Forbidden Patterns
 
 ```typescript
@@ -311,6 +343,7 @@ Client: Supabase Realtime `postgres_changes` on `creative_jobs` table.
 ## 10. Build Phases
 
 ### Phase 1 — Foundation ✅ IN PROGRESS
+
 - Supabase schema + Drizzle
 - Zod env validation
 - Auth (email + Google)
@@ -323,18 +356,23 @@ Client: Supabase Realtime `postgres_changes` on `creative_jobs` table.
 - Credit debit + ledger
 
 ### Phase 2 — Expansion
+
 Video, music, script generation from anchor image.
 
 ### Phase 3 — Composition
+
 Sharp pipeline, brand kit, text overlays, format selector.
 
 ### Phase 4 — Publishing
+
 Ayrshare connect, platform picker, publish + schedule.
 
 ### Phase 5 — Billing
+
 Stripe subscriptions + credit packs, webhook grants.
 
 ### Phase 6 — Production Hardening
+
 Rate limiting, Sentry, Posthog, email flows, E2E tests, security audit.
 
 ---
