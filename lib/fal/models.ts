@@ -33,6 +33,14 @@ export const FAL_MODELS = {
   // when the user picks a Style; vector_illustration styles return SVG, so it
   // serves BOTH styled concepts and the styled finalize. Verified live Jul 2026.
   logo_styled: "fal-ai/recraft/v3/text-to-image",
+  // ── Image Compositing (lib/compositing/). Every endpoint ID verified live
+  // against fal.ai/models before wiring (Jul 2026) — see lib/compositing/ops.ts
+  // for the input builders (schemas differ per model, so never hand-build).
+  composite_cutout: "fal-ai/birefnet/v2", // image_url → transparent PNG (same engine as bg_remove)
+  composite_inpaint: "fal-ai/flux-pro/v1/fill", // {image_url, mask_url, prompt} → filled region, blended edges
+  composite_relight: "fal-ai/iclight-v2", // {image_url, prompt} → relit to match target lighting
+  composite_blend: "fal-ai/flux-pro/kontext/max/multi", // {image_urls[2..5], prompt} → semantic merge
+  composite_depth: "fal-ai/image-preprocessors/depth-anything/v2", // image_url → single depth-map `image`
 } as const;
 
 // v2.1 uses the same path for queue status/result as submission — no alias needed

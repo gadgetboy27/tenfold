@@ -240,12 +240,22 @@ async function handleSuccess(
   const images =
     payload.images ?? (payload.image ? [payload.image] : undefined);
 
+  // Image Compositing jobs (lib/compositing/) — cutout/depth return PNG with a
+  // real alpha or precision channel that a forced .jpg re-label would corrupt.
+  const isComposite = job.type.startsWith("composite_");
+
   if (images) {
     for (const img of images) {
       const assetId = uuidv4();
-      // Extension from the real content type — a logo SVG saved as .jpg would be
-      // served with the wrong type and break the SVG editor.
-      const ext = (img.content_type ?? "").includes("svg") ? "svg" : "jpg";
+      // Extension from the real content type — a logo SVG (or a compositing
+      // cutout/depth PNG) saved as .jpg would be served with the wrong type and
+      // corrupt its alpha/precision channel.
+      const contentType = img.content_type ?? "";
+      const ext = contentType.includes("svg")
+        ? "svg"
+        : contentType.includes("png")
+          ? "png"
+          : "jpg";
       const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.${ext}`;
 
       const imgRes = await fetch(img.url);
@@ -279,28 +289,36 @@ async function handleSuccess(
               // one so the SVG deliverable matches the chosen look.
               ...(direction?.prompt ? { prompt: direction.prompt } : {}),
             }
-          : direction
+          : isComposite
             ? {
-                direction: direction.label,
-                direction_index: direction.index,
-                prompt: direction.prompt,
-                request_id: direction.requestId,
-                // Variety pack: which model made this image — the pick signal.
-                ...(direction.modelId ? { model: direction.modelId } : {}),
+                kind: "composite_step",
+                // op is "cutout" | "inpaint" | "relight" | "blend" | "depth"
+                op: job.input_params?.op ?? job.type.replace("composite_", ""),
+                request_id: job.fal_request_id,
               }
-            : job.type === "upscale"
+            : direction
               ? {
-                  hd: true,
-                  source_asset_id: job.input_params?.source_asset_id ?? null,
-                  upscale_factor: 2,
+                  direction: direction.label,
+                  direction_index: direction.index,
+                  prompt: direction.prompt,
+                  request_id: direction.requestId,
+                  // Variety pack: which model made this image — the pick signal.
+                  ...(direction.modelId ? { model: direction.modelId } : {}),
                 }
-              : job.type === "bg_remove"
+              : job.type === "upscale"
                 ? {
-                    effect: "bg_removed",
-                    transparent: true,
+                    hd: true,
                     source_asset_id: job.input_params?.source_asset_id ?? null,
+                    upscale_factor: 2,
                   }
-                : {},
+                : job.type === "bg_remove"
+                  ? {
+                      effect: "bg_removed",
+                      transparent: true,
+                      source_asset_id:
+                        job.input_params?.source_asset_id ?? null,
+                    }
+                  : {},
       });
     }
   }

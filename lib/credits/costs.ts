@@ -26,6 +26,13 @@ export const CREDIT_COSTS = {
   music_generation: 8,
   script_generation: 1,
   layout_autofix: 3,
+  // ── Image Compositing (lib/compositing/). All async via the fal webhook
+  // pipeline except the Sharp-only mechanical blends (0 credits, no fal call).
+  composite_cutout: 1, // fal-ai/birefnet/v2 (~$0.02 raw) — reuses bg_remove's engine
+  composite_inpaint: 3, // fal-ai/flux-pro/v1/fill (~$0.05 raw)
+  composite_relight: 2, // fal-ai/iclight-v2 (~$0.04 raw)
+  composite_blend: 3, // fal-ai/flux-pro/kontext/max/multi (~$0.06 raw)
+  composite_depth: 1, // fal-ai/image-preprocessors/depth-anything/v2 (~$0.01 raw)
 } as const satisfies Record<string, number>;
 
 export type CreditCostKey = keyof typeof CREDIT_COSTS;

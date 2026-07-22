@@ -312,6 +312,38 @@ _candidate_ the gate deliberately blocks — it can't cover Kling's 15s clips
 
 ---
 
+## 7c. Image Compositing — `lib/compositing/`
+
+Photoshop-grade blending: no manual masking, API-driven, through the same
+`creative_jobs` queue → webhook → Realtime pattern as everything else. Every
+fal endpoint below was verified LIVE before wiring (Jul 2026) — see
+`lib/compositing/ops.ts` for the exact input schema per op.
+
+| Op        | fal endpoint                                      | Cost |
+| --------- | ------------------------------------------------- | ---- |
+| `cutout`  | `fal-ai/birefnet/v2` (same engine as `bg_remove`) | 1    |
+| `inpaint` | `fal-ai/flux-pro/v1/fill`                         | 3    |
+| `relight` | `fal-ai/iclight-v2`                               | 2    |
+| `blend`   | `fal-ai/flux-pro/kontext/max/multi` (2–5 images)  | 3    |
+| `depth`   | `fal-ai/image-preprocessors/depth-anything/v2`    | 1    |
+
+`lib/compositing/blend.ts` is a separate, **mechanical** tier — pure Sharp
+composites (`textureOverlay`, `gradientMerge`, `softGlow`), zero fal calls, zero
+credits, served synchronously via `POST /api/compositing/blend`. The five AI ops
+above go through `POST /api/compositing` (debit → `creative_jobs` row → fal
+queue → the shared `/api/webhooks/fal` handler), mirroring the dedicated-route
+pattern used by `bg-remove` rather than the generic `/api/jobs` dispatcher.
+
+Every result — AI or mechanical — is stored as an asset tagged
+`metadata.kind = 'composite_step'` (`storeCompositeAsset()` in
+`lib/compositing/storage.ts`) so a pipeline can be stepped back through. Chain
+steps via `buildCompositeInput()`; never hand-build a fal input for these
+endpoints elsewhere. The shared webhook's asset extension detection now
+respects the real `content_type` (png/jpg/svg) instead of forcing `.jpg` —
+required so cutout/depth outputs keep their alpha/precision intact.
+
+---
+
 ## 8. Forbidden Patterns
 
 ```typescript
