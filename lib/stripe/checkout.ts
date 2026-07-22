@@ -1,10 +1,14 @@
 import { stripe } from "./client";
+import { ADDONS } from "@/lib/billing/addons";
 
 function isSubscriptionPrice(priceId: string): boolean {
   return [
     process.env.STRIPE_PRICE_CREATOR_MONTHLY,
     process.env.STRIPE_PRICE_BUSINESS_MONTHLY,
     process.env.STRIPE_PRICE_AGENCY_MONTHLY,
+    // Add-ons (e.g. the Blend Package) are recurring too — a second, separate
+    // Stripe subscription alongside the workspace's main tier subscription.
+    ...ADDONS.map((a) => a.priceId),
   ].includes(priceId);
 }
 

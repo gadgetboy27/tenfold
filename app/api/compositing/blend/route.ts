@@ -3,6 +3,9 @@ import { z } from "zod";
 import sharp from "sharp";
 import { getSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getEntitlements } from "@/lib/billing/entitlements";
+import { hasActiveAddon } from "@/lib/billing/addons";
+import { canUseCompositing } from "@/lib/compositing/access";
 import {
   fetchImageBuffer,
   storeCompositeAsset,
@@ -31,6 +34,26 @@ export async function POST(req: Request) {
     const session = await getSession(req);
     const body = blendSchema.parse(await req.json());
     const admin = createSupabaseAdminClient();
+
+    // Mechanical blends are free (no fal call, no credits) but still part of
+    // the compositing module's paywall — Agency, or Business with the Blend
+    // Package add-on.
+    const ent = await getEntitlements(session.workspaceId);
+    const hasBlendAddon =
+      ent.tier === "business"
+        ? await hasActiveAddon(session.workspaceId, "blend_package")
+        : false;
+    const access = canUseCompositing(
+      ent.tier,
+      "mechanical_blend",
+      hasBlendAddon,
+    );
+    if (!access.allowed) {
+      return NextResponse.json(
+        { error: access.reason, upgrade: true },
+        { status: 403 },
+      );
+    }
 
     // Tenant guard — the campaign must belong to this workspace.
     const { data: campaign } = await admin

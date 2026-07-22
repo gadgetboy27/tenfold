@@ -1,6 +1,7 @@
 import Stripe from "stripe";
 import { stripe } from "./client";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { addonForPriceId } from "@/lib/billing/addons";
 
 export function verifyStripeWebhook(
   body: string,
@@ -76,21 +77,50 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
-      if (session.mode !== "payment") break;
-
       const workspaceId = session.metadata?.workspaceId;
       const priceId = session.metadata?.priceId;
       if (!workspaceId || !priceId) break;
 
-      const credits = creditGrantForPack(priceId);
-      if (credits) {
-        await grantCredits(
-          workspaceId,
-          credits,
-          "Credit pack purchase",
-          typeof session.payment_intent === "string"
-            ? session.payment_intent
-            : undefined,
+      if (session.mode === "payment") {
+        const credits = creditGrantForPack(priceId);
+        if (credits) {
+          await grantCredits(
+            workspaceId,
+            credits,
+            "Credit pack purchase",
+            typeof session.payment_intent === "string"
+              ? session.payment_intent
+              : undefined,
+          );
+        }
+        break;
+      }
+
+      if (session.mode === "subscription") {
+        // Add-on checkout (e.g. Blend Package) — a SECOND subscription beside
+        // the workspace's main tier one. A tier-upgrade checkout is handled by
+        // customer.subscription.created below instead (no addon match here).
+        const addon = addonForPriceId(priceId);
+        if (!addon) break;
+        const subscriptionId =
+          typeof session.subscription === "string"
+            ? session.subscription
+            : session.subscription?.id;
+        const customerId =
+          typeof session.customer === "string"
+            ? session.customer
+            : session.customer?.id;
+        if (!subscriptionId) break;
+
+        await admin.from("workspace_addons").upsert(
+          {
+            workspace_id: workspaceId,
+            addon_key: addon.key,
+            status: "active",
+            stripe_subscription_id: subscriptionId,
+            stripe_customer_id: customerId ?? null,
+          },
+          { onConflict: "workspace_id,addon_key" },
         );
       }
       break;
@@ -147,10 +177,6 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
           ? stripeSub.customer
           : stripeSub.customer.id;
       const priceId = stripeSub.items.data[0]?.price?.id;
-      const tierResult = priceId
-        ? creditsForSubscriptionTier(priceId)
-        : undefined;
-      const tier = tierResult?.tier ?? "payg";
 
       const firstItem = stripeSub.items
         .data[0] as (typeof stripeSub.items.data)[0] & {
@@ -158,13 +184,41 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
         current_period_end?: number;
       };
 
+      // Add-on subscription (e.g. Blend Package) — a workspace can hold this
+      // AND its main tier subscription on the SAME Stripe customer at once, so
+      // this must be matched by subscription id, never by customer id (which
+      // the tier branch below uses and would otherwise clobber).
+      const addon = priceId ? addonForPriceId(priceId) : undefined;
+      if (addon) {
+        await admin
+          .from("workspace_addons")
+          .update({
+            status: stripeSub.status,
+            current_period_end: firstItem.current_period_end
+              ? new Date(firstItem.current_period_end * 1000).toISOString()
+              : null,
+          })
+          .eq("stripe_subscription_id", stripeSub.id);
+        break;
+      }
+
+      // Not an add-on price — resolve as the main tier subscription. Only
+      // touch `subscriptions` when the price is a RECOGNIZED tier price; an
+      // unrecognized price must never silently downgrade the workspace to
+      // payg (that was the pre-addon bug: any unmatched subscription event on
+      // the customer reset tier).
+      const tierResult = priceId
+        ? creditsForSubscriptionTier(priceId)
+        : undefined;
+      if (!tierResult) break;
+
       await admin
         .from("subscriptions")
         .update({
           stripe_subscription_id: stripeSub.id,
-          tier,
+          tier: tierResult.tier,
           status: stripeSub.status,
-          credits_per_period: tierResult?.credits ?? 0,
+          credits_per_period: tierResult.credits,
           current_period_start: firstItem.current_period_start
             ? new Date(firstItem.current_period_start * 1000).toISOString()
             : null,
@@ -182,6 +236,17 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
         typeof stripeSub.customer === "string"
           ? stripeSub.customer
           : stripeSub.customer.id;
+      const priceId = stripeSub.items.data[0]?.price?.id;
+
+      const addon = priceId ? addonForPriceId(priceId) : undefined;
+      if (addon) {
+        await admin
+          .from("workspace_addons")
+          .update({ status: "canceled" })
+          .eq("stripe_subscription_id", stripeSub.id);
+        break;
+      }
+
       await admin
         .from("subscriptions")
         .update({ tier: "payg", status: "canceled", credits_per_period: 0 })

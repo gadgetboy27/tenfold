@@ -447,6 +447,42 @@ export const assetComments = pgTable(
 // ─── LOGO PROJECTS (Logo Studio) ──────────────────────────────────────────────
 // State machine for a logo build. Logo ASSETS live in `assets`
 // (type 'image', metadata.kind 'logo_svg'); only project state lives here.
+// A workspace can hold a main tier subscription AND separate paid add-ons
+// (e.g. the Business-tier Blend Package upsell) — each is its own Stripe
+// subscription, so this is a distinct table from `subscriptions`, not a column
+// on it. `addonKey` + `workspaceId` is unique: one active row per add-on.
+export const workspaceAddons = pgTable(
+  "workspace_addons",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    addonKey: text("addon_key").notNull(),
+    status: text("status").notNull().default("active"),
+    stripeSubscriptionId: text("stripe_subscription_id").unique(),
+    stripeCustomerId: text("stripe_customer_id"),
+    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("workspace_addons_workspace_key_unique").on(
+      t.workspaceId,
+      t.addonKey,
+    ),
+    index("idx_workspace_addons_workspace").on(t.workspaceId),
+    check(
+      "workspace_addon_status_check",
+      sql`${t.status} IN ('active','past_due','canceled')`,
+    ),
+  ],
+);
+
 export const logoProjects = pgTable(
   "logo_projects",
   {

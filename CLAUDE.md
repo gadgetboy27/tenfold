@@ -342,6 +342,31 @@ endpoints elsewhere. The shared webhook's asset extension detection now
 respects the real `content_type` (png/jpg/svg) instead of forcing `.jpg` —
 required so cutout/depth outputs keep their alpha/precision intact.
 
+### Access — Agency-only, except Blend (Business add-on)
+
+The whole module (all 5 AI ops **and** the mechanical Sharp blend route) is
+**Agency-exclusive by default**. The one carve-out: `blend` (both the AI multi-
+image merge and the mechanical blends) can be unlocked on **Business** by
+purchasing the **Blend Package** add-on — enforced by `canUseCompositing()`
+(`lib/compositing/access.ts`), called at the top of both `POST /api/compositing`
+and `POST /api/compositing/blend` before any tenant/credit work.
+
+Add-ons are **not** a column on `subscriptions` — a workspace can hold its main
+tier subscription AND one or more add-on subscriptions simultaneously (each its
+own Stripe subscription object), so they live in `workspace_addons`
+(`lib/billing/addons.ts` — `ADDONS`, `hasActiveAddon()`). Purchasing one reuses
+the existing generic `POST /api/credits/purchase` route (already priceId-driven)
+— no new checkout route needed, just the `STRIPE_PRICE_BLEND_ADDON` price.
+
+**Webhook correctness note:** `customer.subscription.created/updated` used to
+match purely by `stripe_customer_id` and default any unrecognized price to tier
+`payg` — which would have silently downgraded a workspace's real tier the
+moment it bought a second (add-on) subscription on the same customer. Fixed:
+the handler now matches add-on prices by `stripe_subscription_id` (unambiguous
+even with two concurrent subscriptions) and only touches `subscriptions.tier`
+when the price is a _recognized_ tier price — an unmatched price is now
+ignored rather than resetting tier.
+
 ---
 
 ## 8. Forbidden Patterns
@@ -425,6 +450,7 @@ STRIPE_PRICE_300CR=
 STRIPE_PRICE_CREATOR_MONTHLY=
 STRIPE_PRICE_BUSINESS_MONTHLY=
 STRIPE_PRICE_AGENCY_MONTHLY=
+STRIPE_PRICE_BLEND_ADDON=
 AYRSHARE_API_KEY=
 ANTHROPIC_API_KEY=
 RESEND_API_KEY=

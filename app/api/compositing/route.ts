@@ -7,6 +7,9 @@ import { refundCredits } from "@/lib/credits/refund";
 import { CREDIT_COSTS, type CreditCostKey } from "@/lib/credits/costs";
 import { enqueueJob } from "@/lib/fal/queue";
 import type { FalModelKey } from "@/lib/fal/models";
+import { getEntitlements } from "@/lib/billing/entitlements";
+import { hasActiveAddon } from "@/lib/billing/addons";
+import { canUseCompositing } from "@/lib/compositing/access";
 import {
   COMPOSITE_JOB_TYPE,
   buildCompositeInput,
@@ -67,6 +70,21 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
     );
   }
 
+  // Image Compositing is Agency-only, except Blend — Business can unlock it
+  // via the Blend Package add-on. Every other op stays Agency-exclusive.
+  const ent = await getEntitlements(session.workspaceId);
+  const hasBlendAddon =
+    ent.tier === "business"
+      ? await hasActiveAddon(session.workspaceId, "blend_package")
+      : false;
+  const access = canUseCompositing(ent.tier, body.op, hasBlendAddon);
+  if (!access.allowed) {
+    return NextResponse.json(
+      { error: access.reason, upgrade: true },
+      { status: 403 },
+    );
+  }
+
   // Tenant guard — the campaign must belong to this workspace.
   const { data: campaign } = await db
     .from("campaigns")
@@ -84,7 +102,10 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
 
   const debit = await debitCredits(session.workspaceId, jobId, creditKey);
   if (!debit.success) {
-    return NextResponse.json({ error: "Insufficient credits" }, { status: 402 });
+    return NextResponse.json(
+      { error: "Insufficient credits" },
+      { status: 402 },
+    );
   }
 
   const { error: jobErr } = await admin.from("creative_jobs").insert({
