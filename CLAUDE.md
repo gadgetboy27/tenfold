@@ -367,6 +367,16 @@ even with two concurrent subscriptions) and only touches `subscriptions.tier`
 when the price is a _recognized_ tier price — an unmatched price is now
 ignored rather than resetting tier.
 
+**Entitlements correctness note:** `TIERS.business.proEffects` must **not**
+statically list `"blend"` — it briefly did, which would have shown the Studio's
+"Fade / blend" effect as unlocked (no lock icon) for every Business workspace
+while the server-side gate still 403'd them without the add-on. `blend` is
+patched into Business's `proEffects` **dynamically** in `getEntitlements()`
+only when `hasActiveAddon(..., "blend_package")` is true, so the UI's lock
+state and the API's real gate can never drift apart again. Agency keeps
+`blend` (and everything else) in the static list — it's bundled, no add-on
+needed.
+
 ---
 
 ## 8. Forbidden Patterns

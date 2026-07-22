@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { hasActiveAddon } from "@/lib/billing/addons";
 
 /** Subscription tiers (mirror app/api/billing PLANS + the pay-as-you-go default). */
 export type Tier = "payg" | "creator" | "business" | "agency";
@@ -80,7 +81,11 @@ const TIERS: Record<Tier, Entitlements> = {
     apiAccess: false,
     advancedAnalytics: true,
     maxWorkspaces: 3,
-    proEffects: ["removebg", "borders", "blend"],
+    // "blend" is NOT bundled free on Business — it requires the Blend Package
+    // add-on (see getEntitlements below), matching lib/compositing/access.ts's
+    // server-side gate. Keeping it out of this static list is what makes the
+    // Studio's lock icons agree with what the API will actually allow.
+    proEffects: ["removebg", "borders"],
   },
   agency: {
     tier: "agency",
@@ -152,5 +157,14 @@ export async function getEntitlements(
   const sub = data as { tier: string | null; status: string | null } | null;
   // Only honour the tier while the subscription is active/trialing.
   const active = sub?.status === "active" || sub?.status === "trialing";
-  return entitlementsForTier(active ? sub?.tier : "payg");
+  const base = entitlementsForTier(active ? sub?.tier : "payg");
+
+  // Blend is bundled free on Agency but requires the Blend Package add-on on
+  // Business — checked here so proEffects (which drives the Studio UI's lock
+  // icons) always agrees with lib/compositing/access.ts's server-side gate.
+  if (base.tier === "business") {
+    const hasBlend = await hasActiveAddon(workspaceId, "blend_package");
+    if (hasBlend) return { ...base, proEffects: [...base.proEffects, "blend"] };
+  }
+  return base;
 }
