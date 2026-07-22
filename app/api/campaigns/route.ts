@@ -23,6 +23,16 @@ const ASPECT_TO_IMAGE_SIZE: Record<string, string> = {
   "9:16": "portrait_16_9",
 };
 
+// FLUX Kontext takes aspect_ratio (NOT image_size) — verified live. 4:5 isn't in
+// its enum, so map it to the nearest supported portrait.
+const ASPECT_TO_KONTEXT: Record<string, string> = {
+  "1:1": "1:1",
+  "4:5": "3:4",
+  "16:9": "16:9",
+  "9:16": "9:16",
+};
+const KONTEXT_ENDPOINT = "fal-ai/flux-pro/kontext";
+
 const STYLE_SUFFIXES: Record<string, string> = {
   Photorealistic:
     "RAW photo, photorealistic, ultra-detailed, 8K UHD, DSLR camera, sharp focus, professional studio lighting, shallow depth of field, colour graded, hyperrealistic skin texture",
@@ -166,9 +176,13 @@ export async function POST(req: Request) {
       );
     }
 
+    // Bring-your-own product photo → image-conditioned generation (FLUX Kontext).
+    // A reference drives one consistent transformation, so it overrides variety.
+    const useReference = !!body.referenceImageUrl;
+
     // Variety pack: the anchor set spans the top models (2 each) so the user
     // picks the look they prefer — Pro-only (premium models).
-    const variety = body.variety === true;
+    const variety = body.variety === true && !useReference;
     if (variety && !ent.isPro) {
       return NextResponse.json(
         {
@@ -269,7 +283,8 @@ export async function POST(req: Request) {
       parameters: {
         aspectRatio: body.aspectRatio,
         style: body.style,
-        model: imageModel.id,
+        model: useReference ? "flux-kontext" : imageModel.id,
+        referenceImageUrl: body.referenceImageUrl,
         originalPrompt: promptRefined ? body.prompt : undefined,
       },
       status: "generating",
@@ -315,10 +330,22 @@ export async function POST(req: Request) {
         const vm = d.modelId
           ? VARIETY_IMAGE_MODELS.find((m) => m.id === d.modelId)
           : undefined;
-        const endpoints = vm ? [vm.endpoint] : fallbackEndpoints;
-        const input = vm
-          ? imageInputFor(vm, d.prompt, imageSize)
-          : { prompt: d.prompt, image_size: imageSize, num_images: 1 };
+        const endpoints = useReference
+          ? [KONTEXT_ENDPOINT]
+          : vm
+            ? [vm.endpoint]
+            : fallbackEndpoints;
+        const input = useReference
+          ? {
+              image_url: body.referenceImageUrl,
+              prompt: d.prompt,
+              aspect_ratio:
+                ASPECT_TO_KONTEXT[body.aspectRatio ?? "1:1"] ?? "1:1",
+              num_images: 1,
+            }
+          : vm
+            ? imageInputFor(vm, d.prompt, imageSize)
+            : { prompt: d.prompt, image_size: imageSize, num_images: 1 };
         try {
           const { requestId } = await enqueueWithFallback(
             endpoints,

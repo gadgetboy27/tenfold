@@ -11,6 +11,10 @@ export const createCampaignSchema = z.object({
    *  instead of one, so the user picks the look they like — and we learn which
    *  models they prefer. Pro-only (uses premium models). */
   variety: z.boolean().optional(),
+  /** Bring-your-own product photo: when set, generation is image-conditioned
+   *  (FLUX Kontext) so the anchors feature the uploaded subject. Must be a
+   *  public URL from our own uploads endpoint. */
+  referenceImageUrl: z.string().url().max(1000).optional(),
   parameters: z
     .object({
       aspectRatio: z

@@ -13,7 +13,6 @@ import {
   Shapes,
   Send,
   Sparkles,
-  Upload,
   Check,
   Loader2,
   ArrowRight,
@@ -34,6 +33,7 @@ import {
   type StudioOption,
 } from "@/components/studio/StudioSelect";
 import { LogoStudio } from "@/components/logo/LogoStudio";
+import { ReferencePhotoField } from "@/components/studio/ReferencePhotoField";
 import { useEntitlements } from "@/lib/billing/useEntitlements";
 import { randomCampaignName } from "@/lib/util/campaign-name";
 import { MUSIC_GENRES } from "@/lib/fal/prompts";
@@ -125,6 +125,9 @@ export function Studio({
   const [campaignName, setCampaignName] = useState(randomCampaignName);
   const [prompt, setPrompt] = useState("");
   const [variety, setVariety] = useState(true);
+  // Bring-your-own product photo (image-conditioned generation via Kontext).
+  const [referenceUrl, setReferenceUrl] = useState<string | null>(null);
+  const [refUploading, setRefUploading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [stage, setStage] = useState("");
   const [campaignId, setCampaignId] = useState<string | null>(null);
@@ -200,6 +203,31 @@ export function Studio({
     }
   };
 
+  const uploadReference = async (file: File) => {
+    setRefUploading(true);
+    const t = toast.loading("Uploading photo…");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await api("/api/uploads/image", {
+        method: "POST",
+        body: fd,
+        workspaceSlug,
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        url?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.url) throw new Error(data.error ?? "Upload failed");
+      setReferenceUrl(data.url);
+      toast.success("Photo added — your ads will feature it", { id: t });
+    } catch (err) {
+      toast.error((err as Error).message ?? "Upload failed", { id: t });
+    } finally {
+      setRefUploading(false);
+    }
+  };
+
   const generate = async () => {
     if (prompt.trim().length < 3 || generating) return;
     setGenerating(true);
@@ -216,6 +244,7 @@ export function Studio({
           prompt: prompt.trim(),
           variety,
           name: campaignName.trim() || randomCampaignName(),
+          ...(referenceUrl ? { referenceImageUrl: referenceUrl } : {}),
         }),
         workspaceSlug,
       });
@@ -333,6 +362,7 @@ export function Studio({
       setAnchorId(camp.anchor_asset_id ?? null);
       setEnhancedUrl(null);
       setVideoUrl(vid);
+      setReferenceUrl(null);
       setGenerating(false);
       setSection(
         camp.anchor_asset_id ? "video" : imgs.length ? "images" : "brief",
@@ -350,6 +380,7 @@ export function Studio({
     setAnchorId(null);
     setEnhancedUrl(null);
     setVideoUrl(null);
+    setReferenceUrl(null);
     setGenerating(false);
     setSection("brief");
   };
@@ -762,9 +793,14 @@ export function Studio({
                 setAssets([]);
                 setAnchorId(null);
                 setVideoUrl(null);
+                setReferenceUrl(null);
                 setCampaignName(randomCampaignName());
                 setSection("brief");
               }}
+              referenceUrl={referenceUrl}
+              refUploading={refUploading}
+              onUploadReference={uploadReference}
+              onClearReference={() => setReferenceUrl(null)}
               generating={generating}
               stage={stage}
               assets={assets}
@@ -791,6 +827,10 @@ export function Studio({
               variety={variety}
               setVariety={setVariety}
               onGenerate={generate}
+              referenceUrl={referenceUrl}
+              refUploading={refUploading}
+              onUploadReference={uploadReference}
+              onClearReference={() => setReferenceUrl(null)}
             />
           ) : section === "images" ? (
             <ImagesCanvas
@@ -886,12 +926,20 @@ function BriefCanvas({
   variety,
   setVariety,
   onGenerate,
+  referenceUrl,
+  refUploading,
+  onUploadReference,
+  onClearReference,
 }: {
   prompt: string;
   setPrompt: (v: string) => void;
   variety: boolean;
   setVariety: (v: boolean) => void;
   onGenerate: () => void;
+  referenceUrl: string | null;
+  refUploading: boolean;
+  onUploadReference: (file: File) => void;
+  onClearReference: () => void;
 }) {
   return (
     <div className="mx-auto flex h-full max-w-2xl flex-col items-center justify-center gap-5 text-center">
@@ -920,20 +968,20 @@ function BriefCanvas({
           <button
             type="button"
             onClick={() => setVariety(!variety)}
-            className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${
-              variety
+            disabled={!!referenceUrl}
+            title={
+              referenceUrl
+                ? "Variety is off while a reference photo drives generation"
+                : undefined
+            }
+            className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-40 ${
+              variety && !referenceUrl
                 ? "border-primary/40 bg-primary/15 text-primary"
                 : "border-border text-muted-foreground hover:text-foreground"
             }`}
           >
             <Sparkles className="h-3 w-3" /> Variety pack
           </button>
-          <span
-            className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs text-muted-foreground"
-            title="Bring your own product photo (coming to Studio)"
-          >
-            <Upload className="h-3 w-3" /> Upload a photo
-          </span>
           <button
             type="button"
             onClick={onGenerate}
@@ -942,6 +990,15 @@ function BriefCanvas({
           >
             <Sparkles className="h-4 w-4" /> Generate
           </button>
+        </div>
+        <div className="mt-3 border-t border-border pt-3 text-left">
+          <ReferencePhotoField
+            url={referenceUrl}
+            uploading={refUploading}
+            onUpload={onUploadReference}
+            onClear={onClearReference}
+            compact
+          />
         </div>
       </div>
       <p className="text-xs text-muted-foreground/70">
@@ -1094,6 +1151,10 @@ function CockpitCreate({
   setVariety,
   onGenerate,
   onReset,
+  referenceUrl,
+  refUploading,
+  onUploadReference,
+  onClearReference,
   generating,
   stage,
   assets,
@@ -1128,6 +1189,10 @@ function CockpitCreate({
   setVariety: (v: boolean) => void;
   onGenerate: () => void;
   onReset: () => void;
+  referenceUrl: string | null;
+  refUploading: boolean;
+  onUploadReference: (file: File) => void;
+  onClearReference: () => void;
   generating: boolean;
   stage: string;
   assets: Anchor[];
@@ -1231,28 +1296,26 @@ function CockpitCreate({
               />
             </div>
 
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                Reference photo{" "}
-                <span className="text-muted-foreground/60">· optional</span>
-              </label>
-              <div className="flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border bg-background/50 px-3 py-4 text-center">
-                <Upload className="h-4 w-4 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">
-                  Drop a product photo, or paste a URL
-                </span>
-                <span className="text-[10px] text-muted-foreground/60">
-                  Bring-your-own image — coming to Studio
-                </span>
-              </div>
-            </div>
+            <ReferencePhotoField
+              url={referenceUrl}
+              uploading={refUploading}
+              onUpload={onUploadReference}
+              onClear={onClearReference}
+              compact
+            />
 
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => setVariety(!variety)}
-                className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${
-                  variety
+                disabled={!!referenceUrl}
+                title={
+                  referenceUrl
+                    ? "Variety is off while a reference photo drives generation"
+                    : undefined
+                }
+                className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-40 ${
+                  variety && !referenceUrl
                     ? "border-primary/40 bg-primary/15 text-primary"
                     : "border-border text-muted-foreground hover:text-foreground"
                 }`}
@@ -1260,7 +1323,11 @@ function CockpitCreate({
                 <Sparkles className="h-3 w-3" /> Variety pack
               </button>
               <span className="text-[11px] text-muted-foreground/70">
-                {variety ? "20 credits" : "12 credits"}
+                {referenceUrl
+                  ? "12 credits · features your photo"
+                  : variety
+                    ? "20 credits"
+                    : "12 credits"}
               </span>
             </div>
 
