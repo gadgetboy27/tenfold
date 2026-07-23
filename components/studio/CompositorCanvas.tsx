@@ -23,9 +23,13 @@ import { v4 as uuidv4 } from "uuid";
 import { useCompositorStore, type Layer } from "@/store/useCompositorStore";
 import { LayerList } from "@/components/compositor/LayerList";
 import { LayerControls } from "@/components/compositor/LayerControls";
+// The classic Compositor's canvas — real pointer-driven drag/resize/rotate,
+// battle-tested — reused here rather than re-implemented against the
+// DOM-mock preview this file used before. Aliased: this file's own export is
+// also named CompositorCanvas.
+import { CompositorCanvas as LayeredCanvas } from "@/components/compositor/CompositorCanvas";
 import {
   ASPECT_DESIGN,
-  resolveCenter,
   type CompositeHistoryEntry,
   type CompositeProvenance,
   type CompositionDoc,
@@ -230,6 +234,25 @@ export function CompositorCanvas({
     }).catch(() => {});
   };
 
+  // Autosave: LayeredCanvas's drag/resize/rotate writes straight to the store
+  // with no explicit save step (unlike submitOp/handleRedo, which persist
+  // themselves) — without this, moving a layer and navigating away would
+  // silently lose it. Debounced so a drag (many store updates) coalesces
+  // into one write once the user pauses. Mirrors the classic Compositor's
+  // own autosave effect.
+  const lastSavedRef = useRef<string>("");
+  useEffect(() => {
+    if (!doc || !campaignId) return;
+    const serialized = JSON.stringify(doc);
+    if (serialized === lastSavedRef.current) return;
+    const t = setTimeout(() => {
+      lastSavedRef.current = serialized;
+      void persist(doc);
+    }, 1200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc, campaignId]);
+
   const selectedLayer = doc?.layers.find((l) => l.id === selectedLayerId);
   // The source for a new op: the selected image layer, else the background.
   const sourceImageUrl =
@@ -259,6 +282,42 @@ export function CompositorCanvas({
       if (maskPreviewUrl) URL.revokeObjectURL(maskPreviewUrl);
     };
   }, [maskPreviewUrl]);
+
+  // The mask-upload overlay needs to sit exactly over the rendered image
+  // inside LayeredCanvas's <canvas> — which is letterboxed (object-contain)
+  // within its flex wrapper, not flush with it. Measure the container and
+  // compute the same contain-fit rect the browser applies to the canvas.
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+  const [containRect, setContainRect] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const aspect = doc?.aspect;
+  useEffect(() => {
+    const el = previewContainerRef.current;
+    if (!el || !aspect) return;
+    const { width: dW, height: dH } = ASPECT_DESIGN[aspect];
+    const compute = () => {
+      const cw = el.clientWidth;
+      const ch = el.clientHeight;
+      if (!cw || !ch) return;
+      const scale = Math.min(cw / dW, ch / dH);
+      const width = dW * scale;
+      const height = dH * scale;
+      setContainRect({
+        left: (cw - width) / 2,
+        top: (ch - height) / 2,
+        width,
+        height,
+      });
+    };
+    compute();
+    const ro = new ResizeObserver(compute);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [aspect]);
 
   const resetForm = () => {
     setActiveOp(null);
@@ -509,10 +568,6 @@ export function CompositorCanvas({
       </div>
     );
   }
-
-  const { width: designW, height: designH } = ASPECT_DESIGN[doc.aspect];
-  // Render order: index 0 = back, last = front (matches the store's convention).
-  const stack = doc.layers;
 
   return (
     <div className="mx-auto flex h-full max-w-6xl flex-col gap-3">
@@ -779,22 +834,27 @@ export function CompositorCanvas({
           )}
         </div>
 
-        {/* Preview — fills the available space instead of being capped small;
-            aspect-ratio + max-w/max-h let it grow to whichever dimension is
-            the real constraint. */}
+        {/* Preview — the classic Compositor's real canvas: click to select,
+            drag to move, edge/corner handles to resize/rotate. Fills the
+            available space (canvas intrinsic size + max-w/max-h), no more
+            capped-small mock. */}
         <div className="flex min-h-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-card p-4">
-          <div
-            className="relative h-full max-w-full overflow-hidden rounded-lg bg-background shadow"
-            style={{ aspectRatio: `${designW} / ${designH}` }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={doc.background.src}
-              alt="Background"
-              className="absolute inset-0 h-full w-full object-cover"
+          <div ref={previewContainerRef} className="relative h-full w-full">
+            <LayeredCanvas
+              playing={false}
+              onTick={() => {}}
+              onEnded={() => {}}
             />
-            {activeOp === "inpaint" && (
-              <>
+            {activeOp === "inpaint" && containRect && (
+              <div
+                className="absolute overflow-hidden rounded-lg"
+                style={{
+                  left: containRect.left,
+                  top: containRect.top,
+                  width: containRect.width,
+                  height: containRect.height,
+                }}
+              >
                 <input
                   ref={maskInputRef}
                   type="file"
@@ -808,9 +868,9 @@ export function CompositorCanvas({
                     <img
                       src={maskPreviewUrl}
                       alt="Mask preview"
-                      className="absolute inset-0 h-full w-full object-cover opacity-70 mix-blend-screen"
+                      className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-70 mix-blend-screen"
                     />
-                    <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white">
+                    <span className="pointer-events-none absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white">
                       Mask preview — white = fill
                     </span>
                     <button
@@ -834,41 +894,8 @@ export function CompositorCanvas({
                     </span>
                   </button>
                 )}
-              </>
+              </div>
             )}
-            {stack.map((layer) => {
-              if (layer.kind !== "image") return null;
-              const { x, y } = resolveCenter(layer.pos, doc.aspect, 0, 0);
-              const leftPct = (x / designW) * 100;
-              const topPct = (y / designH) * 100;
-              return (
-                <div
-                  key={layer.id}
-                  className="absolute"
-                  style={{
-                    left: `${leftPct}%`,
-                    top: `${topPct}%`,
-                    transform: `translate(-50%, -50%) rotate(${layer.rotationDeg}deg) scale(${layer.scale})`,
-                    opacity: layer.opacity,
-                    mixBlendMode: layer.blend,
-                    width: "40%",
-                  }}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={layer.src}
-                    alt=""
-                    className="w-full rounded"
-                    draggable={false}
-                  />
-                  {layer.locked && (
-                    <span className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white">
-                      <Lock className="h-3 w-3" />
-                    </span>
-                  )}
-                </div>
-              );
-            })}
           </div>
         </div>
       </div>
