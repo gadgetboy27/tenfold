@@ -352,7 +352,10 @@ export function Studio({
           created_at: string;
           metadata?: { model?: string; direction?: string; hd?: boolean };
         }[];
-        expansion_data?: { video?: { url?: string | null } };
+        expansion_data?: {
+          video?: { url?: string | null };
+          music?: { url?: string | null };
+        };
       };
       const list = camp.assets ?? [];
       const imgs = list
@@ -368,12 +371,19 @@ export function Studio({
           .sort((a, b) => b.created_at.localeCompare(a.created_at))[0]?.url ??
         camp.expansion_data?.video?.url ??
         null;
+      const music =
+        list
+          .filter((a) => a.type === "audio")
+          .sort((a, b) => b.created_at.localeCompare(a.created_at))[0]?.url ??
+        camp.expansion_data?.music?.url ??
+        null;
       setCampaignId(id);
       setCampaignName(camp.name?.trim() || randomCampaignName());
       setAssets(imgs);
       setAnchorId(camp.anchor_asset_id ?? null);
       setEnhancedUrl(null);
       setVideoUrl(vid);
+      setMusicUrl(music);
       setReferenceUrl(null);
       setGenerating(false);
       setSection(
@@ -393,6 +403,7 @@ export function Studio({
     setAnchorId(null);
     setEnhancedUrl(null);
     setVideoUrl(null);
+    setMusicUrl(null);
     setReferenceUrl(null);
     setGenerating(false);
     setSection("brief");
@@ -751,6 +762,8 @@ export function Studio({
               stage={musicStage}
               url={musicUrl}
               onGenerate={generateMusic}
+              onBack={() => setSection("video")}
+              onContinue={() => setSection("compositor")}
             />
           ) : section === "logo" && logoEnabled ? (
             // The full world-class Logo & Brand studio, delivered into the big
@@ -785,6 +798,7 @@ export function Studio({
                 setAssets([]);
                 setAnchorId(null);
                 setVideoUrl(null);
+                setMusicUrl(null);
                 setReferenceUrl(null);
                 setCampaignName(randomCampaignName());
                 setSection("brief");
@@ -807,6 +821,7 @@ export function Studio({
               videoUrl={videoUrl}
               onGenerateVideo={generateVideo}
               workingImage={workingImage}
+              publishReady={publishReady}
               allowedEffects={ent?.proEffects ?? []}
               onUpgrade={() => setShowUpgrade(true)}
               bgBusy={bgBusy}
@@ -865,6 +880,7 @@ function CockpitCreate({
   bgBusy,
   onRemoveBg,
   onOpenCompositorOp,
+  publishReady,
 }: {
   tools: {
     id: SectionId;
@@ -904,6 +920,9 @@ function CockpitCreate({
   bgBusy: boolean;
   onRemoveBg: () => void;
   onOpenCompositorOp: (op: "inpaint" | "blend") => void;
+  /** True once there's enough to publish (mirrors Studio's own publishReady) —
+   *  drives the same pulsing-dot treatment as the header's Publish button. */
+  publishReady: boolean;
 }) {
   const isCreate = section === "brief" || section === "images";
   const isVideo = section === "video";
@@ -935,6 +954,19 @@ function CockpitCreate({
           {tools.map((t) => {
             const Icon = t.icon;
             const active = section === t.id;
+            // A nav item pulses once whatever it needs is actually in place —
+            // never before, so an option that isn't open yet stays a plain
+            // dot rather than inviting a click that goes nowhere.
+            const justUnlocked =
+              !t.done &&
+              !active &&
+              (t.id === "video" || t.id === "caption" || t.id === "compositor"
+                ? !!anchorId
+                : t.id === "music"
+                  ? !!videoUrl
+                  : t.id === "publish"
+                    ? publishReady
+                    : false);
             const cls = `flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
               active
                 ? "bg-primary/15 text-foreground"
@@ -950,7 +982,9 @@ function CockpitCreate({
                       ? "bg-emerald-500"
                       : active
                         ? "bg-primary"
-                        : "bg-border"
+                        : justUnlocked
+                          ? "animate-pulse bg-emerald-500"
+                          : "bg-border"
                   }`}
                 />
               </>
@@ -1477,6 +1511,8 @@ function MusicCanvas({
   stage,
   url,
   onGenerate,
+  onBack,
+  onContinue,
 }: {
   genre: string;
   setGenre: (g: string) => void;
@@ -1490,6 +1526,8 @@ function MusicCanvas({
   stage: string;
   url: string | null;
   onGenerate: () => void;
+  onBack: () => void;
+  onContinue: () => void;
 }) {
   const genreOptions: StudioOption<string>[] = MUSIC_GENRES.map((g) => ({
     value: g,
@@ -1504,12 +1542,21 @@ function MusicCanvas({
   const isNatural = model === "lyria2";
   return (
     <div className="mx-auto flex h-full max-w-3xl flex-col gap-4">
-      <div>
-        <h2 className="text-base font-semibold">Add a soundtrack</h2>
-        <p className="text-sm text-muted-foreground">
-          A track composed to match — sized to your{" "}
-          {hasVideo ? `${durationSec}s video` : "chosen video length"}.
-        </p>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold">Add a soundtrack</h2>
+          <p className="text-sm text-muted-foreground">
+            A track composed to match — sized to your{" "}
+            {hasVideo ? `${durationSec}s video` : "chosen video length"}.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex shrink-0 items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+        >
+          ← Back to video
+        </button>
       </div>
 
       {/* Result / preview */}
@@ -1529,13 +1576,28 @@ function MusicCanvas({
             <audio controls src={url} className="w-full">
               <track kind="captions" />
             </audio>
-            <a
-              href={url}
-              download
-              className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-            >
-              <ArrowRight className="h-3.5 w-3.5" /> Download track
-            </a>
+            <div className="flex items-center gap-1.5 text-[11px] text-emerald-500">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              Attached to this campaign — the Compositor will pick it up
+              automatically
+            </div>
+            <div className="flex items-center gap-2">
+              <a
+                href={url}
+                download
+                className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+              >
+                <ArrowRight className="h-3.5 w-3.5" /> Download track
+              </a>
+              <span className="text-muted-foreground/40">·</span>
+              <button
+                type="button"
+                onClick={onContinue}
+                className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+              >
+                Continue to Compositor <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
         ) : (
           <>
