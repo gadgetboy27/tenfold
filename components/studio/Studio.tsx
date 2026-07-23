@@ -639,10 +639,13 @@ export function Studio({
           <button
             type="button"
             onClick={() => setSection("projects")}
-            title="Gallery"
-            className="flex items-center"
+            title="Gallery — browse past projects and images"
+            className="flex items-center gap-2 rounded-lg px-1.5 py-1 transition-colors hover:bg-muted"
           >
             <Logo size={18} withWordmark />
+            <span className="rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+              Gallery
+            </span>
           </button>
           <input
             value={campaignName}
@@ -968,14 +971,6 @@ function CockpitCreate({
               />
             </div>
 
-            <ReferencePhotoField
-              url={referenceUrl}
-              uploading={refUploading}
-              onUpload={onUploadReference}
-              onClear={onClearReference}
-              compact
-            />
-
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
@@ -1118,9 +1113,21 @@ function CockpitCreate({
           </div>
         ) : !hasResult ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
-            <div className="grid h-16 w-16 place-items-center rounded-full bg-primary/10">
-              <Sparkles className="h-7 w-7 text-primary/70" />
-            </div>
+            {isCreate && (
+              <div className="w-full max-w-xs">
+                <ReferencePhotoField
+                  url={referenceUrl}
+                  uploading={refUploading}
+                  onUpload={onUploadReference}
+                  onClear={onClearReference}
+                />
+              </div>
+            )}
+            {!referenceUrl && (
+              <div className="grid h-16 w-16 place-items-center rounded-full bg-primary/10">
+                <Sparkles className="h-7 w-7 text-primary/70" />
+              </div>
+            )}
             <p className="max-w-[16rem] text-sm text-muted-foreground">
               {prompt.trim().length < 3
                 ? "Write a brief on the left, then hit Generate."
