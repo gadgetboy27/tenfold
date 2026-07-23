@@ -954,23 +954,8 @@ function CockpitCreate({
 
         {isCreate ? (
           <div className="flex min-h-0 flex-1 flex-col gap-3">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                Prompt
-              </label>
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                onKeyDown={(e) => {
-                  if ((e.metaKey || e.ctrlKey) && e.key === "Enter")
-                    onGenerate();
-                }}
-                rows={4}
-                placeholder="A coffee roastery overlooking the bay at golden hour, steam rising off fresh beans…"
-                className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary/50"
-              />
-            </div>
-
+            {/* Room above the prompt for effects/other controls as they land
+                here — the prompt + Generate stay pinned to the bottom. */}
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
@@ -998,19 +983,29 @@ function CockpitCreate({
               </span>
             </div>
 
-            <div className="mt-auto flex items-center gap-2 pt-1">
-              <button
-                type="button"
-                onClick={onReset}
-                className="rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-              >
-                Reset
-              </button>
+            <div className="mt-auto flex flex-col gap-2">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                  Prompt
+                </label>
+                <textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  onKeyDown={(e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === "Enter")
+                      onGenerate();
+                  }}
+                  rows={4}
+                  placeholder="A coffee roastery overlooking the bay at golden hour, steam rising off fresh beans…"
+                  className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary/50"
+                />
+              </div>
+
               <button
                 type="button"
                 onClick={onGenerate}
                 disabled={prompt.trim().length < 3 || generating}
-                className="ml-auto flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-opacity disabled:opacity-40"
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-opacity disabled:opacity-40"
               >
                 {generating ? (
                   <>
@@ -1024,6 +1019,14 @@ function CockpitCreate({
                     </span>
                   </>
                 )}
+              </button>
+
+              <button
+                type="button"
+                onClick={onReset}
+                className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Reset
               </button>
             </div>
           </div>
