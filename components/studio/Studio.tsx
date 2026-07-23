@@ -136,7 +136,18 @@ export function Studio({
     }
   };
 
-  const [section, setSection] = useState<SectionId>("brief");
+  const [section, setSectionRaw] = useState<SectionId>("brief");
+  // Set by the Pro-effects panel so the Compositor opens with that op
+  // preselected. navigateSection clears it the moment navigation heads
+  // anywhere else, so a later plain nav click into Compositor doesn't reuse a
+  // stale preselection.
+  const [compositorInitialOp, setCompositorInitialOp] = useState<
+    "inpaint" | "blend" | null
+  >(null);
+  const setSection = (s: SectionId) => {
+    if (s !== "compositor") setCompositorInitialOp(null);
+    setSectionRaw(s);
+  };
   // Pre-fill a friendly random project name; the user can keep it, clear it, or
   // rename it. Persisted to the campaign once one exists.
   const [campaignName, setCampaignName] = useState(randomCampaignName);
@@ -757,6 +768,7 @@ export function Studio({
               campaignId={campaignId}
               anchorUrl={workingImage}
               classicHref={`/${workspaceSlug}/compositor?campaign=${campaignId}`}
+              initialOp={compositorInitialOp}
             />
           ) : (
             <CockpitCreate
@@ -799,6 +811,10 @@ export function Studio({
               onUpgrade={() => setShowUpgrade(true)}
               bgBusy={bgBusy}
               onRemoveBg={removeBg}
+              onOpenCompositorOp={(op) => {
+                setCompositorInitialOp(op);
+                setSection("compositor");
+              }}
             />
           )}
         </main>
@@ -848,6 +864,7 @@ function CockpitCreate({
   onUpgrade,
   bgBusy,
   onRemoveBg,
+  onOpenCompositorOp,
 }: {
   tools: {
     id: SectionId;
@@ -886,6 +903,7 @@ function CockpitCreate({
   onUpgrade: () => void;
   bgBusy: boolean;
   onRemoveBg: () => void;
+  onOpenCompositorOp: (op: "inpaint" | "blend") => void;
 }) {
   const isCreate = section === "brief" || section === "images";
   const isVideo = section === "video";
@@ -1039,6 +1057,7 @@ function CockpitCreate({
                   onUpgrade={onUpgrade}
                   bgBusy={bgBusy}
                   onRemoveBg={onRemoveBg}
+                  onOpenCompositorOp={onOpenCompositorOp}
                 />
                 <div className="border-t border-border" />
               </>
@@ -1351,23 +1370,30 @@ function VideoResult({
  *  are live for Pro; the rest tease as "Soon". Non-Pro sees them all locked. */
 const EFFECTS = [
   { key: "removebg", label: "Remove background", ready: true },
-  { key: "inpaint", label: "Erase & replace", ready: false },
-  { key: "blend", label: "Fade / blend", ready: false },
+  { key: "inpaint", label: "Erase & replace", ready: true },
+  { key: "blend", label: "Fade / blend", ready: true },
   { key: "borders", label: "Borders & frames", ready: false },
   { key: "motion", label: "Crossfade + Ken Burns", ready: false },
 ] as const;
+
+// inpaint/blend are built, but as full Compositor ops (mask/prompt/second
+// image) — not a single instant action like removebg, so clicking them
+// jumps into the Compositor with that op preselected instead of running here.
+const COMPOSITOR_EFFECT_KEYS = new Set(["inpaint", "blend"]);
 
 function EffectsPanel({
   allowedEffects,
   bgBusy,
   onRemoveBg,
   onUpgrade,
+  onOpenCompositorOp,
 }: {
   /** Effect keys the current tier unlocks (from entitlements.proEffects). */
   allowedEffects: string[];
   bgBusy: boolean;
   onRemoveBg: () => void;
   onUpgrade: () => void;
+  onOpenCompositorOp: (op: "inpaint" | "blend") => void;
 }) {
   return (
     <div>
@@ -1383,7 +1409,9 @@ function EffectsPanel({
           const onClick = live
             ? e.key === "removebg"
               ? onRemoveBg
-              : undefined
+              : COMPOSITOR_EFFECT_KEYS.has(e.key)
+                ? () => onOpenCompositorOp(e.key as "inpaint" | "blend")
+                : undefined
             : !allowed
               ? onUpgrade
               : undefined;
@@ -1396,7 +1424,9 @@ function EffectsPanel({
               title={
                 allowed
                   ? e.ready
-                    ? undefined
+                    ? COMPOSITOR_EFFECT_KEYS.has(e.key)
+                      ? "Opens in the Compositor"
+                      : undefined
                     : "Coming soon to Studio"
                   : "Not on your plan — upgrade to unlock"
               }

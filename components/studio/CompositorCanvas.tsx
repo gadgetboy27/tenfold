@@ -129,11 +129,15 @@ export function CompositorCanvas({
   campaignId,
   anchorUrl,
   classicHref,
+  initialOp = null,
 }: {
   workspaceSlug: string;
   campaignId: string;
   anchorUrl: string;
   classicHref: string;
+  /** Preselects an op (e.g. jumping here from the video step's Pro-effects
+   *  panel) instead of landing on the bare toolbar. */
+  initialOp?: CompositeOp | null;
 }) {
   const doc = useCompositorStore((s) => s.doc);
   const selectedLayerId = useCompositorStore((s) => s.selectedLayerId);
@@ -143,7 +147,7 @@ export function CompositorCanvas({
   const reset = useCompositorStore((s) => s.reset);
 
   const [loading, setLoading] = useState(true);
-  const [activeOp, setActiveOp] = useState<CompositeOp | null>(null);
+  const [activeOp, setActiveOp] = useState<CompositeOp | null>(initialOp);
   const [prompt, setPrompt] = useState("");
   const [direction, setDirection] =
     useState<(typeof RELIGHT_DIRECTIONS)[number]>("None");
