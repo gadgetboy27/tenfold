@@ -6,6 +6,7 @@ import { LogoBrief } from "./LogoBrief";
 import { LogoConceptGrid, type LogoAsset } from "./LogoConceptGrid";
 import { LogoRefine } from "./LogoRefine";
 import { LogoEditor } from "./LogoEditor";
+import { LogoUpload } from "./LogoUpload";
 import { LogoLibrary, type LogoProjectSummary } from "./LogoLibrary";
 import type { LogoBrief as LogoBriefType } from "@/lib/logo/brief";
 import { useAppStore } from "@/store/useAppStore";
@@ -37,6 +38,7 @@ export function LogoStudio() {
   const [expected, setExpected] = useState(6);
   const [state, setState] = useState<ProjectState | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [packaging, setPackaging] = useState(false);
@@ -208,6 +210,32 @@ export function LogoStudio() {
     }
   }
 
+  // Bring an existing (older-saved) logo in, rather than generating one — the
+  // backend has always supported this (POST /api/logo/vectorize), it just had
+  // no UI entry point. Lands directly on a finalized project (no concepts/
+  // anchor step): the render logic below falls back to the final asset when
+  // there's no separate anchor.
+  async function uploadExisting(file: File) {
+    setUploading(true);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/logo/vectorize", {
+        method: "POST",
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not start vectorize");
+      setProjectId(data.projectId as string);
+      refreshBalance();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong");
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function anchor(assetId: string) {
     if (!projectId) return;
     setBusy(true);
@@ -358,6 +386,7 @@ export function LogoStudio() {
           deletingId={deletingId}
         />
         <LogoBrief onSubmit={startGeneration} submitting={submitting} />
+        <LogoUpload onUpload={uploadExisting} uploading={uploading} />
       </div>
     );
   }
@@ -380,6 +409,13 @@ export function LogoStudio() {
     null;
 
   const finalAsset = state.finalized[0] ?? null;
+
+  // A project vectorized from an uploaded logo (or anything else landing
+  // straight on final_asset_id) never goes through anchor selection, so
+  // anchorAsset stays null even though the project is done — without this
+  // fallback it would fall through to an empty LogoConceptGrid instead of
+  // the finished-logo view.
+  const displayAnchor = anchorAsset ?? finalAsset;
 
   // Free editor (Phase 2): opened from the finished logo. Edits its SVG in the
   // browser and saves versions — no credits.
@@ -409,14 +445,16 @@ export function LogoStudio() {
     );
   }
 
-  // An anchor is chosen — refine / finalize / (once final) customise.
-  if (anchorAsset) {
+  // An anchor is chosen (or the project is already finalized with no
+  // separate anchor, e.g. an uploaded/vectorized logo) — refine / finalize /
+  // (once final) customise.
+  if (displayAnchor) {
     return (
       <div className="px-4 py-10">
         {banner}
         {backBar}
         <LogoRefine
-          anchor={anchorAsset}
+          anchor={displayAnchor}
           refined={state.refined}
           finalized={finalAsset}
           onRefine={refine}
