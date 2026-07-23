@@ -515,7 +515,7 @@ export function CompositorCanvas({
   const stack = doc.layers;
 
   return (
-    <div className="mx-auto flex h-full max-w-6xl flex-col gap-4">
+    <div className="mx-auto flex h-full max-w-6xl flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold">Compositing</h2>
@@ -533,227 +533,259 @@ export function CompositorCanvas({
         </Link>
       </div>
 
-      {/* Toolbar — add a new compositing op */}
-      <div className="flex flex-wrap gap-2">
-        {(
-          Object.entries(OP_META) as [
-            CompositeOp,
-            (typeof OP_META)[CompositeOp],
-          ][]
-        ).map(([op, meta]) => {
-          const Icon = meta.icon;
-          return (
-            <button
-              key={op}
-              type="button"
-              onClick={() => setActiveOp(op)}
-              disabled={!!running}
-              title={meta.blurb}
-              className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-40 ${
-                activeOp === op
-                  ? "border-primary/50 bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-              }`}
-            >
-              <Icon className="h-3.5 w-3.5" /> {meta.label}
-            </button>
-          );
-        })}
-      </div>
+      {/* LEFT: op menu + active op form + layer stack/properties, all in one
+          scrolling panel — RIGHT: the big canvas. Same split as the rest of
+          Studio's Cockpit (menu left, result right). */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(280px,320px)_1fr]">
+        <div className="flex min-h-0 flex-col gap-3 overflow-y-auto rounded-2xl border border-border bg-card p-3">
+          {/* Op menu — a vertical list (not a wrapping pill row) since the
+              left column has the height to spare. */}
+          <nav className="flex flex-col gap-0.5">
+            {(
+              Object.entries(OP_META) as [
+                CompositeOp,
+                (typeof OP_META)[CompositeOp],
+              ][]
+            ).map(([op, meta]) => {
+              const Icon = meta.icon;
+              const active = activeOp === op;
+              return (
+                <button
+                  key={op}
+                  type="button"
+                  onClick={() => setActiveOp(op)}
+                  disabled={!!running}
+                  title={meta.blurb}
+                  className={`flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] font-medium transition-colors disabled:opacity-40 ${
+                    active
+                      ? "bg-primary/15 text-foreground"
+                      : "text-muted-foreground hover:bg-background hover:text-foreground"
+                  }`}
+                >
+                  <Icon className="h-4 w-4 shrink-0 opacity-90" />
+                  <span className="flex-1">{meta.label}</span>
+                </button>
+              );
+            })}
+          </nav>
 
-      {/* Inline form for the active op */}
-      {activeOp && (
-        <div className="space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
-          <p className="text-xs text-muted-foreground">
-            Source: {selectedLayer ? "selected layer" : "background image"}
-          </p>
-          {(activeOp === "inpaint" ||
-            activeOp === "relight" ||
-            activeOp === "blend") && (
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              rows={2}
-              placeholder={
-                activeOp === "inpaint"
-                  ? "What should fill the masked region?"
-                  : activeOp === "relight"
-                    ? "Describe the target lighting…"
-                    : "Describe how to merge the two images…"
-              }
-              className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary/50"
-            />
-          )}
-          {activeOp === "relight" && (
-            <select
-              value={direction}
-              onChange={(e) =>
-                setDirection(
-                  e.target.value as (typeof RELIGHT_DIRECTIONS)[number],
-                )
-              }
-              className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-            >
-              {RELIGHT_DIRECTIONS.map((d) => (
-                <option key={d} value={d}>
-                  {d === "None" ? "Auto lighting direction" : `Light from ${d}`}
-                </option>
-              ))}
-            </select>
-          )}
-          {activeOp === "inpaint" && (
-            <p className="text-xs text-muted-foreground">
-              {maskFile
-                ? `Mask: ${maskFile.name} — click the canvas to replace it.`
-                : "Click the canvas below to upload a mask (white = fill, black = keep)."}
-            </p>
-          )}
-          {activeOp === "textureOverlay" && (
-            <>
-              <select
-                value={mode}
-                onChange={(e) =>
-                  setMode(e.target.value as (typeof MECH_MODES)[number])
-                }
-                className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-              >
-                {MECH_MODES.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
+          {/* Inline form for the active op */}
+          {activeOp && (
+            <div className="space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
+              <p className="text-xs text-muted-foreground">
+                Source: {selectedLayer ? "selected layer" : "background image"}
+              </p>
+              {(activeOp === "inpaint" ||
+                activeOp === "relight" ||
+                activeOp === "blend") && (
+                <textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  rows={2}
+                  placeholder={
+                    activeOp === "inpaint"
+                      ? "What should fill the masked region?"
+                      : activeOp === "relight"
+                        ? "Describe the target lighting…"
+                        : "Describe how to merge the two images…"
+                  }
+                  className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary/50"
+                />
+              )}
+              {activeOp === "relight" && (
+                <select
+                  value={direction}
+                  onChange={(e) =>
+                    setDirection(
+                      e.target.value as (typeof RELIGHT_DIRECTIONS)[number],
+                    )
+                  }
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                >
+                  {RELIGHT_DIRECTIONS.map((d) => (
+                    <option key={d} value={d}>
+                      {d === "None"
+                        ? "Auto lighting direction"
+                        : `Light from ${d}`}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {activeOp === "inpaint" && (
+                <p className="text-xs text-muted-foreground">
+                  {maskFile
+                    ? `Mask: ${maskFile.name} — click the canvas to replace it.`
+                    : "Click the canvas to upload a mask (white = fill, black = keep)."}
+                </p>
+              )}
+              {activeOp === "textureOverlay" && (
+                <>
+                  <select
+                    value={mode}
+                    onChange={(e) =>
+                      setMode(e.target.value as (typeof MECH_MODES)[number])
+                    }
+                    className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  >
+                    {MECH_MODES.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={mechOpacity}
+                      onChange={(e) => setMechOpacity(+e.target.value)}
+                      className="flex-1"
+                    />
+                    <span className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                      {Math.round(mechOpacity * 100)}%
+                    </span>
+                  </div>
+                </>
+              )}
+              {activeOp === "gradientMerge" && (
+                <select
+                  value={mechDirection}
+                  onChange={(e) =>
+                    setMechDirection(
+                      e.target.value as (typeof MECH_DIRECTIONS)[number],
+                    )
+                  }
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                >
+                  {MECH_DIRECTIONS.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {activeOp === "softGlow" && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="range"
+                    min={0}
+                    max={40}
+                    step={1}
+                    value={sigma}
+                    onChange={(e) => setSigma(+e.target.value)}
+                    className="flex-1"
+                  />
+                  <span className="w-8 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                    {sigma}
+                  </span>
+                </div>
+              )}
+              {NEEDS_SECOND_IMAGE.has(activeOp) &&
+                (secondImage ? (
+                  <div className="flex items-center gap-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={secondImage.url}
+                      alt="Second image"
+                      className="h-10 w-10 rounded-md object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setSecondImage(null)}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Change
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setPickingSecond(true)}
+                    className="rounded-lg border border-dashed border-border px-3 py-1.5 text-xs text-muted-foreground hover:border-primary/40"
+                  >
+                    Pick second image from your gallery
+                  </button>
                 ))}
-              </select>
-              <div className="flex items-center gap-2">
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={mechOpacity}
-                  onChange={(e) => setMechOpacity(+e.target.value)}
-                  className="flex-1"
-                />
-                <span className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-                  {Math.round(mechOpacity * 100)}%
-                </span>
-              </div>
-            </>
-          )}
-          {activeOp === "gradientMerge" && (
-            <select
-              value={mechDirection}
-              onChange={(e) =>
-                setMechDirection(
-                  e.target.value as (typeof MECH_DIRECTIONS)[number],
-                )
-              }
-              className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-            >
-              {MECH_DIRECTIONS.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
-          )}
-          {activeOp === "softGlow" && (
-            <div className="flex items-center gap-2">
-              <input
-                type="range"
-                min={0}
-                max={40}
-                step={1}
-                value={sigma}
-                onChange={(e) => setSigma(+e.target.value)}
-                className="flex-1"
-              />
-              <span className="w-8 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-                {sigma}
-              </span>
-            </div>
-          )}
-          {NEEDS_SECOND_IMAGE.has(activeOp) &&
-            (secondImage ? (
-              <div className="flex items-center gap-2">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={secondImage.url}
-                  alt="Second image"
-                  className="h-10 w-10 rounded-md object-cover"
-                />
+              {pickingSecond && (
+                <div className="grid max-h-40 grid-cols-4 gap-1.5 overflow-y-auto rounded-lg border border-border p-2">
+                  {gallery.map((g) => (
+                    <button
+                      key={g.id}
+                      type="button"
+                      onClick={() => {
+                        setSecondImage(g);
+                        setPickingSecond(false);
+                      }}
+                      className="aspect-square overflow-hidden rounded-md border border-border hover:border-primary/50"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={g.url}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="flex items-center gap-2 pt-1">
                 <button
                   type="button"
-                  onClick={() => setSecondImage(null)}
+                  onClick={submitOp}
+                  disabled={running === activeOp}
+                  className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-1.5 text-sm font-semibold text-primary-foreground disabled:opacity-40"
+                >
+                  {running === activeOp ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3.5 w-3.5" />
+                  )}
+                  Generate
+                </button>
+                <button
+                  type="button"
+                  onClick={resetForm}
                   className="text-xs text-muted-foreground hover:text-foreground"
                 >
-                  Change
+                  Cancel
                 </button>
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setPickingSecond(true)}
-                className="rounded-lg border border-dashed border-border px-3 py-1.5 text-xs text-muted-foreground hover:border-primary/40"
-              >
-                Pick second image from your gallery
-              </button>
-            ))}
-          {pickingSecond && (
-            <div className="grid max-h-40 grid-cols-6 gap-1.5 overflow-y-auto rounded-lg border border-border p-2">
-              {gallery.map((g) => (
-                <button
-                  key={g.id}
-                  type="button"
-                  onClick={() => {
-                    setSecondImage(g);
-                    setPickingSecond(false);
-                  }}
-                  className="aspect-square overflow-hidden rounded-md border border-border hover:border-primary/50"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={g.url}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
-                </button>
-              ))}
             </div>
           )}
-          <div className="flex items-center gap-2 pt-1">
-            <button
-              type="button"
-              onClick={submitOp}
-              disabled={running === activeOp}
-              className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-1.5 text-sm font-semibold text-primary-foreground disabled:opacity-40"
-            >
-              {running === activeOp ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Sparkles className="h-3.5 w-3.5" />
-              )}
-              Generate
-            </button>
-            <button
-              type="button"
-              onClick={resetForm}
-              className="text-xs text-muted-foreground hover:text-foreground"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]">
-        {/* Preview — stacked, read-only (manipulate via the sliders below) */}
-        <div className="flex items-center justify-center overflow-hidden rounded-xl border border-border bg-card p-4">
+          <div className="border-t border-border" />
+
+          {/* Layer stack + properties */}
+          <LayerList />
+          {selectedLayer && (
+            <div className="border-t border-border pt-3">
+              <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                {selectedLayer.locked ? (
+                  <Lock className="h-3.5 w-3.5" />
+                ) : (
+                  <LockOpen className="h-3.5 w-3.5" />
+                )}
+                {selectedLayer.locked ? "Locked" : "Unlocked"} — selected layer
+              </div>
+              <LayerControls
+                layer={selectedLayer}
+                onRedo={handleRedo}
+                redoing={running === "redo"}
+                onRevertHistory={handleRevertHistory}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Preview — fills the available space instead of being capped small;
+            aspect-ratio + max-w/max-h let it grow to whichever dimension is
+            the real constraint. */}
+        <div className="flex min-h-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-card p-4">
           <div
-            className="relative max-h-full max-w-full overflow-hidden rounded-lg bg-background shadow"
-            style={{
-              aspectRatio: `${designW} / ${designH}`,
-              width: "min(100%, 60vh)",
-            }}
+            className="relative h-full max-w-full overflow-hidden rounded-lg bg-background shadow"
+            style={{ aspectRatio: `${designW} / ${designH}` }}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -838,29 +870,6 @@ export function CompositorCanvas({
               );
             })}
           </div>
-        </div>
-
-        {/* Layer stack + properties */}
-        <div className="flex flex-col gap-3 overflow-y-auto">
-          <LayerList />
-          {selectedLayer && (
-            <div className="border-t border-border pt-3">
-              <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                {selectedLayer.locked ? (
-                  <Lock className="h-3.5 w-3.5" />
-                ) : (
-                  <LockOpen className="h-3.5 w-3.5" />
-                )}
-                {selectedLayer.locked ? "Locked" : "Unlocked"} — selected layer
-              </div>
-              <LayerControls
-                layer={selectedLayer}
-                onRedo={handleRedo}
-                redoing={running === "redo"}
-                onRevertHistory={handleRevertHistory}
-              />
-            </div>
-          )}
         </div>
       </div>
 
