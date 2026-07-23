@@ -401,6 +401,27 @@ const layerBaseSchema = z.object({
    *  the export. Optional (like `effects`) so older layer literals parse and
    *  build unchanged; absent/undefined means unlocked. */
   locked: z.boolean().optional(),
+  /**
+   * Drop shadow — the one layer effect built so far (stroke/glow/clipping
+   * masks/groups are deferred). PREVIEW-ONLY today: rendered via the canvas
+   * 2D context's native shadow* properties in drawLayer(), but NOT yet baked
+   * into the FFmpeg export, so a caller must label it clearly in the UI
+   * ("preview only") rather than implying it'll appear in the published video.
+   * Offsets are in the layer's own (rotated/scaled) local space, not screen
+   * space — a simplification versus true PS drop shadows.
+   */
+  shadow: z
+    .object({
+      color: z
+        .string()
+        .regex(/^#[0-9a-fA-F]{6}$/)
+        .default("#000000"),
+      blurPx: z.number().min(0).max(100).default(12),
+      offsetXPx: z.number().min(-100).max(100).default(4),
+      offsetYPx: z.number().min(-100).max(100).default(4),
+      opacity: z.number().min(0).max(1).default(0.6),
+    })
+    .optional(),
 });
 
 /**
@@ -411,11 +432,30 @@ const layerBaseSchema = z.object({
  * `params` is the exact op input last used, so a redo can prefill it.
  */
 export const compositeProvenanceSchema = z.object({
-  op: z.enum(["cutout", "inpaint", "relight", "blend"]),
+  op: z.enum([
+    "cutout",
+    "inpaint",
+    "relight",
+    "blend",
+    // Mechanical (Sharp, free) blends — same provenance shape so they get the
+    // same "redo" treatment as the AI ops, just with no jobId (synchronous).
+    "textureOverlay",
+    "gradientMerge",
+    "softGlow",
+  ]),
   jobId: z.string().optional(),
   params: z.record(z.string(), z.unknown()).optional(),
 });
 export type CompositeProvenance = z.infer<typeof compositeProvenanceSchema>;
+
+/** One prior version of a producedBy layer's result, kept so a redo is
+ *  reversible — capped short (see CompositorCanvas) rather than a full
+ *  generic undo stack. */
+export const compositeHistoryEntrySchema = z.object({
+  src: z.string().url(),
+  producedBy: compositeProvenanceSchema.optional(),
+});
+export type CompositeHistoryEntry = z.infer<typeof compositeHistoryEntrySchema>;
 
 export const imageLayerSchema = layerBaseSchema.extend({
   kind: z.literal("image"),
@@ -423,6 +463,9 @@ export const imageLayerSchema = layerBaseSchema.extend({
   src: z.string().url(),
   /** Set only for layers produced by an Image Compositing op — see above. */
   producedBy: compositeProvenanceSchema.optional(),
+  /** Previous src/producedBy pairs, most recent first — lets a redo be
+   *  reverted. Capped (see CompositorCanvas's HISTORY_LIMIT). */
+  history: z.array(compositeHistoryEntrySchema).max(5).optional(),
 });
 
 export const textAlignSchema = z.enum(["left", "center", "right"]);

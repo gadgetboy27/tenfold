@@ -99,6 +99,14 @@ export function layerCenter(
   return resolveCenter(layer.pos, aspect, halfW, halfH);
 }
 
+/** "#rrggbb" + 0–1 opacity → an rgba() string canvas shadowColor accepts. */
+function shadowRgba(hex: string, opacity: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+}
+
 function drawLayer(
   ctx: CanvasRenderingContext2D,
   layer: Layer,
@@ -115,6 +123,16 @@ function drawLayer(
   ctx.translate(c.x + motion.dx, c.y + motion.dy);
   ctx.rotate(((layer.rotationDeg + motion.rotDeg) * Math.PI) / 180);
   ctx.scale(layer.scale, layer.scale);
+
+  // Preview-only — see the `shadow` field's doc comment in layers.ts. Set
+  // before the kind-specific draw below so it's in the layer's own local
+  // (rotated/scaled) space; the outer ctx.restore() clears it after.
+  if (layer.shadow) {
+    ctx.shadowColor = shadowRgba(layer.shadow.color, layer.shadow.opacity);
+    ctx.shadowBlur = layer.shadow.blurPx;
+    ctx.shadowOffsetX = layer.shadow.offsetXPx;
+    ctx.shadowOffsetY = layer.shadow.offsetYPx;
+  }
 
   if (layer.kind === "image") {
     const img = images.get(layer.src);

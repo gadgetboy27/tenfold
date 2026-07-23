@@ -31,10 +31,37 @@ const RELIGHT_DIRECTIONS = ["None", "Left", "Right", "Top", "Bottom"] as const;
  * direction inputs, reusing the structural inputs (mask, blended images) from
  * the original run. Rendered only when the layer is unlocked.
  */
+const MECH_MODES = ["overlay", "soft-light", "multiply"] as const;
+const MECH_DIRECTIONS = ["horizontal", "vertical"] as const;
+
+const OP_LABEL: Record<CompositeProvenance["op"], string> = {
+  cutout: "Cutout",
+  inpaint: "Erase & replace",
+  relight: "Relight",
+  blend: "Blend",
+  textureOverlay: "Texture overlay",
+  gradientMerge: "Gradient merge",
+  softGlow: "Soft glow",
+};
+
+const HAS_PROMPT = new Set<CompositeProvenance["op"]>([
+  "inpaint",
+  "relight",
+  "blend",
+]);
+const REUSES_STRUCTURE = new Set<CompositeProvenance["op"]>([
+  "inpaint",
+  "blend",
+  "textureOverlay",
+  "gradientMerge",
+]);
+
 function RedoPanel({
   provenance,
   onRedo,
   redoing,
+  history,
+  onRevert,
 }: {
   provenance: CompositeProvenance;
   onRedo: (
@@ -42,6 +69,10 @@ function RedoPanel({
     params: Record<string, unknown>,
   ) => void;
   redoing: boolean;
+  history?: import("@/lib/composition/layers").CompositeHistoryEntry[];
+  onRevert?: (
+    entry: import("@/lib/composition/layers").CompositeHistoryEntry,
+  ) => void;
 }) {
   const params = provenance.params ?? {};
   const [prompt, setPrompt] = useState(
@@ -50,22 +81,36 @@ function RedoPanel({
   const [direction, setDirection] = useState<
     (typeof RELIGHT_DIRECTIONS)[number]
   >((params.direction as (typeof RELIGHT_DIRECTIONS)[number]) ?? "None");
+  const [mode, setMode] = useState<(typeof MECH_MODES)[number]>(
+    (params.mode as (typeof MECH_MODES)[number]) ?? "soft-light",
+  );
+  const [mechOpacity, setMechOpacity] = useState(
+    typeof params.opacity === "number" ? params.opacity : 1,
+  );
+  const [mechDirection, setMechDirection] = useState<
+    (typeof MECH_DIRECTIONS)[number]
+  >((params.direction as (typeof MECH_DIRECTIONS)[number]) ?? "horizontal");
+  const [sigma, setSigma] = useState(
+    typeof params.sigma === "number" ? params.sigma : 12,
+  );
 
-  const opLabel: Record<CompositeProvenance["op"], string> = {
-    cutout: "Cutout",
-    inpaint: "Erase & replace",
-    relight: "Relight",
-    blend: "Blend",
+  const op = provenance.op;
+
+  const buildParams = (): Record<string, unknown> => {
+    if (op === "relight") return { ...params, prompt, direction };
+    if (op === "textureOverlay") return { ...params, mode, opacity: mechOpacity };
+    if (op === "gradientMerge") return { ...params, direction: mechDirection };
+    if (op === "softGlow") return { ...params, sigma };
+    return { ...params, ...(prompt ? { prompt } : {}) };
   };
 
   return (
     <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-3">
       <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
-        <Sparkles className="h-3.5 w-3.5" /> Redo {opLabel[provenance.op]}
+        <Sparkles className="h-3.5 w-3.5" /> Redo {OP_LABEL[op]}
       </div>
-      {(provenance.op === "inpaint" ||
-        provenance.op === "relight" ||
-        provenance.op === "blend") && (
+
+      {HAS_PROMPT.has(op) && (
         <Textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
@@ -74,7 +119,7 @@ function RedoPanel({
           className="bg-background text-sm"
         />
       )}
-      {provenance.op === "relight" && (
+      {op === "relight" && (
         <select
           value={direction}
           onChange={(e) =>
@@ -89,23 +134,69 @@ function RedoPanel({
           ))}
         </select>
       )}
-      {(provenance.op === "inpaint" || provenance.op === "blend") && (
+      {op === "textureOverlay" && (
+        <>
+          <select
+            value={mode}
+            onChange={(e) => setMode(e.target.value as (typeof MECH_MODES)[number])}
+            className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+          >
+            {MECH_MODES.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+          <Slider
+            min={0}
+            max={1}
+            step={0.05}
+            value={[mechOpacity]}
+            onValueChange={([v]) => setMechOpacity(v)}
+          />
+        </>
+      )}
+      {op === "gradientMerge" && (
+        <select
+          value={mechDirection}
+          onChange={(e) =>
+            setMechDirection(e.target.value as (typeof MECH_DIRECTIONS)[number])
+          }
+          className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+        >
+          {MECH_DIRECTIONS.map((d) => (
+            <option key={d} value={d}>
+              {d}
+            </option>
+          ))}
+        </select>
+      )}
+      {op === "softGlow" && (
+        <div className="flex items-center gap-2">
+          <Slider
+            min={0}
+            max={40}
+            step={1}
+            value={[sigma]}
+            onValueChange={([v]) => setSigma(v)}
+          />
+          <span className="w-8 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+            {sigma}
+          </span>
+        </div>
+      )}
+      {REUSES_STRUCTURE.has(op) && (
         <p className="text-[11px] text-muted-foreground">
-          {provenance.op === "inpaint"
+          {op === "inpaint"
             ? "Reuses the same masked region — redraw the mask isn't supported yet."
-            : "Reuses the same blended images — swapping images isn't supported yet."}
+            : "Reuses the same second image — swapping it isn't supported yet."}
         </p>
       )}
+
       <Button
         size="sm"
         disabled={redoing}
-        onClick={() =>
-          onRedo(provenance.op, {
-            ...params,
-            ...(prompt ? { prompt } : {}),
-            ...(provenance.op === "relight" ? { direction } : {}),
-          })
-        }
+        onClick={() => onRedo(op, buildParams())}
         className="w-full gap-1.5"
       >
         {redoing ? (
@@ -115,6 +206,30 @@ function RedoPanel({
         )}
         Regenerate
       </Button>
+
+      {history && history.length > 0 && onRevert && (
+        <div className="space-y-1 border-t border-border pt-2">
+          <p className="text-[11px] text-muted-foreground">Previous versions</p>
+          <div className="flex gap-1.5">
+            {history.map((h, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => onRevert(h)}
+                title="Revert to this version"
+                className="h-9 w-9 shrink-0 overflow-hidden rounded-md border border-border hover:border-primary/50"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={h.src}
+                  alt="Previous version"
+                  className="h-full w-full object-cover"
+                />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -156,6 +271,7 @@ export function LayerControls({
   layer,
   onRedo,
   redoing = false,
+  onRevertHistory,
 }: {
   layer: Layer;
   /** Wired only by callers that can actually re-run a compositing op (Studio's
@@ -166,6 +282,9 @@ export function LayerControls({
     params: Record<string, unknown>,
   ) => void;
   redoing?: boolean;
+  onRevertHistory?: (
+    entry: import("@/lib/composition/layers").CompositeHistoryEntry,
+  ) => void;
 }) {
   const updateLayer = useCompositorStore((s) => s.updateLayer);
   const patchLayout = useCompositorStore((s) => s.patchLayout);
@@ -244,6 +363,8 @@ export function LayerControls({
           provenance={layer.producedBy}
           onRedo={onRedo}
           redoing={redoing}
+          history={layer.history}
+          onRevert={onRevertHistory}
         />
       )}
       {layer.kind === "text" && (
@@ -391,6 +512,62 @@ export function LayerControls({
             </option>
           ))}
         </select>
+      </Row>
+      <Row label="Shadow">
+        {layer.shadow ? (
+          <div className="space-y-1.5">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-400">
+              Preview only — not yet in the exported video
+            </span>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={layer.shadow.color}
+                onChange={(e) =>
+                  set({ shadow: { ...layer.shadow!, color: e.target.value } })
+                }
+                className="h-7 w-9 cursor-pointer rounded border border-border bg-background"
+              />
+              <Slider
+                min={0}
+                max={100}
+                step={1}
+                value={[layer.shadow.blurPx]}
+                onValueChange={([v]) =>
+                  set({ shadow: { ...layer.shadow!, blurPx: v } })
+                }
+              />
+              <span className="w-8 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                {layer.shadow.blurPx}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => set({ shadow: undefined })}
+              className="text-[11px] text-muted-foreground hover:text-destructive"
+            >
+              Remove shadow
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() =>
+              set({
+                shadow: {
+                  color: "#000000",
+                  blurPx: 12,
+                  offsetXPx: 4,
+                  offsetYPx: 4,
+                  opacity: 0.6,
+                },
+              })
+            }
+            className="rounded-md border border-dashed border-border px-2 py-1 text-xs text-muted-foreground hover:border-primary/40"
+          >
+            + Add drop shadow
+          </button>
+        )}
       </Row>
 
       <div className="grid grid-cols-2 gap-2 pt-1">
