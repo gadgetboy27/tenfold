@@ -23,6 +23,9 @@ import {
   LayoutGrid,
   List as ListIcon,
   Music2,
+  Download,
+  Maximize2,
+  Anchor,
 } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { Spinner } from "@/components/brand/Spinner";
@@ -42,11 +45,13 @@ import { useAppStore } from "@/store/useAppStore";
 import { api } from "@/lib/api";
 
 /**
- * Studio — the progressive-canvas shell (hidden preview at /[workspace]/studio).
- * The frame (tool rail + a lingering Publish button) stays put; only the canvas
- * changes. It drives the SAME endpoints as the classic flow — this is a new
- * surface over existing functionality, not a new engine. First slice wires
- * Brief → Images end to end; the rest link out to the classic pages for now.
+ * Studio — the main site (rendered directly at /[workspace]). A single
+ * Cockpit layout: left panel for input/navigation, right panel for the
+ * persistent result — the frame stays put, only the canvas changes. It drives
+ * the SAME endpoints the classic flow used — a new surface over existing
+ * functionality, not a new engine. Sections not yet ported (Caption,
+ * Compositor, Publish beyond the basics) fall back to a placeholder, with
+ * Compositor/Logo offering a deliberate "Open in classic" link.
  */
 
 type SectionId =
@@ -65,6 +70,17 @@ interface ProjectSummary {
   name: string | null;
   status: string;
   thumbnailUrl: string | null;
+  created_at: string;
+  anchor_asset_id: string | null;
+}
+
+/** A past generated image, reusable as the anchor of a brand-new project. */
+interface GalleryImage {
+  id: string;
+  url: string;
+  type: string;
+  campaign_id: string;
+  metadata?: { direction?: string } | null;
   created_at: string;
 }
 
@@ -157,24 +173,6 @@ export function Studio({
   const [enhancedUrl, setEnhancedUrl] = useState<string | null>(null);
   const [bgBusy, setBgBusy] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
-
-  // Two layouts, same engine: "simple" (the calm centered canvas) and "cockpit"
-  // (fal-style input-left / result-right workspace). Simple stays the default so
-  // it's never lost; the choice persists so a flick back sticks.
-  const [layout, setLayout] = useState<"simple" | "cockpit">("simple");
-  useEffect(() => {
-    const saved = localStorage.getItem("tf-studio-layout");
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time mount init from a persisted preference
-    if (saved === "cockpit" || saved === "simple") setLayout(saved);
-  }, []);
-  const chooseLayout = (l: "simple" | "cockpit") => {
-    setLayout(l);
-    try {
-      localStorage.setItem("tf-studio-layout", l);
-    } catch {
-      /* private mode — the choice just won't persist */
-    }
-  };
 
   const refreshBalance = useCallback(() => {
     api("/api/credits/balance", { workspaceSlug })
@@ -325,8 +323,10 @@ export function Studio({
   };
 
   // Open a past project into the canvas — rehydrate its state and land on the
-  // right stage. Never leaves the surface.
-  const openProject = async (id: string) => {
+  // right stage. Never leaves the surface. Pass `goto` to jump straight to a
+  // specific section (e.g. "publish") instead of the default anchor/images/
+  // brief heuristic — used by the Gallery's Publish quick-action.
+  const openProject = async (id: string, goto?: SectionId) => {
     try {
       const res = await api(`/api/campaigns/${id}`, { workspaceSlug });
       if (!res.ok) throw new Error("Couldn't open that project");
@@ -365,7 +365,8 @@ export function Studio({
       setReferenceUrl(null);
       setGenerating(false);
       setSection(
-        camp.anchor_asset_id ? "video" : imgs.length ? "images" : "brief",
+        goto ??
+          (camp.anchor_asset_id ? "video" : imgs.length ? "images" : "brief"),
       );
     } catch (err) {
       toast.error((err as Error).message ?? "Couldn't open that project");
@@ -383,6 +384,46 @@ export function Studio({
     setReferenceUrl(null);
     setGenerating(false);
     setSection("brief");
+  };
+
+  // Start a brand-new project anchored on an already-generated image from the
+  // Gallery's Images tab — free, no regeneration. Mirrors openProject's state
+  // shape but for a single carried-over asset instead of a full campaign.
+  const reuseGalleryImage = async (assetId: string) => {
+    try {
+      const res = await api("/api/campaigns/from-asset", {
+        method: "POST",
+        body: JSON.stringify({ assetId }),
+        workspaceSlug,
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        campaignId?: string;
+        campaignName?: string;
+        asset?: { id: string; url: string; direction?: string };
+        error?: string;
+      };
+      if (!res.ok || !data.campaignId || !data.asset) {
+        throw new Error(data.error ?? "Couldn't reuse this image");
+      }
+      setCampaignId(data.campaignId);
+      setCampaignName(data.campaignName?.trim() || randomCampaignName());
+      setAssets([
+        {
+          id: data.asset.id,
+          url: data.asset.url,
+          label: data.asset.direction ?? "",
+        },
+      ]);
+      setAnchorId(data.asset.id);
+      setEnhancedUrl(null);
+      setVideoUrl(null);
+      setReferenceUrl(null);
+      setGenerating(false);
+      setSection("video");
+      toast.success("New project started from this image — no credits used.");
+    } catch (err) {
+      toast.error((err as Error).message ?? "Couldn't reuse this image");
+    }
   };
 
   const anchor = assets.find((a) => a.id === anchorId) ?? null;
@@ -590,73 +631,15 @@ export function Studio({
 
   return (
     <div className="flex h-screen bg-background text-foreground">
-      {/* ── tool rail — Simple layout only. Cockpit puts navigation inside the
+      {/* ── main — Cockpit is the only layout now. Navigation lives inside the
              left input panel (true two-column workspace, no separate sidebar). ── */}
-      {layout === "simple" && (
-        <aside className="hidden w-56 shrink-0 flex-col gap-1 border-r border-border bg-card p-3 sm:flex">
-          <button
-            type="button"
-            onClick={() => setSection("projects")}
-            title="Your projects"
-            className="mb-3 flex items-center px-2"
-          >
-            <Logo size={20} withWordmark />
-          </button>
-          <button
-            type="button"
-            onClick={() => setSection("projects")}
-            className={`flex items-center gap-3 rounded-lg border px-2.5 py-2 text-sm font-medium transition-colors ${
-              section === "projects"
-                ? "border-primary/40 bg-primary/15 text-foreground"
-                : "border-transparent text-muted-foreground hover:bg-background hover:text-foreground"
-            }`}
-          >
-            <ImagesIcon className="h-4 w-4 shrink-0 opacity-90" /> Projects
-          </button>
-          <button
-            type="button"
-            onClick={newProject}
-            className="mb-1 flex items-center gap-3 rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/15"
-          >
-            <Sparkles className="h-4 w-4 shrink-0" /> New campaign
-          </button>
-          <span className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-            Build
-          </span>
-          {tools.slice(0, 5).map((t) => (
-            <ToolButton
-              key={t.id}
-              tool={t}
-              active={section === t.id}
-              onClick={() => setSection(t.id)}
-            />
-          ))}
-          <span className="px-2 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-            Finish
-          </span>
-          {tools.slice(5).map((t) => (
-            <ToolButton
-              key={t.id}
-              tool={t}
-              active={section === t.id}
-              onClick={() => setSection(t.id)}
-            />
-          ))}
-          <div className="flex-1" />
-          <div className="rounded-lg border border-border bg-background px-2.5 py-2 text-xs text-muted-foreground">
-            Studio preview — same engine, new canvas.
-          </div>
-        </aside>
-      )}
-
-      {/* ── main ──────────────────────────────────────────────── */}
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center gap-3 border-b border-border px-4 py-2.5">
           <button
             type="button"
             onClick={() => setSection("projects")}
-            title="Your projects"
-            className={`items-center ${layout === "cockpit" ? "flex" : "flex sm:hidden"}`}
+            title="Gallery"
+            className="flex items-center"
           >
             <Logo size={18} withWordmark />
           </button>
@@ -707,22 +690,6 @@ export function Studio({
             >
               <Share2 className="h-4 w-4" />
             </button>
-            <div className="hidden items-center rounded-full border border-border p-0.5 text-xs font-medium sm:flex">
-              {(["simple", "cockpit"] as const).map((l) => (
-                <button
-                  key={l}
-                  type="button"
-                  onClick={() => chooseLayout(l)}
-                  className={`rounded-full px-2.5 py-1 capitalize transition-colors ${
-                    layout === l
-                      ? "bg-primary/15 text-primary"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {l}
-                </button>
-              ))}
-            </div>
             <CreditMeter />
             <button
               type="button"
@@ -753,10 +720,9 @@ export function Studio({
               workspaceSlug={workspaceSlug}
               onOpen={openProject}
               onNew={newProject}
+              onReuseImage={reuseGalleryImage}
             />
           ) : section === "music" ? (
-            // Music is a compose step, not a generate/preview split — render the
-            // same full canvas in both layouts.
             <MusicCanvas
               genre={musicGenre}
               setGenre={setMusicGenre}
@@ -778,7 +744,7 @@ export function Studio({
             <div className="mx-auto h-full max-w-5xl">
               <LogoStudio />
             </div>
-          ) : layout === "cockpit" ? (
+          ) : (
             <CockpitCreate
               tools={tools}
               section={section}
@@ -820,50 +786,6 @@ export function Studio({
               bgBusy={bgBusy}
               onRemoveBg={removeBg}
             />
-          ) : section === "brief" ? (
-            <BriefCanvas
-              prompt={prompt}
-              setPrompt={setPrompt}
-              variety={variety}
-              setVariety={setVariety}
-              onGenerate={generate}
-              referenceUrl={referenceUrl}
-              refUploading={refUploading}
-              onUploadReference={uploadReference}
-              onClearReference={() => setReferenceUrl(null)}
-            />
-          ) : section === "images" ? (
-            <ImagesCanvas
-              generating={generating}
-              stage={stage}
-              assets={assets}
-              anchorId={anchorId}
-              onPick={pickAnchor}
-              onRegenerate={() => setSection("brief")}
-              onContinue={() => setSection("video")}
-            />
-          ) : section === "video" ? (
-            <VideoCanvas
-              hasAnchor={anchorPicked}
-              stillUrl={workingImage}
-              duration={videoDuration}
-              setDuration={setVideoDuration}
-              style={videoStyle}
-              setStyle={setVideoStyle}
-              generating={videoGenerating}
-              stage={videoStage}
-              url={videoUrl}
-              onGenerate={generateVideo}
-              allowedEffects={ent?.proEffects ?? []}
-              onUpgrade={() => setShowUpgrade(true)}
-              bgBusy={bgBusy}
-              onRemoveBg={removeBg}
-            />
-          ) : (
-            <PlaceholderCanvas
-              tool={tools.find((t) => t.id === section)!}
-              anchorReady={anchorPicked}
-            />
           )}
         </main>
       </div>
@@ -874,267 +796,6 @@ export function Studio({
         feature="Pro effects"
         blurb="Unlock the AI-Photoshop effects — background removal, erase & replace, borders, blends and motion — plus 30s video and HD exports."
       />
-    </div>
-  );
-}
-
-function ToolButton({
-  tool,
-  active,
-  onClick,
-}: {
-  tool: {
-    id: string;
-    label: string;
-    icon: typeof PenLine;
-    done: boolean;
-  };
-  active: boolean;
-  onClick: () => void;
-}) {
-  const Icon = tool.icon;
-  const inner = (
-    <>
-      <Icon className="h-4 w-4 shrink-0 opacity-90" />
-      <span>{tool.label}</span>
-      <span
-        className={`ml-auto h-1.5 w-1.5 rounded-full ${
-          tool.done
-            ? "bg-emerald-500"
-            : active
-              ? "bg-primary shadow-[0_0_0_3px] shadow-primary/25"
-              : "bg-border"
-        }`}
-      />
-    </>
-  );
-  const cls = `flex items-center gap-3 rounded-lg border px-2.5 py-2 text-sm font-medium transition-colors ${
-    active
-      ? "border-primary/40 bg-primary/15 text-foreground"
-      : "border-transparent text-muted-foreground hover:bg-background hover:text-foreground"
-  }`;
-  return (
-    <button type="button" onClick={onClick} className={cls}>
-      {inner}
-    </button>
-  );
-}
-
-function BriefCanvas({
-  prompt,
-  setPrompt,
-  variety,
-  setVariety,
-  onGenerate,
-  referenceUrl,
-  refUploading,
-  onUploadReference,
-  onClearReference,
-}: {
-  prompt: string;
-  setPrompt: (v: string) => void;
-  variety: boolean;
-  setVariety: (v: boolean) => void;
-  onGenerate: () => void;
-  referenceUrl: string | null;
-  refUploading: boolean;
-  onUploadReference: (file: File) => void;
-  onClearReference: () => void;
-}) {
-  return (
-    <div className="mx-auto flex h-full max-w-2xl flex-col items-center justify-center gap-5 text-center">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">
-          What are we advertising?
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Describe it — the studio generates your options, you refine from
-          there.
-        </p>
-      </div>
-      <div className="w-full rounded-2xl border border-border bg-card p-4 shadow-xl">
-        <textarea
-          autoFocus
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") onGenerate();
-          }}
-          rows={3}
-          placeholder="A coffee roastery overlooking the bay at golden hour, steam rising off fresh beans…"
-          className="w-full resize-none bg-transparent text-[15px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/70"
-        />
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setVariety(!variety)}
-            disabled={!!referenceUrl}
-            title={
-              referenceUrl
-                ? "Variety is off while a reference photo drives generation"
-                : undefined
-            }
-            className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-40 ${
-              variety && !referenceUrl
-                ? "border-primary/40 bg-primary/15 text-primary"
-                : "border-border text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <Sparkles className="h-3 w-3" /> Variety pack
-          </button>
-          <button
-            type="button"
-            onClick={onGenerate}
-            disabled={prompt.trim().length < 3}
-            className="ml-auto flex items-center gap-1.5 rounded-full bg-primary px-4 py-1.5 text-sm font-semibold text-primary-foreground transition-opacity disabled:opacity-40"
-          >
-            <Sparkles className="h-4 w-4" /> Generate
-          </button>
-        </div>
-        <div className="mt-3 border-t border-border pt-3 text-left">
-          <ReferencePhotoField
-            url={referenceUrl}
-            uploading={refUploading}
-            onUpload={onUploadReference}
-            onClear={onClearReference}
-            compact
-          />
-        </div>
-      </div>
-      <p className="text-xs text-muted-foreground/70">
-        {variety
-          ? "6 options across your top 3 models · 20 credits"
-          : "6 options · 12 credits"}{" "}
-        · ⌘↵ to generate
-      </p>
-    </div>
-  );
-}
-
-function ImagesCanvas({
-  generating,
-  stage,
-  assets,
-  anchorId,
-  onPick,
-  onRegenerate,
-  onContinue,
-}: {
-  generating: boolean;
-  stage: string;
-  assets: Anchor[];
-  anchorId: string | null;
-  onPick: (id: string) => void;
-  onRegenerate: () => void;
-  onContinue: () => void;
-}) {
-  if (generating && assets.length === 0) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
-        <div className="grid w-full max-w-3xl grid-cols-2 gap-3 sm:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div
-              key={i}
-              className="aspect-square animate-pulse rounded-xl border border-border bg-card"
-            />
-          ))}
-        </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin text-primary" /> {stage}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mx-auto flex h-full max-w-3xl flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-base font-semibold">Pick your look</h2>
-          <p className="text-sm text-muted-foreground">
-            Tap the one that feels right — everything builds from it.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onRegenerate}
-          className="rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
-        >
-          New brief
-        </button>
-      </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {assets.map((a) => (
-          <button
-            key={a.id}
-            type="button"
-            onClick={() => onPick(a.id)}
-            className={`group relative aspect-square overflow-hidden rounded-xl border-2 transition-all ${
-              anchorId === a.id
-                ? "border-primary shadow-[0_0_0_3px] shadow-primary/25"
-                : "border-border hover:border-primary/50"
-            }`}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={a.url}
-              alt={a.label || "Option"}
-              className="h-full w-full object-cover"
-            />
-            {a.label && (
-              <span className="absolute left-1.5 top-1.5 rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-medium text-white">
-                {a.label}
-              </span>
-            )}
-            {anchorId === a.id && (
-              <span className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded-full bg-primary text-primary-foreground">
-                <Check className="h-3 w-3" />
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-      {anchorId && (
-        <div className="flex items-center justify-end gap-3 text-sm">
-          <span className="text-muted-foreground">Anchor set.</span>
-          <button
-            type="button"
-            onClick={onContinue}
-            className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
-          >
-            Continue — enhance &amp; animate <ArrowRight className="h-4 w-4" />
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function PlaceholderCanvas({
-  tool,
-  anchorReady,
-}: {
-  tool: { label: string; classicHref?: string };
-  anchorReady: boolean;
-}) {
-  return (
-    <div className="mx-auto flex h-full max-w-md flex-col items-center justify-center gap-3 text-center">
-      <h2 className="text-lg font-semibold">{tool.label}</h2>
-      <p className="text-sm text-muted-foreground">
-        {tool.classicHref
-          ? "Coming to Studio soon. For now it opens in the classic flow — same engine."
-          : anchorReady
-            ? "Coming to Studio soon — this builds on the look you picked."
-            : "Generate your images first — then this step builds on the look you pick."}
-      </p>
-      {tool.classicHref && (
-        <Link
-          href={tool.classicHref}
-          className="mt-1 flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
-        >
-          Open {tool.label} <ArrowRight className="h-4 w-4" />
-        </Link>
-      )}
     </div>
   );
 }
@@ -1751,63 +1412,6 @@ function EffectsPanel({
   );
 }
 
-function VideoCanvas(props: {
-  hasAnchor: boolean;
-  stillUrl: string | null;
-  duration: 10 | 15 | 30;
-  setDuration: (d: 10 | 15 | 30) => void;
-  style: (typeof VIDEO_STYLES)[number];
-  setStyle: (s: (typeof VIDEO_STYLES)[number]) => void;
-  generating: boolean;
-  stage: string;
-  url: string | null;
-  onGenerate: () => void;
-  allowedEffects: string[];
-  onUpgrade: () => void;
-  bgBusy: boolean;
-  onRemoveBg: () => void;
-}) {
-  return (
-    <div className="mx-auto flex h-full max-w-3xl flex-col gap-4">
-      <div>
-        <h2 className="text-base font-semibold">Enhance &amp; animate</h2>
-        <p className="text-sm text-muted-foreground">
-          Your chosen image, ready to work on — apply an effect, or bring it to
-          life.
-        </p>
-      </div>
-      <div className="flex min-h-[42vh] flex-1 items-center justify-center rounded-xl border border-border bg-card p-4">
-        <VideoResult
-          generating={props.generating}
-          stage={props.stage}
-          url={props.url}
-          stillUrl={props.stillUrl}
-        />
-      </div>
-      {props.hasAnchor && (
-        <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4">
-          <EffectsPanel
-            allowedEffects={props.allowedEffects}
-            onUpgrade={props.onUpgrade}
-            bgBusy={props.bgBusy}
-            onRemoveBg={props.onRemoveBg}
-          />
-          <div className="border-t border-border" />
-          <VideoInputs
-            hasAnchor={props.hasAnchor}
-            duration={props.duration}
-            setDuration={props.setDuration}
-            style={props.style}
-            setStyle={props.setStyle}
-            generating={props.generating}
-            onGenerate={props.onGenerate}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
 /* ── Music: a track sized to the chosen video length ──────────────────────── */
 function MusicCanvas({
   genre,
@@ -1989,14 +1593,20 @@ function ProjectsCanvas({
   workspaceSlug,
   onOpen,
   onNew,
+  onReuseImage,
 }: {
   workspaceSlug: string;
-  onOpen: (id: string) => void;
+  onOpen: (id: string, goto?: SectionId) => void;
   onNew: () => void;
+  onReuseImage: (assetId: string) => void;
 }) {
+  const [tab, setTab] = useState<"projects" | "images">("projects");
   const [list, setList] = useState<ProjectSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<"grid" | "row">("grid");
+  const [images, setImages] = useState<GalleryImage[]>([]);
+  const [imagesLoading, setImagesLoading] = useState(true);
+  const [reusing, setReusing] = useState<string | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem("tf-studio-projects-view");
@@ -2028,38 +1638,80 @@ function ProjectsCanvas({
     };
   }, [workspaceSlug]);
 
+  // Every image ever generated, across all past campaigns — reusable as the
+  // anchor of a brand-new project, free (no regeneration), like the old site.
+  useEffect(() => {
+    let active = true;
+    api("/api/gallery", { workspaceSlug })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { assets?: GalleryImage[] } | null) => {
+        if (active) setImages(d?.assets ?? []);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setImagesLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [workspaceSlug]);
+
+  const handleReuse = async (assetId: string) => {
+    setReusing(assetId);
+    try {
+      await onReuseImage(assetId);
+    } finally {
+      setReusing(null);
+    }
+  };
+
+  const download = async (a: GalleryImage) => {
+    try {
+      const res = await fetch(a.url);
+      const href = URL.createObjectURL(await res.blob());
+      const el = document.createElement("a");
+      el.href = href;
+      el.download = `tenfold-${a.id}.jpg`;
+      el.click();
+      URL.revokeObjectURL(href);
+    } catch {
+      window.open(a.url, "_blank", "noopener");
+    }
+  };
+
   return (
     <div className="mx-auto flex h-full max-w-5xl flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">
-            Your projects
-          </h1>
+          <h1 className="text-xl font-semibold tracking-tight">Gallery</h1>
           <p className="text-sm text-muted-foreground">
-            Pick up where you left off, or start something new.
+            Pick up a past project, publish one that&apos;s ready, or start
+            something new from an image you already made.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center rounded-lg border border-border p-0.5">
-            <button
-              type="button"
-              onClick={() => chooseView("grid")}
-              title="Grid"
-              aria-label="Grid view"
-              className={`rounded-md p-1.5 ${view === "grid" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => chooseView("row")}
-              title="List"
-              aria-label="List view"
-              className={`rounded-md p-1.5 ${view === "row" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              <ListIcon className="h-4 w-4" />
-            </button>
-          </div>
+          {tab === "projects" && (
+            <div className="flex items-center rounded-lg border border-border p-0.5">
+              <button
+                type="button"
+                onClick={() => chooseView("grid")}
+                title="Grid"
+                aria-label="Grid view"
+                className={`rounded-md p-1.5 ${view === "grid" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => chooseView("row")}
+                title="List"
+                aria-label="List view"
+                className={`rounded-md p-1.5 ${view === "row" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                <ListIcon className="h-4 w-4" />
+              </button>
+            </div>
+          )}
           <button
             type="button"
             onClick={onNew}
@@ -2070,92 +1722,219 @@ function ProjectsCanvas({
         </div>
       </div>
 
-      {loading ? (
+      {/* Tabs — Projects (resume/publish) vs Images (start new from an old one) */}
+      <div className="flex items-center gap-1 border-b border-border">
+        {(
+          [
+            { id: "projects", label: "Projects" },
+            { id: "images", label: "Images" },
+          ] as const
+        ).map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+              tab === t.id
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "projects" ? (
+        loading ? (
+          <div className="flex flex-1 items-center justify-center">
+            <Spinner size={40} />
+          </div>
+        ) : list.length === 0 ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center text-muted-foreground">
+            <ImagesIcon className="h-8 w-8 opacity-40" />
+            <p className="text-sm">
+              No projects yet — let’s make your first ad.
+            </p>
+            <button
+              type="button"
+              onClick={onNew}
+              className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+            >
+              <Sparkles className="h-4 w-4" /> New campaign
+            </button>
+          </div>
+        ) : view === "grid" ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {list.map((p) => (
+              <div
+                key={p.id}
+                className="group relative flex flex-col overflow-hidden rounded-xl border border-border transition-colors hover:border-primary/50"
+              >
+                <button
+                  type="button"
+                  onClick={() => onOpen(p.id)}
+                  className="flex aspect-square items-center justify-center bg-background text-left"
+                >
+                  {p.thumbnailUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={p.thumbnailUrl}
+                      alt={p.name ?? "Project"}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <ImagesIcon className="h-6 w-6 text-muted-foreground/40" />
+                  )}
+                </button>
+                {p.anchor_asset_id && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpen(p.id, "publish");
+                    }}
+                    title="Publish this project"
+                    className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity hover:bg-primary group-hover:opacity-100"
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onOpen(p.id)}
+                  className="border-t border-border px-3 py-2 text-left"
+                >
+                  <p className="truncate text-sm font-medium">
+                    {p.name || "Untitled"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    <span
+                      className={
+                        STATUS_TONE[p.status] ?? "text-muted-foreground"
+                      }
+                    >
+                      {p.status}
+                    </span>{" "}
+                    · {timeAgo(p.created_at)}
+                  </p>
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {list.map((p) => (
+              <div
+                key={p.id}
+                onClick={() => onOpen(p.id)}
+                className="group flex cursor-pointer items-center gap-3 rounded-lg border border-border px-2.5 py-2 transition-colors hover:border-primary/50"
+              >
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md bg-background">
+                  {p.thumbnailUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={p.thumbnailUrl}
+                      alt={p.name ?? "Project"}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <ImagesIcon className="h-4 w-4 text-muted-foreground/40" />
+                  )}
+                </div>
+                <span className="flex-1 truncate text-sm font-medium">
+                  {p.name || "Untitled"}
+                </span>
+                <span
+                  className={`text-xs ${STATUS_TONE[p.status] ?? "text-muted-foreground"}`}
+                >
+                  {p.status}
+                </span>
+                <span className="w-16 shrink-0 text-right text-xs text-muted-foreground">
+                  {timeAgo(p.created_at)}
+                </span>
+                {p.anchor_asset_id && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpen(p.id, "publish");
+                    }}
+                    title="Publish this project"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground opacity-0 transition-opacity hover:text-primary group-hover:opacity-100"
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )
+      ) : imagesLoading ? (
         <div className="flex flex-1 items-center justify-center">
           <Spinner size={40} />
         </div>
-      ) : list.length === 0 ? (
+      ) : images.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center text-muted-foreground">
           <ImagesIcon className="h-8 w-8 opacity-40" />
-          <p className="text-sm">No projects yet — let’s make your first ad.</p>
-          <button
-            type="button"
-            onClick={onNew}
-            className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
-          >
-            <Sparkles className="h-4 w-4" /> New campaign
-          </button>
-        </div>
-      ) : view === "grid" ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {list.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => onOpen(p.id)}
-              className="group flex flex-col overflow-hidden rounded-xl border border-border text-left transition-colors hover:border-primary/50"
-            >
-              <div className="flex aspect-square items-center justify-center bg-background">
-                {p.thumbnailUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={p.thumbnailUrl}
-                    alt={p.name ?? "Project"}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <ImagesIcon className="h-6 w-6 text-muted-foreground/40" />
-                )}
-              </div>
-              <div className="border-t border-border px-3 py-2">
-                <p className="truncate text-sm font-medium">
-                  {p.name || "Untitled"}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  <span
-                    className={STATUS_TONE[p.status] ?? "text-muted-foreground"}
-                  >
-                    {p.status}
-                  </span>{" "}
-                  · {timeAgo(p.created_at)}
-                </p>
-              </div>
-            </button>
-          ))}
+          <p className="text-sm">
+            No images yet — generate a project and they&apos;ll be saved here.
+          </p>
         </div>
       ) : (
-        <div className="flex flex-col gap-1.5">
-          {list.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => onOpen(p.id)}
-              className="flex items-center gap-3 rounded-lg border border-border px-2.5 py-2 text-left transition-colors hover:border-primary/50"
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {images.map((a) => (
+            <div
+              key={a.id}
+              className="group relative aspect-square overflow-hidden rounded-xl border border-border bg-card"
             >
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md bg-background">
-                {p.thumbnailUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={p.thumbnailUrl}
-                    alt={p.name ?? "Project"}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <ImagesIcon className="h-4 w-4 text-muted-foreground/40" />
-                )}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={a.url}
+                alt={a.metadata?.direction ?? "Generated image"}
+                loading="lazy"
+                className="h-full w-full object-cover"
+              />
+              {a.metadata?.direction && (
+                <span className="absolute left-2 top-2 rounded-full bg-black/55 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-white backdrop-blur-sm">
+                  {a.metadata.direction}
+                </span>
+              )}
+              <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1.5 bg-gradient-to-t from-black/70 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
+                <button
+                  type="button"
+                  onClick={() => handleReuse(a.id)}
+                  disabled={reusing === a.id}
+                  title="Start a new project with this image as the anchor — free"
+                  className="flex h-7 items-center gap-1 rounded-full bg-primary px-2 text-[10px] font-semibold text-white disabled:opacity-60"
+                >
+                  {reusing === a.id ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Anchor className="h-3 w-3" />
+                  )}
+                  Use as anchor
+                </button>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => window.open(a.url, "_blank", "noopener")}
+                    title="View full size"
+                    className="flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-primary"
+                  >
+                    <Maximize2 className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => download(a)}
+                    title="Download"
+                    className="flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-primary"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
-              <span className="flex-1 truncate text-sm font-medium">
-                {p.name || "Untitled"}
-              </span>
-              <span
-                className={`text-xs ${STATUS_TONE[p.status] ?? "text-muted-foreground"}`}
-              >
-                {p.status}
-              </span>
-              <span className="w-16 shrink-0 text-right text-xs text-muted-foreground">
-                {timeAgo(p.created_at)}
-              </span>
-            </button>
+            </div>
           ))}
         </div>
       )}
