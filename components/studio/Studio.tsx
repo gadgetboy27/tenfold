@@ -36,6 +36,7 @@ import {
   type StudioOption,
 } from "@/components/studio/StudioSelect";
 import { LogoStudio } from "@/components/logo/LogoStudio";
+import { CompositorCanvas } from "@/components/studio/CompositorCanvas";
 import { ReferencePhotoField } from "@/components/studio/ReferencePhotoField";
 import { useEntitlements } from "@/lib/billing/useEntitlements";
 import { randomCampaignName } from "@/lib/util/campaign-name";
@@ -744,6 +745,16 @@ export function Studio({
             <div className="mx-auto h-full max-w-5xl">
               <LogoStudio />
             </div>
+          ) : section === "compositor" && campaignId && workingImage ? (
+            // Each compositing op (cutout/inpaint/relight/blend) becomes a real,
+            // lockable layer in the SAME layer system the classic Compositor
+            // uses — reused, not forked.
+            <CompositorCanvas
+              workspaceSlug={workspaceSlug}
+              campaignId={campaignId}
+              anchorUrl={workingImage}
+              classicHref={`/${workspaceSlug}/compositor?campaign=${campaignId}`}
+            />
           ) : (
             <CockpitCreate
               tools={tools}

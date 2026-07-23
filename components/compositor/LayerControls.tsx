@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import {
   anchorToFraction,
   BLEND_MODES,
+  type CompositeProvenance,
   type EffectInKind,
   type EffectLoopKind,
   type EffectOutKind,
@@ -15,11 +17,107 @@ import {
   effectsOf,
 } from "@/lib/composition/effects";
 import toast from "react-hot-toast";
-import { Copy } from "lucide-react";
+import { Copy, Lock, Sparkles, Loader2 } from "lucide-react";
 import { useCompositorStore, type Layer } from "@/store/useCompositorStore";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
+import { Button } from "@/components/ui/button";
+
+const RELIGHT_DIRECTIONS = ["None", "Left", "Right", "Top", "Bottom"] as const;
+
+/**
+ * Redo panel for a layer produced by an Image Compositing op — editable text/
+ * direction inputs, reusing the structural inputs (mask, blended images) from
+ * the original run. Rendered only when the layer is unlocked.
+ */
+function RedoPanel({
+  provenance,
+  onRedo,
+  redoing,
+}: {
+  provenance: CompositeProvenance;
+  onRedo: (
+    op: CompositeProvenance["op"],
+    params: Record<string, unknown>,
+  ) => void;
+  redoing: boolean;
+}) {
+  const params = provenance.params ?? {};
+  const [prompt, setPrompt] = useState(
+    typeof params.prompt === "string" ? params.prompt : "",
+  );
+  const [direction, setDirection] = useState<
+    (typeof RELIGHT_DIRECTIONS)[number]
+  >((params.direction as (typeof RELIGHT_DIRECTIONS)[number]) ?? "None");
+
+  const opLabel: Record<CompositeProvenance["op"], string> = {
+    cutout: "Cutout",
+    inpaint: "Erase & replace",
+    relight: "Relight",
+    blend: "Blend",
+  };
+
+  return (
+    <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-3">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
+        <Sparkles className="h-3.5 w-3.5" /> Redo {opLabel[provenance.op]}
+      </div>
+      {(provenance.op === "inpaint" ||
+        provenance.op === "relight" ||
+        provenance.op === "blend") && (
+        <Textarea
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          rows={2}
+          placeholder="Describe what you want…"
+          className="bg-background text-sm"
+        />
+      )}
+      {provenance.op === "relight" && (
+        <select
+          value={direction}
+          onChange={(e) =>
+            setDirection(e.target.value as (typeof RELIGHT_DIRECTIONS)[number])
+          }
+          className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+        >
+          {RELIGHT_DIRECTIONS.map((d) => (
+            <option key={d} value={d}>
+              {d === "None" ? "Auto lighting direction" : `Light from ${d}`}
+            </option>
+          ))}
+        </select>
+      )}
+      {(provenance.op === "inpaint" || provenance.op === "blend") && (
+        <p className="text-[11px] text-muted-foreground">
+          {provenance.op === "inpaint"
+            ? "Reuses the same masked region — redraw the mask isn't supported yet."
+            : "Reuses the same blended images — swapping images isn't supported yet."}
+        </p>
+      )}
+      <Button
+        size="sm"
+        disabled={redoing}
+        onClick={() =>
+          onRedo(provenance.op, {
+            ...params,
+            ...(prompt ? { prompt } : {}),
+            ...(provenance.op === "relight" ? { direction } : {}),
+          })
+        }
+        className="w-full gap-1.5"
+      >
+        {redoing ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Sparkles className="h-3.5 w-3.5" />
+        )}
+        Regenerate
+      </Button>
+    </div>
+  );
+}
 
 const FONTS = ["Inter", "Montserrat", "Playfair Display", "Lora", "Roboto"];
 
@@ -54,7 +152,21 @@ function Row({
 }
 
 /** Property editor for the selected layer (position edits happen on canvas). */
-export function LayerControls({ layer }: { layer: Layer }) {
+export function LayerControls({
+  layer,
+  onRedo,
+  redoing = false,
+}: {
+  layer: Layer;
+  /** Wired only by callers that can actually re-run a compositing op (Studio's
+   *  CompositorCanvas). Absent in the classic Compositor page — a producedBy
+   *  layer there just shows as a locked/unlockable plain image layer. */
+  onRedo?: (
+    op: CompositeProvenance["op"],
+    params: Record<string, unknown>,
+  ) => void;
+  redoing?: boolean;
+}) {
   const updateLayer = useCompositorStore((s) => s.updateLayer);
   const patchLayout = useCompositorStore((s) => s.patchLayout);
   const layerCount = useCompositorStore((s) => s.doc?.layers.length ?? 0);
@@ -104,8 +216,36 @@ export function LayerControls({ layer }: { layer: Layer }) {
     toast.success("Effects copied to all layers.");
   };
 
+  // Locked (Photoshop-style): editing is fully blocked here too, not just
+  // canvas click-through — unlock to manipulate or redo. Matches the ask that
+  // a locked layer must actually be protected, not just harder to drag.
+  if (layer.locked) {
+    return (
+      <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border p-4 text-center">
+        <Lock className="h-5 w-5 text-muted-foreground" />
+        <p className="text-xs text-muted-foreground">
+          This layer is locked — unlock it to move, resize, or redo it.
+        </p>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => set({ locked: false })}
+        >
+          Unlock
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
+      {layer.kind === "image" && layer.producedBy && onRedo && (
+        <RedoPanel
+          provenance={layer.producedBy}
+          onRedo={onRedo}
+          redoing={redoing}
+        />
+      )}
       {layer.kind === "text" && (
         <>
           <Row label="Text">

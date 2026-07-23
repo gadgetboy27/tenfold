@@ -403,10 +403,26 @@ const layerBaseSchema = z.object({
   locked: z.boolean().optional(),
 });
 
+/**
+ * Provenance for an image layer that was PRODUCED by an Image Compositing op
+ * (lib/compositing/) rather than uploaded/generated as a plain anchor. Its
+ * presence is what lets the properties panel offer "Redo this [op]" —
+ * re-running the same op with edited inputs — instead of a manual replace.
+ * `params` is the exact op input last used, so a redo can prefill it.
+ */
+export const compositeProvenanceSchema = z.object({
+  op: z.enum(["cutout", "inpaint", "relight", "blend"]),
+  jobId: z.string().optional(),
+  params: z.record(z.string(), z.unknown()).optional(),
+});
+export type CompositeProvenance = z.infer<typeof compositeProvenanceSchema>;
+
 export const imageLayerSchema = layerBaseSchema.extend({
   kind: z.literal("image"),
   /** Storage URL. Drawn with drawImage only — never through a model. */
   src: z.string().url(),
+  /** Set only for layers produced by an Image Compositing op — see above. */
+  producedBy: compositeProvenanceSchema.optional(),
 });
 
 export const textAlignSchema = z.enum(["left", "center", "right"]);
