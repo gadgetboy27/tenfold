@@ -17,7 +17,7 @@ Early migrations (0001) were created as raw SQL before Drizzle's migration syste
 
 ## Running Migrations
 
-### Option A: Vercel/Production (Recommended)
+### Option A: Production (Recommended)
 ```bash
 # Drizzle migrations (0000 only)
 npx drizzle-kit migrate

@@ -203,18 +203,15 @@ curl -H "Authorization: Bearer your-cron-secret" \
 
 ## 🔄 Running Weekly Analytics
 
-Option 1: **Vercel Cron** (production)
-Add to `vercel.json` or `vercel.ts`:
-```json
-{
-  "crons": [
-    {
-      "path": "/api/cron/analytics",
-      "schedule": "0 8 * * 1"
-    }
-  ]
-}
+Option 1: **Railway Cron Schedule** (production)
+Set a Cron Schedule on the service in the Railway dashboard (Settings → Cron
+Schedule, e.g. `0 8 * * 1`), with the start command hitting the endpoint:
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" \
+  https://tenfold.nz/api/cron/analytics
 ```
+(Or trigger it from any external scheduler — a GitHub Actions scheduled
+workflow works too — since it's just a Bearer-token-protected GET.)
 
 Option 2: **Local Testing**
 ```bash

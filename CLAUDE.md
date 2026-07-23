@@ -90,7 +90,7 @@ Composition     Sharp (server-side image processing) + FFmpeg (video overlays)
 Validation      Zod (all API inputs, all env vars)
 Testing         Vitest + Supertest (API) + Playwright (E2E critical paths)
 Linting         ESLint + Prettier (run before every commit)
-Deployment      Vercel (Next.js) + Supabase (managed DB + storage)
+Deployment      Railway (Docker — see Dockerfile) + Supabase (managed DB + storage)
 ```
 
 ---
