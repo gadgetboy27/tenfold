@@ -1740,20 +1740,15 @@ function ProjectBadges({
     <div className="flex flex-wrap gap-1">
       {active.map((b) => {
         const Icon = b.icon;
-        return compact ? (
+        return (
           <span
             key={b.key}
-            title={b.label}
-            className="grid h-5 w-5 place-items-center rounded-full bg-emerald-500/15 text-emerald-500"
+            className={`flex items-center gap-1 rounded-full bg-emerald-500/15 font-medium text-emerald-500 ${
+              compact ? "px-1.5 py-0.5 text-[9px]" : "px-2 py-0.5 text-[10px]"
+            }`}
           >
-            <Icon className="h-3 w-3" />
-          </span>
-        ) : (
-          <span
-            key={b.key}
-            className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-500"
-          >
-            <Icon className="h-2.5 w-2.5" /> {b.label}
+            <Icon className="h-2.5 w-2.5" />
+            {b.label}
           </span>
         );
       })}
