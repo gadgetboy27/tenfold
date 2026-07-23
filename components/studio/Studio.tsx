@@ -207,6 +207,16 @@ export function Studio({
     refreshBalance();
   }, [workspaceSlug, setWorkspaceSlug, refreshBalance]);
 
+  // Drives the nav's Gallery shortcut (greyed out with nothing to browse yet).
+  // Defaults to true so it never flashes disabled while this is in flight.
+  const [hasGalleryItems, setHasGalleryItems] = useState(true);
+  useEffect(() => {
+    api("/api/campaigns", { workspaceSlug })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d: unknown[]) => setHasGalleryItems(Array.isArray(d) && d.length > 0))
+      .catch(() => {});
+  }, [workspaceSlug]);
+
   // Persist the project name (once a campaign exists); never leave it blank.
   const saveName = () => {
     const name = campaignName.trim() || randomCampaignName();
@@ -632,8 +642,29 @@ export function Studio({
     icon: typeof PenLine;
     done: boolean;
     classicHref?: string;
+    /** Overrides the default setSection(id) click and active-highlight —
+     *  used by the Gallery shortcut below, which navigates to "projects"
+     *  rather than representing its own section. */
+    onSelect?: () => void;
+    isActive?: () => boolean;
+    disabled?: boolean;
+    disabledTitle?: string;
   }[] = [
-    { id: "brief", label: "Brief", icon: PenLine, done: !!campaignId },
+    // Brief and Images render the identical prompt/result screen (both are
+    // `isCreate` in CockpitCreate) — a dedicated "Brief" nav item was a dead
+    // click that looked like nothing happened. Repurposed as a second way
+    // into the Gallery (matching the logo click), greyed out until there's
+    // something in it — Images still covers the actual prompt-writing entry.
+    {
+      id: "brief",
+      label: "Gallery",
+      icon: LayoutGrid,
+      done: false,
+      onSelect: () => setSection("projects"),
+      isActive: () => section === "projects",
+      disabled: !hasGalleryItems,
+      disabledTitle: "Nothing in the Gallery yet — generate your first project",
+    },
     { id: "images", label: "Images", icon: ImagesIcon, done: anchorPicked },
     { id: "video", label: "Video", icon: Play, done: !!videoUrl },
     { id: "music", label: "Music", icon: Music, done: false },
@@ -895,6 +926,10 @@ function CockpitCreate({
     icon: typeof PenLine;
     done: boolean;
     classicHref?: string;
+    onSelect?: () => void;
+    isActive?: () => boolean;
+    disabled?: boolean;
+    disabledTitle?: string;
   }[];
   section: SectionId;
   setSection: (s: SectionId) => void;
@@ -960,7 +995,7 @@ function CockpitCreate({
         <nav className="flex flex-col gap-0.5">
           {tools.map((t) => {
             const Icon = t.icon;
-            const active = section === t.id;
+            const active = t.isActive ? t.isActive() : section === t.id;
             // A nav item pulses once whatever it needs is actually in place —
             // never before, so an option that isn't open yet stays a plain
             // dot rather than inviting a click that goes nowhere.
@@ -975,9 +1010,11 @@ function CockpitCreate({
                     ? publishReady
                     : false);
             const cls = `flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
-              active
-                ? "bg-primary/15 text-foreground"
-                : "text-muted-foreground hover:bg-background hover:text-foreground"
+              t.disabled
+                ? "cursor-not-allowed text-muted-foreground/40"
+                : active
+                  ? "bg-primary/15 text-foreground"
+                  : "text-muted-foreground hover:bg-background hover:text-foreground"
             }`;
             const inner = (
               <>
@@ -1000,7 +1037,9 @@ function CockpitCreate({
               <button
                 key={t.id}
                 type="button"
-                onClick={() => setSection(t.id)}
+                disabled={t.disabled}
+                title={t.disabled ? t.disabledTitle : undefined}
+                onClick={() => (t.onSelect ? t.onSelect() : setSection(t.id))}
                 className={cls}
               >
                 {inner}
