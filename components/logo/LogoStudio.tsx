@@ -7,6 +7,7 @@ import { LogoConceptGrid, type LogoAsset } from "./LogoConceptGrid";
 import { LogoRefine } from "./LogoRefine";
 import { LogoEditor } from "./LogoEditor";
 import { LogoUpload } from "./LogoUpload";
+import { BrandColors } from "./BrandColors";
 import { LogoLibrary, type LogoProjectSummary } from "./LogoLibrary";
 import type { LogoBrief as LogoBriefType } from "@/lib/logo/brief";
 import { useAppStore } from "@/store/useAppStore";
@@ -387,6 +388,7 @@ export function LogoStudio() {
         />
         <LogoBrief onSubmit={startGeneration} submitting={submitting} />
         <LogoUpload onUpload={uploadExisting} uploading={uploading} />
+        <BrandColors onSaved={setBrandPalette} />
       </div>
     );
   }
