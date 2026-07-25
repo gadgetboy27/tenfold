@@ -1,25 +1,16 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { LogoBrief } from "./brief";
+import {
+  SUPPORTED_FONTS,
+  type SupportedFont,
+  type FontPairing,
+} from "./font-list";
 
 // Font pairing (Phase 3b). One Claude call recommends a heading + body pairing —
 // but CONSTRAINED to the fonts the compositor can actually render (brand-apply
 // BRAND_FONTS), so the recommendation is usable in the marketing pipeline, not
 // an arbitrary Google font the video renderer doesn't have.
-
-export const SUPPORTED_FONTS = [
-  "Inter",
-  "Montserrat",
-  "Playfair Display",
-  "Lora",
-  "Roboto",
-] as const;
-export type SupportedFont = (typeof SUPPORTED_FONTS)[number];
-
-export interface FontPairing {
-  heading: SupportedFont;
-  body: SupportedFont;
-  rationale: string;
-}
+export { SUPPORTED_FONTS, type SupportedFont, type FontPairing };
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 

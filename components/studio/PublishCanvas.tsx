@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { PLATFORM_FORMATS, type PlatformId } from "@/lib/composition/formats";
-import { PLATFORM_GUIDE } from "@/lib/claude/adapt-captions";
+import { PLATFORM_GUIDE } from "@/lib/social/caption-guide";
 import { platformDefaults } from "@/lib/social/platform-defaults";
 
 /**

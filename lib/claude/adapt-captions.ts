@@ -1,46 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { PLATFORM_GUIDE } from "@/lib/social/caption-guide";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// Per-platform character ceilings + the voice each one rewards. The model is
-// told to fit within `max` and lean into `style`.
-export const PLATFORM_GUIDE: Record<string, { max: number; style: string }> = {
-  instagram: {
-    max: 2200,
-    style:
-      "engaging and warm, a strong first line, tasteful emoji, 3–8 relevant hashtags at the end",
-  },
-  tiktok: {
-    max: 150,
-    style: "ultra-short punchy hook, 1–3 trending-style hashtags, very casual",
-  },
-  linkedin: {
-    max: 3000,
-    style:
-      "professional and value-led, no emoji spam, at most 1–3 hashtags, a clear takeaway",
-  },
-  x: {
-    max: 280,
-    style: "tight and witty, one idea, at most 1–2 hashtags",
-  },
-  twitter: {
-    max: 280,
-    style: "tight and witty, one idea, at most 1–2 hashtags",
-  },
-  facebook: {
-    max: 500,
-    style: "conversational with a clear call to action, few hashtags",
-  },
-  youtube: {
-    max: 4900,
-    style: "descriptive and keyword-rich, a CTA to subscribe",
-  },
-  threads: { max: 500, style: "casual and conversational" },
-  pinterest: {
-    max: 500,
-    style: "descriptive, keyword-rich and inspirational",
-  },
-};
+// PLATFORM_GUIDE moved to lib/social/caption-guide.ts (client-safe — no
+// Anthropic import) — re-exported here so existing server-side importers of
+// this module don't need to change. New client-side consumers should import
+// from lib/social/caption-guide directly, never from this file.
+export { PLATFORM_GUIDE };
 
 export interface AdaptedCaption {
   platform: string;

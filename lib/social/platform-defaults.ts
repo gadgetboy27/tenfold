@@ -1,5 +1,5 @@
 import { PLATFORM_FORMATS, type PlatformId } from "@/lib/composition/formats";
-import { PLATFORM_GUIDE } from "@/lib/claude/adapt-captions";
+import { PLATFORM_GUIDE } from "@/lib/social/caption-guide";
 import type { CompositionAspect } from "@/lib/composition/layers";
 
 /**
