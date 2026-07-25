@@ -11,8 +11,19 @@ import { extractBrandSignals } from "@/lib/claude/brand-scrape";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 
+// Users routinely type "example.com" without a scheme — z.string().url()
+// rejects that outright ("Invalid URL"), which was surfacing as a raw Zod
+// error blob at a misleading 500. Normalize before validating so both the
+// UI and any direct API caller get a working request instead of a reject.
+const urlField = z.preprocess((val) => {
+  if (typeof val === "string" && !/^https?:\/\//i.test(val)) {
+    return `https://${val}`;
+  }
+  return val;
+}, z.string().url().max(2000));
+
 const schema = z.object({
-  url: z.string().url().max(2000),
+  url: urlField,
   userNotes: z.string().max(1000).default(""),
 });
 
@@ -273,6 +284,14 @@ export async function POST(req: Request) {
       throw e;
     }
   } catch (err) {
+    if (err instanceof z.ZodError) {
+      const issue = err.issues[0];
+      const msg =
+        issue?.path[0] === "url"
+          ? "That doesn't look like a valid URL — try including the full address, e.g. https://example.com"
+          : (issue?.message ?? "Invalid request");
+      return NextResponse.json({ error: msg }, { status: 400 });
+    }
     const msg = err instanceof Error ? err.message : "Unknown error";
     if (msg === "Unauthorized")
       return NextResponse.json({ error: msg }, { status: 401 });
