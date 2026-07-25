@@ -58,10 +58,11 @@ The way to stop being "just another AI wrapper":
 Roughly in the order a reviewer would prioritize them — not a mandate to
 build all of it at once:
 
-1. **Phase 7 — Analytics & Learning** (see `CLAUDE.md` §10). Even a v1 that
-   just pulls impression/engagement data from Ayrshare and surfaces "which
-   AI-generated styles perform best" starts the feedback loop the current
-   spec is missing entirely.
+1. ~~**Phase 7 — Analytics & Learning**~~ — **v1 shipped**, see `CLAUDE.md`
+   §10. Manual refresh only (no scheduled pull), and it reports performance —
+   nothing feeds it back into generation yet, which is the actual "learning"
+   half of this item's name. Next increment here, when wanted: use it to bias
+   future generation toward what's already scoring well.
 2. **Explicit approval state machine.** Extend `campaigns` (or a dedicated
    table) with `status: 'draft' | 'pending_review' | 'approved' | 'scheduled'
    | 'published'` rather than publishing being a single unguarded action.

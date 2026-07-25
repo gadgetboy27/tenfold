@@ -260,6 +260,10 @@ export async function POST(req: Request) {
       : body.caption;
 
     const platformResults: Record<string, string> = {};
+    // Ayrshare's own top-level post id per platform (distinct from the
+    // platform-native id in platformResults) — the analytics/post endpoint
+    // needs THIS id, not the platform's. Meta-direct platforms have none.
+    const ayrshareIds: Record<string, string> = {};
     const errors: Record<string, string> = {};
 
     for (const platform of body.platforms) {
@@ -319,6 +323,7 @@ export async function POST(req: Request) {
             ...(body.scheduledAt ? { scheduleDate: body.scheduledAt } : {}),
           });
           postId = result.postIds?.[0]?.id ?? result.id ?? "posted";
+          if (result.id) ayrshareIds[platform] = result.id;
         }
         platformResults[platform] = postId;
       } catch (err) {
@@ -359,6 +364,7 @@ export async function POST(req: Request) {
         published_at: isScheduled ? null : new Date().toISOString(),
         status: isScheduled ? "scheduled" : "published",
         platform_results: platformResults as unknown as Record<string, unknown>,
+        ayrshare_post_ids: ayrshareIds as unknown as Record<string, unknown>,
       })
       .select()
       .single();

@@ -317,6 +317,12 @@ export const publishRecords = pgTable(
     publishedAt: timestamp("published_at", { withTimezone: true }),
     status: text("status").notNull().default("pending"),
     platformResults: jsonb("platform_results").notNull().default("{}"),
+    // platform -> Ayrshare post id, only for platforms published via Ayrshare
+    // (Meta-direct platforms have no entry). Needed for the analytics/post
+    // endpoint, which takes Ayrshare's own top-level post id, not the
+    // platform-native id stored in platformResults.
+    ayrsharePostIds: jsonb("ayrshare_post_ids").notNull().default("{}"),
+    // Normalized per-publish performance snapshot — see lib/analytics/engagement.ts.
     analytics: jsonb("analytics").notNull().default("{}"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

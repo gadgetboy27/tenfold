@@ -98,6 +98,15 @@ interface Anchor {
   label: string;
 }
 
+/** One row of GET /api/analytics/styles — style_performance() grouped by the
+ *  campaign's generation style/model. Phase 7 (PRODUCT_STRATEGY.md §4). */
+interface StylePerformance {
+  style: string | null;
+  model: string | null;
+  posts: number;
+  avg_engagement: number | null;
+}
+
 const STAGE_LABELS = [
   [0, "Submitting your brief…"],
   [3, "Waiting for a GPU…"],
@@ -1806,7 +1815,12 @@ function ProjectsCanvas({
   onNew: () => void;
   onReuseImage: (assetId: string) => void;
 }) {
-  const [tab, setTab] = useState<"projects" | "images">("projects");
+  const [tab, setTab] = useState<"projects" | "images" | "performance">(
+    "projects",
+  );
+  const [styles, setStyles] = useState<StylePerformance[]>([]);
+  const [stylesLoading, setStylesLoading] = useState(true);
+  const [refreshingAnalytics, setRefreshingAnalytics] = useState(false);
   const [list, setList] = useState<ProjectSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<"grid" | "row">("grid");
@@ -1861,6 +1875,46 @@ function ProjectsCanvas({
       active = false;
     };
   }, [workspaceSlug]);
+
+  // "Which styles perform best" (Phase 7, PRODUCT_STRATEGY.md §4) — loaded
+  // lazily on first visit to the tab, not eagerly with the other two, since
+  // it's a join across publish_records/compositions/campaigns most Gallery
+  // visits won't need.
+  const loadStyles = useCallback(() => {
+    setStylesLoading(true);
+    api("/api/analytics/styles", { workspaceSlug })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { styles?: StylePerformance[] } | null) =>
+        setStyles(d?.styles ?? []),
+      )
+      .catch(() => {})
+      .finally(() => setStylesLoading(false));
+  }, [workspaceSlug]);
+
+  const refreshAnalytics = async () => {
+    setRefreshingAnalytics(true);
+    try {
+      const res = await api("/api/analytics/refresh", {
+        method: "POST",
+        workspaceSlug,
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        refreshed?: number;
+      };
+      if (!res.ok) throw new Error(data.error ?? "Refresh failed");
+      toast.success(
+        data.refreshed
+          ? `Updated performance data for ${data.refreshed} post${data.refreshed === 1 ? "" : "s"}`
+          : "No new performance data yet",
+      );
+      loadStyles();
+    } catch (err) {
+      toast.error((err as Error).message ?? "Couldn't refresh performance data");
+    } finally {
+      setRefreshingAnalytics(false);
+    }
+  };
 
   const handleReuse = async (assetId: string) => {
     setReusing(assetId);
@@ -1928,18 +1982,23 @@ function ProjectsCanvas({
         </div>
       </div>
 
-      {/* Tabs — Projects (resume/publish) vs Images (start new from an old one) */}
+      {/* Tabs — Projects (resume/publish), Images (start new from an old one),
+          Performance (Phase 7: which generated styles do best once published) */}
       <div className="flex items-center gap-1 border-b border-border">
         {(
           [
             { id: "projects", label: "Projects" },
             { id: "images", label: "Images" },
+            { id: "performance", label: "Performance" },
           ] as const
         ).map((t) => (
           <button
             key={t.id}
             type="button"
-            onClick={() => setTab(t.id)}
+            onClick={() => {
+              setTab(t.id);
+              if (t.id === "performance" && styles.length === 0) loadStyles();
+            }}
             className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
               tab === t.id
                 ? "border-primary text-foreground"
@@ -2082,7 +2141,8 @@ function ProjectsCanvas({
             ))}
           </div>
         )
-      ) : imagesLoading ? (
+      ) : tab === "images" ? (
+        imagesLoading ? (
         <div className="flex flex-1 items-center justify-center">
           <Spinner size={40} />
         </div>
@@ -2148,6 +2208,69 @@ function ProjectsCanvas({
               </div>
             </div>
           ))}
+        </div>
+        )
+      ) : (
+        <div className="flex flex-1 flex-col gap-4">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              Which generated styles perform best once published — ranked by
+              engagement across your connected platforms.
+            </p>
+            <button
+              type="button"
+              onClick={refreshAnalytics}
+              disabled={refreshingAnalytics}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground disabled:opacity-60"
+            >
+              {refreshingAnalytics ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" />
+              )}
+              Refresh performance data
+            </button>
+          </div>
+
+          {stylesLoading ? (
+            <div className="flex flex-1 items-center justify-center">
+              <Spinner size={40} />
+            </div>
+          ) : styles.length === 0 ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center text-muted-foreground">
+              <Sparkles className="h-8 w-8 opacity-40" />
+              <p className="max-w-sm text-sm">
+                No performance data yet — publish a project, then hit
+                &quot;Refresh performance data&quot; once your posts have had
+                time to gather engagement.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {styles.map((s, i) => (
+                <div
+                  key={`${s.style ?? "unknown"}-${s.model ?? "unknown"}`}
+                  className="flex items-center gap-3 rounded-lg border border-border px-3 py-2.5"
+                >
+                  <span className="w-5 shrink-0 text-center text-xs font-semibold text-muted-foreground">
+                    {i + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">
+                      {s.style ?? "Unknown style"}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {s.model ?? "Unknown model"} · {s.posts} post
+                      {s.posts === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-primary/15 px-2.5 py-1 text-xs font-semibold text-primary">
+                    {s.avg_engagement?.toFixed(1) ?? "—"} avg engagement
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

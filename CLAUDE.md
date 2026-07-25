@@ -196,13 +196,18 @@ add-ons (`workspace_addons`).
 Rate limiting ✅ (`withWorkspace`), Sentry ✅, E2E test scaffold ✅
 (`tests/e2e`). Not yet: Posthog, a completed security audit.
 
-### Phase 7 — Analytics & Learning — proposed, not started
+### Phase 7 — Analytics & Learning — v1 shipped
 
-From `PRODUCT_STRATEGY.md` §4: pull post-publish impression/engagement data
-from Ayrshare and surface it back to the user — even a v1 that just shows
-"which AI-generated styles perform best" starts a feedback loop the product
-doesn't have today. A prerequisite for the "performance-driven generation"
-pitch in `PRODUCT_STRATEGY.md` §3.
+From `PRODUCT_STRATEGY.md` §4. `POST /api/analytics/refresh` pulls each
+publish's engagement from Ayrshare's `analytics/post` endpoint, normalizes it
+across platforms into one comparable score (`lib/analytics/engagement.ts` —
+deliberately approximate, for ranking not reporting), and stores it on
+`publish_records.analytics`. `style_performance()` (migration 0025) then
+ranks the campaign's generation style/model by average engagement; surfaced
+as the Gallery's "Performance" tab. Manually triggered, not scheduled — no
+cron yet. A prerequisite for the "performance-driven generation" pitch in
+`PRODUCT_STRATEGY.md` §3, which isn't built (nothing yet feeds a style's past
+performance back INTO generation — this only reports it).
 
 ---
 
