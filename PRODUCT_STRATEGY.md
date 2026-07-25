@@ -80,10 +80,17 @@ build all of it at once:
    business decision, not an engineering one — flagging it here, not
    changing `lib/credits/costs.ts` or any Stripe price without a deliberate
    separate call on it.
-5. **Enforce platform-native defaults.** Selecting "LinkedIn" should
-   auto-apply a 4:5/1:1 aspect ratio, a professional-toned caption with a
-   few relevant hashtags, and no music — not leave every platform's
-   convention to manual configuration each time.
+5. ~~**Enforce platform-native defaults.**~~ — **v1 shipped.** Turned out
+   aspect (`PLATFORM_FORMATS`) and caption tone/hashtag count
+   (`PLATFORM_GUIDE` / `adaptCaptions`) already existed — they just weren't
+   automatic or reachable. The one genuinely new piece is a per-platform
+   music default (`lib/social/platform-defaults.ts`, `noMusic` on
+   `/api/publish`). This came bundled with a much bigger fix it depended on:
+   **Publish itself was unreachable in the live app** — Studio (the only
+   route left standing) had no publish screen, just a placeholder, so this
+   also shipped a Studio-native `PublishCanvas` (ported from the classic
+   dashboard's real but orphaned `Step6Publish`) and fixed the two
+   "Continue to publish" entry points that were silently landing nowhere.
 6. **Asset ingestion.** A path to ground generation in an uploaded product
    photo, a URL, or a brand PDF — not just a text prompt. The reference-photo
    upload (`components/studio/ReferencePhotoField.tsx`) is the existing

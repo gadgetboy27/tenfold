@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
 import {
   PenLine,
@@ -37,6 +38,7 @@ import {
 } from "@/components/studio/StudioSelect";
 import { LogoStudio } from "@/components/logo/LogoStudio";
 import { CompositorCanvas } from "@/components/studio/CompositorCanvas";
+import { PublishCanvas } from "@/components/studio/PublishCanvas";
 import { ReferencePhotoField } from "@/components/studio/ReferencePhotoField";
 import { useEntitlements } from "@/lib/billing/useEntitlements";
 import { randomCampaignName } from "@/lib/util/campaign-name";
@@ -391,9 +393,14 @@ export function Studio({
           url: a.url,
           label: a.metadata?.model ?? a.metadata?.direction ?? "",
         }));
+      // Prefer the Compositor's branded export (composed_video) over the raw
+      // clip when both exist — same preference order as /api/publish and
+      // lib/campaign/publish-nav.ts, so "Continue to publish" from the
+      // Compositor actually shows the video it just finished, not the plain
+      // Kling output.
       const vid =
         list
-          .filter((a) => a.type === "video")
+          .filter((a) => a.type === "composed_video" || a.type === "video")
           .sort((a, b) => b.created_at.localeCompare(a.created_at))[0]?.url ??
         camp.expansion_data?.video?.url ??
         null;
@@ -420,6 +427,23 @@ export function Studio({
       toast.error((err as Error).message ?? "Couldn't open that project");
     }
   };
+
+  // External entry points (the classic Compositor's "Continue to publish",
+  // the Productions page) land here via ?openProject=<id>&section=<id> —
+  // Studio has no other way to receive a campaign from outside itself, since
+  // (unlike the classic dashboard this replaced) it keeps its own local
+  // state rather than reading useAppStore's campaign fields. Runs once: the
+  // router.replace strips the params so a refresh doesn't re-trigger it.
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const projectId = searchParams.get("openProject");
+    if (!projectId) return;
+    const goto = searchParams.get("section") as SectionId | null;
+    queueMicrotask(() => void openProject(projectId, goto ?? undefined));
+    router.replace(`/${workspaceSlug}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const newProject = () => {
     setCampaignId(null);
@@ -829,6 +853,14 @@ export function Studio({
               anchorUrl={workingImage}
               classicHref={`/${workspaceSlug}/compositor?campaign=${campaignId}`}
               initialOp={compositorInitialOp}
+            />
+          ) : section === "publish" ? (
+            <PublishCanvas
+              workspaceSlug={workspaceSlug}
+              campaignId={campaignId}
+              anchorId={anchorId}
+              workingImage={workingImage}
+              videoUrl={videoUrl}
             />
           ) : (
             <CockpitCreate

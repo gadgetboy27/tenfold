@@ -121,6 +121,10 @@ export const publishSchema = z.object({
   // "Publish the video": resolve the campaign's video clip directly server-side.
   campaignId: z.string().optional(),
   preferVideo: z.boolean().optional(),
+  // Platform-native default (lib/social/platform-defaults.ts): publish the
+  // raw (unmixed) clip instead of the music-mixed one for this batch of
+  // platforms — e.g. LinkedIn defaults to no music bed.
+  noMusic: z.boolean().optional(),
 });
 
 export const purchaseCreditsSchema = z.object({

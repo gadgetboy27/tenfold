@@ -4,7 +4,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // Per-platform character ceilings + the voice each one rewards. The model is
 // told to fit within `max` and lean into `style`.
-const PLATFORM_GUIDE: Record<string, { max: number; style: string }> = {
+export const PLATFORM_GUIDE: Record<string, { max: number; style: string }> = {
   instagram: {
     max: 2200,
     style:

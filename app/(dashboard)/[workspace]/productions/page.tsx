@@ -5,7 +5,6 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAppStore } from "@/store/useAppStore";
 import { api } from "@/lib/api";
-import { openCampaignForPublish } from "@/lib/campaign/publish-nav";
 import { Film, Download, ArrowLeft, Loader2, Send } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -57,17 +56,13 @@ export default function ProductionsPage() {
     }
   };
 
-  // Open this production's campaign at the Publish step and go — the publish
-  // flow posts the campaign's finished video to social, as before.
-  const publish = async (p: Production) => {
+  // Open this production's campaign at the Publish step and go — Studio
+  // rehydrates the campaign itself from the URL params (see Studio.tsx's
+  // openProject-on-mount effect), same as the Compositor's "Continue to
+  // publish".
+  const publish = (p: Production) => {
     setPublishing(p.id);
-    const ok = await openCampaignForPublish(p.campaignId, slug, p.url);
-    if (!ok) {
-      toast.error("Couldn't open publish — please try again.");
-      setPublishing(null);
-      return;
-    }
-    router.push(`/${slug}`);
+    router.push(`/${slug}?openProject=${p.campaignId}&section=publish`);
   };
 
   return (

@@ -21,7 +21,6 @@ import { CaptionPresetRow } from "@/components/compositor/CaptionPresetRow";
 import { AppHeader } from "@/components/layout/AppHeader";
 import UpgradeModal from "@/components/billing/UpgradeModal";
 import { fetchCompositionDoc } from "@/components/compositor/export-client";
-import { openCampaignForPublish } from "@/lib/campaign/publish-nav";
 import { brandKitLayers, pickKitLogo } from "@/lib/composition/brand-apply";
 import type { CompositionAspect } from "@/lib/composition/layers";
 import { useCompositorStore } from "@/store/useCompositorStore";
@@ -271,21 +270,14 @@ export default function CompositorPage() {
     return () => reset();
   }, [params.workspace, load, reset, setComposeCaption]);
 
-  const continueToPublish = async () => {
-    // Load the campaign into the app store AT the Publish step, then navigate —
-    // otherwise currentCampaignId is unset (the compositor uses a local id) and
-    // the workspace root shows the lobby instead of the publish screen.
+  const continueToPublish = () => {
+    // Studio (the workspace root) rehydrates the campaign itself from these
+    // params and lands on Publish — it keeps its own local state rather than
+    // reading useAppStore, so there's nothing to pre-load here. exportedUrl
+    // doesn't need passing through either: Studio's openProject picks up the
+    // just-created composed_video asset directly from the campaign.
     if (!campaignId) return;
-    const ok = await openCampaignForPublish(
-      campaignId,
-      params.workspace,
-      exportedUrl,
-    );
-    if (!ok) {
-      toast.error("Couldn't open publish — please try again.");
-      return;
-    }
-    router.push(`/${params.workspace}`);
+    router.push(`/${params.workspace}?openProject=${campaignId}&section=publish`);
   };
 
   // Back to the compose screen (Step 4) to pick a different video — the brand

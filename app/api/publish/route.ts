@@ -117,60 +117,68 @@ export async function POST(req: Request) {
           .limit(1)
           .maybeSingle();
 
-      // All fan-out formats for this campaign, newest-first, indexed by aspect
-      // (first/newest wins per aspect). Untagged mixes just don't get indexed.
-      const { data: composed } = await admin
-        .from("assets")
-        .select("id, url, type, metadata")
-        .eq("campaign_id", body.campaignId)
-        .eq("workspace_id", session.workspaceId)
-        .eq("type", "composed_video")
-        .order("created_at", { ascending: false });
-      for (const row of composed ?? []) {
-        const r = row as unknown as {
-          id: string;
-          url: string;
-          type: string;
-          metadata?: { aspect?: string } | null;
-        };
-        const asp = r.metadata?.aspect;
-        if (asp && !assetsByAspect.has(asp)) {
-          assetsByAspect.set(asp, { id: r.id, url: r.url, type: r.type });
-        }
-      }
-
-      const { data: existing } = await pick("composed_video");
-      if (existing) {
-        asset = existing as unknown as Asset;
-      } else {
+      // Platform-native default (lib/social/platform-defaults.ts): some
+      // platforms (LinkedIn, Pinterest, ...) default to no music bed — post
+      // the raw clip, skip the mix/fan-out lookup entirely.
+      if (body.noMusic) {
         const { data: rawVideo } = await pick("video");
-        const { data: music } = await pick("audio", "url");
-        const rv = rawVideo as unknown as Asset | null;
-        const mus = music as unknown as { url: string } | null;
-        if (rv && mus) {
-          try {
-            const mix = await composeVideo({
-              videoUrl: rv.url,
-              audioUrl: mus.url,
-              captionStyle: "none", // caption rides as the post text
-              workspaceId: session.workspaceId,
-              campaignId: body.campaignId,
-            });
-            const newId = uuidv4();
-            await admin.from("assets").insert({
-              id: newId,
-              campaign_id: body.campaignId,
-              workspace_id: session.workspaceId,
-              type: "composed_video",
-              url: mix.url,
-              storage_path: mix.storagePath,
-            });
-            asset = { id: newId, url: mix.url, type: "composed_video" };
-          } catch {
-            asset = rv; // music expired / mix failed → publish the raw clip
+        asset = rawVideo as unknown as Asset | null;
+      } else {
+        // All fan-out formats for this campaign, newest-first, indexed by aspect
+        // (first/newest wins per aspect). Untagged mixes just don't get indexed.
+        const { data: composed } = await admin
+          .from("assets")
+          .select("id, url, type, metadata")
+          .eq("campaign_id", body.campaignId)
+          .eq("workspace_id", session.workspaceId)
+          .eq("type", "composed_video")
+          .order("created_at", { ascending: false });
+        for (const row of composed ?? []) {
+          const r = row as unknown as {
+            id: string;
+            url: string;
+            type: string;
+            metadata?: { aspect?: string } | null;
+          };
+          const asp = r.metadata?.aspect;
+          if (asp && !assetsByAspect.has(asp)) {
+            assetsByAspect.set(asp, { id: r.id, url: r.url, type: r.type });
           }
+        }
+
+        const { data: existing } = await pick("composed_video");
+        if (existing) {
+          asset = existing as unknown as Asset;
         } else {
-          asset = rv;
+          const { data: rawVideo } = await pick("video");
+          const { data: music } = await pick("audio", "url");
+          const rv = rawVideo as unknown as Asset | null;
+          const mus = music as unknown as { url: string } | null;
+          if (rv && mus) {
+            try {
+              const mix = await composeVideo({
+                videoUrl: rv.url,
+                audioUrl: mus.url,
+                captionStyle: "none", // caption rides as the post text
+                workspaceId: session.workspaceId,
+                campaignId: body.campaignId,
+              });
+              const newId = uuidv4();
+              await admin.from("assets").insert({
+                id: newId,
+                campaign_id: body.campaignId,
+                workspace_id: session.workspaceId,
+                type: "composed_video",
+                url: mix.url,
+                storage_path: mix.storagePath,
+              });
+              asset = { id: newId, url: mix.url, type: "composed_video" };
+            } catch {
+              asset = rv; // music expired / mix failed → publish the raw clip
+            }
+          } else {
+            asset = rv;
+          }
         }
       }
     }
