@@ -67,12 +67,17 @@ build all of it at once:
    table) with `status: 'draft' | 'pending_review' | 'approved' | 'scheduled'
    | 'published'` rather than publishing being a single unguarded action.
    Needed before this is credibly sellable to a team, not just a solo user.
-3. **Abstract the AI providers further.** A `ModelRouter` interface in `lib/`
-   so swapping fal.ai for Replicate/RunPod (in whole or per-model) is a
-   config change, not a rewrite of the job queue. `lib/fal/model-adoption.ts`
-   and `lib/fal/model-ledger.ts` already gate which *model* gets called
-   within fal — this would be the layer above that, gating which *provider*
-   gets called. See the note in `lib/fal/CLAUDE.md`.
+3. ~~**Abstract the AI providers further.**~~ — **v1 shipped**, see
+   `lib/fal/CLAUDE.md`. `lib/providers/` — a `ProviderAdapter` interface, the
+   fal adapter (the existing submit logic, moved not rewritten), and a
+   `resolveProvider()` router with an empty-by-default per-endpoint override
+   map. `enqueueJob`/`enqueueWithFallback`/`enqueueFirstOf` kept their exact
+   signatures, so none of their ~17 callers changed. Deliberately doesn't
+   include a second (Replicate/RunPod) adapter — there's nothing to verify it
+   against yet, and shipping unverified provider code is exactly what the
+   Model Adoption Gate exists to prevent one layer down. Also doesn't
+   abstract webhook ingestion (still fal-specific per caller) — stated
+   plainly in `lib/fal/CLAUDE.md` rather than implied to be covered.
 4. **Rethink the 10× markup.** Consider a hybrid: a higher base subscription
    for the workflow/storage/publishing value, with AI generation passed
    through at closer to 1.5–2× rather than 10×. Feels fairer, reduces churn

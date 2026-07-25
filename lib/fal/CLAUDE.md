@@ -21,8 +21,25 @@ for what's actually called. Worked example: Veo 3.1 Fast is a registered
 _candidate_ the gate deliberately blocks — it can't cover Kling's 15s clips
 (caps at ~8s), which is exactly why we didn't swap the default.
 
-**Proposed, not built:** this gate governs which *model* gets called within
-fal.ai. `PRODUCT_STRATEGY.md` §4 proposes a `ModelRouter` layer above this —
-which *provider* gets called (fal.ai vs. Replicate/RunPod), so a pricing or
-availability change on fal isn't a job-queue rewrite. Nothing here implements
-that yet; `enqueueJob`/`enqueueWithFallback` are fal-specific today.
+## Provider abstraction — `lib/providers/`
+
+This gate governs which *model* gets called within fal.ai. `lib/providers/`
+is the layer above it — which *provider* submits the job (fal.ai vs. a future
+Replicate/RunPod). `enqueueJob`/`enqueueWithFallback`/`enqueueFirstOf`
+(`lib/fal/queue.ts`) kept their exact signatures — their ~17 callers across
+`app/api/**` needed zero changes — and now delegate to
+`resolveProvider(endpoint).submit(...)` internally instead of calling
+`fal.queue.submit` directly. To move an endpoint to a different provider once
+a second adapter actually exists, add one line to `PROVIDER_FOR_ENDPOINT` in
+`lib/providers/router.ts` and register the adapter — that's the "single
+config change."
+
+**Honest boundary — this abstracts submission only, not the whole pipeline.**
+No second provider adapter exists yet (there's no Replicate/RunPod account,
+no live-verified endpoint — building one now would be the exact untested
+guesswork the Model Adoption Gate above exists to prevent). And webhook
+ingestion is a separate, still-fal-specific concern: every caller still
+hardcodes `${APP_URL}/api/webhooks/fal?j=${jobId}` as its `webhookUrl`, and
+that route parses fal's own payload shape. A real second provider would need
+its own webhook route and payload parser — `lib/providers/` doesn't paper
+over that.

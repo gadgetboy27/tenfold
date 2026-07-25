@@ -1,49 +1,15 @@
-import { fal } from "./client";
 import { FAL_MODELS, type FalModelKey } from "./models";
+import { resolveProvider } from "@/lib/providers/router";
 
-type Submit = (
-  endpointId: string,
-  opts: { input: unknown; webhookUrl: string },
-) => Promise<{ request_id: string }>;
-
+// Submission routes through the provider abstraction (lib/providers/) so a
+// future non-fal provider is a config change there, not here — see
+// lib/providers/types.ts for what that boundary does and doesn't cover.
 async function submitToEndpoint(
   endpoint: string,
   input: Record<string, unknown>,
   webhookUrl: string,
 ): Promise<{ requestId: string }> {
-  try {
-    const result = await (fal.queue.submit as Submit)(endpoint, {
-      input,
-      webhookUrl,
-    });
-    return { requestId: result.request_id };
-  } catch (err) {
-    // The fal client throws a bare "Unexpected status code: 422" and hides the
-    // validation detail on `.body`. Surface it so job.error_message tells us
-    // WHAT fal rejected instead of just the status.
-    const e = err as { status?: number; body?: unknown; message?: string };
-    let detail = "";
-    try {
-      detail =
-        typeof e.body === "string"
-          ? e.body
-          : e.body
-            ? JSON.stringify(e.body)
-            : "";
-    } catch {
-      /* body wasn't serialisable */
-    }
-    throw new Error(
-      [
-        `fal ${endpoint}`,
-        e.status ? `HTTP ${e.status}` : "",
-        detail || e.message,
-      ]
-        .filter(Boolean)
-        .join(" · ")
-        .slice(0, 600),
-    );
-  }
+  return resolveProvider(endpoint).submit(endpoint, input, webhookUrl);
 }
 
 export async function enqueueJob(
