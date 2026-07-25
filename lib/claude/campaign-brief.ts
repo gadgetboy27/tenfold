@@ -82,7 +82,13 @@ export async function analyzeCampaignUrl(
 
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 2048,
+    // 2048 was already tight for 4 detailed campaign angles; adding
+    // brandSuggestion (2026-07-26) pushed real responses past it — confirmed
+    // live via message.stop_reason === "max_tokens", truncating mid-JSON and
+    // failing JSON.parse with a cryptic "Expected ',' or ']'" error. Bumped
+    // with real headroom; Anthropic bills actual tokens generated, not this
+    // ceiling, so raising it has no cost unless genuinely needed.
+    max_tokens: 4096,
     messages: [
       {
         role: "user",
@@ -138,13 +144,27 @@ Provide exactly 4 campaign angles covering different goals: awareness, conversio
     ],
   });
 
+  // Defensive check for the exact failure mode that shipped 2026-07-26:
+  // hitting max_tokens truncates mid-JSON, and JSON.parse below would throw
+  // a cryptic "Expected ',' or ']'" instead of something actionable.
+  if (message.stop_reason === "max_tokens") {
+    throw new Error(
+      "The site analysis was too long to complete — try a shorter/simpler page.",
+    );
+  }
+
   const block = message.content[0];
   if (block.type !== "text") throw new Error("No response from Claude");
 
   const match = block.text.match(/\{[\s\S]*\}/);
   if (!match) throw new Error("Could not parse brief from Claude response");
 
-  const parsed = JSON.parse(match[0]) as Omit<CampaignBrief, "url">;
+  let parsed: Omit<CampaignBrief, "url">;
+  try {
+    parsed = JSON.parse(match[0]) as Omit<CampaignBrief, "url">;
+  } catch {
+    throw new Error("Could not parse brief from Claude response");
+  }
   return {
     ...parsed,
     url,
