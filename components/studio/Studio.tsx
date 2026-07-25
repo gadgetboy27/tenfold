@@ -40,7 +40,12 @@ import { LogoStudio } from "@/components/logo/LogoStudio";
 import { CompositorCanvas } from "@/components/studio/CompositorCanvas";
 import { PublishCanvas } from "@/components/studio/PublishCanvas";
 import { ReferencePhotoField } from "@/components/studio/ReferencePhotoField";
-import { BrandImportPanel } from "@/components/studio/BrandImportPanel";
+import {
+  BrandImportPanel,
+  type AnalyzeResult,
+  type CampaignAngle,
+} from "@/components/studio/BrandImportPanel";
+import { BrandAnalysisResults } from "@/components/studio/BrandAnalysisResults";
 import { useEntitlements } from "@/lib/billing/useEntitlements";
 import { randomCampaignName } from "@/lib/util/campaign-name";
 import { MUSIC_GENRES } from "@/lib/fal/prompts";
@@ -172,6 +177,14 @@ export function Studio({
   const [campaignName, setCampaignName] = useState(randomCampaignName);
   const [prompt, setPrompt] = useState("");
   const [variety, setVariety] = useState(true);
+  // "Brand Brain" (BrandImportPanel input / BrandAnalysisResults canvas
+  // display) — lifted here, not local to CockpitCreate, so results can
+  // render in the large right-hand canvas while the URL input stays in the
+  // cramped left column. See components/studio/CLAUDE.md.
+  const [createMode, setCreateMode] = useState<"prompt" | "website">("prompt");
+  const [websiteAnalysis, setWebsiteAnalysis] = useState<AnalyzeResult | null>(
+    null,
+  );
   // Bring-your-own product photo (image-conditioned generation via Kontext).
   const [referenceUrl, setReferenceUrl] = useState<string | null>(null);
   const [refUploading, setRefUploading] = useState(false);
@@ -269,8 +282,14 @@ export function Studio({
     }
   };
 
-  const generate = async () => {
-    if (prompt.trim().length < 3 || generating) return;
+  // Accepts an optional override so callers that just set the prompt (e.g.
+  // choosing a Brand Brain angle) can pass the SAME value explicitly instead
+  // of relying on `prompt` state having re-rendered first — setPrompt(x)
+  // followed immediately by generate() in the same handler would otherwise
+  // read the pre-update `prompt` from this closure (stale by one render).
+  const generate = async (overridePrompt?: string) => {
+    const effectivePrompt = (overridePrompt ?? prompt).trim();
+    if (effectivePrompt.length < 3 || generating) return;
     setGenerating(true);
     setStage(STAGE_LABELS[0][1]);
     setAssets([]);
@@ -282,7 +301,7 @@ export function Studio({
       const res = await api("/api/campaigns", {
         method: "POST",
         body: JSON.stringify({
-          prompt: prompt.trim(),
+          prompt: effectivePrompt,
           variety,
           name: campaignName.trim() || randomCampaignName(),
           ...(referenceUrl ? { referenceImageUrl: referenceUrl } : {}),
@@ -307,6 +326,17 @@ export function Studio({
       setSection("brief");
       toast.error((err as Error).message ?? "Generation failed");
     }
+  };
+
+  // Picking a Brand Brain angle: fill the prompt, drop back to normal
+  // "prompt" mode, clear the analysis view, and generate immediately with
+  // the SAME value passed explicitly (see generate()'s comment above) —
+  // replaces the angle-picker canvas with the usual generating/result view.
+  const chooseWebsiteAngle = (angle: CampaignAngle) => {
+    setPrompt(angle.imagePrompt);
+    setWebsiteAnalysis(null);
+    setCreateMode("prompt");
+    void generate(angle.imagePrompt);
   };
 
   const poll = async (id: string) => {
@@ -871,6 +901,11 @@ export function Studio({
               section={section}
               setSection={setSection}
               workspaceSlug={workspaceSlug}
+              createMode={createMode}
+              setCreateMode={setCreateMode}
+              websiteAnalysis={websiteAnalysis}
+              onWebsiteAnalysis={setWebsiteAnalysis}
+              onChooseWebsiteAngle={chooseWebsiteAngle}
               prompt={prompt}
               setPrompt={setPrompt}
               variety={variety}
@@ -935,6 +970,11 @@ function CockpitCreate({
   section,
   setSection,
   workspaceSlug,
+  createMode,
+  setCreateMode,
+  websiteAnalysis,
+  onWebsiteAnalysis,
+  onChooseWebsiteAngle,
   prompt,
   setPrompt,
   variety,
@@ -980,6 +1020,11 @@ function CockpitCreate({
   section: SectionId;
   setSection: (s: SectionId) => void;
   workspaceSlug: string;
+  createMode: "prompt" | "website";
+  setCreateMode: (m: "prompt" | "website") => void;
+  websiteAnalysis: AnalyzeResult | null;
+  onWebsiteAnalysis: (r: AnalyzeResult) => void;
+  onChooseWebsiteAngle: (angle: CampaignAngle) => void;
   prompt: string;
   setPrompt: (v: string) => void;
   variety: boolean;
@@ -1015,7 +1060,6 @@ function CockpitCreate({
 }) {
   const isCreate = section === "brief" || section === "images";
   const isVideo = section === "video";
-  const [createMode, setCreateMode] = useState<"prompt" | "website">("prompt");
   const hasResult = generating || assets.length > 0;
   const activeTool = tools.find((t) => t.id === section);
   const next: {
@@ -1120,10 +1164,7 @@ function CockpitCreate({
             {createMode === "website" ? (
               <BrandImportPanel
                 workspaceSlug={workspaceSlug}
-                onApplyPrompt={(p) => {
-                  setPrompt(p);
-                  setCreateMode("prompt");
-                }}
+                onResult={onWebsiteAnalysis}
               />
             ) : (
               <>
@@ -1290,6 +1331,15 @@ function CockpitCreate({
             <ImagesIcon className="h-7 w-7 opacity-30" />
             <p className="text-sm">{activeTool?.label} preview appears here.</p>
           </div>
+        ) : websiteAnalysis ? (
+          // Takes priority over the empty-state placeholder below — cleared
+          // the moment an angle is chosen (onChooseWebsiteAngle), at which
+          // point generating/hasResult naturally take over rendering here.
+          <BrandAnalysisResults
+            result={websiteAnalysis}
+            workspaceSlug={workspaceSlug}
+            onChoose={onChooseWebsiteAngle}
+          />
         ) : !hasResult ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
             {isCreate && (

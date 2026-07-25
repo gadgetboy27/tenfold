@@ -2,24 +2,22 @@
 
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import {
-  Globe,
-  Loader2,
-  Sparkles,
-  ShieldCheck,
-  Palette,
-  Wand2,
-  Film,
-} from "lucide-react";
+import { Globe, Loader2, Wand2, Palette, Film } from "lucide-react";
 import { api } from "@/lib/api";
 import { CREDIT_COSTS } from "@/lib/credits/costs";
 
 /**
  * "Brand Brain" (PRODUCT_STRATEGY.md §3/§4.6): paste a website URL, get a
  * campaign brief (4 angles) plus a proposed brand palette/font, seeded from
- * app/api/campaigns/analyze-url/route.ts. Picking an angle hands its
- * imagePrompt back to CockpitCreate's normal prompt textarea/Generate flow
- * unchanged — this panel never calls POST /api/campaigns itself.
+ * app/api/campaigns/analyze-url/route.ts.
+ *
+ * This panel is input-only (URL field + Analyze button) — lives in
+ * CockpitCreate's cramped left control column. The RESULT (brand kit
+ * preview + campaign angles) is deliberately NOT rendered here: comparing
+ * 4 detailed options needs real width, so results render in the large
+ * right-hand canvas instead (components/studio/BrandAnalysisResults.tsx),
+ * fed by the `onResult` callback below. See components/studio/Studio.tsx
+ * for how `websiteAnalysis` state is lifted to make that possible.
  *
  * Delivers an ON-BRAND campaign (your site's colors/font/tone applied to
  * generated marketing imagery) — not a literal screenshot/walkthrough of
@@ -33,12 +31,12 @@ import { CREDIT_COSTS } from "@/lib/credits/costs";
  * client-side, same file the server route itself charges from.
  */
 
-interface ResolvedField {
+export interface ResolvedField {
   value: string;
   source: "detected" | "ai_suggested";
 }
 
-interface ProposedBrandKit {
+export interface ProposedBrandKit {
   primary_color: ResolvedField;
   secondary_color: ResolvedField;
   accent_color: ResolvedField;
@@ -46,15 +44,17 @@ interface ProposedBrandKit {
   tagline: string;
 }
 
-interface CampaignAngle {
+export interface CampaignAngle {
   id: string;
   title: string;
   goal: string;
   strategy: string;
+  keyMessage: string;
+  visualStyle: string;
   imagePrompt: string;
 }
 
-interface AnalyzeResult {
+export interface AnalyzeResult {
   campaignAngles: CampaignAngle[];
   proposedBrandKit: ProposedBrandKit;
   brandKitApplied: boolean;
@@ -63,16 +63,13 @@ interface AnalyzeResult {
 
 export function BrandImportPanel({
   workspaceSlug,
-  onApplyPrompt,
+  onResult,
 }: {
   workspaceSlug: string;
-  onApplyPrompt: (prompt: string) => void;
+  onResult: (data: AnalyzeResult) => void;
 }) {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<AnalyzeResult | null>(null);
-  const [applyingKit, setApplyingKit] = useState(false);
-  const [kitApplied, setKitApplied] = useState(false);
   const [nzdEstimate, setNzdEstimate] = useState<number | null>(null);
 
   const cost = CREDIT_COSTS.brand_import;
@@ -100,7 +97,6 @@ export function BrandImportPanel({
   const handleAnalyze = async () => {
     if (!url.trim()) return;
     setLoading(true);
-    setResult(null);
     try {
       const res = await api("/api/campaigns/analyze-url", {
         method: "POST",
@@ -115,40 +111,11 @@ export function BrandImportPanel({
             : (data.error ?? "Could not analyze that site"),
         );
       }
-      setResult(data);
-      setKitApplied(data.brandKitApplied);
+      onResult(data);
     } catch (err) {
       toast.error((err as Error).message ?? "Could not analyze that site");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const applyBrandKit = async () => {
-    if (!result) return;
-    setApplyingKit(true);
-    try {
-      const kit = result.proposedBrandKit;
-      const res = await api("/api/brand-kit", {
-        method: "PATCH",
-        body: JSON.stringify({
-          primary_color: kit.primary_color.value,
-          secondary_color: kit.secondary_color.value,
-          accent_color: kit.accent_color.value,
-          font_family: kit.font_family.value,
-          tagline: kit.tagline,
-        }),
-        workspaceSlug,
-      });
-      if (!res.ok) throw new Error("Could not apply to your Brand Kit");
-      setKitApplied(true);
-      toast.success("Applied to your Brand Kit");
-    } catch (err) {
-      toast.error(
-        (err as Error).message ?? "Could not apply to your Brand Kit",
-      );
-    } finally {
-      setApplyingKit(false);
     }
   };
 
@@ -157,35 +124,33 @@ export function BrandImportPanel({
     : `${cost} credits`;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      {!result && (
-        <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
-          <div className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold">
-            <Wand2 className="h-4 w-4 text-primary" />
-            Build a campaign from your website
-          </div>
-          <p className="mb-2.5 text-xs text-muted-foreground">
-            Reads your site&apos;s colors, font and content, then drafts 4
-            on-brand campaign angles — pick one to generate matching images,
-            then branch into video. This matches your site&apos;s look and tone;
-            it doesn&apos;t show the site itself in the video (that&apos;s a
-            separate, not-yet-built feature).
-          </p>
-          <div className="flex flex-col gap-1 text-[11px] text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <Globe className="h-3 w-3 shrink-0" /> 1. Paste your URL
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Palette className="h-3 w-3 shrink-0" /> 2. We detect your
-              colors/font, draft 4 campaign angles
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Film className="h-3 w-3 shrink-0" /> 3. Pick one → generate
-              images → branch into video, same as any other campaign
-            </span>
-          </div>
+    <div className="flex flex-col gap-3">
+      <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+        <div className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold">
+          <Wand2 className="h-4 w-4 text-primary" />
+          Build a campaign from your website
         </div>
-      )}
+        <p className="mb-2.5 text-xs text-muted-foreground">
+          Reads your site&apos;s colors, font and content, then drafts 4
+          on-brand campaign angles — pick one to generate matching images, then
+          branch into video. This matches your site&apos;s look and tone; it
+          doesn&apos;t show the site itself in the video (that&apos;s a
+          separate, not-yet-built feature).
+        </p>
+        <div className="flex flex-col gap-1 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <Globe className="h-3 w-3 shrink-0" /> 1. Paste your URL
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Palette className="h-3 w-3 shrink-0" /> 2. We detect your
+            colors/font, draft 4 campaign angles
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Film className="h-3 w-3 shrink-0" /> 3. Pick one on the right →
+            generate images → branch into video, same as any other campaign
+          </span>
+        </div>
+      </div>
 
       <div className="flex gap-2">
         <input
@@ -211,80 +176,8 @@ export function BrandImportPanel({
       </div>
       <p className="text-[11px] text-muted-foreground">
         {costLabel} — reads your site&apos;s colors, font and content to draft a
-        matching campaign.
+        matching campaign. Results appear on the right.
       </p>
-
-      {result && (
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
-          <div className="rounded-lg border border-border bg-card p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">
-                Brand kit
-              </span>
-              {kitApplied ? (
-                <span className="flex items-center gap-1 text-[11px] text-emerald-500">
-                  <ShieldCheck className="h-3 w-3" /> Applied
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  onClick={applyBrandKit}
-                  disabled={applyingKit}
-                  className="rounded-md border border-primary/40 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/10 disabled:opacity-50"
-                >
-                  {applyingKit ? "Applying…" : "Apply to my Brand Kit"}
-                </button>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              {(
-                [
-                  result.proposedBrandKit.primary_color,
-                  result.proposedBrandKit.secondary_color,
-                  result.proposedBrandKit.accent_color,
-                ] as ResolvedField[]
-              ).map((field, i) => (
-                <span
-                  key={i}
-                  title={`${field.value} (${field.source === "detected" ? "detected on your site" : "AI suggested"})`}
-                  className="h-6 w-6 rounded-full border border-border"
-                  style={{ backgroundColor: field.value }}
-                />
-              ))}
-              <span className="ml-1 text-xs">
-                {result.proposedBrandKit.font_family.value}
-              </span>
-              <span
-                className="text-[10px] text-muted-foreground"
-                title="Whether each field was read from your site or suggested by AI"
-              >
-                {result.proposedBrandKit.font_family.source === "detected"
-                  ? "· detected"
-                  : "· AI suggested"}
-              </span>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            {result.campaignAngles.map((angle) => (
-              <button
-                key={angle.id}
-                type="button"
-                onClick={() => onApplyPrompt(angle.imagePrompt)}
-                className="rounded-lg border border-border bg-card p-3 text-left text-sm transition-colors hover:border-primary/50"
-              >
-                <div className="mb-1 flex items-center gap-1.5 font-medium">
-                  <Sparkles className="h-3.5 w-3.5 text-primary" />
-                  {angle.title}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {angle.strategy}
-                </p>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

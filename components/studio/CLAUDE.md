@@ -28,23 +28,53 @@ functionality, not a new engine.
 - Tier gating is by capability, not layout: `ent.proEffects` drives the locked
   "AI-Photoshop" effects.
 
-## Brief — `BrandImportPanel`, "Brand Brain" from a URL
+## Brief — `BrandImportPanel` + `BrandAnalysisResults`, "Brand Brain" from a URL
 
-`CockpitCreate`'s Brief/Images step has a mode toggle (local `createMode`
-state) alongside the free-text prompt textarea: "Write a prompt" vs. "Import
-from your website". The website mode renders
-`components/studio/BrandImportPanel.tsx`, which posts to the extended
-`POST /api/campaigns/analyze-url` (PRODUCT_STRATEGY.md §4 item 6) and shows a
-brand-kit preview + 4 campaign-angle cards. Picking an angle calls
-`onApplyPrompt(imagePrompt)`, which just does `setPrompt(...)` +
-switches back to "Write a prompt" mode — the normal `onGenerate` /
-`POST /api/campaigns` path is completely unaware this happened.
+`CockpitCreate`'s Brief/Images step has a `createMode` toggle (lifted to
+`Studio`'s top level, not local — see below) alongside the free-text prompt
+textarea: "Write a prompt" vs. "Import from your website".
 
-**Deliberately does not import `lib/claude/campaign-brief.ts` or
-`lib/claude/brand-scrape.ts`** — those touch `@anthropic-ai/sdk` (the former
-constructs an Anthropic client at module scope) and this is a `"use client"`
-component. `BrandImportPanel` declares its own local response-shape
-interfaces instead of importing the server-side ones, by design — see
+**Split across two components (2026-07-26), not one** — comparing 4
+detailed campaign angles needs real width, which the cramped left control
+column doesn't have:
+
+- `components/studio/BrandImportPanel.tsx` — input only. Renders in the
+  left column in website mode: the URL field, the explainer card, and the
+  Analyze button. Posts to the extended `POST /api/campaigns/analyze-url`
+  (PRODUCT_STRATEGY.md §4 item 6) and hands the result up via `onResult`,
+  never rendering it itself.
+- `components/studio/BrandAnalysisResults.tsx` — the brand-kit preview +
+  4 campaign-angle cards (title/goal/strategy/keyMessage/visualStyle),
+  spread out in a real grid. Renders in the large right-hand "Result"
+  canvas, taking priority over the empty-state placeholder whenever
+  `websiteAnalysis` state is set.
+
+**State lives in `Studio`'s top-level component, not CockpitCreate** —
+`createMode` and `websiteAnalysis` are passed down as props to
+`CockpitCreate`, which renders `BrandImportPanel` on the left (feeding
+`onWebsiteAnalysis`, i.e. `setWebsiteAnalysis`) and `BrandAnalysisResults`
+on the right (fed `websiteAnalysis` directly). This is what lets one
+result live in two different parts of the screen.
+
+Picking an angle calls `onChooseWebsiteAngle` (→ `Studio.tsx`'s
+`chooseWebsiteAngle`), which sets the prompt, clears `websiteAnalysis`
+(so the canvas falls through to the normal generating/result branches),
+switches `createMode` back to `"prompt"`, and calls `generate(angle.
+imagePrompt)` immediately — **`generate()` takes an optional override
+prompt argument specifically for this**: calling `setPrompt(x)` then
+`generate()` in the same handler would otherwise read the pre-update
+`prompt` from `generate`'s closure (stale by one render), since React
+doesn't re-render synchronously. Passing the value explicitly sidesteps
+that entirely. The normal `onGenerate` button still calls `generate()`
+with no argument, using `prompt` state as before.
+
+**Both components deliberately do not import `lib/claude/campaign-brief.ts`
+or `lib/claude/brand-scrape.ts`** — those touch `@anthropic-ai/sdk` (the
+former constructs an Anthropic client at module scope) and both are
+`"use client"` components. `BrandImportPanel` declares (and exports) its
+own local response-shape interfaces instead of importing the server-side
+ones, by design; `BrandAnalysisResults` imports those as `import type`
+only (erased at compile time, no runtime coupling) — see
 `lib/credits/CLAUDE.md` and the 2026-07-25 incident it documents for why
 that boundary matters here specifically.
 
