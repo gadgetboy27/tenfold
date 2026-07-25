@@ -17,6 +17,21 @@ const COST_ROWS: { key: keyof typeof CREDIT_COSTS; label: string }[] = [
   { key: "script_generation", label: "Script or caption" },
 ];
 
+// "A full campaign" worked example below — computed from CREDIT_COSTS/PLANS
+// rather than hardcoded, so a future repricing (like 2026-07-25's) can't
+// leave this sentence silently wrong the way the old hardcoded "36 credits /
+// under $3" text did after video_10s was repriced.
+const EXAMPLE_CAMPAIGN_CREDITS =
+  CREDIT_COSTS.image_generation +
+  CREDIT_COSTS.video_10s +
+  CREDIT_COSTS.music_generation +
+  CREDIT_COSTS.script_generation;
+const CREATOR_PLAN = PLANS.find((p) => p.id === "creator")!;
+const EXAMPLE_CAMPAIGN_NZD = Math.ceil(
+  EXAMPLE_CAMPAIGN_CREDITS *
+    (CREATOR_PLAN.priceNzd / CREATOR_PLAN.creditsPerMonth),
+);
+
 export function PricingContent() {
   return (
     <div className="px-5 pb-28 pt-32">
@@ -138,8 +153,9 @@ export function PricingContent() {
         </div>
         <p className="mt-4 text-center text-sm text-muted-foreground">
           A full campaign — image set, 10-second video, music and captions —
-          costs about 36 credits. On the Creator plan that&apos;s under $3 NZD,
-          a fraction of a single agency hour.
+          costs about {EXAMPLE_CAMPAIGN_CREDITS} credits. On the Creator plan
+          that&apos;s under ${EXAMPLE_CAMPAIGN_NZD} NZD, a fraction of a
+          single agency hour.
         </p>
       </div>
     </div>

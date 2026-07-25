@@ -130,8 +130,11 @@ respond) lives in `app/api/CLAUDE.md`.
 
 Markup is deliberately uneven, not flat — see `PRODUCT_STRATEGY.md` §4.4 for
 the 2026-07-25 margin-banded repricing (raw cost per type lives in
-`lib/costs/rates.ts`, real-time margin at `/api/analytics/usage`). Any
-further `CREDIT_COSTS` change should be checked against real
+`lib/costs/rates.ts`, real-time margin at `/api/analytics/usage`). Before
+changing any `CREDIT_COSTS` value, or if a change to it broke something
+non-obvious, read `lib/credits/CLAUDE.md` — it lists the downstream files
+(credit-level thresholds, pricing-page copy, tests) that silently go stale
+otherwise. Any further `CREDIT_COSTS` change should be checked against real
 `actual_cost_usd` data first, not assumed.
 
 ---
