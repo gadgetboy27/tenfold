@@ -122,15 +122,33 @@ export async function POST(req: Request) {
 
     let html: string;
     try {
-      const res = await fetch(body.url, {
-        signal: controller.signal,
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (compatible; Tenfold-Bot/1.0; +https://tenfold.nz)",
-          Accept: "text/html,application/xhtml+xml,*/*;q=0.9",
-          "Accept-Language": "en-US,en;q=0.9",
-        },
-      });
+      let res: Response;
+      try {
+        res = await fetch(body.url, {
+          signal: controller.signal,
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (compatible; Tenfold-Bot/1.0; +https://tenfold.nz)",
+            Accept: "text/html,application/xhtml+xml,*/*;q=0.9",
+            "Accept-Language": "en-US,en;q=0.9",
+          },
+        });
+      } catch (fetchErr) {
+        // Distinct from a bad HTTP status below — this means we couldn't even
+        // reach the domain at all (DNS failure, connection refused, etc.), by
+        // far the most common real-world cause: a typo'd or unregistered
+        // domain. Confirmed live via direct DNS lookup while diagnosing a
+        // user report on "letsroam.nz" (NXDOMAIN — doesn't exist; likely
+        // meant a different TLD). The raw error (e.g. "fetch failed") is
+        // rethrown as-is if it's an abort/timeout, so that branch below
+        // still handles those; anything else becomes this specific message.
+        const fetchMsg =
+          fetchErr instanceof Error ? fetchErr.message : "fetch failed";
+        if (fetchMsg.includes("aborted")) throw fetchErr;
+        throw new Error(
+          "We couldn't find that website. Double-check the URL — it may have a typo, or the domain might not be live.",
+        );
+      }
       if (!res.ok)
         throw new Error(
           `That website couldn't be reached properly (it returned a ${res.status} error) — double-check the URL and try again.`,
@@ -320,6 +338,7 @@ export async function POST(req: Request) {
       "The site analysis didn't return a result — please try again.",
       "We couldn't read the site analysis properly. Please try again.",
       "The site analysis was too long to complete — try a shorter/simpler page.",
+      "We couldn't find that website. Double-check the URL — it may have a typo, or the domain might not be live.",
     ]);
     const isSafe =
       KNOWN_SAFE_MESSAGES.has(msg) ||
