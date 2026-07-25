@@ -29,6 +29,30 @@ export const GET = withWorkspace<{ id: string }>(
 - First-login workspace provisioning lives in one place: `getOrProvisionWorkspace`
   (`lib/auth/provisioning.ts`). Do not re-implement it inline in auth routes.
 
+## Approval state machine — `campaigns.approval_status`
+
+`campaigns.approval_status: 'draft' | 'pending_review' | 'approved'`
+(migration `0026_campaign_approval.sql`) gates the one action that matters —
+publishing — for `member`-role users. `owner`/`admin` bypass every gate below;
+the whole point is restricting member-role publishing, not solo/owner
+workflows.
+
+- `POST /api/campaigns/[id]/submit-review` — any member, `draft` →
+  `pending_review`.
+- `POST /api/campaigns/[id]/approve` — owner/admin only, `draft` OR
+  `pending_review` → `approved` (so an owner/admin can self-approve without
+  the review round-trip). Records `approved_by` / `approved_at`.
+- `POST /api/campaigns/[id]/reject` — owner/admin only, `pending_review` →
+  `draft` ("changes requested"), clearing `approved_by`/`approved_at`.
+- **Enforcement lives in `POST /api/publish`**, not just the UI: it resolves
+  `campaignId` from whichever publish path fired (`body.campaignId` for
+  video; `assets.campaign_id` via `body.assetId`; `compositions.campaign_id`
+  via `body.compositionId`), then 403s if `session.role === 'member'` and
+  that campaign's `approval_status !== 'approved'`. Owner/admin always pass.
+- UI: `components/studio/PublishCanvas.tsx` shows a status banner with the
+  role-appropriate action (submit / approve / request changes) — see
+  `components/studio/CLAUDE.md`.
+
 ## Async Job Pattern
 
 1. Check credits → fail fast with 402 if insufficient

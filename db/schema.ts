@@ -180,6 +180,14 @@ export const campaigns = pgTable(
     parameters: jsonb("parameters").notNull().default("{}"),
     anchorAssetId: uuid("anchor_asset_id"), // FK added after assets table
     status: text("status").notNull().default("generating"),
+    // Approval state machine (PRODUCT_STRATEGY.md §4) — separate from `status`
+    // above, which tracks image-generation progress, not review. Gates
+    // publishing for "member"-role users; owner/admin bypass it (they can
+    // always self-approve). See migration 0026 for why this is 3 states, not
+    // the 5 the original ask sketched.
+    approvalStatus: text("approval_status").notNull().default("draft"),
+    approvedBy: uuid("approved_by"),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -190,6 +198,7 @@ export const campaigns = pgTable(
   (t) => [
     index("idx_campaigns_workspace").on(t.workspaceId),
     index("idx_campaigns_status").on(t.status),
+    index("idx_campaigns_approval_status").on(t.approvalStatus),
   ],
 );
 

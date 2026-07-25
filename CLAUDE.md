@@ -101,6 +101,17 @@ Gallery.
 
 ---
 
+## 5c. Approval State Machine
+
+`campaigns.approval_status: 'draft' | 'pending_review' | 'approved'` gates
+publishing for `member`-role users (`owner`/`admin` bypass — they can always
+self-approve). See `app/api/CLAUDE.md` for the workflow routes and the
+`POST /api/publish` enforcement gate; `db/migrations/0026_campaign_approval.sql`
+for why it's three states, not the five `PRODUCT_STRATEGY.md` §4 originally
+sketched.
+
+---
+
 ## 6. Credit System
 
 `lib/credits/costs.ts` is the single source of truth — never hardcode a cost

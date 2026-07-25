@@ -183,10 +183,14 @@ export async function POST(req: Request) {
       }
     }
 
+    // Tracks the campaign a publish resolves to, for the approval gate below —
+    // populated alongside whichever asset-resolution branch fires.
+    let resolvedCampaignId: string | null = body.campaignId ?? null;
+
     if (!asset && body.compositionId) {
       const { data: composition } = await admin
         .from("compositions")
-        .select("output_asset_id, anchor_asset_id")
+        .select("output_asset_id, anchor_asset_id, campaign_id")
         .eq("id", body.compositionId)
         .eq("workspace_id", session.workspaceId)
         .single();
@@ -197,7 +201,9 @@ export async function POST(req: Request) {
         const comp = composition as {
           output_asset_id: string | null;
           anchor_asset_id: string | null;
+          campaign_id: string | null;
         };
+        resolvedCampaignId = comp.campaign_id ?? resolvedCampaignId;
         const assetRef = comp.output_asset_id ?? comp.anchor_asset_id;
         if (assetRef) {
           const { data: a } = await admin
@@ -213,16 +219,51 @@ export async function POST(req: Request) {
     if (!asset && body.assetId) {
       const { data: a } = await admin
         .from("assets")
-        .select("id, url, type")
+        .select("id, url, type, campaign_id")
         .eq("id", body.assetId)
         .eq("workspace_id", session.workspaceId)
         .single();
       asset = a as Asset | null;
+      resolvedCampaignId =
+        (a as { campaign_id?: string | null } | null)?.campaign_id ??
+        resolvedCampaignId;
     }
 
     if (!asset)
       return NextResponse.json({ error: "Asset not found" }, { status: 404 });
     const resolvedAsset = asset; // non-null fallback for every platform
+
+    // Approval gate (PRODUCT_STRATEGY.md §4): a "member" can prep and submit a
+    // campaign for review, but only owner/admin (or a self-approving
+    // owner/admin) may actually publish it. Owner/admin bypass entirely — the
+    // gate restricts member-role publishing, not solo workflows. A campaign we
+    // couldn't resolve (shouldn't happen given the asset lookups above all
+    // carry campaign_id) is let through rather than blocking on an edge case
+    // the schema doesn't allow.
+    if (
+      resolvedCampaignId &&
+      session.role !== "owner" &&
+      session.role !== "admin"
+    ) {
+      const { data: campaign } = await admin
+        .from("campaigns")
+        .select("approval_status")
+        .eq("id", resolvedCampaignId)
+        .eq("workspace_id", session.workspaceId)
+        .single();
+      const approvalStatus = (
+        campaign as { approval_status?: string } | null
+      )?.approval_status;
+      if (approvalStatus && approvalStatus !== "approved") {
+        return NextResponse.json(
+          {
+            error:
+              "This campaign needs owner/admin approval before it can be published. Submit it for review first.",
+          },
+          { status: 403 },
+        );
+      }
+    }
 
     // The MP4 to post to a given platform: its format's fan-out render when one
     // exists, otherwise the single resolved asset (backward compatible).

@@ -63,10 +63,17 @@ build all of it at once:
    nothing feeds it back into generation yet, which is the actual "learning"
    half of this item's name. Next increment here, when wanted: use it to bias
    future generation toward what's already scoring well.
-2. **Explicit approval state machine.** Extend `campaigns` (or a dedicated
-   table) with `status: 'draft' | 'pending_review' | 'approved' | 'scheduled'
-   | 'published'` rather than publishing being a single unguarded action.
-   Needed before this is credibly sellable to a team, not just a solo user.
+2. ~~**Explicit approval state machine.**~~ — **v1 shipped**, see `CLAUDE.md`
+   §5c. `campaigns.approval_status: 'draft' | 'pending_review' | 'approved'`
+   — deliberately three states, not the five sketched above: `scheduled` and
+   `published` already exist with finer (per-platform, per-post) granularity
+   on `publish_records.status`, so duplicating them here would just drift out
+   of sync. Any workspace member can submit for review; only `owner`/`admin`
+   can approve or reject (send back to draft) — enforced server-side in
+   `POST /api/publish` (403 for a member on an unapproved campaign), not just
+   hidden in the UI. Owner/admin can self-approve directly, skipping the
+   review round-trip. Surfaced in Studio's `PublishCanvas` as an inline
+   status banner + action buttons, not a separate screen.
 3. ~~**Abstract the AI providers further.**~~ — **v1 shipped**, see
    `lib/fal/CLAUDE.md`. `lib/providers/` — a `ProviderAdapter` interface, the
    fal adapter (the existing submit logic, moved not rewritten), and a
@@ -110,10 +117,13 @@ a cohesive brand identity.
 
 **Cons:** the core value prop ("prompt to multi-platform content") is
 trending toward commodity; high exposure to third-party API pricing/
-availability; no post-publish analytics or team approval workflow yet; the
-10× markup may drive churn as underlying AI costs keep falling.
+availability; analytics doesn't feed back into generation yet (reports
+performance, doesn't act on it); the 10× markup may drive churn as
+underlying AI costs keep falling.
 
-**Bottom line:** the architecture is ready to win. The product story needs
-to shift from "we can generate things" to "we make your marketing
-measurably better and safer" — analytics and approval workflows are what
-make that claim true, not just the tagline.
+**Bottom line:** the architecture is ready to win. Analytics (§4.1) and the
+approval state machine (§4.2) are now v1-shipped, moving the product story
+from "we can generate things" toward "we make your marketing measurably
+better and safer." What's left to make that claim fully true: closing the
+analytics feedback loop, and rethinking the pricing model (§4.4) so it holds
+up as underlying AI costs keep falling.

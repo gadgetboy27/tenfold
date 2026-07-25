@@ -64,6 +64,16 @@ has a mount effect that reads those two params, calls its own `openProject`
 preference) — it only checked `video` before, so opening a project whose
 only video was the Compositor's branded export showed no video at all.
 
+**Approval gate.** `PublishCanvas` fetches the campaign's `approval_status`
+(`GET /api/campaigns/[id]`) and the caller's `role` (`GET /api/workspaces/me`)
+on mount, and shows a status banner above the caption with the
+role-appropriate action: a `member` on a `draft` campaign gets "Submit for
+review"; an `owner`/`admin` gets "Approve" (and "Request changes" when
+`pending_review`). The Publish button itself is disabled client-side when
+`role === 'member'` and the campaign isn't `approved` — but this is UX, not
+the gate; `POST /api/publish` enforces it server-side regardless (see
+`app/api/CLAUDE.md`).
+
 ## Gallery — the `"projects"` section, reachable via the logo click
 
 `ProjectsCanvas` is the front door (clicking the Tenfold wordmark calls

@@ -17,6 +17,9 @@ import {
   VolumeX,
   Play,
   Image as ImageIcon,
+  ShieldCheck,
+  Eye,
+  Undo2,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { PLATFORM_FORMATS, type PlatformId } from "@/lib/composition/formats";
@@ -38,6 +41,12 @@ import { platformDefaults } from "@/lib/social/platform-defaults";
  * caption tone/hashtags auto-adapt per platform via the existing
  * adapt-captions endpoint (now automatic, not a manual click); music
  * defaults per platformDefaults() and can be toggled per platform.
+ *
+ * Approval state machine (PRODUCT_STRATEGY.md §4): a "member" role can
+ * submit a campaign for review but /api/publish 403s them until an
+ * owner/admin approves it (server-side gate — this UI is the workflow, not
+ * the enforcement). Owner/admin see an inline approve/request-changes action
+ * instead and can always self-approve.
  */
 
 interface SocialProfile {
@@ -100,6 +109,10 @@ export function PublishCanvas({
   const [publishing, setPublishing] = useState(false);
   const [results, setResults] = useState<PostResult[] | null>(null);
 
+  const [role, setRole] = useState<string | null>(null);
+  const [approvalStatus, setApprovalStatus] = useState<string | null>(null);
+  const [approvalActionLoading, setApprovalActionLoading] = useState(false);
+
   const fetchProfiles = useCallback(async () => {
     setLoadingProfiles(true);
     try {
@@ -125,6 +138,31 @@ export function PublishCanvas({
       .then((e: { isPro?: boolean } | null) => setIsPro(e?.isPro ?? false))
       .catch(() => setIsPro(false));
   }, [workspaceSlug]);
+
+  useEffect(() => {
+    api("/api/workspaces/me", { workspaceSlug })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { role?: string } | null) => setRole(d?.role ?? null))
+      .catch(() => setRole(null));
+  }, [workspaceSlug]);
+
+  const refreshApprovalStatus = useCallback(async () => {
+    if (!campaignId) return;
+    try {
+      const res = await api(`/api/campaigns/${campaignId}`, { workspaceSlug });
+      if (res.ok) {
+        const d = (await res.json()) as { approval_status?: string };
+        setApprovalStatus(d.approval_status ?? "draft");
+      }
+    } catch {
+      // Silent — the publish button falling back to "not approved yet" is
+      // the safe default if this fetch fails.
+    }
+  }, [campaignId, workspaceSlug]);
+
+  useEffect(() => {
+    queueMicrotask(() => void refreshApprovalStatus());
+  }, [refreshApprovalStatus]);
 
   // Re-check on refocus — coming back from a native-OAuth or Ayrshare tab.
   useEffect(() => {
@@ -236,6 +274,34 @@ export function PublishCanvas({
     }
   };
 
+  const runApprovalAction = async (
+    action: "submit-review" | "approve" | "reject",
+    successMessage: string,
+  ) => {
+    if (!campaignId) return;
+    setApprovalActionLoading(true);
+    try {
+      const res = await api(`/api/campaigns/${campaignId}/${action}`, {
+        method: "POST",
+        workspaceSlug,
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        approval_status?: string;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(data.error ?? "That didn't go through");
+      setApprovalStatus(data.approval_status ?? null);
+      toast.success(successMessage);
+    } catch (err) {
+      toast.error((err as Error).message ?? "That didn't go through");
+    } finally {
+      setApprovalActionLoading(false);
+    }
+  };
+
+  const isReviewer = role === "owner" || role === "admin";
+  const canPublish = isReviewer || approvalStatus === "approved";
+
   const addHashtag = (raw: string) => {
     const tag = raw.replace(/^#+/, "").trim().replace(/\s+/g, "_");
     if (!tag || hashtags.includes(tag) || hashtags.length >= 30) return;
@@ -269,6 +335,10 @@ export function PublishCanvas({
   }, [platforms, noMusicPlatforms]);
 
   const handlePublish = async () => {
+    if (!canPublish) {
+      toast.error("This campaign needs owner/admin approval before it can be published");
+      return;
+    }
     if (platforms.length === 0) {
       toast.error("Select at least one platform");
       return;
@@ -560,6 +630,61 @@ export function PublishCanvas({
 
       {/* RIGHT: caption, hashtags, schedule, publish */}
       <div className="flex min-h-0 flex-col gap-4 overflow-y-auto rounded-2xl border border-border bg-card p-4">
+        {approvalStatus && approvalStatus !== "approved" && (
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+            <span className="flex items-center gap-1.5">
+              <Eye className="h-3.5 w-3.5 shrink-0" />
+              {approvalStatus === "pending_review"
+                ? isReviewer
+                  ? "Waiting on your review before this can publish."
+                  : "Submitted — waiting on an owner/admin to approve."
+                : isReviewer
+                  ? "Draft — approve it yourself, or wait for it to be submitted."
+                  : "Draft — submit it for review before publishing."}
+            </span>
+            <span className="flex shrink-0 items-center gap-1.5">
+              {!isReviewer && approvalStatus === "draft" && (
+                <button
+                  type="button"
+                  disabled={approvalActionLoading}
+                  onClick={() =>
+                    runApprovalAction("submit-review", "Submitted for review")
+                  }
+                  className="rounded-md border border-amber-500/40 px-2 py-1 font-medium text-amber-700 hover:bg-amber-500/15 disabled:opacity-50 dark:text-amber-300"
+                >
+                  Submit for review
+                </button>
+              )}
+              {isReviewer && approvalStatus === "pending_review" && (
+                <button
+                  type="button"
+                  disabled={approvalActionLoading}
+                  onClick={() =>
+                    runApprovalAction("reject", "Sent back to draft")
+                  }
+                  className="flex items-center gap-1 rounded-md border border-amber-500/40 px-2 py-1 font-medium text-amber-700 hover:bg-amber-500/15 disabled:opacity-50 dark:text-amber-300"
+                >
+                  <Undo2 className="h-3 w-3" /> Request changes
+                </button>
+              )}
+              {isReviewer && (
+                <button
+                  type="button"
+                  disabled={approvalActionLoading}
+                  onClick={() => runApprovalAction("approve", "Approved")}
+                  className="flex items-center gap-1 rounded-md bg-amber-500/90 px-2 py-1 font-medium text-white hover:bg-amber-500 disabled:opacity-50"
+                >
+                  <ShieldCheck className="h-3 w-3" /> Approve
+                </button>
+              )}
+            </span>
+          </div>
+        )}
+        {approvalStatus === "approved" && (
+          <div className="flex items-center gap-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-600 dark:text-emerald-400">
+            <ShieldCheck className="h-3.5 w-3.5" /> Approved for publishing
+          </div>
+        )}
         <div>
           <div className="mb-1.5 flex items-center justify-between">
             <label className="text-xs font-medium text-muted-foreground">
@@ -672,7 +797,12 @@ export function PublishCanvas({
         <button
           type="button"
           onClick={handlePublish}
-          disabled={publishing || platforms.length === 0}
+          disabled={publishing || platforms.length === 0 || !canPublish}
+          title={
+            canPublish
+              ? undefined
+              : "Needs owner/admin approval — submit it for review above"
+          }
           className="mt-auto flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity disabled:opacity-40"
         >
           {publishing ? (
@@ -684,9 +814,11 @@ export function PublishCanvas({
           )}
           {publishing
             ? "Publishing…"
-            : scheduleMode === "later"
-              ? `Schedule · ${platforms.length} platform${platforms.length === 1 ? "" : "s"}`
-              : `Publish · ${platforms.length} platform${platforms.length === 1 ? "" : "s"}`}
+            : !canPublish
+              ? "Awaiting approval"
+              : scheduleMode === "later"
+                ? `Schedule · ${platforms.length} platform${platforms.length === 1 ? "" : "s"}`
+                : `Publish · ${platforms.length} platform${platforms.length === 1 ? "" : "s"}`}
         </button>
       </div>
     </div>
