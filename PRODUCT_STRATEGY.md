@@ -167,7 +167,52 @@ build all of it at once:
      from the scraped page text — a natural next increment, not needed to
      hit "matching fonts and style."
 
-## 5. Pros / cons snapshot
+## 5. Backlog — what's left, not yet started
+
+Everything below is a deferred or "next increment" item surfaced while
+shipping the sections above — collected here as one list instead of
+scattered across §3/§4, so there's a single place to see what's actually
+left. Not prioritized against each other; pick per business need.
+
+1. **Performance-driven generation (analytics feedback loop).** §4 item 1
+   (Analytics) reports style performance (`style_performance()`,
+   `lib/analytics/engagement.ts`) but nothing feeds it back into generation
+   yet — the "learning" half of that item's own name. Concretely: bias
+   default style/model choice in `POST /api/campaigns` toward whatever a
+   workspace's past campaigns have scored best on, when available.
+2. **Agentic content calendars.** Net new, nothing built. "Here's our new
+   blog post URL — generate a 2-week calendar: 3 LinkedIn posts, 5 tweets,
+   2 TikTok scripts," per §3. Would likely build on Brand Brain's URL-scrape
+   plumbing (§4 item 6) rather than starting from scratch.
+3. **Brand Brain — PDF ingestion.** §4 item 6 shipped URL-only. A brand
+   guide/PDF upload path is a separate ingestion mechanism, not built.
+4. **Brand Brain — voice_profile integration.** The scraped page text
+   currently only feeds colors/font/campaign angles. `lib/claude/
+   brand-voice.ts`'s existing tone-analysis pipeline (writes
+   `brand_kits.voice_profile`/`voice_samples`) is separate and untouched —
+   wiring the scrape into it would complete "matching fonts and style" with
+   matching *voice* too.
+5. **ModelRouter — a second provider adapter.** `lib/providers/` (§4 item 3)
+   deliberately ships with only the fal adapter — there's no second
+   provider account or verified endpoint to build against yet, and the
+   Model Adoption Gate (`lib/fal/CLAUDE.md`) exists specifically to prevent
+   shipping unverified provider code. Revisit once there's an actual
+   Replicate/RunPod/etc. candidate to verify.
+6. **ModelRouter — webhook ingestion abstraction.** Still fal-specific per
+   caller (`app/api/webhooks/fal/route.ts` parses fal's own payload shape).
+   A real second provider would need its own webhook handling; abstracting
+   this now, with nothing to abstract *for*, would be speculative.
+7. **`store/useAppStore.ts` dead-field cleanup.** Flagged during the
+   2026-07-26 classic-dashboard deletion: ~25 fields (`currentStep`,
+   `campaignBrief`, `pendingBriefPrompt`, `expandDrafts`, etc.) look
+   classic-wizard-only by name, but the file is still used by ~12 live
+   components (Studio, PublishCanvas, Compositor, LogoStudio, and others).
+   Needs a real per-field usage audit against every live consumer before
+   trimming anything — deliberately not rushed into the file-deletion pass
+   since a shared, actively-used state file is a different risk class than
+   deleting whole zero-importer files.
+
+## 6. Pros / cons snapshot
 
 **Pros:** production-ready architectural guidelines, a real fragmented B2B
 pain point (AI creation + publishing in one place), enforceable coding
