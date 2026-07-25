@@ -97,7 +97,9 @@ New API routes use the `withWorkspace` wrapper — see `app/api/CLAUDE.md`.
 `components/studio/Studio.tsx`, rendered directly at `/[workspace]`, is the
 main site — no separate classic homepage anymore. See
 `components/studio/CLAUDE.md` for the Cockpit layout conventions and the
-Gallery.
+Gallery. Auth + workspace-membership for every `/[workspace]/*` route is
+enforced once in `app/(dashboard)/[workspace]/layout.tsx` — a new route
+under that path doesn't need its own check.
 
 ---
 

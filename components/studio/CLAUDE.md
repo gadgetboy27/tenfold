@@ -115,5 +115,35 @@ app had at `/[workspace]` (`CampaignLobby`) and `/[workspace]/gallery`:
 The classic `/[workspace]/studio` and `/[workspace]/gallery` routes now just
 `redirect()` to `/[workspace]` for old bookmarks/links. The pre-Studio classic
 dashboard (`DashboardClient`, `CampaignLobby`, `StepView`, `FloatingPromptBar`,
-`LeftRail`, `RightPanel`) is unreached from any route now but still in the
-repo — nothing has deleted it yet.
+`LeftRail`, `RightPanel`, `components/campaign/CampaignBriefPanel.tsx`,
+`components/steps/Step1Create.tsx`–`Step6Publish.tsx`,
+`components/hooks/ABVariantsPanel.tsx`) was deleted 2026-07-26 — confirmed
+zero real importers anywhere in the repo first (two independent audits,
+plus a clean `tsc`/production build after deletion). `Step6Publish.tsx` was
+the classic file `PublishCanvas.tsx` above was ported from; only the
+original was deleted, `PublishCanvas.tsx` is unrelated and stays.
+
+`components/layout/AppHeader.tsx` and `TopBar.tsx` are NOT part of that
+deletion despite living in the same directory — separate, live, shared
+components (used by the still-real `compositor`/`logo` "Open in classic"
+routes below, and by Studio itself).
+
+## Auth — one shared membership check for every `/[workspace]/*` route
+
+`app/(dashboard)/[workspace]/layout.tsx` checks login AND workspace
+membership (via `workspace_members`) before any nested route renders —
+including Client Component pages like `compositor/page.tsx`, since Next.js
+runs an ancestor layout server-side first and can redirect before the child
+page ever mounts. Redirects a non-member to their own workspace (via the
+existing `getOrProvisionWorkspace`, `lib/auth/provisioning.ts`), not to
+`/login` — they're authenticated, just requested the wrong slug. Individual
+`/[workspace]/*` pages/layouts (e.g. `settings/layout.tsx`) don't need their
+own membership check anymore; a new route under this path is covered
+automatically.
+
+`compositor/page.tsx`, `logo/page.tsx`, and `productions/page.tsx` are
+**not** classic-dashboard dead code, despite predating Studio — they're
+Studio's intentional "Open in classic" escape hatches (`classicHref` in
+`Studio.tsx`) for Compositor and Logo when not fully ported inline, and
+`productions` is linked in turn from the compositor page. Real, reachable,
+kept.
