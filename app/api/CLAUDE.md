@@ -63,3 +63,19 @@ workflows.
 
 Webhook handler: log first (idempotency) → find job → handle success/failure → mark processed.
 Client: Supabase Realtime `postgres_changes` on `creative_jobs` table.
+
+### Claude-only (non-fal) credit-charged actions
+
+A synchronous Claude-only route (e.g. `app/api/hooks/route.ts`,
+`app/api/campaigns/analyze-url/route.ts`) skips the webhook/Realtime half of
+the pattern above, but still needs a **real `creative_jobs` row**, not just
+a `debitCredits()` call — `refund_credits()` (`db/migrations/0005`) looks up
+`credits_charged` by job id to know how much to reverse on failure, and
+`creative_jobs.campaign_id` is `NOT NULL`. (`credit_transactions.job_id`
+itself has no enforced FK — confirmed live, despite a stale comment in
+`db/schema.ts` — so nothing stops you from skipping the job row, but doing
+so silently breaks refund-on-failure.) If the action runs before any real
+campaign exists yet (as `analyze-url` does), create a lightweight campaign
+row to hang the job off rather than skipping this — see that route for the
+pattern: debit → insert `creative_jobs` (queued) → do the work → mark
+completed/failed → `refundCredits(jobId)` on failure.

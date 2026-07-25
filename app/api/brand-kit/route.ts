@@ -22,6 +22,10 @@ const updateSchema = z.object({
   // which made logo removal a UI-only illusion).
   logo_url: z.string().url().nullable().optional(),
   logo_dark_url: z.string().url().nullable().optional(),
+  // Set when the client applies a "Brand Brain" (analyze-url) proposal —
+  // lets the UI show "imported from example.com" later.
+  source_url: z.string().url().optional(),
+  imported_at: z.string().datetime().optional(),
 });
 
 export async function GET(req: Request) {

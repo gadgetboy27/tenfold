@@ -38,6 +38,11 @@ export const PROVIDER_COST_USD: Record<string, number> = {
   music_generation: 0.02,
   // Anthropic — claude-sonnet-4-6 (~200 in + 100 out tokens typical)
   script_generation: 0.002,
+  // Anthropic — claude-sonnet-4-6, one larger call for "Brand Brain" (full
+  // page text in ~1.5-2k tokens, 4 campaign angles + brand suggestion out
+  // ~1.5k tokens). Estimate, not yet measured against real usage — see
+  // lib/credits/CLAUDE.md before repricing off this alone.
+  brand_import: 0.015,
 } as const;
 
 // Credit value in USD (used for margin calculations in lib/costs/tracker.ts /

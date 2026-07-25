@@ -40,12 +40,9 @@ its own merits, not bundled into a single sweeping change.
 
 The way to stop being "just another AI wrapper":
 
-- **"Brand Brain."** Instead of manual brand-kit setup, let a user drop a
-  website URL or a brand-guide PDF and have an LLM extract hex codes, fonts,
-  tone of voice, and logo assets automatically. (`components/logo/BrandColors.tsx`
-  and the wider Brand Kit are the manual version of this today — Brand Brain
-  would be an alternate, faster on-ramp into the same `brand_kits` row, not a
-  replacement for manual editing.)
+- ~~**"Brand Brain."**~~ — **v1 shipped, 2026-07-26**, see §4 item 6. Website
+  URL → colors/font/campaign brief. PDF ingestion and logo-asset extraction
+  are not built.
 - **Agentic content calendars.** Not "one prompt → one post" but "here's our
   new blog post URL — generate a 2-week calendar: 3 LinkedIn posts, 5 tweets,
   2 TikTok scripts."
@@ -134,7 +131,41 @@ build all of it at once:
 6. **Asset ingestion.** A path to ground generation in an uploaded product
    photo, a URL, or a brand PDF — not just a text prompt. The reference-photo
    upload (`components/studio/ReferencePhotoField.tsx`) is the existing
-   product-photo case; URL/PDF ingestion would be new.
+   product-photo case.
+   - ~~**URL ingestion ("Brand Brain")**~~ — **v1 shipped, 2026-07-26.**
+     `POST /api/campaigns/analyze-url` (extended, not replaced — its only
+     prior caller was dead classic-dashboard code) now: (1) deterministically
+     parses the fetched HTML for brand signals (`lib/claude/brand-scrape.ts`
+     — `theme-color` meta, CSS custom properties, inline hex codes, Google
+     Fonts `<link>` tags mapped to `lib/logo/font-list.ts`'s
+     `SUPPORTED_FONTS`) at zero AI cost; (2) the existing
+     `analyzeCampaignUrl()` Claude call is extended to also produce a
+     `brandSuggestion` (palette + font) used only where detection came back
+     low-confidence — still one Claude call total; (3) proposes writing the
+     result into `brand_kits`, auto-applying only if the kit is still at
+     factory defaults (never silently overwrites a customized kit — the user
+     confirms via a second explicit "Apply to my Brand Kit" call, which
+     reuses `PATCH /api/brand-kit` unchanged); (4) returns 4 campaign angles
+     (unchanged `CampaignBrief` shape) for the user to pick from, wired into
+     a new `components/studio/BrandImportPanel.tsx` in Studio's Brief step —
+     picking an angle just sets its `imagePrompt` as the normal prompt
+     textarea value; `POST /api/campaigns` itself was not touched.
+   - **Gating: no hard tier lock** — available to every tier at a flat
+     8-credit charge (`CREDIT_COSTS.brand_import`, one Claude call; see
+     `lib/costs/rates.ts` for the raw-cost estimate, not yet measured against
+     real usage). The charge is deliberately the whole gate, so a PAYG/Creator
+     workspace can use it once for their own site without a Business
+     subscription; Business/Agency get it as a marketed plan differentiator
+     without a separate technical lock.
+   - Deliberately **not vision/screenshot-based** — nothing like that exists
+     elsewhere in the codebase, and a site's real hex codes/font names are
+     almost always sitting in its HTML/CSS in plain text, cheaper and more
+     accurate to parse directly than to ask a vision model to guess from a
+     rendered screenshot.
+   - **Not built**: PDF ingestion, and feeding the detected `voice_profile`/
+     brand-voice pipeline (`lib/claude/brand-voice.ts`, separate, untouched)
+     from the scraped page text — a natural next increment, not needed to
+     hit "matching fonts and style."
 
 ## 5. Pros / cons snapshot
 

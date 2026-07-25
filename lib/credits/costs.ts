@@ -32,6 +32,11 @@ export const CREDIT_COSTS = {
   music_generation: 8,
   script_generation: 1,
   layout_autofix: 3,
+  // "Brand Brain" (PRODUCT_STRATEGY.md §3/§4.6, 2026-07-26): one Claude call
+  // analyzing a pasted URL into a campaign brief + brand palette/font
+  // suggestion. Available to every tier — the flat charge is the gate, not a
+  // tier lock (see app/api/campaigns/analyze-url/route.ts).
+  brand_import: 8,
   // ── Image Compositing (lib/compositing/). All async via the fal webhook
   // pipeline except the Sharp-only mechanical blends (0 credits, no fal call).
   composite_cutout: 1, // fal-ai/birefnet/v2 (~$0.02 raw) — reuses bg_remove's engine

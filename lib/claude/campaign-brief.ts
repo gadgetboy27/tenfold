@@ -1,11 +1,19 @@
-import Anthropic from '@anthropic-ai/sdk';
+import Anthropic from "@anthropic-ai/sdk";
+import { SUPPORTED_FONTS, type SupportedFont } from "@/lib/logo/font-list";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+export interface BrandSuggestion {
+  primaryColor: string;
+  secondaryColor: string;
+  accentColor: string;
+  fontFamily: SupportedFont;
+}
 
 export interface CampaignAngle {
   id: string;
   title: string;
-  goal: 'awareness' | 'conversion' | 'engagement' | 'retention';
+  goal: "awareness" | "conversion" | "engagement" | "retention";
   strategy: string;
   keyMessage: string;
   visualStyle: string;
@@ -23,6 +31,14 @@ export interface CampaignBrief {
   campaignAngles: CampaignAngle[];
   suggestedQuestions: string[];
   recommendedPlatforms: string[];
+  /**
+   * Always present — a plausible brand palette/font guess. The caller
+   * (app/api/campaigns/analyze-url/route.ts) only USES this when
+   * lib/claude/brand-scrape.ts's deterministic detection came back
+   * low-confidence; asking for it unconditionally in this same call keeps
+   * the whole "Brand Brain" action at one Claude call, not two.
+   */
+  brandSuggestion: BrandSuggestion;
 }
 
 export interface PageContent {
@@ -33,28 +49,49 @@ export interface PageContent {
   ogImage?: string;
 }
 
+const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+
+function coerceHex(value: unknown, fallback: string): string {
+  return typeof value === "string" && HEX_RE.test(value) ? value : fallback;
+}
+
+// Defensive parse — mirrors lib/logo/fonts.ts's coerceFont: never trust the
+// model to stay inside the constrained font list or return valid hex.
+function coerceBrandSuggestion(value: unknown): BrandSuggestion {
+  const v = (value ?? {}) as Partial<Record<keyof BrandSuggestion, unknown>>;
+  const fontFamily = SUPPORTED_FONTS.includes(v.fontFamily as SupportedFont)
+    ? (v.fontFamily as SupportedFont)
+    : "Inter";
+  return {
+    primaryColor: coerceHex(v.primaryColor, "#6366f1"),
+    secondaryColor: coerceHex(v.secondaryColor, "#8b5cf6"),
+    accentColor: coerceHex(v.accentColor, "#f59e0b"),
+    fontFamily,
+  };
+}
+
 export async function analyzeCampaignUrl(
   url: string,
   page: PageContent,
   userNotes: string,
 ): Promise<CampaignBrief> {
-  const headingStr = page.headings.slice(0, 12).join(' · ');
+  const headingStr = page.headings.slice(0, 12).join(" · ");
   const notesSection = userNotes.trim()
     ? `\n\nAdditional context from the client: "${userNotes.trim()}"`
-    : '';
+    : "";
 
   const message = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: "claude-sonnet-4-6",
     max_tokens: 2048,
     messages: [
       {
-        role: 'user',
+        role: "user",
         content: `You are a senior marketing strategist with expertise in digital advertising, brand positioning, and social media campaigns. Analyze this website and produce a comprehensive marketing campaign brief.
 
 Website URL: ${url}
 Page title: ${page.title}
 Meta description: ${page.description}
-Key headings found: ${headingStr || 'none'}
+Key headings found: ${headingStr || "none"}
 Page content excerpt:
 ---
 ${page.bodyText.slice(0, 2500)}
@@ -87,20 +124,30 @@ Return ONLY valid JSON with no extra text, markdown or code blocks:
     "Is there a specific geography or demographic segment to prioritise?",
     "What budget level are you working with — startup, growth, or enterprise scale?"
   ],
-  "recommendedPlatforms": ["instagram", "linkedin"]
+  "recommendedPlatforms": ["instagram", "linkedin"],
+  "brandSuggestion": {
+    "primaryColor": "#hex — a plausible brand primary color for this business, based on its industry/tone",
+    "secondaryColor": "#hex",
+    "accentColor": "#hex",
+    "fontFamily": "one of: ${SUPPORTED_FONTS.join(", ")} — whichever best fits the brand's tone"
+  }
 }
 
-Provide exactly 4 campaign angles covering different goals: awareness, conversion, engagement, and one wild-card creative angle suited to this specific brand. Each imagePrompt must be visually specific and different — not generic stock-photo descriptions. Think like a creative director.`,
+Provide exactly 4 campaign angles covering different goals: awareness, conversion, engagement, and one wild-card creative angle suited to this specific brand. Each imagePrompt must be visually specific and different — not generic stock-photo descriptions. Think like a creative director. brandSuggestion is always required — a best-guess brand palette/font is more useful than nothing, even from your reasoning alone.`,
       },
     ],
   });
 
   const block = message.content[0];
-  if (block.type !== 'text') throw new Error('No response from Claude');
+  if (block.type !== "text") throw new Error("No response from Claude");
 
   const match = block.text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('Could not parse brief from Claude response');
+  if (!match) throw new Error("Could not parse brief from Claude response");
 
-  const parsed = JSON.parse(match[0]) as Omit<CampaignBrief, 'url'>;
-  return { ...parsed, url };
+  const parsed = JSON.parse(match[0]) as Omit<CampaignBrief, "url">;
+  return {
+    ...parsed,
+    url,
+    brandSuggestion: coerceBrandSuggestion(parsed.brandSuggestion),
+  };
 }

@@ -40,6 +40,7 @@ import { LogoStudio } from "@/components/logo/LogoStudio";
 import { CompositorCanvas } from "@/components/studio/CompositorCanvas";
 import { PublishCanvas } from "@/components/studio/PublishCanvas";
 import { ReferencePhotoField } from "@/components/studio/ReferencePhotoField";
+import { BrandImportPanel } from "@/components/studio/BrandImportPanel";
 import { useEntitlements } from "@/lib/billing/useEntitlements";
 import { randomCampaignName } from "@/lib/util/campaign-name";
 import { MUSIC_GENRES } from "@/lib/fal/prompts";
@@ -224,7 +225,9 @@ export function Studio({
   useEffect(() => {
     api("/api/campaigns", { workspaceSlug })
       .then((r) => (r.ok ? r.json() : []))
-      .then((d: unknown[]) => setHasGalleryItems(Array.isArray(d) && d.length > 0))
+      .then((d: unknown[]) =>
+        setHasGalleryItems(Array.isArray(d) && d.length > 0),
+      )
       .catch(() => {});
   }, [workspaceSlug]);
 
@@ -867,6 +870,7 @@ export function Studio({
               tools={tools}
               section={section}
               setSection={setSection}
+              workspaceSlug={workspaceSlug}
               prompt={prompt}
               setPrompt={setPrompt}
               variety={variety}
@@ -930,6 +934,7 @@ function CockpitCreate({
   tools,
   section,
   setSection,
+  workspaceSlug,
   prompt,
   setPrompt,
   variety,
@@ -974,6 +979,7 @@ function CockpitCreate({
   }[];
   section: SectionId;
   setSection: (s: SectionId) => void;
+  workspaceSlug: string;
   prompt: string;
   setPrompt: (v: string) => void;
   variety: boolean;
@@ -1009,6 +1015,7 @@ function CockpitCreate({
 }) {
   const isCreate = section === "brief" || section === "images";
   const isVideo = section === "video";
+  const [createMode, setCreateMode] = useState<"prompt" | "website">("prompt");
   const hasResult = generating || assets.length > 0;
   const activeTool = tools.find((t) => t.id === section);
   const next: {
@@ -1093,81 +1100,110 @@ function CockpitCreate({
 
         {isCreate ? (
           <div className="flex min-h-0 flex-1 flex-col gap-3">
-            {/* Room above the prompt for effects/other controls as they land
+            <div className="flex overflow-hidden rounded-md border border-border">
+              <button
+                type="button"
+                onClick={() => setCreateMode("prompt")}
+                className={`flex flex-1 items-center justify-center gap-1 px-2 py-1.5 text-xs ${createMode === "prompt" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                Write a prompt
+              </button>
+              <button
+                type="button"
+                onClick={() => setCreateMode("website")}
+                className={`flex flex-1 items-center justify-center gap-1 border-l border-border px-2 py-1.5 text-xs ${createMode === "website" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                Import from website
+              </button>
+            </div>
+
+            {createMode === "website" ? (
+              <BrandImportPanel
+                workspaceSlug={workspaceSlug}
+                onApplyPrompt={(p) => {
+                  setPrompt(p);
+                  setCreateMode("prompt");
+                }}
+              />
+            ) : (
+              <>
+                {/* Room above the prompt for effects/other controls as they land
                 here — the prompt + Generate stay pinned to the bottom. */}
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setVariety(!variety)}
-                disabled={!!referenceUrl}
-                title={
-                  referenceUrl
-                    ? "Variety is off while a reference photo drives generation"
-                    : undefined
-                }
-                className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-40 ${
-                  variety && !referenceUrl
-                    ? "border-primary/40 bg-primary/15 text-primary"
-                    : "border-border text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <Sparkles className="h-3 w-3" /> Variety pack
-              </button>
-              <span className="text-[11px] text-muted-foreground/70">
-                {referenceUrl
-                  ? "12 credits · features your photo"
-                  : variety
-                    ? "20 credits"
-                    : "12 credits"}
-              </span>
-            </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setVariety(!variety)}
+                    disabled={!!referenceUrl}
+                    title={
+                      referenceUrl
+                        ? "Variety is off while a reference photo drives generation"
+                        : undefined
+                    }
+                    className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-40 ${
+                      variety && !referenceUrl
+                        ? "border-primary/40 bg-primary/15 text-primary"
+                        : "border-border text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Sparkles className="h-3 w-3" /> Variety pack
+                  </button>
+                  <span className="text-[11px] text-muted-foreground/70">
+                    {referenceUrl
+                      ? "12 credits · features your photo"
+                      : variety
+                        ? "20 credits"
+                        : "12 credits"}
+                  </span>
+                </div>
 
-            <div className="mt-auto flex flex-col gap-2">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                  Prompt
-                </label>
-                <textarea
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  onKeyDown={(e) => {
-                    if ((e.metaKey || e.ctrlKey) && e.key === "Enter")
-                      onGenerate();
-                  }}
-                  rows={4}
-                  placeholder="A coffee roastery overlooking the bay at golden hour, steam rising off fresh beans…"
-                  className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary/50"
-                />
-              </div>
+                <div className="mt-auto flex flex-col gap-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                      Prompt
+                    </label>
+                    <textarea
+                      value={prompt}
+                      onChange={(e) => setPrompt(e.target.value)}
+                      onKeyDown={(e) => {
+                        if ((e.metaKey || e.ctrlKey) && e.key === "Enter")
+                          onGenerate();
+                      }}
+                      rows={4}
+                      placeholder="A coffee roastery overlooking the bay at golden hour, steam rising off fresh beans…"
+                      className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary/50"
+                    />
+                  </div>
 
-              <button
-                type="button"
-                onClick={onGenerate}
-                disabled={prompt.trim().length < 3 || generating}
-                className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-opacity disabled:opacity-40"
-              >
-                {generating ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" /> Generating
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-4 w-4" /> Generate
-                    <span className="ml-1 rounded border border-white/25 px-1 text-[10px]">
-                      ⌘↵
-                    </span>
-                  </>
-                )}
-              </button>
+                  <button
+                    type="button"
+                    onClick={onGenerate}
+                    disabled={prompt.trim().length < 3 || generating}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-opacity disabled:opacity-40"
+                  >
+                    {generating ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" /> Generating
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4" /> Generate
+                        <span className="ml-1 rounded border border-white/25 px-1 text-[10px]">
+                          ⌘↵
+                        </span>
+                      </>
+                    )}
+                  </button>
 
-              <button
-                type="button"
-                onClick={onReset}
-                className="text-xs text-muted-foreground transition-colors hover:text-foreground"
-              >
-                Reset
-              </button>
-            </div>
+                  <button
+                    type="button"
+                    onClick={onReset}
+                    className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    Reset
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         ) : isVideo ? (
           <div className="flex min-h-0 flex-1 flex-col gap-4">
@@ -1942,7 +1978,9 @@ function ProjectsCanvas({
       );
       loadStyles();
     } catch (err) {
-      toast.error((err as Error).message ?? "Couldn't refresh performance data");
+      toast.error(
+        (err as Error).message ?? "Couldn't refresh performance data",
+      );
     } finally {
       setRefreshingAnalytics(false);
     }
@@ -2175,72 +2213,72 @@ function ProjectsCanvas({
         )
       ) : tab === "images" ? (
         imagesLoading ? (
-        <div className="flex flex-1 items-center justify-center">
-          <Spinner size={40} />
-        </div>
-      ) : images.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center text-muted-foreground">
-          <ImagesIcon className="h-8 w-8 opacity-40" />
-          <p className="text-sm">
-            No images yet — generate a project and they&apos;ll be saved here.
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {images.map((a) => (
-            <div
-              key={a.id}
-              className="group relative aspect-square overflow-hidden rounded-xl border border-border bg-card"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={a.url}
-                alt={a.metadata?.direction ?? "Generated image"}
-                loading="lazy"
-                className="h-full w-full object-cover"
-              />
-              {a.metadata?.direction && (
-                <span className="absolute left-2 top-2 rounded-full bg-black/55 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-white backdrop-blur-sm">
-                  {a.metadata.direction}
-                </span>
-              )}
-              <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1.5 bg-gradient-to-t from-black/70 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
-                <button
-                  type="button"
-                  onClick={() => handleReuse(a.id)}
-                  disabled={reusing === a.id}
-                  title="Start a new project with this image as the anchor — free"
-                  className="flex h-7 items-center gap-1 rounded-full bg-primary px-2 text-[10px] font-semibold text-white disabled:opacity-60"
-                >
-                  {reusing === a.id ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <Anchor className="h-3 w-3" />
-                  )}
-                  Use as anchor
-                </button>
-                <div className="flex gap-1.5">
+          <div className="flex flex-1 items-center justify-center">
+            <Spinner size={40} />
+          </div>
+        ) : images.length === 0 ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center text-muted-foreground">
+            <ImagesIcon className="h-8 w-8 opacity-40" />
+            <p className="text-sm">
+              No images yet — generate a project and they&apos;ll be saved here.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {images.map((a) => (
+              <div
+                key={a.id}
+                className="group relative aspect-square overflow-hidden rounded-xl border border-border bg-card"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={a.url}
+                  alt={a.metadata?.direction ?? "Generated image"}
+                  loading="lazy"
+                  className="h-full w-full object-cover"
+                />
+                {a.metadata?.direction && (
+                  <span className="absolute left-2 top-2 rounded-full bg-black/55 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-white backdrop-blur-sm">
+                    {a.metadata.direction}
+                  </span>
+                )}
+                <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1.5 bg-gradient-to-t from-black/70 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
                   <button
                     type="button"
-                    onClick={() => window.open(a.url, "_blank", "noopener")}
-                    title="View full size"
-                    className="flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-primary"
+                    onClick={() => handleReuse(a.id)}
+                    disabled={reusing === a.id}
+                    title="Start a new project with this image as the anchor — free"
+                    className="flex h-7 items-center gap-1 rounded-full bg-primary px-2 text-[10px] font-semibold text-white disabled:opacity-60"
                   >
-                    <Maximize2 className="h-3.5 w-3.5" />
+                    {reusing === a.id ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Anchor className="h-3 w-3" />
+                    )}
+                    Use as anchor
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => download(a)}
-                    title="Download"
-                    className="flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-primary"
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                  </button>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => window.open(a.url, "_blank", "noopener")}
+                      title="View full size"
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-primary"
+                    >
+                      <Maximize2 className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => download(a)}
+                      title="Download"
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-primary"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
         )
       ) : (
         <div className="flex flex-1 flex-col gap-4">

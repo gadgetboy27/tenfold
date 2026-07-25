@@ -28,6 +28,26 @@ functionality, not a new engine.
 - Tier gating is by capability, not layout: `ent.proEffects` drives the locked
   "AI-Photoshop" effects.
 
+## Brief — `BrandImportPanel`, "Brand Brain" from a URL
+
+`CockpitCreate`'s Brief/Images step has a mode toggle (local `createMode`
+state) alongside the free-text prompt textarea: "Write a prompt" vs. "Import
+from your website". The website mode renders
+`components/studio/BrandImportPanel.tsx`, which posts to the extended
+`POST /api/campaigns/analyze-url` (PRODUCT_STRATEGY.md §4 item 6) and shows a
+brand-kit preview + 4 campaign-angle cards. Picking an angle calls
+`onApplyPrompt(imagePrompt)`, which just does `setPrompt(...)` +
+switches back to "Write a prompt" mode — the normal `onGenerate` /
+`POST /api/campaigns` path is completely unaware this happened.
+
+**Deliberately does not import `lib/claude/campaign-brief.ts` or
+`lib/claude/brand-scrape.ts`** — those touch `@anthropic-ai/sdk` (the former
+constructs an Anthropic client at module scope) and this is a `"use client"`
+component. `BrandImportPanel` declares its own local response-shape
+interfaces instead of importing the server-side ones, by design — see
+`lib/credits/CLAUDE.md` and the 2026-07-25 incident it documents for why
+that boundary matters here specifically.
+
 ## Publish — `PublishCanvas`, ported from the classic dashboard's `Step6Publish`
 
 Was a placeholder until PRODUCT_STRATEGY.md §4's "platform-native defaults"
