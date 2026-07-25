@@ -128,9 +128,11 @@ Never create the `creative_job` row. Never call fal.ai.
 The async job creation pattern (check credits → insert job → enqueue →
 respond) lives in `app/api/CLAUDE.md`.
 
-The flat 10× markup is under strategic review — see `PRODUCT_STRATEGY.md` §4
-for the hybrid-pricing alternative being considered. Not yet decided; don't
-change `CREDIT_COSTS` or any Stripe price off this note alone.
+Markup is deliberately uneven, not flat — see `PRODUCT_STRATEGY.md` §4.4 for
+the 2026-07-25 margin-banded repricing (raw cost per type lives in
+`lib/costs/rates.ts`, real-time margin at `/api/analytics/usage`). Any
+further `CREDIT_COSTS` change should be checked against real
+`actual_cost_usd` data first, not assumed.
 
 ---
 

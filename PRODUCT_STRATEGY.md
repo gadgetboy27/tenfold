@@ -85,13 +85,41 @@ build all of it at once:
    Model Adoption Gate exists to prevent one layer down. Also doesn't
    abstract webhook ingestion (still fal-specific per caller) — stated
    plainly in `lib/fal/CLAUDE.md` rather than implied to be covered.
-4. **Rethink the 10× markup.** Consider a hybrid: a higher base subscription
-   for the workflow/storage/publishing value, with AI generation passed
-   through at closer to 1.5–2× rather than 10×. Feels fairer, reduces churn
-   pressure as underlying model costs keep dropping. This is a pricing/
-   business decision, not an engineering one — flagging it here, not
-   changing `lib/credits/costs.ts` or any Stripe price without a deliberate
-   separate call on it.
+4. ~~**Rethink the 10× markup.**~~ — **v1 shipped, 2026-07-25.** The premise
+   going in ("soften a flat 10× uniformly") turned out to be backwards once
+   measured against real data (`lib/costs/rates.ts` raw costs vs.
+   `creative_jobs.actual_cost_usd`, live since the fal webhook handler wires
+   `recordJobCost`): the markup was never flat. It ranged from real losses
+   on four Logo Studio ops (0.46×–0.77× — `logo_finalize`/`logo_concepts`/
+   `logo_refine`/`logo_mockups`) up to 18–23× on cheap text ops
+   (`script_generation`, `hook_variants`, `music_generation`), while the
+   highest-volume, most compute-heavy category — video — sat thin at
+   1.2–1.6×. A uniform cut to 1.5–2× would have pushed video into losses,
+   the opposite of the goal.
+   - **Repriced (Bands 1 & 4, both to 3.0× raw cost):** `logo_concepts`
+     5→32, `logo_finalize` 3→20, `logo_refine` 1→5, `logo_mockups` 2→8,
+     `video_10s` 25→62, `video_15s` 40→94, `video_30s` 100→187
+     (`lib/credits/costs.ts`). `lib/billing/credit-levels.ts`'s
+     `CREDIT_LOW`/`CREDIT_WARNING` thresholds were re-anchored (50→70,
+     150→200) since they're explicitly denominated against `video_30s`'s
+     cost.
+   - **Bands 2 & 3 (cash cows / healthy core) left untouched** — no
+     evidence they need correction; touching already-fine or
+     already-overpriced-in-the-user's-favor items wasn't part of this pass.
+   - **Also fixed:** `lib/costs/rates.ts`'s `CREDIT_VALUE_USD`
+     (0.10 → 0.046) and `NZD_USD_RATE` (0.61 → 0.58) were stale — the old
+     0.10 implied NZD 0.17/credit, roughly double every real Stripe plan's
+     actual yield (Business, the cheapest tier, is NZD 0.079/credit), which
+     meant `/api/analytics/usage`'s live margin dashboard was overstating
+     margin ~2× on every job type. Pure correctness fix, independent of the
+     repricing decision above.
+   - **Confirmed against the live Stripe product catalogue**: all
+     subscription and credit-pack prices are genuinely billed in NZD (not
+     just the `priceNzd` field name) — verified directly in the Stripe
+     dashboard before doing any of this analysis.
+   - Subscription prices (`lib/billing/plans.ts`) and credit-pack prices
+     were **not** touched — this was a `CREDIT_COSTS` rebalance only, no
+     Stripe product/price changes.
 5. ~~**Enforce platform-native defaults.**~~ — **v1 shipped.** Turned out
    aspect (`PLATFORM_FORMATS`) and caption tone/hashtag count
    (`PLATFORM_GUIDE` / `adaptCaptions`) already existed — they just weren't
@@ -118,12 +146,11 @@ a cohesive brand identity.
 **Cons:** the core value prop ("prompt to multi-platform content") is
 trending toward commodity; high exposure to third-party API pricing/
 availability; analytics doesn't feed back into generation yet (reports
-performance, doesn't act on it); the 10× markup may drive churn as
-underlying AI costs keep falling.
+performance, doesn't act on it).
 
-**Bottom line:** the architecture is ready to win. Analytics (§4.1) and the
-approval state machine (§4.2) are now v1-shipped, moving the product story
-from "we can generate things" toward "we make your marketing measurably
-better and safer." What's left to make that claim fully true: closing the
-analytics feedback loop, and rethinking the pricing model (§4.4) so it holds
-up as underlying AI costs keep falling.
+**Bottom line:** the architecture is ready to win. Analytics (§4.1), the
+approval state machine (§4.2), and the margin-banded pricing pass (§4.4)
+are now v1-shipped, moving the product story from "we can generate things"
+toward "we make your marketing measurably better and safer." What's left to
+make that claim fully true: closing the analytics feedback loop (§4.1) and
+asset ingestion (§4.6).

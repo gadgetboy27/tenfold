@@ -40,9 +40,15 @@ export const PROVIDER_COST_USD: Record<string, number> = {
   script_generation: 0.002,
 } as const;
 
-// Credit pack value in USD (used for margin calculations)
-// 1 credit ≈ NZD 0.17 ≈ USD 0.10 at 1.65 exchange rate
-export const CREDIT_VALUE_USD = 0.1;
+// Credit value in USD (used for margin calculations in lib/costs/tracker.ts /
+// /api/analytics/usage). Corrected 2026-07-25 (PRODUCT_STRATEGY.md §4 pricing
+// rework) — was NZD 0.17/credit, roughly double every actual Stripe plan's
+// real yield (lib/billing/plans.ts: Business $79/1000cr = NZD 0.079/credit,
+// the cheapest — i.e. worst-case — tier), which meant this dashboard was
+// overstating margin ~2x on every job type.
+// 1 credit ≈ NZD 0.079 (Business tier) ≈ USD 0.046 at the rate below.
+export const CREDIT_VALUE_USD = 0.046;
 
-// NZD/USD exchange rate — update quarterly
-export const NZD_USD_RATE = 0.61;
+// NZD/USD exchange rate — update quarterly. Corrected 2026-07-25 to the live
+// rate at the time (0.579); was 0.61.
+export const NZD_USD_RATE = 0.58;

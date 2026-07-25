@@ -14,10 +14,15 @@
  * the same time: 75 credits rendered red in one and amber in the other.
  */
 
-/** Below this you cannot afford a 30s video (100) and are two image grids from zero. */
-export const CREDIT_LOW = 50;
+/**
+ * Below this you cannot afford a 30s video (187) and are down to a handful of
+ * image grids. Re-anchored 2026-07-25 alongside the video_30s repricing
+ * (PRODUCT_STRATEGY.md §4 pricing rework, Band 4: 100 → 187) — was 50/150,
+ * kept the same ~1:3 CREDIT_LOW:CREDIT_WARNING ratio.
+ */
+export const CREDIT_LOW = 70;
 /** Below this you are inside the last 30s video's worth of runway. */
-export const CREDIT_WARNING = 150;
+export const CREDIT_WARNING = 200;
 
 export type CreditLevel = "low" | "warning" | "ok";
 
