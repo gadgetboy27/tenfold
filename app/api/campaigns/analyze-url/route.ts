@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { getSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { debitCredits } from "@/lib/credits/debit";
@@ -130,7 +131,10 @@ export async function POST(req: Request) {
           "Accept-Language": "en-US,en;q=0.9",
         },
       });
-      if (!res.ok) throw new Error(`Site returned ${res.status}`);
+      if (!res.ok)
+        throw new Error(
+          `That website couldn't be reached properly (it returned a ${res.status} error) — double-check the URL and try again.`,
+        );
       html = await res.text();
     } finally {
       clearTimeout(timeout);
@@ -183,7 +187,11 @@ export async function POST(req: Request) {
     if (campaignErr || !campaign) {
       // Vanishingly rare (the debit RPC above just succeeded against the
       // same database) — not worth a compensating-transaction path for.
-      throw new Error(campaignErr?.message ?? "Could not start analysis");
+      // Never surface the raw DB error to the user; capture it for us instead.
+      if (campaignErr) Sentry.captureException(new Error(campaignErr.message));
+      throw new Error(
+        "Something went wrong starting the analysis. Please try again.",
+      );
     }
     const campaignId = (campaign as { id: string }).id;
 
@@ -301,6 +309,31 @@ export async function POST(req: Request) {
         { status: 408 },
       );
     }
-    return NextResponse.json({ error: msg }, { status: 500 });
+    // Every message we deliberately throw ourselves in this file / in
+    // lib/claude/campaign-brief.ts is written to be shown to a non-technical
+    // user as-is. Anything else here is an error we didn't anticipate (a raw
+    // exception message, a library internal, etc.) — never show that
+    // verbatim; report it for us to look into and show a plain fallback.
+    const KNOWN_SAFE_MESSAGES = new Set([
+      "Could not extract content from that URL. Try a different page or paste your description manually.",
+      "Something went wrong starting the analysis. Please try again.",
+      "The site analysis didn't return a result — please try again.",
+      "We couldn't read the site analysis properly. Please try again.",
+      "The site analysis was too long to complete — try a shorter/simpler page.",
+    ]);
+    const isSafe =
+      KNOWN_SAFE_MESSAGES.has(msg) ||
+      /^That website couldn't be reached properly/.test(msg);
+    if (!isSafe) {
+      Sentry.captureException(err);
+    }
+    return NextResponse.json(
+      {
+        error: isSafe
+          ? msg
+          : "Something went wrong analyzing this site. Please try again — if it keeps happening, let us know.",
+      },
+      { status: 500 },
+    );
   }
 }

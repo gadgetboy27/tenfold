@@ -211,6 +211,31 @@ left. Not prioritized against each other; pick per business need.
    trimming anything — deliberately not rushed into the file-deletion pass
    since a shared, actively-used state file is a different risk class than
    deleting whole zero-importer files.
+8. **Error observability — daily digest / admin view of what's breaking.**
+   Requested 2026-07-26, explicitly deferred to "later." What's real today:
+   Sentry is configured (`NEXT_PUBLIC_SENTRY_DSN` set, `instrumentation.ts`
+   wired) and captures uncaught client-side errors (`app/global-error.tsx`)
+   and uncaught server exceptions (`onRequestError`). **What's NOT real yet,
+   found while fixing the analyze-url errors above**: no API route
+   explicitly reports its *caught* errors to Sentry — every route follows
+   the catch-it-and-return-a-JSON-response pattern, which means Next.js's
+   `onRequestError` never fires for them (it only sees errors that
+   propagate unhandled). `app/api/campaigns/analyze-url/route.ts` now calls
+   `Sentry.captureException()` on unexpected errors as a first example of
+   the pattern to follow — the rest of `app/api/**` doesn't yet.
+   - **Before building anything new**: rolling `Sentry.captureException`
+     out to the rest of the API routes is the actual prerequisite — without
+     it, a daily digest or dashboard has nothing to show from the server
+     side, regardless of which option below is chosen.
+   - **Option A (recommended first): use Sentry's own tooling.** Sentry
+     already has email alert rules and a full issues dashboard built in —
+     once routes are actually reporting to it, this may need zero new code,
+     just alert-rule configuration in the Sentry project itself.
+   - **Option B: a custom in-app admin page.** Only worth it if Option A's
+     dashboard genuinely isn't a fit (e.g. wanting it inside tenfold.nz
+     itself, alongside workspace data). Would need either querying Sentry's
+     API server-side, or a dedicated error-log table — a real, separate
+     feature to scope properly, not a rushed addition to a bug-fix pass.
 
 ## 6. Pros / cons snapshot
 

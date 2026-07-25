@@ -154,16 +154,24 @@ Provide exactly 4 campaign angles covering different goals: awareness, conversio
   }
 
   const block = message.content[0];
-  if (block.type !== "text") throw new Error("No response from Claude");
+  if (block.type !== "text")
+    throw new Error(
+      "The site analysis didn't return a result — please try again.",
+    );
 
   const match = block.text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error("Could not parse brief from Claude response");
+  if (!match)
+    throw new Error(
+      "We couldn't read the site analysis properly. Please try again.",
+    );
 
   let parsed: Omit<CampaignBrief, "url">;
   try {
     parsed = JSON.parse(match[0]) as Omit<CampaignBrief, "url">;
   } catch {
-    throw new Error("Could not parse brief from Claude response");
+    throw new Error(
+      "We couldn't read the site analysis properly. Please try again.",
+    );
   }
   return {
     ...parsed,
