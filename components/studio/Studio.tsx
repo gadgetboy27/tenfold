@@ -17,6 +17,7 @@ import {
   Check,
   Loader2,
   ArrowRight,
+  ArrowLeft,
   Share2,
   Crown,
   Scissors,
@@ -74,6 +75,21 @@ type SectionId =
   | "compositor"
   | "logo"
   | "publish";
+
+// Human-readable label for the Gallery's "Back to X" button — keyed
+// separately from the nav `tools` array since "brief" is repurposed there
+// as a second Gallery shortcut, not a real destination.
+const SECTION_LABELS: Record<SectionId, string> = {
+  projects: "Gallery",
+  brief: "Images",
+  images: "Images",
+  video: "Video",
+  music: "Music",
+  caption: "Caption",
+  compositor: "Compositor",
+  logo: "Logo & brand",
+  publish: "Publish",
+};
 
 interface ProjectSummary {
   id: string;
@@ -169,8 +185,16 @@ export function Studio({
   const [compositorInitialOp, setCompositorInitialOp] = useState<
     "inpaint" | "blend" | null
   >(null);
+  // Remembers whatever real work section (never "projects" itself) the user
+  // was on before stepping into the Gallery, so the Gallery can offer an
+  // explicit "Back to X" — the persistent nav rail already lets you click
+  // anywhere, but Gallery is the one screen someone lands on by clicking the
+  // logo/Gallery shortcut without necessarily registering the rail as "back".
+  const [lastWorkSection, setLastWorkSection] =
+    useState<SectionId>("images");
   const setSection = (s: SectionId) => {
     if (s !== "compositor") setCompositorInitialOp(null);
+    if (section !== "projects" && section !== s) setLastWorkSection(section);
     setSectionRaw(s);
   };
   // Pre-fill a friendly random project name; the user can keep it, clear it, or
@@ -878,6 +902,9 @@ export function Studio({
                   onOpen={openProject}
                   onNew={newProject}
                   onReuseImage={reuseGalleryImage}
+                  hasActiveProject={!!campaignId}
+                  backLabel={SECTION_LABELS[lastWorkSection]}
+                  onBack={() => setSection(lastWorkSection)}
                 />
               ) : section === "music" ? (
                 <MusicCanvas
@@ -2045,11 +2072,19 @@ function ProjectsCanvas({
   onOpen,
   onNew,
   onReuseImage,
+  hasActiveProject,
+  backLabel,
+  onBack,
 }: {
   workspaceSlug: string;
   onOpen: (id: string, goto?: SectionId) => void;
   onNew: () => void;
   onReuseImage: (assetId: string) => void;
+  /** Whether there's an in-progress project to resume — hides the Back
+   *  button entirely when the Gallery is the first thing you've seen. */
+  hasActiveProject: boolean;
+  backLabel: string;
+  onBack: () => void;
 }) {
   const [tab, setTab] = useState<"projects" | "images" | "performance">(
     "projects",
@@ -2181,6 +2216,15 @@ function ProjectsCanvas({
     <div className="mx-auto flex h-full max-w-5xl flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
+          {hasActiveProject && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="mb-1.5 inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" /> Back to {backLabel}
+            </button>
+          )}
           <h1 className="text-xl font-semibold tracking-tight">Gallery</h1>
           <p className="text-sm text-muted-foreground">
             Pick up a past project, publish one that&apos;s ready, or start
