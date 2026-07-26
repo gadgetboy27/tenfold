@@ -46,6 +46,7 @@ import {
   type CampaignAngle,
 } from "@/components/studio/BrandImportPanel";
 import { BrandAnalysisResults } from "@/components/studio/BrandAnalysisResults";
+import { CaptionCanvas } from "@/components/studio/CaptionCanvas";
 import { useEntitlements } from "@/lib/billing/useEntitlements";
 import { randomCampaignName } from "@/lib/util/campaign-name";
 import { MUSIC_GENRES } from "@/lib/fal/prompts";
@@ -199,6 +200,12 @@ export function Studio({
   const [videoDuration, setVideoDuration] = useState<10 | 15 | 30>(10);
   const [videoStyle, setVideoStyle] =
     useState<(typeof VIDEO_STYLES)[number]>("Cinematic");
+  // Creative-direction prompt — same variationDirection plumbing as music
+  // (see musicDirection above); app/api/jobs/route.ts's buildFalInput
+  // already folds this into the composed video prompt (durationBrief +
+  // styleBrief + variationDir) — until now nothing but style/duration
+  // presets ever reached it, since body.params.prompt is always sent empty.
+  const [videoDirection, setVideoDirection] = useState("");
   const [videoGenerating, setVideoGenerating] = useState(false);
   const [videoStage, setVideoStage] = useState("");
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -208,6 +215,10 @@ export function Studio({
   const [musicGenre, setMusicGenre] = useState<string>(MUSIC_GENRES[0]);
   const [musicModel, setMusicModel] = useState<string>(MUSIC_MODELS[0].id);
   const [musicLyrics, setMusicLyrics] = useState("");
+  // Creative-direction prompt — reuses variationDirection, plumbing that
+  // already existed server-side (app/api/jobs/route.ts's buildFalInput)
+  // but was never surfaced in any UI until now.
+  const [musicDirection, setMusicDirection] = useState("");
   const [musicGenerating, setMusicGenerating] = useState(false);
   const [musicStage, setMusicStage] = useState("");
   const [musicUrl, setMusicUrl] = useState<string | null>(null);
@@ -551,6 +562,9 @@ export function Studio({
             imageUrl: enhancedUrl ?? anchor.url,
             prompt: "",
             videoStyle,
+            ...(videoDirection.trim()
+              ? { variationDirection: videoDirection.trim() }
+              : {}),
           },
         }),
         workspaceSlug,
@@ -611,6 +625,9 @@ export function Studio({
             durationSec: videoDuration,
             ...(isVocals && musicLyrics.trim()
               ? { lyrics: musicLyrics.trim() }
+              : {}),
+            ...(musicDirection.trim()
+              ? { variationDirection: musicDirection.trim() }
               : {}),
           },
         }),
@@ -845,111 +862,133 @@ export function Studio({
         </header>
 
         <main className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
-          {section === "projects" ? (
-            <ProjectsCanvas
-              workspaceSlug={workspaceSlug}
-              onOpen={openProject}
-              onNew={newProject}
-              onReuseImage={reuseGalleryImage}
-            />
-          ) : section === "music" ? (
-            <MusicCanvas
-              genre={musicGenre}
-              setGenre={setMusicGenre}
-              model={musicModel}
-              setModel={setMusicModel}
-              lyrics={musicLyrics}
-              setLyrics={setMusicLyrics}
-              durationSec={videoDuration}
-              hasVideo={!!videoUrl}
-              generating={musicGenerating}
-              stage={musicStage}
-              url={musicUrl}
-              onGenerate={generateMusic}
-              onBack={() => setSection("video")}
-              onContinue={() => setSection("compositor")}
-            />
-          ) : section === "logo" && logoEnabled ? (
-            // The full world-class Logo & Brand studio, delivered into the big
-            // canvas — its own multi-phase flow (brief → concepts → refine →
-            // vectorize → brand kit), same engine as the classic page.
-            <div className="mx-auto h-full max-w-5xl">
-              <LogoStudio />
-            </div>
-          ) : section === "compositor" && campaignId && workingImage ? (
-            // Each compositing op (cutout/inpaint/relight/blend) becomes a real,
-            // lockable layer in the SAME layer system the classic Compositor
-            // uses — reused, not forked.
-            <CompositorCanvas
-              workspaceSlug={workspaceSlug}
-              campaignId={campaignId}
-              anchorUrl={workingImage}
-              classicHref={`/${workspaceSlug}/compositor?campaign=${campaignId}`}
-              initialOp={compositorInitialOp}
-            />
-          ) : section === "publish" ? (
-            <PublishCanvas
-              workspaceSlug={workspaceSlug}
-              campaignId={campaignId}
-              anchorId={anchorId}
-              workingImage={workingImage}
-              videoUrl={videoUrl}
-            />
-          ) : (
-            <CockpitCreate
+          <div className="flex h-full min-h-0 gap-4">
+            <StudioNav
               tools={tools}
               section={section}
               setSection={setSection}
-              workspaceSlug={workspaceSlug}
-              createMode={createMode}
-              setCreateMode={setCreateMode}
-              websiteAnalysis={websiteAnalysis}
-              onWebsiteAnalysis={setWebsiteAnalysis}
-              onChooseWebsiteAngle={chooseWebsiteAngle}
-              prompt={prompt}
-              setPrompt={setPrompt}
-              variety={variety}
-              setVariety={setVariety}
-              onGenerate={generate}
-              onReset={() => {
-                setPrompt("");
-                setAssets([]);
-                setAnchorId(null);
-                setVideoUrl(null);
-                setMusicUrl(null);
-                setReferenceUrl(null);
-                setCampaignName(randomCampaignName());
-                setSection("brief");
-              }}
-              referenceUrl={referenceUrl}
-              refUploading={refUploading}
-              onUploadReference={uploadReference}
-              onClearReference={() => setReferenceUrl(null)}
-              generating={generating}
-              stage={stage}
-              assets={assets}
               anchorId={anchorId}
-              onPick={pickAnchor}
-              videoDuration={videoDuration}
-              setVideoDuration={setVideoDuration}
-              videoStyle={videoStyle}
-              setVideoStyle={setVideoStyle}
-              videoGenerating={videoGenerating}
-              videoStage={videoStage}
               videoUrl={videoUrl}
-              onGenerateVideo={generateVideo}
-              workingImage={workingImage}
               publishReady={publishReady}
-              allowedEffects={ent?.proEffects ?? []}
-              onUpgrade={() => setShowUpgrade(true)}
-              bgBusy={bgBusy}
-              onRemoveBg={removeBg}
-              onOpenCompositorOp={(op) => {
-                setCompositorInitialOp(op);
-                setSection("compositor");
-              }}
             />
-          )}
+            <div className="min-w-0 flex-1">
+              {section === "projects" ? (
+                <ProjectsCanvas
+                  workspaceSlug={workspaceSlug}
+                  onOpen={openProject}
+                  onNew={newProject}
+                  onReuseImage={reuseGalleryImage}
+                />
+              ) : section === "music" ? (
+                <MusicCanvas
+                  genre={musicGenre}
+                  setGenre={setMusicGenre}
+                  model={musicModel}
+                  setModel={setMusicModel}
+                  lyrics={musicLyrics}
+                  setLyrics={setMusicLyrics}
+                  direction={musicDirection}
+                  setDirection={setMusicDirection}
+                  durationSec={videoDuration}
+                  hasVideo={!!videoUrl}
+                  generating={musicGenerating}
+                  stage={musicStage}
+                  url={musicUrl}
+                  onGenerate={generateMusic}
+                  onBack={() => setSection("video")}
+                  onContinue={() => setSection("compositor")}
+                />
+              ) : section === "caption" ? (
+                <CaptionCanvas
+                  workspaceSlug={workspaceSlug}
+                  campaignId={campaignId}
+                  campaignName={campaignName}
+                  initialTopic={prompt}
+                />
+              ) : section === "logo" && logoEnabled ? (
+                // The full world-class Logo & Brand studio, delivered into the big
+                // canvas — its own multi-phase flow (brief → concepts → refine →
+                // vectorize → brand kit), same engine as the classic page.
+                <div className="mx-auto h-full max-w-5xl">
+                  <LogoStudio />
+                </div>
+              ) : section === "compositor" && campaignId && workingImage ? (
+                // Each compositing op (cutout/inpaint/relight/blend) becomes a real,
+                // lockable layer in the SAME layer system the classic Compositor
+                // uses — reused, not forked.
+                <CompositorCanvas
+                  workspaceSlug={workspaceSlug}
+                  campaignId={campaignId}
+                  anchorUrl={workingImage}
+                  classicHref={`/${workspaceSlug}/compositor?campaign=${campaignId}`}
+                  initialOp={compositorInitialOp}
+                />
+              ) : section === "publish" ? (
+                <PublishCanvas
+                  workspaceSlug={workspaceSlug}
+                  campaignId={campaignId}
+                  anchorId={anchorId}
+                  workingImage={workingImage}
+                  videoUrl={videoUrl}
+                />
+              ) : (
+                <CockpitCreate
+                  tools={tools}
+                  section={section}
+                  setSection={setSection}
+                  workspaceSlug={workspaceSlug}
+                  createMode={createMode}
+                  setCreateMode={setCreateMode}
+                  websiteAnalysis={websiteAnalysis}
+                  onWebsiteAnalysis={setWebsiteAnalysis}
+                  onChooseWebsiteAngle={chooseWebsiteAngle}
+                  prompt={prompt}
+                  setPrompt={setPrompt}
+                  variety={variety}
+                  setVariety={setVariety}
+                  onGenerate={generate}
+                  onReset={() => {
+                    setPrompt("");
+                    setAssets([]);
+                    setAnchorId(null);
+                    setVideoUrl(null);
+                    setMusicUrl(null);
+                    setReferenceUrl(null);
+                    setCampaignName(randomCampaignName());
+                    setSection("brief");
+                  }}
+                  referenceUrl={referenceUrl}
+                  refUploading={refUploading}
+                  onUploadReference={uploadReference}
+                  onClearReference={() => setReferenceUrl(null)}
+                  generating={generating}
+                  stage={stage}
+                  assets={assets}
+                  anchorId={anchorId}
+                  onPick={pickAnchor}
+                  videoDuration={videoDuration}
+                  setVideoDuration={setVideoDuration}
+                  videoStyle={videoStyle}
+                  setVideoStyle={setVideoStyle}
+                  videoDirection={videoDirection}
+                  setVideoDirection={setVideoDirection}
+                  videoGenerating={videoGenerating}
+                  videoStage={videoStage}
+                  videoUrl={videoUrl}
+                  onGenerateVideo={generateVideo}
+                  workingImage={workingImage}
+                  allowedEffects={ent?.proEffects ?? []}
+                  onUpgrade={() => setShowUpgrade(true)}
+                  bgBusy={bgBusy}
+                  onRemoveBg={removeBg}
+                  onOpenCompositorOp={(op) => {
+                    setCompositorInitialOp(op);
+                    setSection("compositor");
+                  }}
+                />
+              )}
+            </div>
+          </div>
         </main>
       </div>
 
@@ -963,8 +1002,104 @@ export function Studio({
   );
 }
 
-/* ── Cockpit: a TRUE two-column workspace — no sidebar. Navigation lives at the
-      top of the left input panel; the result sits persistently on the right. ── */
+/* ── Persistent section nav — extracted 2026-07-26 from inside CockpitCreate,
+      where it only rendered for Brief/Images/Video/Caption. Music, Compositor,
+      Logo, Publish and Projects each took over the full <main> area directly,
+      bypassing CockpitCreate (and its nav) entirely — the actual cause of
+      "can't get back" reports, not state loss (nothing here was ever losing
+      state; Studio never unmounts). Now rendered once, above the per-section
+      conditional, so every section keeps it. Same props/logic as before,
+      just relocated — no behavior change to the nav itself. ── */
+function StudioNav({
+  tools,
+  section,
+  setSection,
+  anchorId,
+  videoUrl,
+  publishReady,
+}: {
+  tools: {
+    id: SectionId;
+    label: string;
+    icon: typeof PenLine;
+    done: boolean;
+    classicHref?: string;
+    onSelect?: () => void;
+    isActive?: () => boolean;
+    disabled?: boolean;
+    disabledTitle?: string;
+  }[];
+  section: SectionId;
+  setSection: (s: SectionId) => void;
+  anchorId: string | null;
+  videoUrl: string | null;
+  publishReady: boolean;
+}) {
+  return (
+    <div className="flex w-[200px] shrink-0 flex-col gap-0.5 overflow-y-auto rounded-2xl border border-border bg-card p-3">
+      <nav className="flex flex-col gap-0.5">
+        {tools.map((t) => {
+          const Icon = t.icon;
+          const active = t.isActive ? t.isActive() : section === t.id;
+          // A nav item pulses once whatever it needs is actually in place —
+          // never before, so an option that isn't open yet stays a plain
+          // dot rather than inviting a click that goes nowhere.
+          const justUnlocked =
+            !t.done &&
+            !active &&
+            (t.id === "video" || t.id === "caption" || t.id === "compositor"
+              ? !!anchorId
+              : t.id === "music"
+                ? !!videoUrl
+                : t.id === "publish"
+                  ? publishReady
+                  : false);
+          const cls = `flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
+            t.disabled
+              ? "cursor-not-allowed text-muted-foreground/40"
+              : active
+                ? "bg-primary/15 text-foreground"
+                : "text-muted-foreground hover:bg-background hover:text-foreground"
+          }`;
+          const inner = (
+            <>
+              <Icon className="h-4 w-4 shrink-0 opacity-90" />
+              <span>{t.label}</span>
+              <span
+                className={`ml-auto h-1.5 w-1.5 rounded-full ${
+                  t.done
+                    ? "bg-emerald-500"
+                    : active
+                      ? "bg-primary"
+                      : justUnlocked
+                        ? "animate-pulse bg-emerald-500"
+                        : "bg-border"
+                }`}
+              />
+            </>
+          );
+          return (
+            <button
+              key={t.id}
+              type="button"
+              disabled={t.disabled}
+              title={t.disabled ? t.disabledTitle : undefined}
+              onClick={() => (t.onSelect ? t.onSelect() : setSection(t.id))}
+              className={cls}
+            >
+              {inner}
+            </button>
+          );
+        })}
+      </nav>
+    </div>
+  );
+}
+
+/* ── Cockpit: brief/images/video/caption's two-column workspace (controls +
+      persistent result). Section nav is StudioNav above, rendered once by
+      Studio itself — CockpitCreate only needs `tools` for the "not yet
+      ported" fallback's label lookup, not to render the nav. ── */
 function CockpitCreate({
   tools,
   section,
@@ -994,6 +1129,8 @@ function CockpitCreate({
   setVideoDuration,
   videoStyle,
   setVideoStyle,
+  videoDirection,
+  setVideoDirection,
   videoGenerating,
   videoStage,
   videoUrl,
@@ -1004,7 +1141,6 @@ function CockpitCreate({
   bgBusy,
   onRemoveBg,
   onOpenCompositorOp,
-  publishReady,
 }: {
   tools: {
     id: SectionId;
@@ -1044,6 +1180,8 @@ function CockpitCreate({
   setVideoDuration: (d: 10 | 15 | 30) => void;
   videoStyle: (typeof VIDEO_STYLES)[number];
   setVideoStyle: (s: (typeof VIDEO_STYLES)[number]) => void;
+  videoDirection: string;
+  setVideoDirection: (d: string) => void;
   videoGenerating: boolean;
   videoStage: string;
   videoUrl: string | null;
@@ -1054,9 +1192,6 @@ function CockpitCreate({
   bgBusy: boolean;
   onRemoveBg: () => void;
   onOpenCompositorOp: (op: "inpaint" | "blend") => void;
-  /** True once there's enough to publish (mirrors Studio's own publishReady) —
-   *  drives the same pulsing-dot treatment as the header's Publish button. */
-  publishReady: boolean;
 }) {
   const isCreate = section === "brief" || section === "images";
   const isVideo = section === "video";
@@ -1082,66 +1217,8 @@ function CockpitCreate({
 
   return (
     <div className="grid h-full grid-cols-1 gap-4 lg:grid-cols-[minmax(280px,320px)_1fr]">
-      {/* ── LEFT: navigation + input, one panel ─────────────── */}
+      {/* ── LEFT: input controls (nav is StudioNav, rendered by Studio) ── */}
       <div className="flex min-h-0 flex-col gap-3 overflow-y-auto rounded-2xl border border-border bg-card p-3">
-        <nav className="flex flex-col gap-0.5">
-          {tools.map((t) => {
-            const Icon = t.icon;
-            const active = t.isActive ? t.isActive() : section === t.id;
-            // A nav item pulses once whatever it needs is actually in place —
-            // never before, so an option that isn't open yet stays a plain
-            // dot rather than inviting a click that goes nowhere.
-            const justUnlocked =
-              !t.done &&
-              !active &&
-              (t.id === "video" || t.id === "caption" || t.id === "compositor"
-                ? !!anchorId
-                : t.id === "music"
-                  ? !!videoUrl
-                  : t.id === "publish"
-                    ? publishReady
-                    : false);
-            const cls = `flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
-              t.disabled
-                ? "cursor-not-allowed text-muted-foreground/40"
-                : active
-                  ? "bg-primary/15 text-foreground"
-                  : "text-muted-foreground hover:bg-background hover:text-foreground"
-            }`;
-            const inner = (
-              <>
-                <Icon className="h-4 w-4 shrink-0 opacity-90" />
-                <span>{t.label}</span>
-                <span
-                  className={`ml-auto h-1.5 w-1.5 rounded-full ${
-                    t.done
-                      ? "bg-emerald-500"
-                      : active
-                        ? "bg-primary"
-                        : justUnlocked
-                          ? "animate-pulse bg-emerald-500"
-                          : "bg-border"
-                  }`}
-                />
-              </>
-            );
-            return (
-              <button
-                key={t.id}
-                type="button"
-                disabled={t.disabled}
-                title={t.disabled ? t.disabledTitle : undefined}
-                onClick={() => (t.onSelect ? t.onSelect() : setSection(t.id))}
-                className={cls}
-              >
-                {inner}
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="border-t border-border" />
-
         {isCreate ? (
           <div className="flex min-h-0 flex-1 flex-col gap-3">
             <div className="flex overflow-hidden rounded-md border border-border">
@@ -1266,6 +1343,8 @@ function CockpitCreate({
               setDuration={setVideoDuration}
               style={videoStyle}
               setStyle={setVideoStyle}
+              direction={videoDirection}
+              setDirection={setVideoDirection}
               generating={videoGenerating}
               onGenerate={onGenerateVideo}
             />
@@ -1440,6 +1519,8 @@ function VideoInputs({
   setDuration,
   style,
   setStyle,
+  direction,
+  setDirection,
   generating,
   onGenerate,
 }: {
@@ -1448,6 +1529,8 @@ function VideoInputs({
   setDuration: (d: 10 | 15 | 30) => void;
   style: (typeof VIDEO_STYLES)[number];
   setStyle: (s: (typeof VIDEO_STYLES)[number]) => void;
+  direction: string;
+  setDirection: (d: string) => void;
   generating: boolean;
   onGenerate: () => void;
 }) {
@@ -1494,6 +1577,21 @@ function VideoInputs({
           value={style}
           onChange={(v) => setStyle(v as (typeof VIDEO_STYLES)[number])}
           options={styleOptions}
+        />
+      </div>
+      <div>
+        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+          Creative direction{" "}
+          <span className="text-muted-foreground/60">
+            · optional — steers the AI beyond just length/style
+          </span>
+        </label>
+        <textarea
+          value={direction}
+          onChange={(e) => setDirection(e.target.value)}
+          rows={2}
+          placeholder="Slow push-in on the product, warm golden light…"
+          className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary/50"
         />
       </div>
       <button
@@ -1678,6 +1776,8 @@ function MusicCanvas({
   setModel,
   lyrics,
   setLyrics,
+  direction,
+  setDirection,
   durationSec,
   hasVideo,
   generating,
@@ -1693,6 +1793,8 @@ function MusicCanvas({
   setModel: (m: string) => void;
   lyrics: string;
   setLyrics: (l: string) => void;
+  direction: string;
+  setDirection: (d: string) => void;
   durationSec: 10 | 15 | 30;
   hasVideo: boolean;
   generating: boolean;
@@ -1787,6 +1889,22 @@ function MusicCanvas({
 
       {/* Controls */}
       <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4">
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+            Describe the vibe{" "}
+            <span className="text-muted-foreground/60">
+              · optional — steers the AI beyond just the style pick
+            </span>
+          </label>
+          <textarea
+            value={direction}
+            onChange={(e) => setDirection(e.target.value)}
+            rows={2}
+            placeholder="Upbeat and energetic, matches a summer sale…"
+            className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary/50"
+          />
+        </div>
+
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-1.5 block text-xs font-medium text-muted-foreground">

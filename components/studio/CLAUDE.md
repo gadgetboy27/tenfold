@@ -1,32 +1,87 @@
 # components/studio — Studio, the main site
 
 `components/studio/Studio.tsx`, rendered directly at `/[workspace]`, **is the
-main site** — there is no separate classic homepage anymore. It's a single
-Cockpit layout: a left panel for input/navigation, a persistent right panel for
-the result. The frame stays put; only the canvas morphs per `SectionId` (brief
-→ images → video → music → caption → compositor → logo → publish). It drives
-the SAME endpoints the classic flow used — a surface over existing
-functionality, not a new engine.
+main site** — there is no separate classic homepage anymore. The frame stays
+put; only the canvas morphs per `SectionId` (brief → images → video → music →
+caption → compositor → logo → publish). It drives the SAME endpoints the
+classic flow used — a surface over existing functionality, not a new engine.
 
 - **There is only one layout now.** The earlier Simple/Cockpit split was
   removed (`BriefCanvas`, `ImagesCanvas`, `VideoCanvas`, `PlaceholderCanvas`,
-  the layout toggle, and the `tf-studio-layout` localStorage key are gone) —
-  `CockpitCreate` is the sole renderer for brief/images/video, and its own
-  internal placeholder handles every other not-yet-ported section. Don't
-  reintroduce a second layout without a real reason.
-- **Every nav item stays in Studio** via `setSection` — never link out. A
-  not-yet-ported section falls back to a placeholder inside `CockpitCreate`;
-  only Compositor and (flag-off) Logo expose a deliberate `classicHref` "Open
-  in classic" button.
+  the layout toggle, and the `tf-studio-layout` localStorage key are gone).
+  Don't reintroduce a second layout without a real reason.
+- **Section nav is `StudioNav`, rendered once above every section (2026-07-26).**
+  It used to live only inside `CockpitCreate`, which several sections
+  (`ProjectsCanvas`, `MusicCanvas`, `LogoStudio`, `CompositorCanvas`,
+  `PublishCanvas`) bypass entirely to take over the full `<main>` area — so
+  the nav architecturally disappeared on those screens, which is what
+  surfaced as "can't get back" reports. It wasn't a state-loss bug: nothing
+  here was ever losing data (all per-section state lives in `Studio`'s own
+  top-level `useState`, which never unmounts) — the nav rail was just
+  missing. Now `Studio`'s `<main>` always renders `<StudioNav>` (a fixed
+  `w-[200px]` rail) beside whichever section's content, so every section
+  keeps a working, clickable nav. `CockpitCreate` no longer renders the nav
+  itself — it only reads `tools` for the "not yet ported" fallback's label
+  lookup.
+- **Every nav item stays in Studio** via `setSection` — never link out. Only
+  Compositor and (flag-off) Logo expose a deliberate `classicHref` "Open in
+  classic" button; a truly not-yet-ported section falls back to
+  `CockpitCreate`'s generic placeholder (currently unused — Caption was the
+  last section on it, see below).
 - **Pickers use `StudioSelect`** (`components/studio/StudioSelect.tsx`, built on
   the Radix `dropdown-menu`) — the one dropdown for every choice-range control.
   Don't reintroduce pill rows.
-- **Wired inline today:** Brief, Images, Video (Length/Style dropdowns), Music
-  (genre + engine dropdowns, track sized to video length), Logo & Brand
-  (renders the full `LogoStudio` in the canvas when `FEATURE_LOGO_BUILDER=1`),
-  Publish (below), and the Gallery (below).
+- **Wired inline today:** Brief, Images, Video (Length/Style, plus an
+  optional creative-direction prompt), Music (genre + engine, plus an
+  optional creative-direction prompt, track sized to video length), Caption
+  (below), Logo & Brand (renders the full `LogoStudio` in the canvas when
+  `FEATURE_LOGO_BUILDER=1`), Publish (below), and the Gallery (below).
 - Tier gating is by capability, not layout: `ent.proEffects` drives the locked
   "AI-Photoshop" effects.
+
+## Creative-direction prompts — Video and Music (2026-07-26)
+
+Both `VideoInputs` and `MusicCanvas` gained an optional free-text textarea
+("Creative direction" / "Describe the vibe") alongside their existing
+dropdowns. This isn't new plumbing — `app/api/jobs/route.ts`'s
+`buildFalInput` already read `params.variationDirection` and folded it into
+the composed prompt for both video and the non-vocals music engines
+(stable-audio/lyria2); it just had no UI surfacing it before now. Studio's
+lifted `videoDirection`/`musicDirection` state threads straight into
+`generateVideo()`/`generateMusic()`'s existing request bodies as
+`variationDirection` — no new fields invented.
+
+One real gap found and fixed: the ACE-Step (vocals) music engine has its
+own `{tags, lyrics, duration}` schema and didn't consume
+`variationDirection` at all — `buildFalInput`'s ace-step branch now appends
+it to `tags` so the direction field works consistently across all three
+engines, not just two.
+
+Separately, `generateVideo()`'s `params.prompt` has always been sent as a
+hardcoded empty string — video generation today is driven purely by
+duration/style presets plus (now) this direction field, **not** by the
+original campaign image prompt as an earlier read of this code assumed.
+
+## Caption — `CaptionCanvas`, reusing an existing backend entirely (2026-07-26)
+
+`components/studio/CaptionCanvas.tsx`: a topic textarea (prefilled from
+Studio's root `prompt`, editable), platform + tone pickers, Generate/
+Regenerate, and a Copy-to-clipboard result. Posts to the **already-complete**
+`POST /api/jobs` (`type: "script_generation"`) — `lib/claude/script.ts`'s
+`generateScript()` (platform-native voice, banned-cliché rules, brand-voice
+override, all pre-existing) was already wired end-to-end via this route; the
+only thing missing was a Studio UI calling it. `businessName` is filled from
+the campaign's own name (`campaignName` state) rather than a separate
+workspace-name fetch — a pragmatic stand-in, not a new lookup.
+
+Not done this pass: feeding the generated caption directly into
+`PublishCanvas`'s own caption field (would need lifting shared state across
+sections, same pattern as Brand Brain's `websiteAnalysis` below) — v1 is
+standalone generate-and-copy.
+
+Deliberately does not import `lib/claude/script.ts` directly (constructs
+the Anthropic client at module scope) — same safe pattern as
+`BrandImportPanel`/`BrandAnalysisResults` below.
 
 ## Brief — `BrandImportPanel` + `BrandAnalysisResults`, "Brand Brain" from a URL
 

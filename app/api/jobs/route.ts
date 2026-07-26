@@ -313,7 +313,15 @@ export async function POST(req: Request) {
         }
         // ACE-Step wants lowercase comma-separated keyword tags, not the display
         // name — fall back to a slugged genre if it's not in the tags map.
-        const tags = MUSIC_GENRE_TAGS[genre] ?? genre.toLowerCase();
+        const baseTags = MUSIC_GENRE_TAGS[genre] ?? genre.toLowerCase();
+        // variationDirection (the Studio "describe the vibe" prompt) already
+        // flows into the non-vocals path via the composed prompt below — this
+        // engine has its own {tags, lyrics, duration} schema instead, so it
+        // needs its own append rather than reusing that composed string.
+        const direction = (
+          body.params.variationDirection as string | undefined
+        )?.trim();
+        const tags = direction ? `${baseTags}, ${direction}` : baseTags;
         return { tags, lyrics, duration: seconds };
       };
       // Vocals (ACE-Step): different schema — `tags` (genre) + `lyrics`. Use the
