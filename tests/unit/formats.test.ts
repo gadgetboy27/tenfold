@@ -15,8 +15,10 @@ import {
   recommendVideoDuration,
   overLengthPlatforms,
   GENERIC_RAIL,
+  VIDEO_GEN_TIERS,
   type NormRect,
 } from "@/lib/composition/formats";
+import { CREDIT_COSTS } from "@/lib/credits/costs";
 
 describe("platform format registry", () => {
   it("keeps every entry internally consistent with the design space", () => {
@@ -162,10 +164,28 @@ describe("video length guidance", () => {
     }
   });
 
+  // The two assertions below used to hardcode a 5s tier and went stale when it
+  // was dropped, failing silently against the real 10/15/30 list. A tier is
+  // only producible if there's a credit cost to bill it, so pin the two
+  // together — dropping or adding a tier now fails here first.
+  it("keeps a credit cost for every gen tier (no drift)", () => {
+    for (const t of VIDEO_GEN_TIERS) {
+      expect(CREDIT_COSTS).toHaveProperty(`video_${t}s`);
+    }
+    const costTiers = Object.keys(CREDIT_COSTS)
+      .map((k) => /^video_(\d+)s$/.exec(k)?.[1])
+      .filter((n): n is string => !!n)
+      .map(Number)
+      .sort((a, b) => a - b);
+    expect(costTiers).toEqual([...VIDEO_GEN_TIERS].sort((a, b) => a - b));
+  });
+
   it("snaps a target length to the nearest producible gen tier", () => {
-    expect(snapToGenTier(6)).toBe(5);
+    // Tiers are 10/15/30 — there is no 5s tier, so anything shorter than 10
+    // clamps up to it rather than down.
+    expect(snapToGenTier(6)).toBe(10);
     expect(snapToGenTier(12)).toBe(10);
-    expect(snapToGenTier(25)).toBe(30); // closer to 30 than 10
+    expect(snapToGenTier(25)).toBe(30); // closer to 30 than 15
     expect(snapToGenTier(40)).toBe(30);
   });
 
@@ -174,8 +194,8 @@ describe("video length guidance", () => {
     expect(recommendVideoDuration(["tiktok", "instagram"])).toBe(30);
     // YouTube's ~55 sweet spot → snaps to 30 (max producible tier).
     expect(recommendVideoDuration(["youtube"])).toBe(30);
-    // Mixed: Pinterest's 15 is shortest → snaps to 10.
-    expect(recommendVideoDuration(["pinterest", "tiktok"])).toBe(10);
+    // Mixed: Pinterest's 15 is shortest, and 15 is itself a tier — no snap.
+    expect(recommendVideoDuration(["pinterest", "tiktok"])).toBe(15);
     // Nothing recognised → 30 default.
     expect(recommendVideoDuration([])).toBe(30);
   });
