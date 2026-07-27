@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
+import { InfoHint } from "@/components/ui/info-hint";
 import {
   LOGO_TYPES,
   COLOR_DIRECTIONS,
@@ -79,7 +80,10 @@ export function LogoBrief({ onSubmit, submitting }: LogoBriefProps) {
       </div>
 
       <div className="space-y-2">
-        <label className="text-sm font-medium">Business name</label>
+        <label className="text-sm font-medium">
+          Business name{" "}
+          <InfoHint text="The exact wording that gets drawn into the logo — capitalisation and punctuation included. Type it the way you want it to appear." />
+        </label>
         <Input
           value={businessName}
           onChange={(e) => setBusinessName(e.target.value)}
@@ -91,7 +95,8 @@ export function LogoBrief({ onSubmit, submitting }: LogoBriefProps) {
 
       <div className="space-y-2">
         <label className="text-sm font-medium">
-          Industry <span className="text-muted-foreground">(optional)</span>
+          Industry <span className="text-muted-foreground">(optional)</span>{" "}
+          <InfoHint text="Gives the AI context for symbols and shapes that suit your trade. Worth filling in — a roaster and a law firm get very different concepts." />
         </label>
         <Input
           value={industry}
@@ -102,7 +107,10 @@ export function LogoBrief({ onSubmit, submitting }: LogoBriefProps) {
       </div>
 
       <div className="space-y-2">
-        <label className="text-sm font-medium">Logo type</label>
+        <label className="text-sm font-medium">
+          Logo type{" "}
+          <InfoHint text="Whether you get a wordmark (name only), a symbol (mark only), or the two combined. Combined is the safest default — it splits apart later for small placements." />
+        </label>
         <div className="flex flex-wrap gap-2">
           {LOGO_TYPES.map((t) => (
             <button
@@ -146,7 +154,10 @@ export function LogoBrief({ onSubmit, submitting }: LogoBriefProps) {
       </div>
 
       <div className="space-y-2">
-        <label className="text-sm font-medium">Colour direction</label>
+        <label className="text-sm font-medium">
+          Colour direction{" "}
+          <InfoHint text="A broad palette to steer toward, not exact colours. You can set precise brand colours after you pick a concept." />
+        </label>
         <div className="flex flex-wrap gap-2">
           {COLOR_DIRECTIONS.map((c) => (
             <button
@@ -166,7 +177,10 @@ export function LogoBrief({ onSubmit, submitting }: LogoBriefProps) {
       </div>
 
       <div className="space-y-4">
-        <label className="text-sm font-medium">Personality</label>
+        <label className="text-sm font-medium">
+          Personality{" "}
+          <InfoHint text="Sliders that shift the feel of every concept. Leave them centred if you're unsure — pushing them to the extremes narrows the results a lot." />
+        </label>
         {AXES.map(({ key, left, right }) => (
           <div key={key} className="space-y-1.5">
             <div className="flex justify-between text-xs text-muted-foreground">

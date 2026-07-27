@@ -34,10 +34,38 @@ classic flow used — a surface over existing functionality, not a new engine.
 - **Wired inline today:** Brief, Images, Video (Length/Style, plus an
   optional creative-direction prompt), Music (genre + engine, plus an
   optional creative-direction prompt, track sized to video length), Caption
-  (below), Logo & Brand (renders the full `LogoStudio` in the canvas when
-  `FEATURE_LOGO_BUILDER=1`), Publish (below), and the Gallery (below).
+  (below), the four Pro tool panels (below), Logo & Brand (renders the full
+  `LogoStudio` in the canvas when `FEATURE_LOGO_BUILDER=1`), Publish (below),
+  and the Gallery (below).
 - Tier gating is by capability, not layout: `ent.proEffects` drives the locked
   "AI-Photoshop" effects.
+
+## The four Pro tool panels — rendered, not rebuilt (2026-07-28)
+
+`ProductShotPanel`, `VirtualTryOnPanel`, `TalkingVideoPanel` and
+`AutoCaptionPanel` (nav labels: Product shot, Virtual try-on, Spokesperson,
+Subtitles) were **fully built and completely unreachable** — routes, credit
+costs, `UPSELLS` entries, store drafts and Zod schemas all shipped, but no
+component imported them, so no screen rendered the UI. Wiring them into
+`Studio`'s nav was the entire fix; none of their internals changed beyond
+`export default` → `export` to match the repo's named-export convention.
+
+Each panel is self-contained (no props) and reads `workspaceSlug` +
+`currentCampaignId` off `useAppStore`. **That store field is why a naive
+wiring silently fails:** `Studio` owns `campaignId` in its own local state and
+only ever mirrored `workspaceSlug` into the store, so all four panels read
+`currentCampaignId === null`, failed their internal `validCampaign` check, and
+would have rendered with a permanently disabled Generate button. `Studio` now
+mirrors `campaignId` into the store via a dedicated effect — keep that effect
+if you touch campaign state. `setCampaignId`'s type was also widened to
+`string | null` to match the nullable field it writes (it was `string`,
+despite `resetCampaign()` already setting null internally).
+
+Nav items are disabled until `campaignId` exists, since every one of them
+bills its job to a campaign — this mirrors each panel's own `validCampaign`
+guard rather than letting a user open a screen that can't do anything. Pro
+gating is left to the panels themselves: each already renders its own
+`ProUpsell` and disables its action when `!isPro`.
 
 ## Creative-direction prompts — Video and Music (2026-07-26)
 

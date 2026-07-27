@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import CreditMeter from "@/components/shared/CreditMeter";
+import { TipsToggle } from "@/components/ui/info-hint";
 import { useAppStore } from "@/store/useAppStore";
 import { api } from "@/lib/api";
 
@@ -60,7 +61,10 @@ export function AppHeader({
           <Logo size={22} withWordmark />
         </Link>
       </div>
-      <CreditMeter />
+      <div className="flex items-center gap-3">
+        <TipsToggle />
+        <CreditMeter />
+      </div>
     </header>
   );
 }

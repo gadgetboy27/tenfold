@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Upload, X, Loader2 } from "lucide-react";
+import { InfoHint } from "@/components/ui/info-hint";
 
 /**
  * Bring-your-own product photo. Uploads via the parent's handler and shows a
@@ -29,7 +30,8 @@ export function ReferencePhotoField({
     <div>
       <label className="mb-1 block text-xs font-medium text-muted-foreground">
         Reference photo{" "}
-        <span className="text-muted-foreground/60">· optional</span>
+        <span className="text-muted-foreground/60">· optional</span>{" "}
+        <InfoHint text="Upload your actual product or storefront and the generated images are built around it, rather than inventing one. Turns Variety pack off — the reference is what holds the six shots together." />
       </label>
 
       {url ? (

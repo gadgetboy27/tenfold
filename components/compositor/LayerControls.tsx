@@ -22,6 +22,7 @@ import { useCompositorStore, type Layer } from "@/store/useCompositorStore";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
+import { InfoHint } from "@/components/ui/info-hint";
 import { Button } from "@/components/ui/button";
 
 const RELIGHT_DIRECTIONS = ["None", "Left", "Right", "Top", "Bottom"] as const;
@@ -98,7 +99,8 @@ function RedoPanel({
 
   const buildParams = (): Record<string, unknown> => {
     if (op === "relight") return { ...params, prompt, direction };
-    if (op === "textureOverlay") return { ...params, mode, opacity: mechOpacity };
+    if (op === "textureOverlay")
+      return { ...params, mode, opacity: mechOpacity };
     if (op === "gradientMerge") return { ...params, direction: mechDirection };
     if (op === "softGlow") return { ...params, sigma };
     return { ...params, ...(prompt ? { prompt } : {}) };
@@ -138,7 +140,9 @@ function RedoPanel({
         <>
           <select
             value={mode}
-            onChange={(e) => setMode(e.target.value as (typeof MECH_MODES)[number])}
+            onChange={(e) =>
+              setMode(e.target.value as (typeof MECH_MODES)[number])
+            }
             className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
           >
             {MECH_MODES.map((m) => (
@@ -251,15 +255,18 @@ const ANCHOR_GRID: LayerAnchor[] = [
 
 function Row({
   label,
+  hint,
   children,
 }: {
   label: string;
+  /** Optional explainer shown via <InfoHint> — respects the global tips toggle. */
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
     <div className="flex items-center gap-3">
       <span className="w-24 shrink-0 text-xs leading-tight text-muted-foreground">
-        {label}
+        {label} {hint && <InfoHint text={hint} />}
       </span>
       <div className="min-w-0 flex-1">{children}</div>
     </div>
@@ -384,7 +391,10 @@ export function LayerControls({
               placeholder="Type your text — the box grows to fit"
             />
           </Row>
-          <Row label="Font">
+          <Row
+            label="Font"
+            hint="The typeface for this text layer. Your brand kit's fonts appear at the top of the list."
+          >
             <select
               value={layer.font}
               onChange={(e) => set({ font: e.target.value as never })}
@@ -397,7 +407,10 @@ export function LayerControls({
               ))}
             </select>
           </Row>
-          <Row label="Size">
+          <Row
+            label="Size"
+            hint="Text size relative to the canvas, so it stays proportionate when you export to a different format."
+          >
             <Slider
               min={16}
               max={240}
@@ -406,7 +419,10 @@ export function LayerControls({
               onValueChange={([v]) => setLayout({ sizePx: v })}
             />
           </Row>
-          <Row label="Colour">
+          <Row
+            label="Colour"
+            hint="Fill colour for the text. Check it against the busiest part of your image, not the calmest — add a shadow below if it disappears."
+          >
             <input
               type="color"
               value={layer.color}
@@ -417,7 +433,10 @@ export function LayerControls({
         </>
       )}
 
-      <Row label="Position">
+      <Row
+        label="Position"
+        hint="Float reflows the layer proportionally when you switch format. Pin holds it a fixed distance from a chosen corner or edge in every format — better for logos and legal lines."
+      >
         <div className="space-y-1.5">
           <div className="flex gap-1">
             <button
@@ -463,7 +482,10 @@ export function LayerControls({
           )}
         </div>
       </Row>
-      <Row label="Scale">
+      <Row
+        label="Scale"
+        hint="Size of the layer relative to the canvas. 1.0 is its natural size."
+      >
         <Slider
           min={0.05}
           max={3}
@@ -472,7 +494,10 @@ export function LayerControls({
           onValueChange={([v]) => setLayout({ scale: v })}
         />
       </Row>
-      <Row label="Rotation">
+      <Row
+        label="Rotation"
+        hint="Tilt in degrees. Small angles read as deliberate; large ones usually hurt legibility."
+      >
         <div className="flex items-center gap-2">
           <Slider
             min={-180}
@@ -486,7 +511,10 @@ export function LayerControls({
           </span>
         </div>
       </Row>
-      <Row label="Opacity">
+      <Row
+        label="Opacity"
+        hint="How see-through the layer is. Useful for watermarks and for letting a colour wash sit over the photo."
+      >
         <div className="flex items-center gap-2">
           <Slider
             min={0}
@@ -500,7 +528,10 @@ export function LayerControls({
           </span>
         </div>
       </Row>
-      <Row label="Blend">
+      <Row
+        label="Blend"
+        hint="How this layer's pixels mix with what's underneath. Normal just covers; Multiply darkens; Screen lightens. Worth trying when a logo looks pasted on."
+      >
         <select
           value={layer.blend}
           onChange={(e) => set({ blend: e.target.value as never })}
@@ -513,7 +544,10 @@ export function LayerControls({
           ))}
         </select>
       </Row>
-      <Row label="Shadow">
+      <Row
+        label="Shadow"
+        hint="A drop shadow behind the layer — the reliable fix for text that gets lost against a busy photo."
+      >
         {layer.shadow ? (
           <div className="space-y-1.5">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-400">
@@ -572,7 +606,8 @@ export function LayerControls({
 
       <div className="grid grid-cols-2 gap-2 pt-1">
         <label className="text-xs text-muted-foreground">
-          Appear (s)
+          Appear (s){" "}
+          <InfoHint text="Seconds into the video before this layer shows up. 0 means it's there from the first frame." />
           <Input
             type="number"
             min={0}
@@ -583,7 +618,8 @@ export function LayerControls({
           />
         </label>
         <label className="text-xs text-muted-foreground">
-          Disappear (s)
+          Disappear (s){" "}
+          <InfoHint text="Seconds in when the layer leaves. Leave it blank and it stays to the end of the video." />
           <Input
             type="number"
             min={0}
@@ -603,7 +639,10 @@ export function LayerControls({
 
       {/* ── Effects suite ── */}
       <div className="space-y-3 border-t border-border pt-3">
-        <Row label="Enter">
+        <Row
+          label="Enter"
+          hint="How the layer arrives on screen when this is exported as video. Only affects motion, not a still image."
+        >
           <select
             value={fx.in.kind}
             onChange={(e) =>
@@ -638,7 +677,10 @@ export function LayerControls({
             </div>
           </Row>
         )}
-        <Row label="Exit">
+        <Row
+          label="Exit"
+          hint="How the layer leaves at the end of its time on screen."
+        >
           <select
             value={fx.out.kind}
             onChange={(e) =>
@@ -673,7 +715,10 @@ export function LayerControls({
             </div>
           </Row>
         )}
-        <Row label="On screen">
+        <Row
+          label="On screen"
+          hint="A continuous motion the layer holds while it's visible, between its Enter and Exit — a slow drift or pulse. Video export only."
+        >
           <select
             value={fx.loop}
             onChange={(e) => setFx({ loop: e.target.value as EffectLoopKind })}

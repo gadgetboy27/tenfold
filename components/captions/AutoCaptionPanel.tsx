@@ -1,11 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Captions,
-  Loader2,
-  ExternalLink,
-} from "lucide-react";
+import { Captions, Loader2, ExternalLink } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useEntitlements } from "@/lib/billing/useEntitlements";
 import { Button } from "@/components/ui/button";
@@ -27,7 +23,7 @@ const FONT_SIZES = [
 
 // Auto-captions: burn animated subtitles into a video with speech (best on the
 // spoken-spokesperson video). Single fal job, polled via /api/jobs.
-export default function AutoCaptionPanel() {
+export function AutoCaptionPanel() {
   const ent = useEntitlements();
   const {
     currentCampaignId,

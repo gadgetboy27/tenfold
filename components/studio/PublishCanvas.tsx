@@ -24,6 +24,7 @@ import {
 import { api } from "@/lib/api";
 import { PLATFORM_FORMATS, type PlatformId } from "@/lib/composition/formats";
 import { PLATFORM_GUIDE } from "@/lib/social/caption-guide";
+import { InfoHint } from "@/components/ui/info-hint";
 import { platformDefaults } from "@/lib/social/platform-defaults";
 
 /**
@@ -336,7 +337,9 @@ export function PublishCanvas({
 
   const handlePublish = async () => {
     if (!canPublish) {
-      toast.error("This campaign needs owner/admin approval before it can be published");
+      toast.error(
+        "This campaign needs owner/admin approval before it can be published",
+      );
       return;
     }
     if (platforms.length === 0) {
@@ -372,7 +375,9 @@ export function PublishCanvas({
           body.assetId = anchorId;
         }
         const tailored = Object.fromEntries(
-          list.filter((p) => platformCaptions[p]).map((p) => [p, platformCaptions[p]]),
+          list
+            .filter((p) => platformCaptions[p])
+            .map((p) => [p, platformCaptions[p]]),
         );
         if (Object.keys(tailored).length) body.platformCaptions = tailored;
         if (list.includes("facebook") && facebookPageId)
@@ -430,8 +435,8 @@ export function PublishCanvas({
       <div className="mx-auto flex h-full max-w-md flex-col items-center justify-center gap-2 text-center text-muted-foreground">
         <Send className="h-7 w-7 opacity-40" />
         <p className="text-sm">
-          Generate an image or video first — publishing builds on the look
-          you pick.
+          Generate an image or video first — publishing builds on the look you
+          pick.
         </p>
       </div>
     );
@@ -500,7 +505,8 @@ export function PublishCanvas({
       {/* LEFT: connected platforms */}
       <div className="flex min-h-0 flex-col gap-3 overflow-y-auto rounded-2xl border border-border bg-card p-3">
         <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <Send className="h-3.5 w-3.5" /> Publish to
+          <Send className="h-3.5 w-3.5" /> Publish to{" "}
+          <InfoHint text="Pick every account this should go out to — one publish covers all of them. On video, the speaker icon beside a selected platform mutes the music bed just for that one (LinkedIn and Pinterest start muted, where silent autoplay is the norm)." />
         </div>
         {(hasVideo || hasImage) && hasVideo && hasImage && (
           <div className="flex overflow-hidden rounded-md border border-border">
@@ -518,6 +524,9 @@ export function PublishCanvas({
             >
               <ImageIcon className="h-3 w-3" /> Image
             </button>
+            <span className="flex items-center border-l border-border px-2">
+              <InfoHint text="You made both a video and an image — this picks which one gets posted. It's one or the other, not both in the same publish." />
+            </span>
           </div>
         )}
 
@@ -581,8 +590,8 @@ export function PublishCanvas({
             href={`/${workspaceSlug}/settings/billing`}
             className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-2.5 py-2 text-xs text-primary hover:bg-primary/10"
           >
-            <Sparkles className="h-3.5 w-3.5" /> Upgrade for X, LinkedIn,
-            TikTok &amp; more
+            <Sparkles className="h-3.5 w-3.5" /> Upgrade for X, LinkedIn, TikTok
+            &amp; more
           </Link>
         ) : (
           <button
@@ -604,8 +613,8 @@ export function PublishCanvas({
           onClick={connectMeta}
           className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary"
         >
-          <ExternalLink className="h-3.5 w-3.5" /> Connect Facebook /
-          Instagram (free)
+          <ExternalLink className="h-3.5 w-3.5" /> Connect Facebook / Instagram
+          (free)
         </button>
 
         {fbPages.length > 1 && platforms.includes("facebook") && (
@@ -688,7 +697,8 @@ export function PublishCanvas({
         <div>
           <div className="mb-1.5 flex items-center justify-between">
             <label className="text-xs font-medium text-muted-foreground">
-              Caption
+              Caption{" "}
+              <InfoHint text="Write one caption here and it's automatically rewritten to each platform's tone and character limit before posting — you don't need to write several. Editing this resets those fitted versions." />
             </label>
             <span
               className={`flex items-center gap-1.5 text-[11px] ${overLimit ? "text-destructive" : "text-muted-foreground"}`}
@@ -715,7 +725,8 @@ export function PublishCanvas({
 
         <div>
           <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-            Hashtags
+            Hashtags{" "}
+            <InfoHint text="Added to the end of every caption, on every platform. Up to 30. Type without the # — press Enter to add each one." />
           </label>
           <div className="flex min-h-[40px] flex-wrap gap-1.5 rounded-lg border border-border bg-background p-2 focus-within:border-primary/50">
             {hashtags.map((tag) => (
@@ -754,7 +765,8 @@ export function PublishCanvas({
 
         <div>
           <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-            When
+            When{" "}
+            <InfoHint text="Post now goes out the moment you hit publish. Later hands the post to your scheduler — it publishes at the time you set, in your own timezone." />
           </label>
           <div className="mb-2 flex gap-2">
             {(["now", "later"] as const).map((mode) => (

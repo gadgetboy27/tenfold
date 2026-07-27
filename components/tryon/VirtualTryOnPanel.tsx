@@ -2,13 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import {
-  Shirt,
-  Upload,
-  Loader2,
-  Check,
-  ExternalLink,
-} from "lucide-react";
+import { Shirt, Upload, Loader2, Check, ExternalLink } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useEntitlements } from "@/lib/billing/useEntitlements";
 import { Button } from "@/components/ui/button";
@@ -25,7 +19,7 @@ type Status = "idle" | "submitting" | "pending" | "ready" | "failed";
 
 // Virtual try-on: upload a model photo + a garment, get the model wearing it.
 // Single fal image job, polled via the shared /api/jobs status endpoint.
-export default function VirtualTryOnPanel() {
+export function VirtualTryOnPanel() {
   const ent = useEntitlements();
   const { currentCampaignId, workspaceSlug, creditBalance, setCreditBalance } =
     useAppStore();

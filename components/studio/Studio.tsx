@@ -28,11 +28,16 @@ import {
   Download,
   Maximize2,
   Anchor,
+  Package,
+  Shirt,
+  Mic,
+  Captions,
 } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { Spinner } from "@/components/brand/Spinner";
 import CreditMeter from "@/components/shared/CreditMeter";
 import UpgradeModal from "@/components/billing/UpgradeModal";
+import { InfoHint, TipsToggle } from "@/components/ui/info-hint";
 import {
   StudioSelect,
   type StudioOption,
@@ -48,6 +53,10 @@ import {
 } from "@/components/studio/BrandImportPanel";
 import { BrandAnalysisResults } from "@/components/studio/BrandAnalysisResults";
 import { CaptionCanvas } from "@/components/studio/CaptionCanvas";
+import { ProductShotPanel } from "@/components/scene/ProductShotPanel";
+import { VirtualTryOnPanel } from "@/components/tryon/VirtualTryOnPanel";
+import { TalkingVideoPanel } from "@/components/talking/TalkingVideoPanel";
+import { AutoCaptionPanel } from "@/components/captions/AutoCaptionPanel";
 import { useEntitlements } from "@/lib/billing/useEntitlements";
 import { randomCampaignName } from "@/lib/util/campaign-name";
 import { MUSIC_GENRES } from "@/lib/fal/prompts";
@@ -72,6 +81,10 @@ type SectionId =
   | "video"
   | "music"
   | "caption"
+  | "productshot"
+  | "tryon"
+  | "talking"
+  | "autocaption"
   | "compositor"
   | "logo"
   | "publish";
@@ -86,6 +99,10 @@ const SECTION_LABELS: Record<SectionId, string> = {
   video: "Video",
   music: "Music",
   caption: "Caption",
+  productshot: "Product shot",
+  tryon: "Virtual try-on",
+  talking: "Spokesperson",
+  autocaption: "Subtitles",
   compositor: "Compositor",
   logo: "Logo & brand",
   publish: "Publish",
@@ -160,6 +177,7 @@ export function Studio({
   logoEnabled?: boolean;
 }) {
   const setWorkspaceSlug = useAppStore((s) => s.setWorkspaceSlug);
+  const setStoreCampaignId = useAppStore((s) => s.setCampaignId);
   const setCreditBalance = useAppStore((s) => s.setCreditBalance);
   const ent = useEntitlements();
 
@@ -190,8 +208,7 @@ export function Studio({
   // explicit "Back to X" — the persistent nav rail already lets you click
   // anywhere, but Gallery is the one screen someone lands on by clicking the
   // logo/Gallery shortcut without necessarily registering the rail as "back".
-  const [lastWorkSection, setLastWorkSection] =
-    useState<SectionId>("images");
+  const [lastWorkSection, setLastWorkSection] = useState<SectionId>("images");
   const setSection = (s: SectionId) => {
     if (s !== "compositor") setCompositorInitialOp(null);
     if (section !== "projects" && section !== s) setLastWorkSection(section);
@@ -266,6 +283,14 @@ export function Studio({
     setWorkspaceSlug(workspaceSlug);
     refreshBalance();
   }, [workspaceSlug, setWorkspaceSlug, refreshBalance]);
+
+  // Studio owns `campaignId` in local state, but the Pro tool panels
+  // (Product shot, Virtual try-on, Spokesperson, Subtitles) are self-contained
+  // and read the campaign off the shared store — they bill their jobs to it.
+  // Without this mirror they'd read `null` and stay disabled forever.
+  useEffect(() => {
+    setStoreCampaignId(campaignId);
+  }, [campaignId, setStoreCampaignId]);
 
   // Drives the nav's Gallery shortcut (greyed out with nothing to browse yet).
   // Defaults to true so it never flashes disabled while this is in flight.
@@ -743,6 +768,8 @@ export function Studio({
   // Every nav item stays IN Studio (setSection) — no item flings you to the
   // classic app on click. classicHref is only for the deliberate "Open in
   // classic" button inside a not-yet-built section's placeholder.
+  const needsProjectTitle = "Start a project first — these bill to a campaign";
+
   const tools: {
     id: SectionId;
     label: string;
@@ -773,7 +800,44 @@ export function Studio({
       disabledTitle: "Nothing in the Gallery yet — generate your first project",
     },
     { id: "images", label: "Images", icon: ImagesIcon, done: anchorPicked },
+    // Pro image tools. They work off their own uploads rather than the anchor,
+    // but every one of them bills to a campaign — so they stay disabled until
+    // there's a real campaign to attribute the spend to (matching each panel's
+    // own `validCampaign` guard, which would otherwise disable the button
+    // *inside* an already-opened screen).
+    {
+      id: "productshot",
+      label: "Product shot",
+      icon: Package,
+      done: false,
+      disabled: !campaignId,
+      disabledTitle: needsProjectTitle,
+    },
+    {
+      id: "tryon",
+      label: "Virtual try-on",
+      icon: Shirt,
+      done: false,
+      disabled: !campaignId,
+      disabledTitle: needsProjectTitle,
+    },
     { id: "video", label: "Video", icon: Play, done: !!videoUrl },
+    {
+      id: "talking",
+      label: "Spokesperson",
+      icon: Mic,
+      done: false,
+      disabled: !campaignId,
+      disabledTitle: needsProjectTitle,
+    },
+    {
+      id: "autocaption",
+      label: "Subtitles",
+      icon: Captions,
+      done: false,
+      disabled: !campaignId,
+      disabledTitle: needsProjectTitle,
+    },
     { id: "music", label: "Music", icon: Music, done: false },
     { id: "caption", label: "Caption", icon: MessageSquare, done: false },
     {
@@ -852,6 +916,7 @@ export function Studio({
             </button>
           )}
           <div className="ml-auto flex items-center gap-3">
+            <TipsToggle />
             <button
               type="button"
               onClick={share}
@@ -932,6 +997,22 @@ export function Studio({
                   campaignName={campaignName}
                   initialTopic={prompt}
                 />
+              ) : section === "productshot" ? (
+                <div className="mx-auto h-full max-w-3xl">
+                  <ProductShotPanel />
+                </div>
+              ) : section === "tryon" ? (
+                <div className="mx-auto h-full max-w-3xl">
+                  <VirtualTryOnPanel />
+                </div>
+              ) : section === "talking" ? (
+                <div className="mx-auto h-full max-w-3xl">
+                  <TalkingVideoPanel />
+                </div>
+              ) : section === "autocaption" ? (
+                <div className="mx-auto h-full max-w-3xl">
+                  <AutoCaptionPanel />
+                </div>
               ) : section === "logo" && logoEnabled ? (
                 // The full world-class Logo & Brand studio, delivered into the big
                 // canvas — its own multi-phase flow (brief → concepts → refine →
@@ -1263,6 +1344,9 @@ function CockpitCreate({
               >
                 Import from website
               </button>
+              <span className="flex items-center border-l border-border px-2">
+                <InfoHint text="Two ways to start. Write a prompt describes the image yourself. Import from website reads your site and drafts 4 campaign angles for you — pick one and it generates straight away." />
+              </span>
             </div>
 
             {createMode === "website" ? (
@@ -1292,6 +1376,7 @@ function CockpitCreate({
                   >
                     <Sparkles className="h-3 w-3" /> Variety pack
                   </button>
+                  <InfoHint text="On, the 6 images span different styles and compositions — good when you're still exploring. Off, all 6 stay close to your prompt. Costs more because it's a wider spread." />
                   <span className="text-[11px] text-muted-foreground/70">
                     {referenceUrl
                       ? "12 credits · features your photo"
@@ -1304,7 +1389,8 @@ function CockpitCreate({
                 <div className="mt-auto flex flex-col gap-2">
                   <div>
                     <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                      Prompt
+                      Prompt{" "}
+                      <InfoHint text="Describe the scene, not the ad. Subject, setting, lighting and mood all help — 'fresh beans on a wooden counter, morning light through a window' beats 'coffee ad'. You get 6 images to choose from." />
                     </label>
                     <textarea
                       value={prompt}
@@ -1588,7 +1674,8 @@ function VideoInputs({
     <div className="flex flex-col gap-4">
       <div>
         <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-          Length
+          Length{" "}
+          <InfoHint text="How long the clip runs. 10s suits a quick social hook; 15s gives you a beat and a payoff. 30s is Pro — it renders as two 15s segments joined together, so it costs and takes about double." />
         </label>
         <StudioSelect
           value={String(duration)}
@@ -1598,7 +1685,8 @@ function VideoInputs({
       </div>
       <div>
         <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-          Style
+          Style{" "}
+          <InfoHint text="How the camera moves and the shot is cut. This drives the motion — your chosen image stays the starting frame either way." />
         </label>
         <StudioSelect
           value={style}
@@ -1611,7 +1699,8 @@ function VideoInputs({
           Creative direction{" "}
           <span className="text-muted-foreground/60">
             · optional — steers the AI beyond just length/style
-          </span>
+          </span>{" "}
+          <InfoHint text="Free text on top of the Length and Style picks. Describe camera moves, pacing or mood — 'slow push-in, warm golden light'. Leave it blank and the presets decide on their own." />
         </label>
         <textarea
           value={direction}
@@ -1921,7 +2010,8 @@ function MusicCanvas({
             Describe the vibe{" "}
             <span className="text-muted-foreground/60">
               · optional — steers the AI beyond just the style pick
-            </span>
+            </span>{" "}
+            <InfoHint text="Free text on top of the Style pick — tempo, instruments, feel. 'Upbeat, light percussion, builds to a lift'. Leave it blank and the style alone decides." />
           </label>
           <textarea
             value={direction}
@@ -1935,7 +2025,8 @@ function MusicCanvas({
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-              Style
+              Style{" "}
+              <InfoHint text="The genre of the track. Match it to the feel of your video rather than to your industry — the wrong energy is more noticeable than the wrong genre." />
             </label>
             <StudioSelect
               value={genre}
@@ -1945,7 +2036,8 @@ function MusicCanvas({
           </div>
           <div>
             <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-              Engine
+              Engine{" "}
+              <InfoHint text="Which model writes the track. Instrumental engines are the safe default for ads; the vocals engine sings, and unlocks the Lyrics field below." />
             </label>
             <StudioSelect
               value={model}
@@ -1961,7 +2053,8 @@ function MusicCanvas({
               Lyrics{" "}
               <span className="text-muted-foreground/60">
                 · optional — left blank, we&apos;ll write a jingle
-              </span>
+              </span>{" "}
+              <InfoHint text="Only used by the vocals engine. Short and repetitive works best — a track this length fits roughly two lines, so anything longer gets rushed." />
             </label>
             <textarea
               value={lyrics}

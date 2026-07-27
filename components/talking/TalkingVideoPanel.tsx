@@ -97,7 +97,7 @@ function Group({
   );
 }
 
-export default function TalkingVideoPanel() {
+export function TalkingVideoPanel() {
   const ent = useEntitlements();
   const {
     generatedAssets,

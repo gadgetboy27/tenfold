@@ -19,7 +19,7 @@ type Status = "idle" | "submitting" | "pending" | "ready" | "failed";
 
 // Product-in-scene: upload a product photo + describe a scene → product placed
 // into that lifestyle background. Single fal image job, polled via /api/jobs.
-export default function ProductShotPanel() {
+export function ProductShotPanel() {
   const ent = useEntitlements();
   const { currentCampaignId, workspaceSlug, creditBalance, setCreditBalance } =
     useAppStore();

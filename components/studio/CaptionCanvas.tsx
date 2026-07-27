@@ -9,6 +9,7 @@ import {
   type StudioOption,
 } from "@/components/studio/StudioSelect";
 import { PLATFORM_FORMATS, type PlatformId } from "@/lib/composition/formats";
+import { InfoHint } from "@/components/ui/info-hint";
 
 /**
  * Caption AI — a from-scratch, topic/prompt-driven caption generator.
@@ -121,7 +122,8 @@ export function CaptionCanvas({
         </div>
         <div>
           <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-            What&apos;s this about
+            What&apos;s this about{" "}
+            <InfoHint text="Prefilled from your image prompt, but edit it freely — this is what the caption is written about. Mentioning the offer or the audience gives you a sharper result than the scene description alone." />
           </label>
           <textarea
             value={topic}
@@ -134,7 +136,8 @@ export function CaptionCanvas({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-              Platform
+              Platform{" "}
+              <InfoHint text="Each platform gets its own voice and length — LinkedIn runs longer and more measured, TikTok short and punchy. Pick where this post is actually going." />
             </label>
             <StudioSelect
               value={platform}
@@ -144,7 +147,8 @@ export function CaptionCanvas({
           </div>
           <div>
             <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-              Tone
+              Tone{" "}
+              <InfoHint text="The register of the writing. If you've set a brand voice in Settings, that overrides this pick." />
             </label>
             <StudioSelect
               value={tone}

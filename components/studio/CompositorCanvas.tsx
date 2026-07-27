@@ -35,6 +35,7 @@ import {
   type CompositionDoc,
 } from "@/lib/composition/layers";
 import { Spinner } from "@/components/brand/Spinner";
+import { InfoHint } from "@/components/ui/info-hint";
 import { api } from "@/lib/api";
 
 type CompositeOp = CompositeProvenance["op"];
@@ -823,6 +824,7 @@ export function CompositorCanvas({
                   <LockOpen className="h-3.5 w-3.5" />
                 )}
                 {selectedLayer.locked ? "Locked" : "Unlocked"} — selected layer
+                <InfoHint text="Locking a layer freezes it so later operations build on top instead of replacing it. Unlock to edit its settings or regenerate it." />
               </div>
               <LayerControls
                 layer={selectedLayer}

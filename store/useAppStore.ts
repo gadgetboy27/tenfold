@@ -180,7 +180,9 @@ interface AppStore {
   rightDrawerOpen: boolean;
 
   setStep: (step: 1 | 2 | 3 | 4 | 5 | 6) => void;
-  setCampaignId: (id: string) => void;
+  /** Nullable to match `currentCampaignId` itself — Studio clears it when a
+   *  project is reset, and the store's own resetCampaign() already sets null. */
+  setCampaignId: (id: string | null) => void;
   setCompositionId: (id: string) => void;
   setCreditBalance: (n: number) => void;
   setWorkspaceSlug: (slug: string) => void;
