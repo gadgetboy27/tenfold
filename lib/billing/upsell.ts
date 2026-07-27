@@ -3,12 +3,12 @@
 // a one-liner.
 
 export const PRO_PERKS = [
-  "Spokesperson & talking video",
-  "Multi-language dubbing",
   "Virtual try-on",
   "Auto-captions & product-in-scene",
-  "30s & 60s video, HD exports",
+  "30s video, HD exports",
   "Publish to X, LinkedIn, TikTok & more",
+  "Spokesperson & talking video (Business+)",
+  "Multi-language dubbing (Business+)",
 ];
 
 export interface UpsellCopy {
@@ -20,7 +20,7 @@ export const UPSELLS = {
   talking_video: {
     feature: "Spokesperson video",
     blurb:
-      "Turn a prompt into an on-camera presenter that speaks your ad — in 12 languages.",
+      "Turn a prompt into an on-camera presenter that speaks your ad — in 12 languages. Included from the Business plan up.",
   },
   virtual_tryon: {
     feature: "Virtual try-on",

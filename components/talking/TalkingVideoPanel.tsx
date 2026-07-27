@@ -146,7 +146,10 @@ export function TalkingVideoPanel() {
   const [error, setError] = useState("");
   const [elapsed, setElapsed] = useState(0);
 
-  const isPro = ent?.isPro ?? false;
+  // Business and above, not merely any paid tier — mirrors the server gate in
+  // /api/talking-video. Named `isPro` locally so the disabled/upsell wiring
+  // below reads the same as the other tool panels.
+  const isPro = ent?.spokesperson ?? false;
   const validCampaign =
     !!currentCampaignId &&
     currentCampaignId !== "__new__" &&
@@ -324,7 +327,7 @@ export function TalkingVideoPanel() {
         </span>
       </div>
 
-      {!isPro && <ProUpsell {...UPSELLS.talking_video} />}
+      {!isPro && <ProUpsell {...UPSELLS.talking_video} plan="Business" />}
 
       {/* 1. Presenter */}
       <Group

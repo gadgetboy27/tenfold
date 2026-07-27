@@ -28,9 +28,12 @@ export async function POST(req: Request) {
     const body = draftSchema.parse(await req.json());
 
     const ent = await getEntitlements(session.workspaceId);
-    if (!ent.isPro) {
+    if (!ent.spokesperson) {
       return NextResponse.json(
-        { error: "Spoken video is a Pro feature.", upgrade: true },
+        {
+          error: "Spokesperson video is on the Business plan and above.",
+          upgrade: true,
+        },
         { status: 403 },
       );
     }

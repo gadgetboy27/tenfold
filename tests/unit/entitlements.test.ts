@@ -27,3 +27,25 @@ describe("entitlementsForTier — proEffects must agree with the compositing gat
     expect(entitlementsForTier("creator").proEffects).not.toContain("blend");
   });
 });
+
+describe("entitlementsForTier — spokesperson is Business+, not merely paid", () => {
+  it("withholds spokesperson from payg and creator", () => {
+    expect(entitlementsForTier("payg").spokesperson).toBe(false);
+    expect(entitlementsForTier("creator").spokesperson).toBe(false);
+  });
+
+  it("grants spokesperson on business and agency", () => {
+    expect(entitlementsForTier("business").spokesperson).toBe(true);
+    expect(entitlementsForTier("agency").spokesperson).toBe(true);
+  });
+
+  it("does not track isPro — creator is paid but still has no spokesperson", () => {
+    // The point of the separate flag. A run costs 130 credits against 5–8 for
+    // the other add-on tools, so it is deliberately not bundled at Creator.
+    // Collapsing this back to `isPro` (as /api/talking-video once did) would
+    // hand every $29 subscriber the most expensive job in the product.
+    const creator = entitlementsForTier("creator");
+    expect(creator.isPro).toBe(true);
+    expect(creator.spokesperson).toBe(false);
+  });
+});

@@ -27,13 +27,15 @@ export async function POST(req: Request) {
     const body = createTalkingVideoSchema.parse(await req.json());
     const admin = createSupabaseAdminClient();
 
-    // Premium feature — gate to paid tiers before charging.
+    // Premium feature — gate before charging. Business and above, not merely
+    // any paid tier: one run is 130 credits against 5–8 for the other add-on
+    // tools, so it isn't bundled at Creator.
     const ent = await getEntitlements(session.workspaceId);
-    if (!ent.isPro) {
+    if (!ent.spokesperson) {
       return NextResponse.json(
         {
           error:
-            "Talking spokesperson videos are a Pro feature — upgrade to generate them.",
+            "Spokesperson videos are on the Business plan and above — upgrade to generate them.",
           upgrade: true,
         },
         { status: 403 },

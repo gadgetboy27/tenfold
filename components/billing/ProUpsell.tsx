@@ -13,9 +13,15 @@ import { PRO_PERKS } from "@/lib/billing/upsell";
 export default function ProUpsell({
   feature,
   blurb,
+  plan = "Pro",
 }: {
   feature: string;
   blurb?: string;
+  /** Plan name shown in the lock label. Defaults to the generic "Pro"; pass a
+   *  specific tier for anything not unlocked by every paid plan (Spokesperson
+   *  is Business and above), so a Creator subscriber isn't told to upgrade to
+   *  something they already have. */
+  plan?: string;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -27,7 +33,7 @@ export default function ProUpsell({
       >
         <Lock className="w-3.5 h-3.5 shrink-0" />
         <span className="flex-1">
-          {feature} is a Pro feature —{" "}
+          {feature} is a {plan} feature —{" "}
           <span className="text-primary font-medium">see what you get</span>
         </span>
         <Sparkles className="w-3.5 h-3.5 text-primary shrink-0" />

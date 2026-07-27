@@ -23,6 +23,10 @@ export interface Entitlements {
   apiAccess: boolean;
   /** Advanced per-post analytics + reporting. */
   advancedAnalytics: boolean;
+  /** Spokesperson (talking-head) video. Business and above — unlike the other
+   *  add-on tools it isn't bundled at Creator, since one run costs 130 credits
+   *  against 5–8 for the rest. */
+  spokesperson: boolean;
   /** Workspaces (brands/clients) the owner may run. */
   maxWorkspaces: number;
   /** Pro "AI Photoshop" effects this tier unlocks (keys match the effects UI:
@@ -52,6 +56,7 @@ const TIERS: Record<Tier, Entitlements> = {
     priorityQueue: false,
     apiAccess: false,
     advancedAnalytics: false,
+    spokesperson: false,
     maxWorkspaces: 1,
     proEffects: [], // none — Pro effects are the upgrade nudge
   },
@@ -66,6 +71,7 @@ const TIERS: Record<Tier, Entitlements> = {
     priorityQueue: false,
     apiAccess: false,
     advancedAnalytics: false,
+    spokesperson: false,
     maxWorkspaces: 1,
     proEffects: ["removebg"],
   },
@@ -80,6 +86,7 @@ const TIERS: Record<Tier, Entitlements> = {
     priorityQueue: true,
     apiAccess: false,
     advancedAnalytics: true,
+    spokesperson: true,
     maxWorkspaces: 3,
     // "blend" is NOT bundled free on Business — it requires the Blend Package
     // add-on (see getEntitlements below), matching lib/compositing/access.ts's
@@ -98,6 +105,7 @@ const TIERS: Record<Tier, Entitlements> = {
     priorityQueue: true,
     apiAccess: true,
     advancedAnalytics: true,
+    spokesperson: true,
     maxWorkspaces: 5,
     proEffects: [...PRO_EFFECTS], // every effect
   },
