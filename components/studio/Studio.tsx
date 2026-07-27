@@ -783,6 +783,9 @@ export function Studio({
     isActive?: () => boolean;
     disabled?: boolean;
     disabledTitle?: string;
+    /** Renders this item in the magenta Pro accent instead of the violet
+     *  primary — marks the four add-on tools as their own family. */
+    pro?: boolean;
   }[] = [
     // Brief and Images render the identical prompt/result screen (both are
     // `isCreate` in CockpitCreate) — a dedicated "Brief" nav item was a dead
@@ -808,6 +811,7 @@ export function Studio({
     {
       id: "productshot",
       label: "Product shot",
+      pro: true,
       icon: Package,
       done: false,
       disabled: !campaignId,
@@ -816,6 +820,7 @@ export function Studio({
     {
       id: "tryon",
       label: "Virtual try-on",
+      pro: true,
       icon: Shirt,
       done: false,
       disabled: !campaignId,
@@ -825,6 +830,7 @@ export function Studio({
     {
       id: "talking",
       label: "Spokesperson",
+      pro: true,
       icon: Mic,
       done: false,
       disabled: !campaignId,
@@ -833,6 +839,7 @@ export function Studio({
     {
       id: "autocaption",
       label: "Subtitles",
+      pro: true,
       icon: Captions,
       done: false,
       disabled: !campaignId,
@@ -1136,6 +1143,7 @@ function StudioNav({
     isActive?: () => boolean;
     disabled?: boolean;
     disabledTitle?: string;
+    pro?: boolean;
   }[];
   section: SectionId;
   setSection: (s: SectionId) => void;
@@ -1162,23 +1170,35 @@ function StudioNav({
                 : t.id === "publish"
                   ? publishReady
                   : false);
+          // The four add-on tools carry a magenta accent rather than the violet
+          // primary, so they read as their own family in a 12-item rail. Idle
+          // they only tint the icon — the label stays muted like everything
+          // else, so the rail doesn't turn into a christmas tree.
           const cls = `flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
             t.disabled
               ? "cursor-not-allowed text-muted-foreground/40"
               : active
-                ? "bg-primary/15 text-foreground"
+                ? t.pro
+                  ? "bg-pro/20 text-pro"
+                  : "bg-primary/15 text-foreground"
                 : "text-muted-foreground hover:bg-background hover:text-foreground"
           }`;
           const inner = (
             <>
-              <Icon className="h-4 w-4 shrink-0 opacity-90" />
+              <Icon
+                className={`h-4 w-4 shrink-0 opacity-90 ${
+                  t.pro && !t.disabled && !active ? "text-pro/70" : ""
+                }`}
+              />
               <span>{t.label}</span>
               <span
                 className={`ml-auto h-1.5 w-1.5 rounded-full ${
                   t.done
                     ? "bg-emerald-500"
                     : active
-                      ? "bg-primary"
+                      ? t.pro
+                        ? "bg-pro"
+                        : "bg-primary"
                       : justUnlocked
                         ? "animate-pulse bg-emerald-500"
                         : "bg-border"
