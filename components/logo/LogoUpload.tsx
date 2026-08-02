@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 import { Upload, Loader2 } from "lucide-react";
+import { GalleryPickButton } from "@/components/shared/GalleryPicker";
+import { CREDIT_COSTS } from "@/lib/credits/costs";
 
 /**
  * Acquisition entry point (Step 1 alternative): a business with an older
@@ -12,9 +14,11 @@ import { Upload, Loader2 } from "lucide-react";
  */
 export function LogoUpload({
   onUpload,
+  onPickFromGallery,
   uploading,
 }: {
   onUpload: (file: File) => void;
+  onPickFromGallery: () => void;
   uploading: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -59,10 +63,18 @@ export function LogoUpload({
             : "Have an existing logo? Upload it"}
         </span>
         <span className="text-xs text-muted-foreground">
-          We&apos;ll turn it into a clean, editable SVG — PNG/JPG/WEBP, under
-          5 MB · 1 credit
+          We&apos;ll turn it into a clean, editable SVG — PNG/JPG/WEBP, under 5
+          MB · {CREDIT_COSTS.logo_vectorize} credit
         </span>
       </button>
+      {/* Or vectorize something already in the workspace — a mark generated
+          in an earlier session doesn't need re-downloading and re-uploading. */}
+      <GalleryPickButton
+        onClick={onPickFromGallery}
+        label="Or vectorize an image from your gallery"
+        disabled={uploading}
+        className="mt-2 w-full justify-center"
+      />
       <input
         ref={inputRef}
         type="file"

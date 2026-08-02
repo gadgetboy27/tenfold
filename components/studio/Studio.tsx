@@ -46,6 +46,11 @@ import { LogoStudio } from "@/components/logo/LogoStudio";
 import { CompositorCanvas } from "@/components/studio/CompositorCanvas";
 import { PublishCanvas } from "@/components/studio/PublishCanvas";
 import { ReferencePhotoField } from "@/components/studio/ReferencePhotoField";
+import { GalleryPicker } from "@/components/shared/GalleryPicker";
+import {
+  ProjectBundle,
+  type ProjectProgress,
+} from "@/components/studio/ProjectBundle";
 import {
   BrandImportPanel,
   type AnalyzeResult,
@@ -230,6 +235,7 @@ export function Studio({
   // Bring-your-own product photo (image-conditioned generation via Kontext).
   const [referenceUrl, setReferenceUrl] = useState<string | null>(null);
   const [refUploading, setRefUploading] = useState(false);
+  const [pickingReference, setPickingReference] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [stage, setStage] = useState("");
   const [campaignId, setCampaignId] = useState<string | null>(null);
@@ -291,6 +297,37 @@ export function Studio({
   useEffect(() => {
     setStoreCampaignId(campaignId);
   }, [campaignId, setStoreCampaignId]);
+
+  // What this project has already produced, per section — the nav's tick
+  // marks. Studio's own local state only knows about the sections it drives
+  // (images/video/music), so the four Pro tools, the Compositor and Publish
+  // could never show progress, and reopening a project lost the rest. This is
+  // server-derived from the campaign's jobs/assets/compositions, so it
+  // survives a reload and reflects work done in any earlier session.
+  const [progress, setProgress] = useState<ProjectProgress | null>(null);
+  const refreshProgress = useCallback(() => {
+    if (!campaignId) {
+      setProgress(null);
+      return;
+    }
+    api(`/api/campaigns/${campaignId}/progress`, { workspaceSlug })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: ProjectProgress | null) => setProgress(d))
+      .catch(() => {});
+  }, [campaignId, workspaceSlug]);
+  useEffect(() => {
+    queueMicrotask(refreshProgress);
+  }, [refreshProgress]);
+  // Re-derive whenever a generation finishes, so a tick appears without a
+  // reload. `generating`/`videoGenerating`/`musicGenerating` cover Studio's own
+  // jobs; `section` covers everything else — the four Pro panels and
+  // CaptionCanvas are self-contained and never report back to Studio, so
+  // navigating away from one is the moment to re-read what it produced.
+  useEffect(() => {
+    if (!generating && !videoGenerating && !musicGenerating)
+      queueMicrotask(refreshProgress);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [generating, videoGenerating, musicGenerating, anchorId, section]);
 
   // Drives the nav's Gallery shortcut (greyed out with nothing to browse yet).
   // Defaults to true so it never flashes disabled while this is in flight.
@@ -802,7 +839,12 @@ export function Studio({
       disabled: !hasGalleryItems,
       disabledTitle: "Nothing in the Gallery yet — generate your first project",
     },
-    { id: "images", label: "Images", icon: ImagesIcon, done: anchorPicked },
+    {
+      id: "images",
+      label: "Images",
+      icon: ImagesIcon,
+      done: anchorPicked || !!progress?.done.images,
+    },
     // Pro image tools. They work off their own uploads rather than the anchor,
     // but every one of them bills to a campaign — so they stay disabled until
     // there's a real campaign to attribute the spend to (matching each panel's
@@ -813,7 +855,7 @@ export function Studio({
       label: "Product shot",
       pro: true,
       icon: Package,
-      done: false,
+      done: !!progress?.done.productshot,
       disabled: !campaignId,
       disabledTitle: needsProjectTitle,
     },
@@ -822,17 +864,22 @@ export function Studio({
       label: "Virtual try-on",
       pro: true,
       icon: Shirt,
-      done: false,
+      done: !!progress?.done.tryon,
       disabled: !campaignId,
       disabledTitle: needsProjectTitle,
     },
-    { id: "video", label: "Video", icon: Play, done: !!videoUrl },
+    {
+      id: "video",
+      label: "Video",
+      icon: Play,
+      done: !!videoUrl || !!progress?.done.video,
+    },
     {
       id: "talking",
       label: "Spokesperson",
       pro: true,
       icon: Mic,
-      done: false,
+      done: !!progress?.done.talking,
       disabled: !campaignId,
       disabledTitle: needsProjectTitle,
     },
@@ -841,17 +888,27 @@ export function Studio({
       label: "Subtitles",
       pro: true,
       icon: Captions,
-      done: false,
+      done: !!progress?.done.autocaption,
       disabled: !campaignId,
       disabledTitle: needsProjectTitle,
     },
-    { id: "music", label: "Music", icon: Music, done: false },
-    { id: "caption", label: "Caption", icon: MessageSquare, done: false },
+    {
+      id: "music",
+      label: "Music",
+      icon: Music,
+      done: !!musicUrl || !!progress?.done.music,
+    },
+    {
+      id: "caption",
+      label: "Caption",
+      icon: MessageSquare,
+      done: !!progress?.done.caption,
+    },
     {
       id: "compositor",
       label: "Compositor",
       icon: Layers,
-      done: false,
+      done: !!progress?.done.compositor,
       classicHref: campaignId
         ? `/${workspaceSlug}/compositor?campaign=${campaignId}`
         : `/${workspaceSlug}/compositor`,
@@ -860,16 +917,33 @@ export function Studio({
       id: "logo",
       label: "Logo & brand",
       icon: Shapes,
-      done: false,
+      // Workspace-level, not per-project — see the progress route's note.
+      done: !!progress?.done.logo,
       // Renders the full Logo & Brand studio inline when enabled; only falls
       // back to the classic page if the builder flag is off.
       ...(logoEnabled ? {} : { classicHref: `/${workspaceSlug}/logo` }),
     },
-    { id: "publish", label: "Publish", icon: Send, done: false },
+    {
+      id: "publish",
+      label: "Publish",
+      icon: Send,
+      done: !!progress?.done.publish,
+    },
   ];
 
   return (
     <div className="flex h-screen bg-background text-foreground">
+      {/* Reference photo can come from a file OR from anything the workspace
+          has already generated — same pair of choices as every other upload. */}
+      <GalleryPicker
+        open={pickingReference}
+        onClose={() => setPickingReference(false)}
+        onPick={(a) => setReferenceUrl(a.url)}
+        workspaceSlug={workspaceSlug}
+        campaignId={campaignId}
+        title="Pick a reference photo"
+        hint="Your ads get built around this image instead of an invented one."
+      />
       {/* ── main — Cockpit is the only layout now. Navigation lives inside the
              left input panel (true two-column workspace, no separate sidebar). ── */}
       <div className="flex min-w-0 flex-1 flex-col">
@@ -1031,21 +1105,41 @@ export function Studio({
                 // Each compositing op (cutout/inpaint/relight/blend) becomes a real,
                 // lockable layer in the SAME layer system the classic Compositor
                 // uses — reused, not forked.
-                <CompositorCanvas
-                  workspaceSlug={workspaceSlug}
-                  campaignId={campaignId}
-                  anchorUrl={workingImage}
-                  classicHref={`/${workspaceSlug}/compositor?campaign=${campaignId}`}
-                  initialOp={compositorInitialOp}
-                />
+                //
+                // The bundle strip sits above it: this is the point where a
+                // user is assembling the finished piece, so it's where seeing
+                // everything the project has produced actually helps.
+                <div className="flex h-full min-h-0 flex-col gap-3">
+                  <ProjectBundle
+                    progress={progress}
+                    projectName={campaignName}
+                  />
+                  <div className="min-h-0 flex-1">
+                    <CompositorCanvas
+                      workspaceSlug={workspaceSlug}
+                      campaignId={campaignId}
+                      anchorUrl={workingImage}
+                      classicHref={`/${workspaceSlug}/compositor?campaign=${campaignId}`}
+                      initialOp={compositorInitialOp}
+                    />
+                  </div>
+                </div>
               ) : section === "publish" ? (
-                <PublishCanvas
-                  workspaceSlug={workspaceSlug}
-                  campaignId={campaignId}
-                  anchorId={anchorId}
-                  workingImage={workingImage}
-                  videoUrl={videoUrl}
-                />
+                <div className="flex h-full min-h-0 flex-col gap-3">
+                  <ProjectBundle
+                    progress={progress}
+                    projectName={campaignName}
+                  />
+                  <div className="min-h-0 flex-1">
+                    <PublishCanvas
+                      workspaceSlug={workspaceSlug}
+                      campaignId={campaignId}
+                      anchorId={anchorId}
+                      workingImage={workingImage}
+                      videoUrl={videoUrl}
+                    />
+                  </div>
+                </div>
               ) : (
                 <CockpitCreate
                   tools={tools}
@@ -1075,6 +1169,7 @@ export function Studio({
                   referenceUrl={referenceUrl}
                   refUploading={refUploading}
                   onUploadReference={uploadReference}
+                  onPickReference={() => setPickingReference(true)}
                   onClearReference={() => setReferenceUrl(null)}
                   generating={generating}
                   stage={stage}
@@ -1247,6 +1342,7 @@ function CockpitCreate({
   referenceUrl,
   refUploading,
   onUploadReference,
+  onPickReference,
   onClearReference,
   generating,
   stage,
@@ -1298,6 +1394,7 @@ function CockpitCreate({
   referenceUrl: string | null;
   refUploading: boolean;
   onUploadReference: (file: File) => void;
+  onPickReference: () => void;
   onClearReference: () => void;
   generating: boolean;
   stage: string;
@@ -1560,6 +1657,7 @@ function CockpitCreate({
                   url={referenceUrl}
                   uploading={refUploading}
                   onUpload={onUploadReference}
+                  onPickFromGallery={onPickReference}
                   onClear={onClearReference}
                 />
               </div>

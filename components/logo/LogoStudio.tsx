@@ -11,6 +11,7 @@ import { BrandColors } from "./BrandColors";
 import { LogoLibrary, type LogoProjectSummary } from "./LogoLibrary";
 import type { LogoBrief as LogoBriefType } from "@/lib/logo/brief";
 import { useAppStore } from "@/store/useAppStore";
+import { GalleryPicker } from "@/components/shared/GalleryPicker";
 import { api } from "@/lib/api";
 
 // The studio orchestrator. Holds the one piece of durable state — the project
@@ -40,6 +41,7 @@ export function LogoStudio() {
   const [state, setState] = useState<ProjectState | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [pickingLogo, setPickingLogo] = useState(false);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [packaging, setPackaging] = useState(false);
@@ -217,14 +219,28 @@ export function LogoStudio() {
   // anchor step): the render logic below falls back to the final asset when
   // there's no separate anchor.
   async function uploadExisting(file: File) {
+    const fd = new FormData();
+    fd.append("file", file);
+    await startVectorize({ body: fd });
+  }
+
+  // Same route, same result — the source is an asset the workspace already owns
+  // rather than a file off disk. The server resolves the id to a URL under this
+  // workspace (lib/assets/owned.ts), so no client-supplied URL is trusted.
+  async function vectorizeFromGallery(assetId: string) {
+    await startVectorize({
+      body: JSON.stringify({ assetId }),
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  async function startVectorize(init: Omit<RequestInit, "method">) {
     setUploading(true);
     setError(null);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
       const res = await fetch("/api/logo/vectorize", {
         method: "POST",
-        body: fd,
+        ...init,
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not start vectorize");
@@ -387,7 +403,19 @@ export function LogoStudio() {
           deletingId={deletingId}
         />
         <LogoBrief onSubmit={startGeneration} submitting={submitting} />
-        <LogoUpload onUpload={uploadExisting} uploading={uploading} />
+        <LogoUpload
+          onUpload={uploadExisting}
+          onPickFromGallery={() => setPickingLogo(true)}
+          uploading={uploading}
+        />
+        <GalleryPicker
+          open={pickingLogo}
+          onClose={() => setPickingLogo(false)}
+          onPick={(a) => void vectorizeFromGallery(a.id)}
+          workspaceSlug={workspaceSlug}
+          title="Pick an image to vectorize"
+          hint="We'll turn it into a clean, editable SVG."
+        />
         <BrandColors onSaved={setBrandPalette} />
       </div>
     );

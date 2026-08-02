@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { Upload, X, Loader2 } from "lucide-react";
 import { InfoHint } from "@/components/ui/info-hint";
+import { GalleryPickButton } from "@/components/shared/GalleryPicker";
 
 /**
  * Bring-your-own product photo. Uploads via the parent's handler and shows a
@@ -13,12 +14,15 @@ export function ReferencePhotoField({
   url,
   uploading,
   onUpload,
+  onPickFromGallery,
   onClear,
   compact,
 }: {
   url: string | null;
   uploading: boolean;
   onUpload: (file: File) => void;
+  /** Opens the gallery picker — a past image is a reference photo too. */
+  onPickFromGallery: () => void;
   onClear: () => void;
   /** Tighter styling for the cockpit's narrow left panel. */
   compact?: boolean;
@@ -93,6 +97,14 @@ export function ReferencePhotoField({
             </span>
           )}
         </button>
+      )}
+
+      {!url && (
+        <GalleryPickButton
+          onClick={onPickFromGallery}
+          label="Or use one from your gallery"
+          className="mt-1.5 w-full justify-center"
+        />
       )}
 
       <input

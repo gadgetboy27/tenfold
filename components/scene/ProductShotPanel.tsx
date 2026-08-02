@@ -14,6 +14,10 @@ import { api } from "@/lib/api";
 import toast from "react-hot-toast";
 import { CREDIT_COSTS } from "@/lib/credits/costs";
 import { PLACEMENTS, type Placement } from "@/lib/fal/product-shot";
+import {
+  GalleryPicker,
+  GalleryPickButton,
+} from "@/components/shared/GalleryPicker";
 
 type Status = "idle" | "submitting" | "pending" | "ready" | "failed";
 
@@ -27,6 +31,7 @@ export function ProductShotPanel() {
   const patch = useAppStore((s) => s.patchProductShotDraft);
 
   const [uploading, setUploading] = useState(false);
+  const [picking, setPicking] = useState(false);
   const [status, setStatus] = useState<Status>("idle");
   const [resultUrl, setResultUrl] = useState("");
   const [error, setError] = useState("");
@@ -132,6 +137,15 @@ export function ProductShotPanel() {
 
   return (
     <div className="bg-card border border-border rounded-2xl p-4 sm:p-5 space-y-4">
+      <GalleryPicker
+        open={picking}
+        onClose={() => setPicking(false)}
+        onPick={(a) => patch({ productImageUrl: a.url })}
+        workspaceSlug={workspaceSlug}
+        campaignId={currentCampaignId}
+        title="Pick a product photo"
+        hint="A clean, cut-out shot places best. Anything you've generated or uploaded before is here."
+      />
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
@@ -194,6 +208,11 @@ export function ProductShotPanel() {
               }}
             />
           </label>
+          <GalleryPickButton
+            onClick={() => setPicking(true)}
+            label="From gallery"
+            className="w-full justify-center px-2"
+          />
         </div>
 
         {/* Scene + result */}

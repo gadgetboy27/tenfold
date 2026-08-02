@@ -5,13 +5,25 @@ import Image from "next/image";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAppStore } from "@/store/useAppStore";
-import { Upload, X, Save, Loader2, Check, Palette } from "lucide-react";
+import {
+  Upload,
+  X,
+  Save,
+  Loader2,
+  Check,
+  Palette,
+  FolderOpen,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ColorField } from "@/components/ui/color-field";
 import toast from "react-hot-toast";
 import { cn } from "@/lib/utils";
 import BrandVoice from "@/components/settings/BrandVoice";
+import {
+  GalleryPicker,
+  GalleryPickButton,
+} from "@/components/shared/GalleryPicker";
 
 const FONTS = [
   "Inter",
@@ -55,6 +67,8 @@ export default function BrandKitPage() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadingDark, setUploadingDark] = useState(false);
+  // Which logo slot the gallery picker is filling, if it's open.
+  const [pickingLogo, setPickingLogo] = useState<"light" | "dark" | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const darkFileRef = useRef<HTMLInputElement>(null);
@@ -102,16 +116,31 @@ export default function BrandKitPage() {
     }
   };
 
+  /**
+   * Set a brand logo from either a picked file or an asset the workspace has
+   * already made (the gallery picker). The route takes multipart for the
+   * former and JSON `{assetId}` for the latter, and copies the bytes into the
+   * brand kit's own path either way.
+   */
   const uploadLogo = async (
-    file: File,
+    source: File | { assetId: string },
     variant: "light" | "dark" = "light",
   ) => {
     const setBusy = variant === "dark" ? setUploadingDark : setUploading;
     setBusy(true);
     try {
-      const form = new FormData();
-      form.append("file", file);
-      form.append("variant", variant);
+      const fromFile = source instanceof File;
+      let body: BodyInit;
+      const headers: Record<string, string> = {};
+      if (fromFile) {
+        const form = new FormData();
+        form.append("file", source);
+        form.append("variant", variant);
+        body = form;
+      } else {
+        body = JSON.stringify({ assetId: source.assetId, variant });
+        headers["Content-Type"] = "application/json";
+      }
       const { getPublicEnv } = await import("@/lib/env/public-client");
       const pub = getPublicEnv();
       const supabase = (await import("@supabase/ssr")).createBrowserClient(
@@ -121,7 +150,6 @@ export default function BrandKitPage() {
       const {
         data: { session },
       } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {};
       if (session?.access_token)
         headers["Authorization"] = `Bearer ${session.access_token}`;
       if (slug) headers["x-workspace-slug"] = slug;
@@ -129,7 +157,7 @@ export default function BrandKitPage() {
       const res = await fetch("/api/brand-kit/logo", {
         method: "POST",
         headers,
-        body: form,
+        body,
       });
       if (!res.ok) {
         const err = (await res.json().catch(() => ({}))) as { error?: string };
@@ -139,9 +167,7 @@ export default function BrandKitPage() {
       const key = variant === "dark" ? "logo_dark_url" : "logo_url";
       setKit((k) => ({ ...k, [key]: url }));
       setSaved((k) => ({ ...k, [key]: url }));
-      toast.success(
-        variant === "dark" ? "Dark logo uploaded" : "Logo uploaded",
-      );
+      toast.success(variant === "dark" ? "Dark logo set" : "Logo set");
     } catch (err) {
       toast.error((err as Error).message ?? "Upload failed");
     } finally {
@@ -184,6 +210,20 @@ export default function BrandKitPage() {
 
   return (
     <div className="max-w-4xl">
+      <GalleryPicker
+        open={pickingLogo !== null}
+        onClose={() => setPickingLogo(null)}
+        onPick={(a) =>
+          void uploadLogo({ assetId: a.id }, pickingLogo ?? "light")
+        }
+        workspaceSlug={slug}
+        title={
+          pickingLogo === "dark"
+            ? "Pick your dark-variant logo"
+            : "Pick your logo"
+        }
+        hint="Anything this workspace has generated — including marks from Logo Studio."
+      />
       <div className="mb-8 flex items-start justify-between">
         <div>
           <h1 className="font-serif text-2xl font-bold text-foreground mb-1">
@@ -294,6 +334,14 @@ export default function BrandKitPage() {
               accept=".png,.jpg,.jpeg,.webp,.svg"
               onChange={handleFileChange}
             />
+            {/* A mark made in Logo Studio is already in the workspace — no
+                reason to make someone download and re-upload it. */}
+            <GalleryPickButton
+              onClick={() => setPickingLogo("light")}
+              label="Or use one from your gallery"
+              disabled={uploading}
+              className="mt-2 w-full justify-center"
+            />
 
             {/* Dark variant — used when the mark sits on light backgrounds */}
             <div className="mt-3 flex items-center gap-3 p-3 rounded-xl border border-border bg-card">
@@ -336,6 +384,15 @@ export default function BrandKitPage() {
                   ) : (
                     "Upload"
                   )}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setPickingLogo("dark")}
+                  disabled={uploadingDark}
+                  title="Use an image from your gallery"
+                >
+                  <FolderOpen className="w-3.5 h-3.5" />
                 </Button>
                 {kit.logo_dark_url && (
                   <Button

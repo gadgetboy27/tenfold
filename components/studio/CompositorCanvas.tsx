@@ -36,6 +36,10 @@ import {
 } from "@/lib/composition/layers";
 import { Spinner } from "@/components/brand/Spinner";
 import { InfoHint } from "@/components/ui/info-hint";
+import {
+  GalleryPicker,
+  GalleryPickButton,
+} from "@/components/shared/GalleryPicker";
 import { api } from "@/lib/api";
 
 type CompositeOp = CompositeProvenance["op"];
@@ -101,7 +105,8 @@ const MECH_DIRECTIONS = ["horizontal", "vertical"] as const;
 // Keep in step with compositeHistoryEntrySchema's .max(5) in layers.ts.
 const HISTORY_LIMIT = 5;
 
-interface GalleryImage {
+/** The second input of a blend/overlay op — from the gallery or a fresh upload. */
+interface SecondImage {
   id: string;
   url: string;
 }
@@ -157,14 +162,14 @@ export function CompositorCanvas({
   const [direction, setDirection] =
     useState<(typeof RELIGHT_DIRECTIONS)[number]>("None");
   const [maskFile, setMaskFile] = useState<File | null>(null);
-  const [secondImage, setSecondImage] = useState<GalleryImage | null>(null);
+  const [secondImage, setSecondImage] = useState<SecondImage | null>(null);
   const [pickingSecond, setPickingSecond] = useState(false);
+  const [uploadingSecond, setUploadingSecond] = useState(false);
   const [mode, setMode] = useState<(typeof MECH_MODES)[number]>("soft-light");
   const [mechOpacity, setMechOpacity] = useState(1);
   const [mechDirection, setMechDirection] =
     useState<(typeof MECH_DIRECTIONS)[number]>("horizontal");
   const [sigma, setSigma] = useState(12);
-  const [gallery, setGallery] = useState<GalleryImage[]>([]);
   const [running, setRunning] = useState<CompositeOp | "redo" | null>(null);
   const maskInputRef = useRef<HTMLInputElement>(null);
 
@@ -261,15 +266,28 @@ export function CompositorCanvas({
       ? selectedLayer.src
       : (doc?.background.src ?? anchorUrl);
 
-  useEffect(() => {
-    if (!pickingSecond || gallery.length > 0) return;
-    api("/api/gallery", { workspaceSlug })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d: { assets?: GalleryImage[] } | null) =>
-        setGallery(d?.assets ?? []),
-      )
-      .catch(() => {});
-  }, [pickingSecond, gallery.length, workspaceSlug]);
+  // The second image can also be a brand-new file — an overlay texture or a
+  // partner logo won't already be in the gallery. Same generic endpoint every
+  // other upload in the app uses.
+  const uploadSecondImage = async (file: File) => {
+    setUploadingSecond(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await api("/api/uploads/image", {
+        method: "POST",
+        body: fd,
+        workspaceSlug,
+      });
+      const data = (await res.json()) as { url?: string; error?: string };
+      if (!res.ok || !data.url) throw new Error(data.error ?? "Upload failed");
+      setSecondImage({ id: uuidv4(), url: data.url });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setUploadingSecond(false);
+    }
+  };
 
   // Preview the uploaded mask directly on the canvas (white = fill) instead
   // of just naming the file — the only way to check it lines up before
@@ -572,6 +590,15 @@ export function CompositorCanvas({
 
   return (
     <div className="mx-auto flex h-full max-w-6xl flex-col gap-3">
+      <GalleryPicker
+        open={pickingSecond}
+        onClose={() => setPickingSecond(false)}
+        onPick={(a) => setSecondImage({ id: a.id, url: a.url })}
+        workspaceSlug={workspaceSlug}
+        campaignId={campaignId}
+        title="Pick the second image"
+        hint="Blended with, or laid over, the image on the canvas."
+      />
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold">Compositing</h2>
@@ -756,36 +783,27 @@ export function CompositorCanvas({
                     </button>
                   </div>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => setPickingSecond(true)}
-                    className="rounded-lg border border-dashed border-border px-3 py-1.5 text-xs text-muted-foreground hover:border-primary/40"
-                  >
-                    Pick second image from your gallery
-                  </button>
-                ))}
-              {pickingSecond && (
-                <div className="grid max-h-40 grid-cols-4 gap-1.5 overflow-y-auto rounded-lg border border-border p-2">
-                  {gallery.map((g) => (
-                    <button
-                      key={g.id}
-                      type="button"
-                      onClick={() => {
-                        setSecondImage(g);
-                        setPickingSecond(false);
-                      }}
-                      className="aspect-square overflow-hidden rounded-md border border-border hover:border-primary/50"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={g.url}
-                        alt=""
-                        className="h-full w-full object-cover"
+                  <div className="flex flex-wrap items-center gap-2">
+                    <GalleryPickButton
+                      onClick={() => setPickingSecond(true)}
+                      label="Pick from gallery"
+                    />
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground">
+                      <Upload className="h-3.5 w-3.5" />
+                      {uploadingSecond ? "Uploading…" : "Upload a file"}
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) void uploadSecondImage(f);
+                          e.target.value = "";
+                        }}
                       />
-                    </button>
-                  ))}
-                </div>
-              )}
+                    </label>
+                  </div>
+                ))}
               <div className="flex items-center gap-2 pt-1">
                 <button
                   type="button"

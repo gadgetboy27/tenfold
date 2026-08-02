@@ -9,6 +9,7 @@ import { refundCredits } from "@/lib/credits/refund";
 import { enqueueJob } from "@/lib/fal/queue";
 import { ensureLogoCampaign } from "@/app/api/logo/route";
 import { validateVectorizeUpload, extensionOf } from "@/lib/logo/upload";
+import { resolveOwnedAsset } from "@/lib/assets/owned";
 
 // POST /api/logo/vectorize — the acquisition hook: upload an old raster logo,
 // get a clean SVG back (Recraft vectorize). 1 credit. Creates a lightweight
@@ -28,33 +29,70 @@ export async function POST(req: Request) {
   }
   try {
     const session = await getSession(req);
-    const form = await req.formData();
-    const file = form.get("file") as File | null;
-    if (!file) {
-      return NextResponse.json({ error: ERROR_MESSAGES.empty }, { status: 400 });
-    }
-    const invalid = validateVectorizeUpload(file);
-    if (invalid) {
-      return NextResponse.json(
-        { error: ERROR_MESSAGES[invalid] },
-        { status: 400 },
-      );
-    }
-    const ext = extensionOf(file.name);
-
     const admin = createSupabaseAdminClient();
 
-    // Store the source raster so vectorize can pull it from a public URL.
-    const uploadPath = `uploads/${session.workspaceId}/${uuidv4()}.${ext}`;
-    const { error: upErr } = await admin.storage
-      .from("assets")
-      .upload(uploadPath, await file.arrayBuffer(), { contentType: file.type });
-    if (upErr) {
-      return NextResponse.json({ error: upErr.message }, { status: 500 });
+    // Two ways in, one pipeline: a multipart file upload, or JSON naming an
+    // asset the workspace already owns (the gallery picker). The asset path
+    // resolves the URL server-side under this workspace — never trusting a
+    // client-supplied URL — and needs no second copy in storage.
+    const isJson = (req.headers.get("content-type") ?? "").includes(
+      "application/json",
+    );
+    let sourceUrl: string;
+    let sourceName: string;
+
+    if (isJson) {
+      const body = (await req.json()) as { assetId?: unknown };
+      if (typeof body.assetId !== "string" || !body.assetId) {
+        return NextResponse.json(
+          { error: ERROR_MESSAGES.empty },
+          { status: 400 },
+        );
+      }
+      const owned = await resolveOwnedAsset(
+        admin,
+        session.workspaceId,
+        body.assetId,
+      );
+      if (!owned) {
+        return NextResponse.json({ error: "Not found" }, { status: 404 });
+      }
+      sourceUrl = owned.url;
+      sourceName = "Gallery logo";
+    } else {
+      const form = await req.formData();
+      const file = form.get("file") as File | null;
+      if (!file) {
+        return NextResponse.json(
+          { error: ERROR_MESSAGES.empty },
+          { status: 400 },
+        );
+      }
+      const invalid = validateVectorizeUpload(file);
+      if (invalid) {
+        return NextResponse.json(
+          { error: ERROR_MESSAGES[invalid] },
+          { status: 400 },
+        );
+      }
+      const ext = extensionOf(file.name);
+
+      // Store the source raster so vectorize can pull it from a public URL.
+      const uploadPath = `uploads/${session.workspaceId}/${uuidv4()}.${ext}`;
+      const { error: upErr } = await admin.storage
+        .from("assets")
+        .upload(uploadPath, await file.arrayBuffer(), {
+          contentType: file.type,
+        });
+      if (upErr) {
+        return NextResponse.json({ error: upErr.message }, { status: 500 });
+      }
+      const { data: urlData } = admin.storage
+        .from("assets")
+        .getPublicUrl(uploadPath);
+      sourceUrl = urlData.publicUrl;
+      sourceName = file.name.replace(/\.[^.]+$/, "");
     }
-    const { data: urlData } = admin.storage
-      .from("assets")
-      .getPublicUrl(uploadPath);
 
     const projectId = uuidv4();
     const jobId = uuidv4();
@@ -76,7 +114,7 @@ export async function POST(req: Request) {
       id: projectId,
       workspace_id: session.workspaceId,
       created_by: session.userId,
-      brief: { businessName: file.name.replace(/\.[^.]+$/, ""), source: "vectorize" },
+      brief: { businessName: sourceName, source: "vectorize" },
       status: "generating",
     });
     if (projErr) {
@@ -96,7 +134,7 @@ export async function POST(req: Request) {
       workspace_id: session.workspaceId,
       type: "logo_vectorize",
       status: "queued",
-      input_params: { logoProjectId: projectId, source_url: urlData.publicUrl },
+      input_params: { logoProjectId: projectId, source_url: sourceUrl },
       credits_charged: cost,
     });
     if (jobErr) {
@@ -108,7 +146,7 @@ export async function POST(req: Request) {
     try {
       const { requestId } = await enqueueJob(
         "logo_vectorize",
-        { image_url: urlData.publicUrl },
+        { image_url: sourceUrl },
         webhookUrl,
       );
       await admin

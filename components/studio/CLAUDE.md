@@ -260,3 +260,59 @@ Studio's intentional "Open in classic" escape hatches (`classicHref` in
 `Studio.tsx`) for Compositor and Logo when not fully ported inline, and
 `productions` is linked in turn from the compositor page. Real, reachable,
 kept.
+
+## Upload from file OR from the gallery — `components/shared/GalleryPicker.tsx`
+
+Every screen that asks for an image now offers both: the existing file input,
+plus a **"Use from gallery"** trigger (`GalleryPickButton`) opening one shared
+modal (`GalleryPicker`) over `GET /api/gallery` — or, with `kind="video"`, over
+`GET /api/productions?kinds=video,composed_video` (that `kinds` param is new and
+additive; absent, the route still returns exports only). When a `campaignId` is
+passed the modal opens on a **"This project"** tab and offers "Everything"
+alongside it. Everything in the gallery is an asset the workspace already paid
+to generate, so reaching back for one is free.
+
+Wired at: `ReferencePhotoField` (Brief/Images), `ProductShotPanel`,
+`VirtualTryOnPanel` (both slots), `TalkingVideoPanel` (presenter),
+`CompositorCanvas` (second image), `AutoCaptionPanel` (source video),
+`LogoUpload` (vectorize), and the Brand Kit settings page (both logo variants).
+
+**Deliberately not offered** on the Compositor's inpaint mask (a purpose-made
+black/white matte — a gallery image is never the right answer) or on audio
+uploads (the gallery holds images and video).
+
+Two behaviours worth knowing:
+
+- `TalkingVideoPanel`'s presenter "generate" tab read `useAppStore`'s
+  `generatedAssets`, which **nothing has populated since Studio replaced the
+  classic dashboard** (only the classic `Compositor`'s `loadCampaign` ever set
+  it) — so that grid was permanently empty. It now goes through the picker.
+- **Routes take an `assetId`, never a URL.** `POST /api/logo/vectorize` and
+  `POST /api/brand-kit/logo` gained a JSON branch alongside their multipart one;
+  both resolve the id through `resolveOwnedAsset` (`lib/assets/owned.ts`), which
+  looks the URL up under the session's `workspace_id`. Accepting a client-supplied
+  URL would hand an arbitrary address to a fal job and cross the tenant boundary.
+
+## Project progress — nav ticks + the bundle strip
+
+`GET /api/campaigns/[id]/progress` derives, from the campaign's own
+jobs/assets/compositions/publish records, both a `done` map keyed by `SectionId`
+and a `bundle` of the actual assets. One fetch, two views:
+
+- **`StudioNav`'s tick dots.** `tools` used to hardcode `done: false` for the
+  four Pro tools, Compositor, Caption, Music and Publish — Studio's local state
+  only knew about the section it was driving, and reopening a project lost the
+  rest. Local state is still OR'd in (`!!videoUrl || progress?.done.video`) so a
+  tick never blinks off while the fetch is in flight.
+- **`ProjectBundle`** (`components/studio/ProjectBundle.tsx`) — a collapsible
+  "Everything in <project name>" strip above the Compositor and Publish canvases,
+  the two screens where you assemble/ship and actually need the whole picture.
+
+Refetched on `campaignId` change, when a Studio generation settles, and on
+**every section change** — the four Pro panels and `CaptionCanvas` are
+self-contained and never report back to Studio, so navigating away from one is
+the only moment to re-read what it produced.
+
+`done.logo` is **workspace-level, not per-campaign**: logo projects hang off the
+shared "Logos" holding campaign (`app/api/logo/route.ts`), so it means "this
+workspace has a finished mark". That's the honest reading of the data.

@@ -14,6 +14,10 @@ import { api } from "@/lib/api";
 import toast from "react-hot-toast";
 import { CREDIT_COSTS } from "@/lib/credits/costs";
 import { TRYON_CATEGORIES, type TryonCategory } from "@/lib/fal/tryon";
+import {
+  GalleryPicker,
+  GalleryPickButton,
+} from "@/components/shared/GalleryPicker";
 
 type Status = "idle" | "submitting" | "pending" | "ready" | "failed";
 
@@ -34,6 +38,7 @@ export function VirtualTryOnPanel() {
 
   // Transient UI state.
   const [uploading, setUploading] = useState<"model" | "garment" | null>(null);
+  const [picking, setPicking] = useState<"model" | "garment" | null>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [resultUrl, setResultUrl] = useState("");
   const [error, setError] = useState("");
@@ -171,11 +176,36 @@ export function VirtualTryOnPanel() {
           }}
         />
       </label>
+      <GalleryPickButton
+        onClick={() => setPicking(which)}
+        label="From gallery"
+        className="w-full justify-center px-2"
+      />
     </div>
   );
 
   return (
     <div className="bg-card border border-border rounded-2xl p-4 sm:p-5 space-y-4">
+      <GalleryPicker
+        open={picking !== null}
+        onClose={() => setPicking(null)}
+        onPick={(a) => {
+          if (picking === "model") setModelUrl(a.url);
+          else if (picking === "garment") setGarmentUrl(a.url);
+        }}
+        workspaceSlug={workspaceSlug}
+        campaignId={currentCampaignId}
+        title={
+          picking === "garment"
+            ? "Pick a garment / product photo"
+            : "Pick a model photo"
+        }
+        hint={
+          picking === "garment"
+            ? "The item to put on the model — a flat-lay or cut-out works best."
+            : "A clear, front-facing photo of a person."
+        }
+      />
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center">

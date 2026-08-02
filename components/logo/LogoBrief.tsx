@@ -6,6 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { InfoHint } from "@/components/ui/info-hint";
+// Never hardcode a price — CREDIT_COSTS is the single source of truth, and
+// these labels had drifted to less than a fifth of what the server charges.
+import { CREDIT_COSTS } from "@/lib/credits/costs";
 import {
   LOGO_TYPES,
   COLOR_DIRECTIONS,
@@ -229,7 +232,9 @@ export function LogoBrief({ onSubmit, submitting }: LogoBriefProps) {
           })
         }
       >
-        {submitting ? "Generating…" : "Generate 6 concepts (5 credits)"}
+        {submitting
+          ? "Generating…"
+          : `Generate 6 concepts (${CREDIT_COSTS.logo_concepts} credits)`}
       </Button>
     </div>
   );

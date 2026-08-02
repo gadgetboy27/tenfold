@@ -4,10 +4,13 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { LogoAsset } from "./LogoConceptGrid";
+// Prices come from CREDIT_COSTS, never a literal — these labels had drifted to
+// a fraction of what the server actually debits (see lib/credits/CLAUDE.md).
+import { CREDIT_COSTS } from "@/lib/credits/costs";
 
 // Step 3: the chosen concept, large. "More like this" runs an image-to-image
-// refine (1 credit) over the anchor; each refine appends a new variant the user
-// can re-anchor to. Finalize re-generates at Pro quality (3 credits) and is the
+// refine over the anchor; each refine appends a new variant the user
+// can re-anchor to. Finalize re-generates at Pro quality and is the
 // deliverable. The most recent refined variant (if any) shows beside the anchor.
 
 interface LogoRefineProps {
@@ -136,7 +139,7 @@ export function LogoRefine({
             <Button className="w-full" disabled={packaging} onClick={onPackage}>
               {packaging
                 ? "Building your package…"
-                : "Get the full brand package (10 credits)"}
+                : `Get the full brand package (${CREDIT_COSTS.brand_package} credits)`}
             </Button>
           )}
         </div>
@@ -149,7 +152,7 @@ export function LogoRefine({
               disabled={busy}
               onClick={onMockups}
             >
-              See it in the real world — 4 mockups (2 credits)
+              {`See it in the real world — 4 mockups (${CREDIT_COSTS.logo_mockups} credits)`}
             </Button>
           ) : (
             <>
@@ -241,13 +244,15 @@ export function LogoRefine({
           disabled={busy}
           onClick={() => onRefine(instruction.trim())}
         >
-          {busy ? "Working…" : "More like this (1 cr)"}
+          {busy
+            ? "Working…"
+            : `More like this (${CREDIT_COSTS.logo_refine} cr)`}
         </Button>
       </div>
 
       <div className="border-t pt-6">
         <Button className="w-full" disabled={busy} onClick={onFinalize}>
-          Finalise logo (3 credits)
+          {`Finalise logo (${CREDIT_COSTS.logo_finalize} credits)`}
         </Button>
       </div>
     </div>

@@ -27,6 +27,10 @@ import {
   LANGUAGES,
   type PresenterSource,
 } from "@/lib/fal/talking-video";
+import {
+  GalleryPicker,
+  GalleryPickButton,
+} from "@/components/shared/GalleryPicker";
 
 type Tone = "professional" | "casual" | "playful";
 type Resolution = "480p" | "720p";
@@ -100,7 +104,6 @@ function Group({
 export function TalkingVideoPanel() {
   const ent = useEntitlements();
   const {
-    generatedAssets,
     currentCampaignId,
     workspaceSlug,
     creditBalance,
@@ -140,6 +143,7 @@ export function TalkingVideoPanel() {
 
   // Transient UI state — fine to reset on navigation.
   const [uploading, setUploading] = useState(false);
+  const [picking, setPicking] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [status, setStatus] = useState<Status>("idle");
   const [videoUrl, setVideoUrl] = useState("");
@@ -306,6 +310,15 @@ export function TalkingVideoPanel() {
 
   return (
     <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 space-y-5">
+      <GalleryPicker
+        open={picking}
+        onClose={() => setPicking(false)}
+        onPick={(a) => setPresenterUrl(a.url)}
+        workspaceSlug={workspaceSlug}
+        campaignId={currentCampaignId}
+        title="Pick your presenter"
+        hint="A clear, front-facing photo of a person lip-syncs best."
+      />
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -333,7 +346,7 @@ export function TalkingVideoPanel() {
       <Group
         n={1}
         title="Presenter"
-        hint="The person who appears on camera and speaks. Use a clear, front-facing photo — upload one, reuse a generated image, or pick a stock avatar."
+        hint="The person who appears on camera and speaks. Use a clear, front-facing photo — upload one, reuse an image from your gallery, or pick a stock avatar."
         done={hasPresenter}
         defaultOpen
       >
@@ -350,7 +363,7 @@ export function TalkingVideoPanel() {
                   : "border-border bg-background hover:border-primary/50",
               )}
             >
-              {s === "generate" ? "Use generated" : s}
+              {s === "generate" ? "From gallery" : s}
             </button>
           ))}
         </div>
@@ -378,33 +391,27 @@ export function TalkingVideoPanel() {
         )}
 
         {source === "generate" && (
-          <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-            {generatedAssets.length === 0 && (
-              <p className="col-span-full text-xs text-muted-foreground">
-                No generated images yet — create some in the earlier steps.
-              </p>
-            )}
-            {generatedAssets.map((a) => (
-              <button
-                key={a.id}
-                type="button"
-                onClick={() => setPresenterUrl(a.url)}
-                className={cn(
-                  "relative aspect-square rounded-lg overflow-hidden ring-2 transition-all",
-                  presenterUrl === a.url
-                    ? "ring-primary"
-                    : "ring-transparent hover:ring-primary/40",
-                )}
-              >
+          // Sourced from the workspace gallery, not the store's
+          // `generatedAssets` — nothing populates that field since Studio
+          // replaced the classic dashboard, so this grid was permanently
+          // empty. The picker reads /api/gallery directly and opens on this
+          // project's own images.
+          <div className="flex items-center gap-2">
+            {presenterUrl && (
+              <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-primary/40 shrink-0">
                 <Image
-                  src={a.url}
-                  alt="Presenter option"
+                  src={presenterUrl}
+                  alt="Chosen presenter"
                   fill
                   className="object-cover"
-                  sizes="80px"
+                  sizes="56px"
                 />
-              </button>
-            ))}
+              </div>
+            )}
+            <GalleryPickButton
+              onClick={() => setPicking(true)}
+              label={presenterUrl ? "Choose another" : "Browse your gallery"}
+            />
           </div>
         )}
 

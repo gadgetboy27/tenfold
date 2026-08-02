@@ -13,6 +13,10 @@ import { api } from "@/lib/api";
 import toast from "react-hot-toast";
 import { CREDIT_COSTS } from "@/lib/credits/costs";
 import { CAPTION_COLORS, type CaptionColor } from "@/lib/fal/captions";
+import {
+  GalleryPicker,
+  GalleryPickButton,
+} from "@/components/shared/GalleryPicker";
 
 type Status = "idle" | "submitting" | "pending" | "ready" | "failed";
 const FONT_SIZES = [
@@ -36,6 +40,7 @@ export function AutoCaptionPanel() {
   const patch = useAppStore((s) => s.patchAutoCaptionDraft);
 
   const [status, setStatus] = useState<Status>("idle");
+  const [picking, setPicking] = useState(false);
   const [resultUrl, setResultUrl] = useState("");
   const [error, setError] = useState("");
   const [elapsed, setElapsed] = useState(0);
@@ -120,6 +125,16 @@ export function AutoCaptionPanel() {
 
   return (
     <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 space-y-5">
+      <GalleryPicker
+        open={picking}
+        onClose={() => setPicking(false)}
+        onPick={(a) => patch({ source: "url", videoUrl: a.url })}
+        workspaceSlug={workspaceSlug}
+        campaignId={currentCampaignId}
+        kind="video"
+        title="Pick a video to caption"
+        hint="Captions are transcribed from the audio — use a clip with speech."
+      />
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
@@ -182,13 +197,22 @@ export function AutoCaptionPanel() {
           </p>
         )}
         {draft.source === "url" && (
-          <input
-            type="url"
-            value={draft.videoUrl}
-            onChange={(e) => patch({ videoUrl: e.target.value })}
-            placeholder="https://…/video.mp4 (a video with speech)"
-            className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
-          />
+          <div className="space-y-2">
+            <input
+              type="url"
+              value={draft.videoUrl}
+              onChange={(e) => patch({ videoUrl: e.target.value })}
+              placeholder="https://…/video.mp4 (a video with speech)"
+              className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+            {/* Rather than making the user hunt down and paste the URL of a
+                video this workspace already produced. Writes into the same
+                `videoUrl` field, so nothing downstream changes. */}
+            <GalleryPickButton
+              onClick={() => setPicking(true)}
+              label="Or pick one of your videos"
+            />
+          </div>
         )}
       </section>
 
