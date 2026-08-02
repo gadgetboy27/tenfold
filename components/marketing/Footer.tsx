@@ -7,7 +7,7 @@ export function Footer() {
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 sm:flex-row">
         <div className="flex items-center gap-2">
           <Image
-            src="/brand/tenfold-mark.svg"
+            src="/brand/prettymuch-mark.svg"
             alt=""
             width={22}
             height={22}

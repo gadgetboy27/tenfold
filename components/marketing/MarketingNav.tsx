@@ -34,7 +34,7 @@ export function MarketingNav() {
       <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
         <Link href="/" className="flex items-center gap-2">
           <Image
-            src="/brand/tenfold-mark.svg"
+            src="/brand/prettymuch-mark.svg"
             alt=""
             width={26}
             height={26}
