@@ -31,19 +31,36 @@ be in the allowlist above or Supabase rejects the redirect.
 For each provider you create an app in that provider's developer console, then paste
 its **Client ID** and **Client Secret** into Supabase. The single most important
 value: the provider's own **Authorized redirect URI is always Supabase's callback**,
-NOT the app's `/auth/callback`. This project now uses a **custom domain**
-(`auth.tenfold.nz`, Supabase Custom Domain add-on) so the canonical callback is:
+NOT the app's `/auth/callback`. The live callback today is the raw project host:
 
 ```
-https://auth.tenfold.nz/auth/v1/callback
+https://gbccfqpmoteicpumhkuj.supabase.co/auth/v1/callback
 ```
 
-> The legacy callback `https://gbccfqpmoteicpumhkuj.supabase.co/auth/v1/callback`
-> may remain in each provider console during transition, but since the custom
-> domain is **activated**, Supabase Auth advertises only `auth.tenfold.nz` and
-> OAuth no longer functions on the raw `*.supabase.co` host. `NEXT_PUBLIC_SUPABASE_URL`
-> must point at `https://auth.tenfold.nz` (local `.env` + Railway).
-> The direct Postgres `DATABASE_URL` is **not** covered by the custom domain — it
+> **The `auth.tenfold.nz` custom domain is gone** (verified 2026-08-03:
+> `auth.tenfold.nz/auth/v1/settings` now 301s to `prettymuch.nz`). Its DNS
+> record is **Cloudflare-proxied**, so the apex redirect rule added during the
+> prettymuch.nz rename swallows the subdomain before it ever reaches Supabase.
+> OAuth runs on the raw `*.supabase.co` host and works — but that means the
+> Google consent screen reads *"to continue to gbccfqpmoteicpumhkuj.supabase.co"*.
+>
+> **Renaming the Supabase project does not fix this.** The project ref is
+> immutable; only a Custom Domain changes the host users see.
+>
+> To brand it as `auth.prettymuch.nz`:
+> 1. Supabase Dashboard → Settings → Custom Domains (paid add-on) → add
+>    `auth.prettymuch.nz`, then publish the CNAME + TXT records it gives you.
+> 2. **The CNAME must be DNS-only (grey cloud) in Cloudflare.** Proxying it is
+>    exactly what killed `auth.tenfold.nz` — Cloudflare terminates the request
+>    and the redirect rule answers instead of Supabase.
+> 3. Add `https://auth.prettymuch.nz/auth/v1/callback` to every provider console
+>    *before* activating, keeping the `*.supabase.co` one until the switch lands.
+> 4. Only then set `NEXT_PUBLIC_SUPABASE_URL=https://auth.prettymuch.nz` (Railway
+>    + local `.env`). Activating the domain stops OAuth on the raw host.
+>
+> Stored asset URLs use the raw `*.supabase.co` host on purpose — a custom
+> domain that later lapses must not break 300+ saved images.
+> The direct Postgres `DATABASE_URL` is **not** covered by a custom domain — it
 > stays on the `*.pooler.supabase.com` host, unchanged.
 
 Same pattern for every provider: **create app → copy Client ID + Secret → enable the
