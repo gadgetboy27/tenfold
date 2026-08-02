@@ -13,9 +13,9 @@ export function Footer() {
             height={22}
             className="h-5 w-5"
           />
-          <span className="font-serif font-bold">tenfold</span>
+          <span className="font-serif font-bold">PrettyMuch</span>
           <span className="ml-2 text-sm text-muted-foreground">
-            © 2026 tenfold.nz
+            © 2026 prettymuch.nz
           </span>
         </div>
         <nav className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
@@ -56,7 +56,7 @@ export function Footer() {
             Privacy
           </Link>
           <a
-            href="mailto:support@tenfold.nz"
+            href="mailto:support@prettymuch.nz"
             className="transition-colors hover:text-foreground"
           >
             Contact

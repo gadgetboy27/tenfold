@@ -12,7 +12,7 @@ interface StoredPage {
   access_token: string;
 }
 
-// POST /api/social/facebook/page — switch which Facebook Page tenfold publishes
+// POST /api/social/facebook/page — switch which Facebook Page PrettyMuch publishes
 // to. All managed pages (with permanent tokens) were saved at connect time in
 // social_profiles.metadata, so switching needs no re-auth.
 export async function POST(req: Request) {

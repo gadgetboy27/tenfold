@@ -136,7 +136,7 @@ export async function downloadCampaignPdf(
     }
   }
 
-  page.drawText("Made with tenfold.nz", {
+  page.drawText("Made with prettymuch.nz", {
     x: margin,
     y: margin - 14,
     size: 8,

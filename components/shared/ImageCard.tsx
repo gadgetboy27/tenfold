@@ -83,7 +83,7 @@ export default function ImageCard({ asset, index }: ImageCardProps) {
       const href = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = href;
-      a.download = `tenfold-${asset.id}.jpg`;
+      a.download = `prettymuch-${asset.id}.jpg`;
       a.click();
       URL.revokeObjectURL(href);
     } catch {

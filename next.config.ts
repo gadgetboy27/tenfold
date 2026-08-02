@@ -9,20 +9,20 @@ const nextConfig: NextConfig = {
     // URLs directly. remotePatterns kept for any optimized usage / future move.
     unoptimized: true,
     remotePatterns: [
-      { protocol: 'https', hostname: '**.supabase.co' },
-      { protocol: 'https', hostname: '**.fal.media' },
-      { protocol: 'https', hostname: 'fal.media' },
-      { protocol: 'https', hostname: '**.fal.ai' },
+      { protocol: "https", hostname: "**.supabase.co" },
+      { protocol: "https", hostname: "**.fal.media" },
+      { protocol: "https", hostname: "fal.media" },
+      { protocol: "https", hostname: "**.fal.ai" },
     ],
   },
   async redirects() {
     return [
-      // Canonical host: redirect www.tenfold.nz → apex so OAuth redirect URIs and
-      // the app's base URL only ever need to match one host (https://tenfold.nz).
+      // Canonical host: redirect www.prettymuch.nz → apex so OAuth redirect URIs and
+      // the app's base URL only ever need to match one host (https://prettymuch.nz).
       {
         source: "/:path*",
-        has: [{ type: "host", value: "www.tenfold.nz" }],
-        destination: "https://tenfold.nz/:path*",
+        has: [{ type: "host", value: "www.prettymuch.nz" }],
+        destination: "https://prettymuch.nz/:path*",
         permanent: true,
       },
     ];

@@ -190,7 +190,7 @@ export function Studio({
     const url = window.location.href;
     try {
       if (navigator.share) {
-        await navigator.share({ title: "My Tenfold campaign", url });
+        await navigator.share({ title: "My PrettyMuch campaign", url });
       } else {
         await navigator.clipboard.writeText(url);
         toast.success("Link copied to clipboard");
@@ -2415,7 +2415,7 @@ function ProjectsCanvas({
       const href = URL.createObjectURL(await res.blob());
       const el = document.createElement("a");
       el.href = href;
-      el.download = `tenfold-${a.id}.jpg`;
+      el.download = `prettymuch-${a.id}.jpg`;
       el.click();
       URL.revokeObjectURL(href);
     } catch {

@@ -4,29 +4,30 @@ import Script from "next/script";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://tenfold.nz"),
-  title: "tenfold — one prompt, a whole campaign",
+  metadataBase: new URL("https://prettymuch.nz"),
+  title: "PrettyMuch — one prompt, a whole campaign",
   description:
-    "tenfold turns a single prompt into images, video, music and copy — then publishes it to up to 13 social platforms. The AI creative pipeline for modern brands.",
+    "PrettyMuch turns a single prompt into images, video, music and copy — then publishes it to up to 13 social platforms. The AI creative pipeline for modern brands.",
+  alternates: { canonical: "/" },
   openGraph: {
-    title: "tenfold — one prompt, a whole campaign",
+    title: "PrettyMuch — one prompt, a whole campaign",
     description:
       "Turn one idea into a full campaign — images, video, music, copy — published everywhere. Start free with 50 credits.",
-    url: "https://tenfold.nz",
-    siteName: "tenfold",
+    url: "https://prettymuch.nz",
+    siteName: "PrettyMuch",
     images: [
       {
         url: "/landing/og-card.jpg",
         width: 1200,
         height: 630,
-        alt: "tenfold — one prompt, a whole campaign",
+        alt: "PrettyMuch — one prompt, a whole campaign",
       },
     ],
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "tenfold — one prompt, a whole campaign",
+    title: "PrettyMuch — one prompt, a whole campaign",
     description:
       "Turn one idea into a full campaign — images, video, music, copy — published everywhere.",
     images: ["/landing/og-card.jpg"],

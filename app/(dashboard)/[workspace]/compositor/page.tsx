@@ -295,7 +295,7 @@ export default function CompositorPage() {
       const href = URL.createObjectURL(await res.blob());
       const el = document.createElement("a");
       el.href = href;
-      el.download = `tenfold-${Date.now()}.mp4`;
+      el.download = `prettymuch-${Date.now()}.mp4`;
       el.click();
       URL.revokeObjectURL(href);
     } catch {

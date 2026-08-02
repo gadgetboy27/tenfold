@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import toast from "react-hot-toast";
 
-/** Floating "Feedback" button → small modal → emails admin@tenfold.nz via Resend. */
+/** Floating "Feedback" button → small modal → emails admin@prettymuch.nz via Resend. */
 export default function FeedbackWidget() {
   const workspaceSlug = useAppStore((s) => s.workspaceSlug);
   const [open, setOpen] = useState(false);

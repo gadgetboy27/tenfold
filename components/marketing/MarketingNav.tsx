@@ -41,7 +41,7 @@ export function MarketingNav() {
             className="h-6 w-6"
           />
           <span className="font-serif text-lg font-bold tracking-tight">
-            tenfold
+            PrettyMuch
           </span>
         </Link>
 

@@ -31,7 +31,7 @@ export function AboutContent() {
           transition={{ duration: 0.6 }}
           className="mb-4 text-sm font-medium uppercase tracking-[0.2em] text-primary"
         >
-          About tenfold
+          About PrettyMuch
         </motion.p>
         <motion.h1
           initial={{ opacity: 0, y: 16 }}
@@ -51,9 +51,9 @@ export function AboutContent() {
           className="mx-auto mt-6 max-w-xl text-lg text-muted-foreground"
         >
           Great marketing has always been gated by budget — studios, editors,
-          schedulers, agencies. tenfold collapses that whole stack into a single
-          prompt, so the quality of your marketing is decided by your ideas, not
-          your headcount.
+          schedulers, agencies. PrettyMuch collapses that whole stack into a
+          single prompt, so the quality of your marketing is decided by your
+          ideas, not your headcount.
         </motion.p>
       </section>
 
@@ -70,7 +70,7 @@ export function AboutContent() {
           learning curve.
         </p>
         <p>
-          tenfold is the opposite bet. One creative pipeline — from a
+          PrettyMuch is the opposite bet. One creative pipeline — from a
           plain-language prompt to images, video, music and copy — wired
           straight into publishing across every major platform. The hard parts
           happen in the background. What you&apos;re left with is the fun part:
@@ -85,7 +85,7 @@ export function AboutContent() {
             Who&apos;s behind it
           </h2>
           <p className="mt-3 text-muted-foreground">
-            tenfold is built by{" "}
+            PrettyMuch is built by{" "}
             <span className="font-medium text-foreground">Henry Peti</span>, a
             solo founder in New Zealand — and it&apos;s the product of its own
             promise. One person, one clear idea, and a brand that shows up

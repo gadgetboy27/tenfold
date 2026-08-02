@@ -17,9 +17,9 @@ interface AppHeaderProps {
 }
 
 /**
- * The shared Tenfold shell header for standalone pages (Logo Studio, compositor,
+ * The shared PrettyMuch shell header for standalone pages (Logo Studio, compositor,
  * etc.) that don't render the full wizard TopBar. Keeps the brand + the live
- * credit meter present everywhere, so users always know they're on Tenfold and
+ * credit meter present everywhere, so users always know they're on PrettyMuch and
  * can always see what they have left. Loads the balance itself since these pages
  * don't go through DashboardClient.
  */
@@ -56,7 +56,7 @@ export function AppHeader({
         <Link
           href={`/${workspaceSlug}`}
           className="flex items-center"
-          aria-label="Tenfold home"
+          aria-label="PrettyMuch home"
         >
           <Logo size={22} withWordmark />
         </Link>

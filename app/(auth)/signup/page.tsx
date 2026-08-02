@@ -121,7 +121,7 @@ function SignUpContent() {
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             Create Account
           </h1>
-          <p className="text-gray-600">Join tenfold.nz and start creating</p>
+          <p className="text-gray-600">Join prettymuch.nz and start creating</p>
         </div>
 
         <div className="mb-6 space-y-3">

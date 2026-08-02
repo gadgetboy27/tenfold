@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { Resend } from "resend";
 import { getSession } from "@/lib/auth/session";
+import { senderAddress } from "@/lib/email/sender";
 
 let resendClient: Resend | null = null;
 function getResendClient(): Resend {
@@ -19,7 +20,7 @@ const schema = z.object({
   page: z.string().max(200).optional(),
 });
 
-// POST /api/feedback — sends user feedback to admin@tenfold.nz via Resend.
+// POST /api/feedback — sends user feedback to admin@prettymuch.nz via Resend.
 export async function POST(req: Request) {
   try {
     const session = await getSession(req);
@@ -27,10 +28,10 @@ export async function POST(req: Request) {
 
     const resend = getResendClient();
     await resend.emails.send({
-      from: "Tenfold Feedback <noreply@tenfold.nz>",
-      to: "admin@tenfold.nz",
+      from: senderAddress("noreply", "PrettyMuch Feedback"),
+      to: "admin@prettymuch.nz",
       ...(email ? { replyTo: email } : {}),
-      subject: `Feedback · ${session.workspaceSlug ?? "tenfold"}`,
+      subject: `Feedback · ${session.workspaceSlug ?? "prettymuch"}`,
       text: [
         `Workspace: ${session.workspaceSlug ?? "—"}`,
         `User ID: ${session.userId ?? "—"}`,

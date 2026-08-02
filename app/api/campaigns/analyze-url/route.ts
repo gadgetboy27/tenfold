@@ -128,7 +128,7 @@ export async function POST(req: Request) {
           signal: controller.signal,
           headers: {
             "User-Agent":
-              "Mozilla/5.0 (compatible; Tenfold-Bot/1.0; +https://tenfold.nz)",
+              "Mozilla/5.0 (compatible; PrettyMuch-Bot/1.0; +https://prettymuch.nz)",
             Accept: "text/html,application/xhtml+xml,*/*;q=0.9",
             "Accept-Language": "en-US,en;q=0.9",
           },

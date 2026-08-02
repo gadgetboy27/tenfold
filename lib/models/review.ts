@@ -3,6 +3,7 @@ import { VARIETY_IMAGE_MODELS } from "@/lib/fal/models";
 import { MUSIC_MODELS } from "@/lib/fal/models";
 import { VIDEO_MODELS } from "@/lib/fal/models";
 import { CAPTION_MODELS } from "@/lib/claude/caption-models";
+import { senderAddress } from "@/lib/email/sender";
 
 /**
  * Monthly model refresh. The model registries (variety images, music, captions)
@@ -146,7 +147,7 @@ export async function sendModelReviewEmail(
   const { Resend } = await import("resend");
   const resend = new Resend(process.env.RESEND_API_KEY);
   await resend.emails.send({
-    from: "models@tenfold.nz",
+    from: senderAddress("models"),
     to,
     subject: "Tenfold — Monthly Model Review",
     html: renderReviewHtml(report),

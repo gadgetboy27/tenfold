@@ -1,6 +1,7 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { SupabaseClient } from '@supabase/supabase-js';
-import { AnalyticsReport } from './types';
+import Anthropic from "@anthropic-ai/sdk";
+import { SupabaseClient } from "@supabase/supabase-js";
+import { AnalyticsReport } from "./types";
+import { senderAddress } from "@/lib/email/sender";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -11,11 +12,13 @@ interface AnalyticsContext {
   db: SupabaseClient;
 }
 
-async function fetchAyrshareAnalytics(profileKey: string): Promise<Record<string, unknown>> {
-  const res = await fetch('https://app.ayrshare.com/api/analytics', {
+async function fetchAyrshareAnalytics(
+  profileKey: string,
+): Promise<Record<string, unknown>> {
+  const res = await fetch("https://app.ayrshare.com/api/analytics", {
     headers: {
       Authorization: `Bearer ${process.env.AYRSHARE_API_KEY}`,
-      'Profile-Key': profileKey,
+      "Profile-Key": profileKey,
     },
   });
 
@@ -35,15 +38,15 @@ export async function generateAnalyticsReport(
   try {
     analyticsData = await fetchAyrshareAnalytics(context.profileKey);
   } catch (error) {
-    console.error('Failed to fetch Ayrshare analytics:', error);
+    console.error("Failed to fetch Ayrshare analytics:", error);
   }
 
   const message = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: "claude-sonnet-4-6",
     max_tokens: 512,
     messages: [
       {
-        role: 'user',
+        role: "user",
         content: `Analyze this week's content performance data and provide insights. Return ONLY valid JSON with no extra text or markdown.
 
 Analytics data:
@@ -75,17 +78,18 @@ If no analytics data is available, provide reasonable recommendations based on b
   });
 
   const block = message.content[0];
-  if (block.type !== 'text') throw new Error('No text response from Claude (Analytics)');
+  if (block.type !== "text")
+    throw new Error("No text response from Claude (Analytics)");
 
   const match = block.text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('Could not parse analytics report JSON');
+  if (!match) throw new Error("Could not parse analytics report JSON");
 
   const report = JSON.parse(match[0]) as AnalyticsReport;
 
-  await context.db.from('analytics_reports').insert({
+  await context.db.from("analytics_reports").insert({
     workspace_id: context.workspaceId,
     report_json: report,
-    week_ending: weekEnding.toISOString().split('T')[0],
+    week_ending: weekEnding.toISOString().split("T")[0],
   });
 
   return report;
@@ -97,11 +101,11 @@ export async function sendAnalyticsEmail(
 ): Promise<void> {
   try {
     if (!process.env.RESEND_API_KEY) {
-      console.warn('RESEND_API_KEY not set, skipping analytics email');
+      console.warn("RESEND_API_KEY not set, skipping analytics email");
       return;
     }
 
-    const { Resend } = await import('resend');
+    const { Resend } = await import("resend");
     const resend = new Resend(process.env.RESEND_API_KEY);
 
     const emailHtml = `
@@ -117,7 +121,7 @@ export async function sendAnalyticsEmail(
 
 <h2>Recommended Topics for Next Week</h2>
 <ul>
-  ${report.topicIdeas.map((idea) => `<li>${idea}</li>`).join('')}
+  ${report.topicIdeas.map((idea) => `<li>${idea}</li>`).join("")}
 </ul>
 
 <p>${report.summary}</p>
@@ -126,12 +130,12 @@ export async function sendAnalyticsEmail(
 `;
 
     await resend.emails.send({
-      from: 'analytics@tenfold.nz',
+      from: senderAddress("analytics"),
       to: userEmail,
-      subject: 'Your Weekly Content Performance Report',
+      subject: "Your Weekly Content Performance Report",
       html: emailHtml,
     });
   } catch (error) {
-    console.error('Failed to send analytics email:', error);
+    console.error("Failed to send analytics email:", error);
   }
 }

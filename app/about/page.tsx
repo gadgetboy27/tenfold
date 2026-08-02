@@ -5,9 +5,10 @@ import { AboutContent } from "@/components/marketing/AboutContent";
 import { Footer } from "@/components/marketing/Footer";
 
 export const metadata: Metadata = {
-  title: "About — tenfold",
+  title: "About — PrettyMuch",
+  alternates: { canonical: "/about" },
   description:
-    "tenfold turns one prompt into a full campaign — images, video, music and copy, published everywhere. A one-person business should look like a hundred-person brand.",
+    "PrettyMuch turns one prompt into a full campaign — images, video, music and copy, published everywhere. A one-person business should look like a hundred-person brand.",
 };
 
 export default function AboutPage() {

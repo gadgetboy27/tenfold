@@ -4,7 +4,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, Check } from "lucide-react";
 
-// The real platforms tenfold publishes to (via Ayrshare), with their brand colors.
+// The real platforms PrettyMuch publishes to (via Ayrshare), with their brand colors.
 const PLATFORMS = [
   { id: "instagram", short: "IG", label: "Instagram", color: "#E1306C" },
   { id: "facebook", short: "FB", label: "Facebook", color: "#1877F2" },

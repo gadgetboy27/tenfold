@@ -1,6 +1,6 @@
 # PRODUCT_STRATEGY.md — external review, 2026-07-25
 
-An external product/architecture review of tenfold.nz's positioning and roadmap.
+An external product/architecture review of prettymuch.nz's positioning and roadmap.
 Captured here as a strategic reference and phased backlog — **nothing in this
 file is implemented yet**; treat every item as proposed until it's actually
 built and this doc is updated to say so. Adopt slowly and methodically, not
@@ -232,7 +232,7 @@ left. Not prioritized against each other; pick per business need.
      once routes are actually reporting to it, this may need zero new code,
      just alert-rule configuration in the Sentry project itself.
    - **Option B: a custom in-app admin page.** Only worth it if Option A's
-     dashboard genuinely isn't a fit (e.g. wanting it inside tenfold.nz
+     dashboard genuinely isn't a fit (e.g. wanting it inside prettymuch.nz
      itself, alongside workspace data). Would need either querying Sentry's
      API server-side, or a dedicated error-log table — a real, separate
      feature to scope properly, not a rushed addition to a bug-fix pass.

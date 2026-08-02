@@ -29,7 +29,7 @@ function validateEnv(): Env {
   const parsed = envSchema.safeParse(process.env);
   if (!parsed.success) {
     const missing = parsed.error.issues.map((i) => i.path.join('.')).join(', ');
-    throw new Error(`tenfold: missing or invalid env vars: ${missing}`);
+    throw new Error(`prettymuch: missing or invalid env vars: ${missing}`);
   }
   return parsed.data;
 }

@@ -30,7 +30,7 @@ function FloatTile({
     >
       <Image
         src={src}
-        alt="Made with tenfold"
+        alt="Made with PrettyMuch"
         fill
         className="object-cover"
         sizes="240px"
@@ -84,7 +84,7 @@ export function Hero() {
             transition={{ duration: 0.7, delay: 0.15 }}
             className="mx-auto mt-6 max-w-xl text-lg text-muted-foreground lg:mx-0"
           >
-            tenfold turns a single idea into images, video, music and copy —
+            PrettyMuch turns a single idea into images, video, music and copy —
             then publishes it to every platform you sell on. No agency. No
             editing suite. Just one sentence.
           </motion.p>

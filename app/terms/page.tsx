@@ -2,8 +2,9 @@ import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Terms of Service — tenfold.nz",
-  description: "The terms governing your use of tenfold.nz.",
+  title: "Terms of Service — prettymuch.nz",
+  alternates: { canonical: "/terms" },
+  description: "The terms governing your use of prettymuch.nz.",
 };
 
 // NOTE: This is a starting template, not legal advice. Have it reviewed by a
@@ -11,7 +12,7 @@ export const metadata: Metadata = {
 // Placeholders to confirm: legal entity name, governing-law jurisdiction,
 // contact email, effective date.
 const LAST_UPDATED = "22 June 2026";
-const CONTACT_EMAIL = "support@tenfold.nz";
+const CONTACT_EMAIL = "support@prettymuch.nz";
 
 export default function TermsPage() {
   return (
@@ -20,7 +21,7 @@ export default function TermsPage() {
         href="/"
         className="text-sm text-muted-foreground hover:text-foreground"
       >
-        ← Back to tenfold.nz
+        ← Back to prettymuch.nz
       </Link>
 
       <h1 className="mt-6 text-3xl font-bold">Terms of Service</h1>
@@ -33,21 +34,21 @@ export default function TermsPage() {
           <h2>1. Agreement</h2>
           <p>
             These Terms of Service (&ldquo;Terms&rdquo;) govern your access to
-            and use of tenfold.nz and its related services (the
-            &ldquo;Service&rdquo;), operated by tenfold (&ldquo;we&rdquo;,
-            &ldquo;us&rdquo;, &ldquo;our&rdquo;). By creating an account or using
-            the Service, you agree to these Terms. If you do not agree, do not
-            use the Service.
+            and use of prettymuch.nz and its related services (the
+            &ldquo;Service&rdquo;), operated by PrettyMuch (&ldquo;we&rdquo;,
+            &ldquo;us&rdquo;, &ldquo;our&rdquo;). By creating an account or
+            using the Service, you agree to these Terms. If you do not agree, do
+            not use the Service.
           </p>
         </section>
 
         <section className="space-y-2">
           <h2>2. The Service</h2>
           <p>
-            tenfold is a creative platform that generates images, video, audio,
-            and written copy using third-party AI models, and publishes the
-            resulting content to social media platforms you connect. Output is
-            produced by automated systems and may vary in quality; we do not
+            PrettyMuch is a creative platform that generates images, video,
+            audio, and written copy using third-party AI models, and publishes
+            the resulting content to social media platforms you connect. Output
+            is produced by automated systems and may vary in quality; we do not
             guarantee any particular result, performance, or outcome.
           </p>
         </section>
@@ -93,8 +94,8 @@ export default function TermsPage() {
             applicable credits, you own the content you generate, to the extent
             permitted by the underlying model providers&rsquo; terms. AI output
             may be similar to output generated for others and is not guaranteed
-            to be original or free of third-party rights. You are responsible for
-            reviewing output before publishing or commercial use.
+            to be original or free of third-party rights. You are responsible
+            for reviewing output before publishing or commercial use.
           </p>
         </section>
 
@@ -104,8 +105,9 @@ export default function TermsPage() {
             The Service relies on third parties including model and
             infrastructure providers and the social platforms you connect. Your
             use of those platforms is also subject to their terms. We are not
-            responsible for third-party services, and connecting a social account
-            authorises us to publish content on your behalf as you direct.
+            responsible for third-party services, and connecting a social
+            account authorises us to publish content on your behalf as you
+            direct.
           </p>
         </section>
 
@@ -121,9 +123,9 @@ export default function TermsPage() {
         <section className="space-y-2">
           <h2>9. Disclaimers &amp; Limitation of Liability</h2>
           <p>
-            The Service is provided &ldquo;as is&rdquo; without warranties of any
-            kind. To the maximum extent permitted by law, we are not liable for
-            indirect, incidental, or consequential damages, and our total
+            The Service is provided &ldquo;as is&rdquo; without warranties of
+            any kind. To the maximum extent permitted by law, we are not liable
+            for indirect, incidental, or consequential damages, and our total
             liability for any claim is limited to the amount you paid us in the
             three months preceding the claim.
           </p>
@@ -142,9 +144,9 @@ export default function TermsPage() {
         <section className="space-y-2">
           <h2>11. Changes</h2>
           <p>
-            We may update these Terms from time to time. Material changes will be
-            posted here with an updated date; continued use after changes take
-            effect constitutes acceptance.
+            We may update these Terms from time to time. Material changes will
+            be posted here with an updated date; continued use after changes
+            take effect constitutes acceptance.
           </p>
         </section>
 

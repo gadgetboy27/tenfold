@@ -32,7 +32,7 @@ export function ValueProps() {
       <div className="mx-auto max-w-6xl">
         <div className="mx-auto mb-14 max-w-2xl text-center">
           <h2 className="font-serif text-4xl font-bold tracking-tight sm:text-5xl">
-            Why teams switch to tenfold
+            Why teams switch to PrettyMuch
           </h2>
         </div>
         <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
@@ -51,7 +51,9 @@ export function ValueProps() {
                   <Icon className="h-5 w-5" />
                 </div>
                 <h3 className="font-serif text-lg font-bold">{p.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{p.body}</p>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  {p.body}
+                </p>
               </motion.div>
             );
           })}

@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import { Logo } from "./Logo";
 
 /**
- * Branded loading spinner — the tenfold "amplification burst" mark spinning.
+ * Branded loading spinner — the PrettyMuch "amplification burst" mark spinning.
  * Use in place of a generic loader while something is building/rendering.
  */
 export function Spinner({

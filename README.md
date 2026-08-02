@@ -29,6 +29,6 @@ To learn more about Next.js, take a look at the following resources:
 
 ## Deployment
 
-tenfold.nz runs on Railway, built from the repo's `Dockerfile` (Node + FFmpeg for
+prettymuch.nz runs on Railway, built from the repo's `Dockerfile` (Node + FFmpeg for
 the composition/export pipeline). See `CLAUDE.md` for the full architecture and
 `RAILWAY_ENV_SETUP.md` for environment variables.

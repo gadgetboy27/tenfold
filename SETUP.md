@@ -1,4 +1,4 @@
-# SETUP.md — external service setup for tenfold.nz
+# SETUP.md — external service setup for prettymuch.nz
 
 Practical, click-by-click steps for the third-party integrations that can't be
 provisioned from code. Env var names match `.env.example`.

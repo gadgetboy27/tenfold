@@ -140,7 +140,7 @@ function LoginContent() {
         </noscript>
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Sign in to tenfold
+            Sign in to PrettyMuch
           </h1>
           <p className="text-gray-600">Welcome back</p>
         </div>

@@ -9,11 +9,11 @@ and **LinkedIn**. The app code is fully wired (`lib/auth/oauth-client.ts`,
 
 **Supabase Dashboard → Authentication → URL Configuration:**
 
-- **Site URL:** your production origin, e.g. `https://tenfold.nz`
+- **Site URL:** your production origin, e.g. `https://prettymuch.nz`
 - **Redirect URLs** (allowlist — add every origin you sign in from):
   ```
-  https://tenfold.nz/auth/callback
-  https://tenfold.nz/callback
+  https://prettymuch.nz/auth/callback
+  https://prettymuch.nz/callback
   https://tenfold-production-78db.up.railway.app/auth/callback
   http://localhost:3000/auth/callback
   ```
@@ -23,8 +23,8 @@ The app sends users to `${NEXT_PUBLIC_APP_URL}/auth/callback`. Both `/auth/callb
 be in the allowlist above or Supabase rejects the redirect.
 
 > On Railway, set `NEXT_PUBLIC_APP_URL` to the exact origin you're testing from.
-> If it's `https://tenfold.nz` but you open the `*.up.railway.app` URL, OAuth will
-> redirect to tenfold.nz. (When unset, the client falls back to the current origin.)
+> If it's `https://prettymuch.nz` but you open the `*.up.railway.app` URL, OAuth will
+> redirect to prettymuch.nz. (When unset, the client falls back to the current origin.)
 
 ## 2. Providers (Supabase → Authentication → Providers)
 

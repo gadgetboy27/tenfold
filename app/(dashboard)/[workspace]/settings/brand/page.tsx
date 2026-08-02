@@ -541,7 +541,7 @@ export default function BrandKitPage() {
                   className="text-white/90 text-xs font-medium drop-shadow"
                   style={{ fontFamily: kit.font_family }}
                 >
-                  Generated with tenfold.nz
+                  Generated with prettymuch.nz
                 </p>
               </div>
               {/* Caption area */}
@@ -581,7 +581,7 @@ export default function BrandKitPage() {
                   </p>
                 )}
                 <div className="flex gap-1 flex-wrap pt-1">
-                  {["#yourhashtag", "#tenfold", "#ai"].map((tag) => (
+                  {["#yourhashtag", "#prettymuch", "#ai"].map((tag) => (
                     <span
                       key={tag}
                       className="text-xs font-medium"

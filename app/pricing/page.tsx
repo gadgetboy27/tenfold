@@ -6,7 +6,8 @@ import { FAQSection } from "@/components/marketing/FAQSection";
 import { Footer } from "@/components/marketing/Footer";
 
 export const metadata: Metadata = {
-  title: "Pricing — tenfold",
+  title: "Pricing — PrettyMuch",
+  alternates: { canonical: "/pricing" },
   description:
     "Start free with 50 credits — no card required. Simple credit pricing for AI-generated campaigns: images, video, music and copy, published to 13 platforms.",
 };

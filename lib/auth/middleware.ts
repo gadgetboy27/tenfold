@@ -4,7 +4,7 @@ import { serverPublicEnv } from "@/lib/env/public-server";
 
 const CORS_ALLOWED_ORIGINS =
   process.env.NODE_ENV === "production"
-    ? [process.env.NEXT_PUBLIC_APP_URL || "https://tenfold.nz"]
+    ? [process.env.NEXT_PUBLIC_APP_URL || "https://prettymuch.nz"]
     : ["http://localhost:3000", "http://127.0.0.1:3000"];
 
 function getCorsHeaders(origin?: string): Record<string, string> {

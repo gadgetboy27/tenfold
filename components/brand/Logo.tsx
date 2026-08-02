@@ -3,13 +3,13 @@ import { cn } from "@/lib/utils";
 interface LogoProps {
   /** Pixel size of the square mark. */
   size?: number;
-  /** Show the "tenfold" wordmark next to the mark. */
+  /** Show the "PrettyMuch" wordmark next to the mark. */
   withWordmark?: boolean;
   className?: string;
 }
 
 /**
- * Tenfold brand mark — an "amplification burst": one origin radiating tenfold,
+ * PrettyMuch brand mark — an "amplification burst": one origin radiating outward,
  * echoing the product (one prompt → many creative outputs). Uses the brand
  * violet gradient. Pair with the serif wordmark for the full lockup.
  */
@@ -26,7 +26,7 @@ export function Logo({
         viewBox="0 0 512 512"
         fill="none"
         role="img"
-        aria-label="Tenfold"
+        aria-label="PrettyMuch"
       >
         <defs>
           <linearGradient
@@ -88,7 +88,7 @@ export function Logo({
       </svg>
       {withWordmark && (
         <span className="font-serif font-bold text-foreground tracking-tight">
-          tenfold
+          PrettyMuch
         </span>
       )}
     </span>

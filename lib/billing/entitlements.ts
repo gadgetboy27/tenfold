@@ -15,7 +15,7 @@ export interface Entitlements {
   maxVariations: number;
   /** High-resolution / print-ready upscaled exports. */
   hdExport: boolean;
-  /** Export without the tenfold watermark / branded frame. */
+  /** Export without the PrettyMuch watermark / branded frame. */
   whiteLabel: boolean;
   /** Jobs jump the generation queue. */
   priorityQueue: boolean;

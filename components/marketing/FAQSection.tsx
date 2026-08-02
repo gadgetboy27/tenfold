@@ -8,7 +8,7 @@ interface FaqItem {
 const DEFAULT_ITEMS: FaqItem[] = [
   {
     q: "Do I own what I generate?",
-    a: "Yes. Everything you generate on tenfold — images, video, music, captions — is yours to use commercially. It's written into our terms, not buried in them.",
+    a: "Yes. Everything you generate on PrettyMuch — images, video, music, captions — is yours to use commercially. It's written into our terms, not buried in them.",
   },
   {
     q: "Which platforms can I publish to?",

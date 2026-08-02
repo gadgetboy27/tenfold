@@ -2,15 +2,16 @@ import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — tenfold.nz",
-  description: "How tenfold.nz collects, uses, and protects your data.",
+  title: "Privacy Policy — prettymuch.nz",
+  alternates: { canonical: "/privacy" },
+  description: "How prettymuch.nz collects, uses, and protects your data.",
 };
 
 // NOTE: This is a starting template, not legal advice. Have it reviewed and
 // tailored to your entity, jurisdiction, and actual data practices before
 // relying on it. Keep the subprocessor list in sync with the services you use.
 const LAST_UPDATED = "22 June 2026";
-const CONTACT_EMAIL = "support@tenfold.nz";
+const CONTACT_EMAIL = "support@prettymuch.nz";
 
 export default function PrivacyPage() {
   return (
@@ -19,7 +20,7 @@ export default function PrivacyPage() {
         href="/"
         className="text-sm text-muted-foreground hover:text-foreground"
       >
-        ← Back to tenfold.nz
+        ← Back to prettymuch.nz
       </Link>
 
       <h1 className="mt-6 text-3xl font-bold">Privacy Policy</h1>
@@ -31,10 +32,10 @@ export default function PrivacyPage() {
         <section className="space-y-2">
           <h2>1. Introduction</h2>
           <p>
-            This Privacy Policy explains how tenfold (&ldquo;we&rdquo;,
+            This Privacy Policy explains how PrettyMuch (&ldquo;we&rdquo;,
             &ldquo;us&rdquo;) collects, uses, and protects information when you
-            use tenfold.nz (the &ldquo;Service&rdquo;). By using the Service, you
-            agree to this policy.
+            use prettymuch.nz (the &ldquo;Service&rdquo;). By using the Service,
+            you agree to this policy.
           </p>
         </section>
 
@@ -116,8 +117,8 @@ export default function PrivacyPage() {
             When you connect a social account, we store the tokens required to
             publish content you create and to show basic account and post
             information. We access these accounts only to perform actions you
-            request. You can disconnect an account at any time, which revokes our
-            access going forward.
+            request. You can disconnect an account at any time, which revokes
+            our access going forward.
           </p>
         </section>
 
@@ -125,9 +126,9 @@ export default function PrivacyPage() {
           <h2>6. Data Retention</h2>
           <p>
             We keep your information for as long as your account is active or as
-            needed to provide the Service, comply with legal obligations, resolve
-            disputes, and enforce agreements. You may request deletion of your
-            account and associated data.
+            needed to provide the Service, comply with legal obligations,
+            resolve disputes, and enforce agreements. You may request deletion
+            of your account and associated data.
           </p>
         </section>
 
@@ -136,8 +137,8 @@ export default function PrivacyPage() {
           <p>
             We use reasonable technical and organisational measures to protect
             your data, including encryption in transit and access controls. No
-            method of transmission or storage is completely secure, and we cannot
-            guarantee absolute security.
+            method of transmission or storage is completely secure, and we
+            cannot guarantee absolute security.
           </p>
         </section>
 
@@ -154,9 +155,9 @@ export default function PrivacyPage() {
         <section className="space-y-2">
           <h2>9. Cookies</h2>
           <p>
-            We use cookies and similar technologies for authentication, security,
-            and basic analytics. You can control cookies through your browser
-            settings, though some features may not work without them.
+            We use cookies and similar technologies for authentication,
+            security, and basic analytics. You can control cookies through your
+            browser settings, though some features may not work without them.
           </p>
         </section>
 
@@ -171,8 +172,8 @@ export default function PrivacyPage() {
         <section className="space-y-2">
           <h2>11. Changes</h2>
           <p>
-            We may update this policy from time to time. Material changes will be
-            posted here with an updated date.
+            We may update this policy from time to time. Material changes will
+            be posted here with an updated date.
           </p>
         </section>
 

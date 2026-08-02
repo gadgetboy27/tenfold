@@ -59,9 +59,9 @@ default. To make it look like Tenfold:
 1. Ayrshare dashboard → **Settings → White Label** (Business plan feature).
 2. Upload the Tenfold logo (`public/brand/tenfold-icon-512.png`), set the
    **brand colour to `#7C5CFC`**, and configure a **custom domain** (e.g.
-   `connect.tenfold.nz`) for the linking page.
+   `connect.prettymuch.nz`) for the linking page.
 3. Optionally set the redirect/return URL back to
-   `https://tenfold.nz/<workspace>/settings/social`.
+   `https://prettymuch.nz/<workspace>/settings/social`.
 
 Result: the customer clicks **Connect your socials** in Tenfold, lands on a page
 that looks like Tenfold, authorises their own social accounts, and returns — with

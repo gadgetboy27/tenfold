@@ -1,4 +1,4 @@
-# tenfold.nz — Product Roadmap
+# prettymuch.nz — Product Roadmap
 
 > Strategy + prioritized backlog. Living document — update as we learn.
 > Last updated: 2026-06-11

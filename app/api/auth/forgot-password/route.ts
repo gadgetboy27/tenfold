@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { Resend } from "resend";
 import { serverPublicEnv } from "@/lib/env/public-server";
+import { senderAddress } from "@/lib/email/sender";
 
 let resendClient: Resend | null = null;
 
@@ -50,9 +51,9 @@ export async function POST(req: Request) {
     // Send confirmation email via Resend
     const resend = getResendClient();
     await resend.emails.send({
-      from: "noreply@tenfold.nz",
+      from: senderAddress("noreply"),
       to: email,
-      subject: "Reset your tenfold password",
+      subject: "Reset your PrettyMuch password",
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2>Password Reset Request</h2>
@@ -62,7 +63,7 @@ export async function POST(req: Request) {
           <p>Or copy this link: <code>${process.env.NEXT_PUBLIC_APP_URL}/reset-password</code></p>
           <p>This link expires in 1 hour. If you didn't request a password reset, you can ignore this email.</p>
           <hr style="margin-top: 30px; border: none; border-top: 1px solid #e5e7eb;">
-          <p style="color: #6b7280; font-size: 12px;">tenfold.nz</p>
+          <p style="color: #6b7280; font-size: 12px;">prettymuch.nz</p>
         </div>
       `,
     });

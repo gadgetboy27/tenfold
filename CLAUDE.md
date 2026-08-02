@@ -1,6 +1,6 @@
-# CLAUDE.md — tenfold.nz
+# CLAUDE.md — prettymuch.nz
 
-> tenfold.nz is the product. Every file, route, component, and decision in this repo serves it.
+> prettymuch.nz is the product. Every file, route, component, and decision in this repo serves it.
 > This file is the single source of truth. Read it fully before touching any code.
 > Do not deviate from patterns defined here without updating this file first.
 
@@ -12,7 +12,7 @@ assuming the credit-markup model or the roadmap below is final.
 
 ## 1. What We Are Building
 
-**tenfold.nz** — a B2B SaaS platform: AI creative pipeline → social publishing.
+**prettymuch.nz** — a B2B SaaS platform: AI creative pipeline → social publishing.
 
 A business inputs a text prompt. The platform generates 6 images via fal.ai.
 The user picks one image (the "anchor"). From that anchor they can branch into:

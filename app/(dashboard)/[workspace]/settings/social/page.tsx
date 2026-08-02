@@ -967,7 +967,7 @@ function WizardPlatformStep({
         </div>
       </div>
 
-      {/* Ayrshare handoff — this is where Tenfold hands control to Ayrshare */}
+      {/* Ayrshare handoff — this is where PrettyMuch hands control to Ayrshare */}
       {isConnected ? (
         <div className="p-4 rounded-xl bg-success/5 border border-success/20">
           <div className="flex items-center gap-2 mb-1">
@@ -977,7 +977,7 @@ function WizardPlatformStep({
             </p>
           </div>
           <p className="text-xs text-muted-foreground">
-            Tenfold will publish to this account when you hit publish on a
+            PrettyMuch will publish to this account when you hit publish on a
             campaign.
           </p>
         </div>
@@ -989,7 +989,7 @@ function WizardPlatformStep({
             </p>
             <p className="text-xs text-muted-foreground">
               A secure window will open where you log in to {platform.label}.
-              Tenfold never sees your password — it&apos;s handled securely.
+              PrettyMuch never sees your password — it&apos;s handled securely.
             </p>
           </div>
           <Button
@@ -1169,7 +1169,7 @@ export default function SocialSettingsPage() {
     setAyrshareLoading(true);
     // Open the tab synchronously on the click so popup blockers allow it; we set
     // its URL once the connect endpoint returns. Linking in a separate tab means
-    // Ayrshare's unreliable "Close" button can't strand the user — their Tenfold
+    // Ayrshare's unreliable "Close" button can't strand the user — their PrettyMuch
     // tab stays put and re-checks connections on refocus.
     const linkTab = window.open("about:blank", "_blank");
     try {
@@ -1204,7 +1204,7 @@ export default function SocialSettingsPage() {
   const disconnectPlatform = async (platformId: string, label: string) => {
     if (
       !window.confirm(
-        `Disconnect ${label}? Tenfold will no longer be able to publish to it until you reconnect.`,
+        `Disconnect ${label}? PrettyMuch will no longer be able to publish to it until you reconnect.`,
       )
     )
       return;
@@ -1222,7 +1222,7 @@ export default function SocialSettingsPage() {
     }
   };
 
-  // Switch which Facebook Page tenfold publishes to (no re-auth — pages were
+  // Switch which Facebook Page PrettyMuch publishes to (no re-auth — pages were
   // stored at connect time).
   const switchFbPage = async (pageId: string) => {
     try {
@@ -1384,7 +1384,7 @@ export default function SocialSettingsPage() {
             Social Connections
           </h1>
           <p className="text-muted-foreground text-sm">
-            Follow each platform&apos;s setup checklist, then connect. Tenfold
+            Follow each platform&apos;s setup checklist, then connect. PrettyMuch
             publishes to all connected accounts when you publish a campaign.
           </p>
         </div>
@@ -1412,7 +1412,7 @@ export default function SocialSettingsPage() {
           </p>
           <p className="text-xs text-muted-foreground">
             Facebook &amp; Instagram connect above (free). Connect everything
-            else through Tenfold in one place — a Pro feature.
+            else through PrettyMuch in one place — a Pro feature.
           </p>
         </div>
         <Button
@@ -1628,12 +1628,12 @@ export default function SocialSettingsPage() {
           </li>
           <li>Log in to the platform inside that window, then close it</li>
           <li>
-            Tenfold detects the closure and refreshes your connection status
+            PrettyMuch detects the closure and refreshes your connection status
             automatically
           </li>
         </ol>
         <p className="text-xs text-muted-foreground/60 mt-3">
-          Connections are managed securely by Tenfold. We never store your
+          Connections are managed securely by PrettyMuch. We never store your
           social passwords.
         </p>
       </div>
