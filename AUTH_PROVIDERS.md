@@ -31,35 +31,41 @@ be in the allowlist above or Supabase rejects the redirect.
 For each provider you create an app in that provider's developer console, then paste
 its **Client ID** and **Client Secret** into Supabase. The single most important
 value: the provider's own **Authorized redirect URI is always Supabase's callback**,
-NOT the app's `/auth/callback`. The live callback today is the raw project host:
+NOT the app's `/auth/callback`. This project uses a **custom domain**
+(`auth.prettymuch.nz`, Supabase Custom Domain add-on, activated 2026-08-03), so
+the canonical callback is:
 
 ```
-https://gbccfqpmoteicpumhkuj.supabase.co/auth/v1/callback
+https://auth.prettymuch.nz/auth/v1/callback
 ```
 
-> **The `auth.tenfold.nz` custom domain is gone** (verified 2026-08-03:
-> `auth.tenfold.nz/auth/v1/settings` now 301s to `prettymuch.nz`). Its DNS
-> record is **Cloudflare-proxied**, so the apex redirect rule added during the
-> prettymuch.nz rename swallows the subdomain before it ever reaches Supabase.
-> OAuth runs on the raw `*.supabase.co` host and works — but that means the
-> Google consent screen reads *"to continue to gbccfqpmoteicpumhkuj.supabase.co"*.
+> **Why a custom domain at all:** without one, Google's consent screen reads
+> _"to continue to gbccfqpmoteicpumhkuj.supabase.co"_. Renaming the Supabase
+> project does **not** change that — the project ref is immutable. Only a
+> Custom Domain changes the host users see.
 >
-> **Renaming the Supabase project does not fix this.** The project ref is
-> immutable; only a Custom Domain changes the host users see.
+> **The CNAME must be DNS-only (grey cloud) in Cloudflare.** This is not a
+> style preference: the previous custom domain `auth.tenfold.nz` was proxied,
+> so when the prettymuch.nz rename added an apex redirect rule, Cloudflare
+> terminated the request and answered with a 301 to the marketing site before
+> it ever reached Supabase — silently killing the custom domain. The current
+> record is `auth.prettymuch.nz CNAME gbccfqpmoteicpumhkuj.supabase.co`,
+> `proxied=false`.
 >
-> To brand it as `auth.prettymuch.nz`:
-> 1. Supabase Dashboard → Settings → Custom Domains (paid add-on) → add
->    `auth.prettymuch.nz`, then publish the CNAME + TXT records it gives you.
-> 2. **The CNAME must be DNS-only (grey cloud) in Cloudflare.** Proxying it is
->    exactly what killed `auth.tenfold.nz` — Cloudflare terminates the request
->    and the redirect rule answers instead of Supabase.
-> 3. Add `https://auth.prettymuch.nz/auth/v1/callback` to every provider console
->    *before* activating, keeping the `*.supabase.co` one until the switch lands.
-> 4. Only then set `NEXT_PUBLIC_SUPABASE_URL=https://auth.prettymuch.nz` (Railway
->    + local `.env`). Activating the domain stops OAuth on the raw host.
+> **Order matters when changing the auth host.** Activation makes Supabase
+> advertise ONLY the custom domain, so a provider console that hasn't got the
+> new callback registered breaks instantly with `redirect_uri_mismatch`:
 >
-> Stored asset URLs use the raw `*.supabase.co` host on purpose — a custom
-> domain that later lapses must not break 300+ saved images.
+> 1. Add the new callback to every provider console first, keeping the old one.
+> 2. Verify Google actually accepts it — its own UI warns settings take "5
+>    minutes to a few hours". Probe it before switching:
+>    `https://accounts.google.com/o/oauth2/v2/auth?client_id=…&redirect_uri=<new>&response_type=code&scope=email`
+>    returns `redirect_uri_mismatch` until it's live.
+> 3. Only then activate, and set `NEXT_PUBLIC_SUPABASE_URL` (Railway + `.env`).
+>
+> **Stored asset URLs stay on the raw `*.supabase.co` host on purpose** — a
+> custom domain that later lapses must not break 300+ saved images. Verified
+> after activation: storage still serves from the raw host unchanged.
 > The direct Postgres `DATABASE_URL` is **not** covered by a custom domain — it
 > stays on the `*.pooler.supabase.com` host, unchanged.
 
@@ -68,6 +74,7 @@ provider in Supabase and paste them → add the Supabase callback above as the a
 redirect URI.**
 
 ### Google
+
 1. **console.cloud.google.com → APIs & Services → Credentials → OAuth 2.0 Client ID**
    (Web application). This project's client ID ends with
    `…88qear6rtb32rsqm1pbv2a6494tqaii2`.
@@ -75,12 +82,12 @@ redirect URI.**
    (Optionally add `https://gbccfqpmoteicpumhkuj.supabase.co` to Authorized
    JavaScript origins.)
 3. **OAuth consent screen:** set Publishing status to **In production** (External).
-   While in **Testing**, only emails listed under *Audience → Test users* can sign
+   While in **Testing**, only emails listed under _Audience → Test users_ can sign
    in — everyone else gets "Access blocked".
 4. **Supabase → Providers → Google** → enable → paste Client ID + Secret → Save.
 
 > **"OAuth user cap" (0 / 100) does NOT apply here.** The cap only limits unverified
-> apps that request *sensitive/restricted* scopes (Gmail, Drive, …). This app only
+> apps that request _sensitive/restricted_ scopes (Gmail, Drive, …). This app only
 > requests `openid email profile` (non-sensitive), so there's no cap and no
 > verification needed.
 >
@@ -89,6 +96,7 @@ redirect URI.**
 > vs `https`, the wrong OAuth client, or the wrong Google project.
 
 ### Facebook
+
 1. **developers.facebook.com → My Apps → Create App** → use case
    **"Authenticate and request data from users with Facebook Login."**
 2. Add the **Facebook Login** product.
@@ -100,7 +108,8 @@ redirect URI.**
    testers can sign in.
 6. **Supabase → Providers → Facebook** → enable → paste App ID + App Secret → Save.
 
-### LinkedIn  (provider key: `linkedin_oidc`)
+### LinkedIn (provider key: `linkedin_oidc`)
+
 1. **linkedin.com/developers → Create app** — you must attach a LinkedIn **Company
    Page** (create a basic one if needed).
 2. **Products** tab → request **"Sign In with LinkedIn using OpenID Connect"**
