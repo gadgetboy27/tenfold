@@ -1,0 +1,51 @@
+# PrettyMuch
+
+> An AI creative pipeline for small businesses. One text prompt becomes images,
+> video, music and copy — then publishes to up to 13 social platforms from a
+> single button. Built in New Zealand, priced in NZD.
+
+PrettyMuch is a web application (no install, no design software). A business
+describes what it wants in a sentence; the platform generates six images to
+choose from, then branches that chosen image into video, a music track,
+AI-written captions, brand-applied compositions, and scheduled social posts.
+
+## What it does
+
+- **Images** — six options per prompt, or bring your own product photo and the
+  generations are built around it.
+- **Video** — 10, 15 or 30 second clips generated from a chosen image.
+- **Music** — a track sized to the video length.
+- **Copy** — platform-native captions and scripts.
+- **Compositing** — cutout, inpaint, relight and blend as real layers, plus a
+  brand kit (logo, colours, fonts) applied automatically.
+- **Logo & brand** — generate a logo from a brief, refine it, export a vector
+  brand package.
+- **Publishing** — Facebook, Instagram, TikTok, LinkedIn, X, YouTube,
+  Pinterest, Google Business Profile and more, with scheduling and an approval
+  workflow for teams.
+
+## Pricing
+
+Credit-based. 50 free credits on signup, no card required. Subscriptions from
+NZD $29/month (Creator) through $79 (Business) to $249 (Agency). Credit top-up
+packs from NZD $15. Full breakdown: https://prettymuch.nz/pricing
+
+## Common questions
+
+- **Do users own what they generate?** Yes — images, video, music and captions
+  are the customer's to use commercially, stated in the terms.
+- **Does anything post automatically?** No. Every asset and caption is reviewed
+  and published by the user, or scheduled deliberately.
+- **Are design skills needed?** No.
+- **Where does data live?** Each customer's assets, brand kit and campaigns are
+  isolated to their own workspace at the database level. Social accounts connect
+  via OAuth; passwords are never seen by PrettyMuch.
+
+## Links
+
+- Home: https://prettymuch.nz
+- Pricing: https://prettymuch.nz/pricing
+- About: https://prettymuch.nz/about
+- Terms: https://prettymuch.nz/terms
+- Privacy: https://prettymuch.nz/privacy
+- Contact: support@prettymuch.nz
