@@ -1,11 +1,18 @@
 import Link from "next/link";
 
-interface FaqItem {
+export interface FaqItem {
   q: string;
   a: React.ReactNode;
+  /**
+   * Plain-text form of the answer, for the FAQPage JSON-LD — schema can't
+   * carry JSX. Only needed when `a` isn't already a string; keeping both on
+   * the same object is what stops the markup drifting from what renders.
+   */
+  plain?: string;
 }
 
-const DEFAULT_ITEMS: FaqItem[] = [
+/** Exported so the FAQPage schema is built from the exact rendered copy. */
+export const FAQ_ITEMS: FaqItem[] = [
   {
     q: "Do I own what I generate?",
     a: "Yes. Everything you generate on PrettyMuch — images, video, music, captions — is yours to use commercially. It's written into our terms, not buried in them.",
@@ -27,6 +34,8 @@ const DEFAULT_ITEMS: FaqItem[] = [
         for the full breakdown.
       </>
     ),
+    plain:
+      "You start with 50 free credits — no card required. When they run out, top up from $15 or subscribe from $29/month for a monthly credit allowance.",
   },
   {
     q: "Do I need design or editing skills?",
@@ -42,7 +51,7 @@ const DEFAULT_ITEMS: FaqItem[] = [
   },
 ];
 
-export function FAQSection({ items = DEFAULT_ITEMS }: { items?: FaqItem[] }) {
+export function FAQSection({ items = FAQ_ITEMS }: { items?: FaqItem[] }) {
   return (
     <section id="faq" className="relative px-5 py-28">
       <div className="mx-auto max-w-3xl">
