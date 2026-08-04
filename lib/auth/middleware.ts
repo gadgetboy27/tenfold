@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { serverPublicEnv } from "@/lib/env/public-server";
+import { isProtectedPath } from "@/lib/auth/public-paths";
 
 const CORS_ALLOWED_ORIGINS =
   process.env.NODE_ENV === "production"
@@ -106,22 +107,17 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  // Other public auth pages (login/signup without a workspace yet, password
-  // reset) render normally — with the session cookie refreshed above.
-  const PUBLIC_PATHS = new Set([
-    "/login",
-    "/signup",
-    "/forgot-password",
-    "/reset-password",
-  ]);
-  if (PUBLIC_PATHS.has(pathname)) {
+  // Public pages (login/signup without a workspace yet, password reset, and
+  // public sections like /guides/*) render normally — with the session cookie
+  // refreshed above. The rule lives in lib/auth/public-paths.ts because a
+  // public two-segment path is indistinguishable from /{workspace}/{page};
+  // see the note there.
+  if (!isProtectedPath(pathname)) {
     return supabaseResponse;
   }
 
   // Protected routes: gate unauthenticated visitors to /login.
-  const isDashboard =
-    pathname.startsWith("/dashboard") || !!pathname.match(/^\/[a-z0-9-]+\//);
-  if (!user && isDashboard) {
+  if (!user) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
