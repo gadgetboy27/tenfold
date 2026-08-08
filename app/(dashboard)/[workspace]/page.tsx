@@ -18,6 +18,7 @@ export default async function WorkspacePage({ params }: Props) {
       workspaceSlug={workspace}
       logoEnabled={isEnabled("logoBuilder")}
       briefAgentEnabled={isEnabled("briefAgent")}
+      foremanEnabled={isEnabled("foreman")}
     />
   );
 }

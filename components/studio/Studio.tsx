@@ -48,6 +48,7 @@ import { PublishCanvas } from "@/components/studio/PublishCanvas";
 import { ReferencePhotoField } from "@/components/studio/ReferencePhotoField";
 import { GalleryPicker } from "@/components/shared/GalleryPicker";
 import { UserMenu } from "@/components/studio/UserMenu";
+import { AutoRunPanel } from "@/components/studio/AutoRunPanel";
 import { BriefAgentPanel } from "@/components/studio/BriefAgentPanel";
 import {
   ProjectBundle,
@@ -180,11 +181,14 @@ export function Studio({
   workspaceSlug,
   logoEnabled = false,
   briefAgentEnabled = false,
+  foremanEnabled = false,
 }: {
   workspaceSlug: string;
   logoEnabled?: boolean;
   /** Slice 1 of the guided brief, dark-launched. Absent unless the flag is on. */
   briefAgentEnabled?: boolean;
+  /** The one-prompt orchestrator. Dark-launched; the manual flow is unaffected. */
+  foremanEnabled?: boolean;
 }) {
   const setWorkspaceSlug = useAppStore((s) => s.setWorkspaceSlug);
   const setStoreCampaignId = useAppStore((s) => s.setCampaignId);
@@ -1252,6 +1256,9 @@ export function Studio({
                   refUploading={refUploading}
                   onUploadReference={uploadReference}
                   briefAgentEnabled={briefAgentEnabled}
+                  foremanEnabled={foremanEnabled}
+                  campaignId={campaignId}
+                  onHandover={(sec) => setSection(sec as SectionId)}
                   onPickReference={() => setPickingReference(true)}
                   onClearReference={() => setReferenceUrl(null)}
                   generating={generating}
@@ -1429,6 +1436,9 @@ function CockpitCreate({
   onPickReference,
   onClearReference,
   briefAgentEnabled,
+  foremanEnabled,
+  campaignId,
+  onHandover,
   generating,
   stage,
   assets,
@@ -1483,6 +1493,9 @@ function CockpitCreate({
   onPickReference: () => void;
   onClearReference: () => void;
   briefAgentEnabled: boolean;
+  foremanEnabled: boolean;
+  campaignId: string | null;
+  onHandover: (section: string) => void;
   generating: boolean;
   stage: string;
   assets: Anchor[];
@@ -1637,6 +1650,17 @@ function CockpitCreate({
                         ? "Type a prompt above to enable Generate."
                         : `Needs at least 3 characters — currently ${prompt.trim().length}.`}
                     </p>
+                  )}
+
+                  {/* The one-prompt path, offered ALONGSIDE the manual flow
+                      rather than replacing it. Only once a campaign exists —
+                      there has to be something to carry forward. */}
+                  {foremanEnabled && campaignId && (
+                    <AutoRunPanel
+                      workspaceSlug={workspaceSlug}
+                      campaignId={campaignId}
+                      onHandover={onHandover}
+                    />
                   )}
 
                   {/* Dark-launched: absent entirely unless FEATURE_BRIEF_AGENT

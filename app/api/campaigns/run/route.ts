@@ -148,6 +148,42 @@ const handler = withWorkspace(async (req, { db, session }) => {
 });
 
 /**
+ * GET /api/campaigns/run?campaignId=… — the live state of a campaign's run.
+ *
+ * Drives the progress UI and, just as importantly, the handover: when a run
+ * fails or is abandoned the client needs to know WHICH stage stopped so it can
+ * drop the user into the manual flow at exactly that point rather than back at
+ * the beginning. `stages` carries that directly.
+ */
+const getHandler = withWorkspace(async (req, { db }) => {
+  const campaignId = new URL(req.url).searchParams.get("campaignId");
+  if (!campaignId) {
+    return NextResponse.json({ error: "campaignId required" }, { status: 400 });
+  }
+  const { data } = await db
+    .from("campaign_runs")
+    .select(
+      "id, status, current_stage, stages, credits_estimated, credits_spent, error",
+    )
+    .eq("campaign_id", campaignId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  // No run is a normal state — the campaign was driven manually.
+  return NextResponse.json({ run: data ?? null });
+});
+
+export async function GET(
+  req: Request,
+  ctx?: { params?: Promise<Record<string, never>> },
+): Promise<Response> {
+  if (!isEnabled("foreman")) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  return getHandler(req, ctx);
+}
+
+/**
  * Flag checked before the wrapper: `withWorkspace` authenticates first, so a
  * check inside it answers 401 to an anonymous caller and confirms the endpoint
  * exists. A dark-launched feature must be genuinely absent
