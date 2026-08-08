@@ -430,7 +430,20 @@ export function Studio({
    * an exception nobody predicted — the button comes back.
    */
   const generate = async (overridePrompt?: string) => {
-    const effectivePrompt = (overridePrompt ?? prompt).trim();
+    // Only trust a genuine string. Passing this function directly as a click
+    // handler (`onClick={onGenerate}`) hands React's MouseEvent in as the
+    // first argument, which arrived here as `overridePrompt` and made
+    // `.trim()` throw inside the handler — so the button did nothing at all,
+    // with the error visible only in the console.
+    //
+    // That worked until 07d4f66 added this parameter for Brand Brain's
+    // auto-generate; the handler had been written years earlier against a
+    // zero-argument function and nothing flagged the change. The call sites
+    // now pass no argument, and this guard makes the whole class of mistake
+    // harmless rather than silent.
+    const override =
+      typeof overridePrompt === "string" ? overridePrompt : undefined;
+    const effectivePrompt = (override ?? prompt).trim();
     if (effectivePrompt.length < 3 || generating) return;
     setGenerating(true);
     setStage(STAGE_LABELS[0][1]);
@@ -1639,7 +1652,7 @@ function CockpitCreate({
 
                   <button
                     type="button"
-                    onClick={onGenerate}
+                    onClick={() => onGenerate()}
                     disabled={prompt.trim().length < 3 || generating}
                     title={
                       generating
@@ -1952,7 +1965,7 @@ function VideoInputs({
       </div>
       <button
         type="button"
-        onClick={onGenerate}
+        onClick={() => onGenerate()}
         disabled={generating}
         className="flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity disabled:opacity-40"
       >
@@ -2308,7 +2321,7 @@ function MusicCanvas({
 
         <button
           type="button"
-          onClick={onGenerate}
+          onClick={() => onGenerate()}
           disabled={generating}
           className="flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity disabled:opacity-40"
         >
