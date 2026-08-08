@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { serverPublicEnv } from "@/lib/env/public-server";
 import { isProtectedPath } from "@/lib/auth/public-paths";
+import { staleAuthCookieNames } from "@/lib/supabase/cookie-name";
 
 const CORS_ALLOWED_ORIGINS =
   process.env.NODE_ENV === "production"
@@ -58,9 +59,23 @@ export async function proxy(request: NextRequest) {
   // Always-public, no session work needed: the marketing home, the OAuth/email
   // callback (which establishes the session itself), or when Supabase env is
   // unavailable at runtime — so these always render.
+  // Expire Supabase auth cookies left over from a previous cookie-name
+  // derivation. They are still sent on every request, grow with each sign-in,
+  // and eventually push the Cookie header past Node's 16KB limit — which
+  // surfaced as HTTP 431 on every authenticated fetch (empty gallery, missing
+  // projects, a credit balance stuck at 0). Users can't be expected to know to
+  // clear cookies, so this cleans up for them. See lib/supabase/cookie-name.ts.
+  const stale = staleAuthCookieNames(request.cookies.getAll());
+  const clearStale = (res: NextResponse): NextResponse => {
+    for (const name of stale) {
+      res.cookies.set(name, "", { maxAge: 0, path: "/" });
+    }
+    return res;
+  };
+
   const ALWAYS_PUBLIC = new Set(["/", "/callback", "/auth/callback"]);
   if (ALWAYS_PUBLIC.has(pathname) || !supabaseUrl || !supabaseKey) {
-    return NextResponse.next({ request });
+    return clearStale(NextResponse.next({ request }));
   }
 
   // For everything else (auth pages + protected routes) refresh the Supabase
@@ -113,15 +128,15 @@ export async function proxy(request: NextRequest) {
   // public two-segment path is indistinguishable from /{workspace}/{page};
   // see the note there.
   if (!isProtectedPath(pathname)) {
-    return supabaseResponse;
+    return clearStale(supabaseResponse);
   }
 
   // Protected routes: gate unauthenticated visitors to /login.
   if (!user) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    return clearStale(NextResponse.redirect(new URL("/login", request.url)));
   }
 
-  return supabaseResponse;
+  return clearStale(supabaseResponse);
 }
 
 export const config = {

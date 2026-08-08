@@ -1,11 +1,16 @@
 import { createBrowserClient } from "@supabase/ssr";
+import { AUTH_COOKIE_NAME } from "@/lib/supabase/cookie-name";
 import { getPublicEnv } from "@/lib/env/public-client";
 
 function getSupabaseClient() {
   const { NEXT_PUBLIC_SUPABASE_URL: url, NEXT_PUBLIC_SUPABASE_ANON_KEY: key } =
     getPublicEnv();
   if (!url || !key) return null;
-  return createBrowserClient(url, key);
+  // Cookie name pinned, not derived from the URL — see lib/supabase/cookie-name.ts
+  // for the 431 incident this prevents.
+  return createBrowserClient(url, key, {
+    cookieOptions: { name: AUTH_COOKIE_NAME },
+  });
 }
 
 interface ApiOptions extends RequestInit {
