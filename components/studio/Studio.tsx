@@ -47,6 +47,7 @@ import { CompositorCanvas } from "@/components/studio/CompositorCanvas";
 import { PublishCanvas } from "@/components/studio/PublishCanvas";
 import { ReferencePhotoField } from "@/components/studio/ReferencePhotoField";
 import { GalleryPicker } from "@/components/shared/GalleryPicker";
+import { BriefAgentPanel } from "@/components/studio/BriefAgentPanel";
 import {
   ProjectBundle,
   type ProjectProgress,
@@ -177,9 +178,12 @@ const VIDEO_STAGE_LABELS = [
 export function Studio({
   workspaceSlug,
   logoEnabled = false,
+  briefAgentEnabled = false,
 }: {
   workspaceSlug: string;
   logoEnabled?: boolean;
+  /** Slice 1 of the guided brief, dark-launched. Absent unless the flag is on. */
+  briefAgentEnabled?: boolean;
 }) {
   const setWorkspaceSlug = useAppStore((s) => s.setWorkspaceSlug);
   const setStoreCampaignId = useAppStore((s) => s.setCampaignId);
@@ -1169,6 +1173,7 @@ export function Studio({
                   referenceUrl={referenceUrl}
                   refUploading={refUploading}
                   onUploadReference={uploadReference}
+                  briefAgentEnabled={briefAgentEnabled}
                   onPickReference={() => setPickingReference(true)}
                   onClearReference={() => setReferenceUrl(null)}
                   generating={generating}
@@ -1344,6 +1349,7 @@ function CockpitCreate({
   onUploadReference,
   onPickReference,
   onClearReference,
+  briefAgentEnabled,
   generating,
   stage,
   assets,
@@ -1396,6 +1402,7 @@ function CockpitCreate({
   onUploadReference: (file: File) => void;
   onPickReference: () => void;
   onClearReference: () => void;
+  briefAgentEnabled: boolean;
   generating: boolean;
   stage: string;
   assets: Anchor[];
@@ -1521,6 +1528,17 @@ function CockpitCreate({
                       className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary/50"
                     />
                   </div>
+
+                  {/* Dark-launched: absent entirely unless FEATURE_BRIEF_AGENT
+                      is on. Sits below the prompt and above Generate, and never
+                      gates it — Generate stays enabled regardless. */}
+                  {briefAgentEnabled && (
+                    <BriefAgentPanel
+                      prompt={prompt}
+                      workspaceSlug={workspaceSlug}
+                      onUsePrompt={setPrompt}
+                    />
+                  )}
 
                   <button
                     type="button"

@@ -23,11 +23,15 @@
  * something by accident.
  */
 
-export type FeatureFlag = "logoBuilder";
+export type FeatureFlag = "logoBuilder" | "briefAgent";
 
 /** Flag → the env var that controls it. Add new flags here. */
 const FLAG_ENV: Record<FeatureFlag, string> = {
   logoBuilder: "FEATURE_LOGO_BUILDER",
+  // Slice 1 of the guided-brief work. Dark-launched: the live prompt→publish
+  // flow must keep working untouched while this is built out, so every part of
+  // it gates on this flag and is genuinely absent in production until flipped.
+  briefAgent: "FEATURE_BRIEF_AGENT",
 };
 
 /** True only when the flag's env var is exactly "1". */

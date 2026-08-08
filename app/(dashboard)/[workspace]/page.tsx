@@ -14,6 +14,10 @@ interface Props {
 export default async function WorkspacePage({ params }: Props) {
   const { workspace } = await params;
   return (
-    <Studio workspaceSlug={workspace} logoEnabled={isEnabled("logoBuilder")} />
+    <Studio
+      workspaceSlug={workspace}
+      logoEnabled={isEnabled("logoBuilder")}
+      briefAgentEnabled={isEnabled("briefAgent")}
+    />
   );
 }

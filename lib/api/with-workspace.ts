@@ -30,6 +30,7 @@ export const WORKSPACE_SCOPED_TABLES = new Set<string>([
   "content_submissions",
   "analytics_reports",
   "asset_comments",
+  "decision_events",
 ]);
 
 type AdminClient = SupabaseClient;
