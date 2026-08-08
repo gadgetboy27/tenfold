@@ -34,7 +34,12 @@ export function InfoHint({ text }: { text: string }) {
       {open && (
         <span
           role="tooltip"
-          className="absolute bottom-full left-1/2 z-50 mb-1 w-52 -translate-x-1/2 rounded-lg border border-border bg-popover px-2.5 py-1.5 text-[11px] leading-relaxed text-foreground shadow-lg"
+          // w-52 (208px) was too narrow: a long hint became a tall thin column
+          // that clipped against the scrolling left panel, so the message only
+          // ever read partially. Wider, with a viewport-relative cap so it
+          // still fits on a phone, and normal wrapping so words never break
+          // mid-hyphenation.
+          className="absolute bottom-full left-1/2 z-50 mb-1.5 w-[19rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 whitespace-normal break-words rounded-lg border border-border bg-popover px-3 py-2 text-[11px] leading-relaxed text-foreground shadow-lg"
         >
           {text}
         </span>

@@ -1550,7 +1550,7 @@ function CockpitCreate({
                   <div>
                     <label className="mb-1 block text-xs font-medium text-muted-foreground">
                       Prompt{" "}
-                      <InfoHint text="Describe the scene, not the ad. Subject, setting, lighting and mood all help — 'fresh beans on a wooden counter, morning light through a window' beats 'coffee ad'. You get 6 images to choose from." />
+                      <InfoHint text="Describe the scene, not the ad — subject, setting, light and mood. 'Fresh beans on a wooden counter, morning light' beats 'coffee ad'. You get 6 images to pick from." />
                     </label>
                     <textarea
                       value={prompt}
