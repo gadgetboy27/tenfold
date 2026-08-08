@@ -1,7 +1,8 @@
 # lib/foreman — the orchestrator ("one prompt, hands off until publish")
 
-**Status: foundation built, executor NOT built.** Read this before assuming a
-run can actually run.
+**Status: complete and dark-launched behind `FEATURE_FOREMAN`.** Never run in
+anger — the code paths below are tested but no real end-to-end run has been
+executed against fal. Treat the first one as a supervised experiment.
 
 ## The mission
 
@@ -28,20 +29,51 @@ step is in flight, and survives the browser closing.
   `initialCaption`. Adopted only while that field is untouched — overwriting
   something the user typed there would be worse than making them paste.
 
-## What does NOT exist yet
+## How a run advances
 
-1. **The executor.** Nothing starts a stage. Needs: debit → insert
-   `creative_jobs` → enqueue, per stage.
-2. **Webhook advance.** `app/api/webhooks/fal/route.ts` saves assets and marks
-   jobs complete; it has no concept of "this job belongs to run X, start stage
-   Y". Plan: carry `runId`/`runStage` in `creative_jobs.input_params` (no schema
-   change) and advance from `handleSuccess`.
-3. **Anchor auto-selection.** Something must pick 1 of 6. The interesting option
-   is feeding `style_performance()` back into the choice — `CLAUDE.md` §10 notes
-   nothing currently does — but v1 can pick the first and let the user change it.
-4. **Failure semantics.** If stage 4 of 5 fails, what happens to the run, the
-   partial campaign, and the credits already spent? Single jobs refund cleanly;
-   a chain has no equivalent yet.
+- **`execute.ts`** runs one stage. Synchronous stages (`anchor`, `caption`)
+  complete inline and the loop continues; async stages (`images`, `video`,
+  `music`) submit a fal job and stop. `driveRun` walks until it hits an async
+  stage or finishes.
+- **`advance.ts`** is called from the fal webhook when a job completes. Async
+  jobs carry `runId`/`runStage` in `creative_jobs.input_params`, so no schema
+  change was needed to identify them.
+- **`buildFalInput` was extracted** to `lib/fal/build-input.ts` and is now
+  shared by `/api/jobs` and the foreman. Duplicating it would have meant an
+  orchestrated run silently diverging from a manual one the first time a prompt
+  or model input changed.
+
+## Credit and failure semantics
+
+Debit per stage, never in a batch: a run that dies at stage 3 must not have
+charged for 4 and 5. Each stage follows CLAUDE.md §1/§6 exactly — debit before
+the job exists, `refundCredits` if submission throws.
+
+A failed stage **stops the run** rather than pressing on. Later stages depend on
+earlier output (video needs the anchor; music is sized to the video), so
+continuing would spend credits producing something incoherent.
+
+The API refuses up front when the balance can't cover the quote, rather than
+failing three stages in and leaving a half-built campaign with a confusing
+ledger.
+
+## Still a placeholder: anchor selection
+
+`pickAnchor` takes the earliest image. That's a placeholder, not a judgement.
+The interesting option is `style_performance()` (migration 0025), which already
+ranks a workspace's styles by real engagement — CLAUDE.md §10 notes nothing
+feeds it back into generation, and this is the obvious place to close that loop.
+Doing it without measuring whether it beats "first" would be guessing, so the
+seam is left explicit.
+
+## Why the webhook touch is safe
+
+`advanceRunForJob` is the only shared-code change. It returns immediately unless
+`input_params.runId` is present — for all existing traffic it is a property read
+and a return, with no client constructed. It is additionally flag-gated, and it
+never throws: the webhook's contract is to record the asset, and a broken run
+must not cost us that. All three properties are asserted in
+`tests/unit/foreman-advance.test.ts`.
 
 ## Two decisions already made, worth keeping
 

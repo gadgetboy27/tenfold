@@ -23,7 +23,7 @@
  * something by accident.
  */
 
-export type FeatureFlag = "logoBuilder" | "briefAgent";
+export type FeatureFlag = "logoBuilder" | "briefAgent" | "foreman";
 
 /** Flag → the env var that controls it. Add new flags here. */
 const FLAG_ENV: Record<FeatureFlag, string> = {
@@ -32,6 +32,10 @@ const FLAG_ENV: Record<FeatureFlag, string> = {
   // flow must keep working untouched while this is built out, so every part of
   // it gates on this flag and is genuinely absent in production until flipped.
   briefAgent: "FEATURE_BRIEF_AGENT",
+  // The orchestrator. Gated hardest of the three: it spends credits without a
+  // per-step confirmation, and its only shared-code touchpoint is the fal
+  // webhook, which every generation for every user passes through.
+  foreman: "FEATURE_FOREMAN",
 };
 
 /** True only when the flag's env var is exactly "1". */

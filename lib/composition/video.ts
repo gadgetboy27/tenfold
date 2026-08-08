@@ -3,6 +3,7 @@ import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { planAudioMix } from "@/lib/composition/audio-mix";
 
 const FONT = "/usr/share/fonts/ttf-dejavu/DejaVuSans.ttf";
 
@@ -86,6 +87,35 @@ async function probeDuration(path: string): Promise<number> {
     return Number.isFinite(d) && d > 0 ? d : 10;
   } catch {
     return 10; // sensible default for a standard clip
+  }
+}
+
+/**
+ * Does the source clip carry an audio stream?
+ *
+ * This decides whether a music track is MIXED UNDER the clip's own audio or
+ * simply mapped over it. It matters because a Spokesperson video IS speech —
+ * the pipeline builds it from TTS + lipsync — so mapping music over it deletes
+ * the voice, silently, with a successful-looking render.
+ */
+async function probeHasAudio(path: string): Promise<boolean> {
+  try {
+    const out = await run("ffprobe", [
+      "-v",
+      "error",
+      "-select_streams",
+      "a",
+      "-show_entries",
+      "stream=index",
+      "-of",
+      "csv=p=0",
+      path,
+    ]);
+    return out.trim().length > 0;
+  } catch {
+    // Assume there IS audio: mixing a silent track is harmless, whereas
+    // wrongly assuming silence destroys speech.
+    return true;
   }
 }
 
@@ -184,13 +214,23 @@ export async function composeVideo(
       vLabel = "vout";
     }
 
+    // Audio: a Spokesperson clip IS speech (TTS + lipsync), so music must be
+    // ducked UNDER it, never mapped over it. The decision lives in
+    // lib/composition/audio-mix.ts so it's testable without FFmpeg.
+    const plan = planAudioMix({
+      hasMusic: !!input.audioUrl,
+      clipHasAudio: input.audioUrl ? await probeHasAudio(videoPath) : false,
+    });
+    filters.push(...plan.filters);
+
     if (filters.length > 0) {
       args.push("-filter_complex", filters.join(";"), "-map", `[${vLabel}]`);
-      // Music replaces the clip's own audio; otherwise keep it if present.
-      if (input.audioUrl) args.push("-map", "1:a:0", "-shortest");
-      else args.push("-map", "0:a?");
-    } else if (input.audioUrl) {
-      args.push("-map", "0:v:0", "-map", "1:a:0", "-shortest"); // music only
+      if (plan.label) args.push("-map", `[${plan.label}]`);
+      else if (plan.directMap) args.push("-map", plan.directMap);
+      if (plan.shortest) args.push("-shortest");
+    } else if (plan.directMap) {
+      args.push("-map", "0:v:0", "-map", plan.directMap);
+      if (plan.shortest) args.push("-shortest");
     }
     args.push(
       "-c:v",

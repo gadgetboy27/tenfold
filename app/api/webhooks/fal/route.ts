@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { advanceRunForJob } from "@/lib/foreman/advance";
 import { falWebhookPayloadSchema, isSuccessStatus } from "@/lib/fal/webhooks";
 import { refundCredits } from "@/lib/credits/refund";
 import { recordJobCost } from "@/lib/costs/tracker";
@@ -455,6 +456,12 @@ async function handleSuccess(
     .update({ status: "completed", completed_at: new Date().toISOString() })
     .eq("id", job.id);
 
+  // If this job belonged to a foreman run, start its next stage. Fire-and-
+  // forget and internally guarded: returns immediately when input_params has
+  // no runId (i.e. for all existing traffic), and never throws — this route's
+  // contract is to record the asset, and a broken run must not cost us that.
+  void advanceRunForJob({ id: job.id, input_params: job.input_params });
+
   // Propagate completion back to the campaign row so the lobby shows correct status
   await admin
     .from("campaigns")
@@ -498,6 +505,9 @@ async function finalizeMultiImage(job: CreativeJob, expected: number) {
       .update({ status: "completed", completed_at: new Date().toISOString() })
       .eq("id", job.id)
       .eq("status", "processing");
+    // Same fire-and-forget advance as the single-asset path above; the images
+    // stage of a run finishes here, since a campaign set is multi-image.
+    void advanceRunForJob({ id: job.id, input_params: job.input_params });
     await admin
       .from("campaigns")
       .update({ status: "ready" })
