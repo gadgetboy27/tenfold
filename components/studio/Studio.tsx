@@ -411,6 +411,13 @@ export function Studio({
   const generate = async (overridePrompt?: string) => {
     const effectivePrompt = (overridePrompt ?? prompt).trim();
     if (effectivePrompt.length < 3 || generating) return;
+    // `generating` disables the button, so anything that leaves it true strands
+    // the user with no way to retry and no error. The catch below resets it,
+    // but only if the promise settles — this guarantees it does.
+    const stuckGuard = setTimeout(() => {
+      setGenerating(false);
+      toast.error("That took too long to start — please try again.");
+    }, 30_000);
     setGenerating(true);
     setStage(STAGE_LABELS[0][1]);
     setAssets([]);
@@ -439,10 +446,12 @@ export function Studio({
           data.issues?.join(" — ") ?? data.error ?? "Couldn't start generation",
         );
       }
+      clearTimeout(stuckGuard);
       setCampaignId(data.campaignId);
       refreshBalance();
       await poll(data.campaignId);
     } catch (err) {
+      clearTimeout(stuckGuard);
       setGenerating(false);
       setSection("brief");
       toast.error((err as Error).message ?? "Generation failed");
