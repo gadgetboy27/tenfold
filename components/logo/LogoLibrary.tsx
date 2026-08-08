@@ -20,7 +20,26 @@ const STATUS_LABEL: Record<string, string> = {
   finalized: "Finalized",
   packaged: "Packaged",
   briefing: "Draft",
+  failed: "Didn't finish",
 };
+
+/**
+ * After this long, a project still claiming to be generating is stuck, not
+ * slow. Six concepts land in well under a minute; anything past this has lost
+ * its webhook and will never complete on its own.
+ *
+ * Without this a dead project renders "Generating…" forever with no preview —
+ * which reads as the app being broken rather than one job having failed, and
+ * gives no hint that deleting it is the way out.
+ */
+const STALL_AFTER_MS = 15 * 60 * 1000;
+
+function isStalled(p: LogoProjectSummary): boolean {
+  return (
+    p.status === "generating" &&
+    Date.now() - new Date(p.createdAt).getTime() > STALL_AFTER_MS
+  );
+}
 
 interface LogoLibraryProps {
   projects: LogoProjectSummary[];
@@ -72,8 +91,16 @@ export function LogoLibrary({
               </div>
               <div className="border-t px-3 py-2">
                 <p className="truncate text-sm font-medium">{p.businessName}</p>
-                <p className="text-xs text-muted-foreground">
-                  {STATUS_LABEL[p.status] ?? p.status}
+                <p
+                  className={`text-xs ${
+                    isStalled(p) || p.status === "failed"
+                      ? "text-amber-400"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  {isStalled(p)
+                    ? "Stalled — delete and try again"
+                    : (STATUS_LABEL[p.status] ?? p.status)}
                 </p>
               </div>
             </button>
