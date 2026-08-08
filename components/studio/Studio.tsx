@@ -1565,15 +1565,22 @@ function CockpitCreate({
                     />
                   </div>
 
-                  {/* Dark-launched: absent entirely unless FEATURE_BRIEF_AGENT
-                      is on. Sits below the prompt and above Generate, and never
-                      gates it — Generate stays enabled regardless. */}
-                  {prompt.trim().length > 0 && prompt.trim().length < 3 && (
+                  {/* Shown whenever Generate is blocked by the prompt being
+                      too short, with the count React actually holds. A greyed
+                      button with no explanation is a dead end — and when the
+                      count disagrees with what's visibly typed, that difference
+                      is the fault, not a guess about it. */}
+                  {prompt.trim().length < 3 && (
                     <p className="text-[11px] text-amber-400">
-                      Needs at least 3 characters to generate.
+                      {prompt.length === 0
+                        ? "Type a prompt above to enable Generate."
+                        : `Needs at least 3 characters — currently ${prompt.trim().length}.`}
                     </p>
                   )}
 
+                  {/* Dark-launched: absent entirely unless FEATURE_BRIEF_AGENT
+                      is on. Sits below the prompt and above Generate, and never
+                      gates it — Generate stays enabled regardless. */}
                   {briefAgentEnabled && (
                     <BriefAgentPanel
                       prompt={prompt}
@@ -1586,9 +1593,6 @@ function CockpitCreate({
                     type="button"
                     onClick={onGenerate}
                     disabled={prompt.trim().length < 3 || generating}
-                    // A disabled button with no explanation is a dead end: the
-                    // user can't tell whether the app is busy, the prompt is
-                    // too short, or something has broken. Say which.
                     title={
                       generating
                         ? "Already generating — this clears itself if it stalls"
