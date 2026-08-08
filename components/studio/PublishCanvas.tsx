@@ -75,12 +75,15 @@ export function PublishCanvas({
   anchorId,
   workingImage,
   videoUrl,
+  initialCaption = "",
 }: {
   workspaceSlug: string;
   campaignId: string | null;
   anchorId: string | null;
   workingImage: string | null;
   videoUrl: string | null;
+  /** Caption generated in the Caption section, if the user made one. */
+  initialCaption?: string;
 }) {
   const hasVideo = !!videoUrl;
   const hasImage = !!workingImage;
@@ -97,10 +100,20 @@ export function PublishCanvas({
   const [noMusicPlatforms, setNoMusicPlatforms] = useState<Set<string>>(
     new Set(),
   );
-  const [caption, setCaption] = useState("");
+  const [caption, setCaption] = useState(initialCaption);
   const [platformCaptions, setPlatformCaptions] = useState<
     Record<string, string>
   >({});
+  // The user may generate a caption AFTER opening Publish. Adopt it only while
+  // this field is still untouched — overwriting something they typed here
+  // would be worse than making them paste it.
+  const [captionTouched, setCaptionTouched] = useState(false);
+  useEffect(() => {
+    if (!captionTouched && initialCaption && initialCaption !== caption) {
+      queueMicrotask(() => setCaption(initialCaption));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCaption, captionTouched]);
   const [adapting, setAdapting] = useState(false);
   const [hashtags, setHashtags] = useState<string[]>([]);
   const [hashtagInput, setHashtagInput] = useState("");
@@ -715,6 +728,7 @@ export function PublishCanvas({
             value={caption}
             onChange={(e) => {
               setCaption(e.target.value);
+              setCaptionTouched(true);
               setPlatformCaptions({});
             }}
             placeholder="Write your caption — each connected platform gets its own AI-fitted tone and length automatically."

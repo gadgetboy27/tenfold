@@ -39,11 +39,19 @@ export function CaptionCanvas({
   campaignId,
   campaignName,
   initialTopic,
+  onCaption,
 }: {
   workspaceSlug: string;
   campaignId: string | null;
   campaignName: string;
   initialTopic: string;
+  /**
+   * Lifts the generated caption to Studio so Publish can start pre-filled.
+   * Without this the user writes the caption twice — generate-and-copy here,
+   * then paste (or retype) in Publish. It also puts a finished caption on the
+   * path the foreman needs.
+   */
+  onCaption?: (caption: string) => void;
 }) {
   const [topic, setTopic] = useState(initialTopic);
   const [platform, setPlatform] = useState<PlatformId>("instagram");
@@ -84,6 +92,7 @@ export function CaptionCanvas({
         );
       }
       setCaption(data.result);
+      onCaption?.(data.result);
     } catch (err) {
       toast.error((err as Error).message ?? "Couldn't generate a caption");
     } finally {

@@ -240,6 +240,11 @@ export function Studio({
   const [referenceUrl, setReferenceUrl] = useState<string | null>(null);
   const [refUploading, setRefUploading] = useState(false);
   const [pickingReference, setPickingReference] = useState(false);
+  // The generated caption, lifted out of CaptionCanvas so Publish can start
+  // pre-filled instead of making the user write it twice. Also the handover
+  // point the orchestrator needs — a caption stuck in a child component can't
+  // be carried to the publish step.
+  const [caption, setCaption] = useState("");
   const [generating, setGenerating] = useState(false);
   const [stage, setStage] = useState("");
   const [campaignId, setCampaignId] = useState<string | null>(null);
@@ -580,6 +585,7 @@ export function Studio({
   }, []);
 
   const newProject = () => {
+    setCaption("");
     setCampaignId(null);
     setCampaignName(randomCampaignName());
     setPrompt("");
@@ -1081,6 +1087,7 @@ export function Studio({
                   campaignId={campaignId}
                   campaignName={campaignName}
                   initialTopic={prompt}
+                  onCaption={setCaption}
                 />
               ) : section === "productshot" ? (
                 <div className="mx-auto h-full max-w-3xl">
@@ -1141,6 +1148,7 @@ export function Studio({
                       anchorId={anchorId}
                       workingImage={workingImage}
                       videoUrl={videoUrl}
+                      initialCaption={caption}
                     />
                   </div>
                 </div>
