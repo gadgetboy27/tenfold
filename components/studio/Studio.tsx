@@ -1568,6 +1568,12 @@ function CockpitCreate({
                   {/* Dark-launched: absent entirely unless FEATURE_BRIEF_AGENT
                       is on. Sits below the prompt and above Generate, and never
                       gates it — Generate stays enabled regardless. */}
+                  {prompt.trim().length > 0 && prompt.trim().length < 3 && (
+                    <p className="text-[11px] text-amber-400">
+                      Needs at least 3 characters to generate.
+                    </p>
+                  )}
+
                   {briefAgentEnabled && (
                     <BriefAgentPanel
                       prompt={prompt}
@@ -1580,6 +1586,16 @@ function CockpitCreate({
                     type="button"
                     onClick={onGenerate}
                     disabled={prompt.trim().length < 3 || generating}
+                    // A disabled button with no explanation is a dead end: the
+                    // user can't tell whether the app is busy, the prompt is
+                    // too short, or something has broken. Say which.
+                    title={
+                      generating
+                        ? "Already generating — this clears itself if it stalls"
+                        : prompt.trim().length < 3
+                          ? `Type at least 3 characters (currently ${prompt.trim().length})`
+                          : "Generate 6 images"
+                    }
                     className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-opacity disabled:opacity-40"
                   >
                     {generating ? (
