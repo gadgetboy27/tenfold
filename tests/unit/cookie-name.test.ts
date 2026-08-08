@@ -1,31 +1,40 @@
 import { describe, it, expect } from "vitest";
 import {
-  AUTH_COOKIE_NAME,
+  currentAuthCookieName,
   staleAuthCookieNames,
 } from "@/lib/supabase/cookie-name";
 
+const RAW = "https://gbccfqpmoteicpumhkuj.supabase.co";
+const CUSTOM = "https://auth.prettymuch.nz";
 const c = (...names: string[]) => names.map((name) => ({ name }));
 
-describe("staleAuthCookieNames", () => {
-  // The incident: NEXT_PUBLIC_SUPABASE_URL moved to a custom domain, the
-  // derived cookie name changed, and the old cookies were orphaned rather than
-  // replaced. They kept being sent, each login added more, and the Cookie
-  // header eventually exceeded Node's 16KB limit — HTTP 431 on every
-  // authenticated fetch.
-  it("finds cookies left over from a previous URL derivation", () => {
-    expect(
-      staleAuthCookieNames(
-        c(
-          "sb-gbccfqpmoteicpumhkuj-auth-token",
-          "sb-auth-auth-token",
-          AUTH_COOKIE_NAME,
-        ),
-      ),
-    ).toEqual(["sb-gbccfqpmoteicpumhkuj-auth-token", "sb-auth-auth-token"]);
+describe("currentAuthCookieName", () => {
+  // Verified empirically against @supabase/ssr 0.10.3 — if the library ever
+  // changes its derivation, this test fails and the cleanup must follow suit,
+  // rather than silently deleting live sessions.
+  it("matches the library's derivation", () => {
+    expect(currentAuthCookieName(RAW)).toBe(
+      "sb-gbccfqpmoteicpumhkuj-auth-token",
+    );
+    expect(currentAuthCookieName(CUSTOM)).toBe("sb-auth-auth-token");
   });
 
-  it("catches chunked cookies, which are what actually blow the header", () => {
-    // A session JWT is split across .0/.1/.2 — the chunks are the bulk of it.
+  it("returns empty for a malformed URL rather than guessing", () => {
+    expect(currentAuthCookieName("not a url")).toBe("");
+  });
+});
+
+describe("staleAuthCookieNames", () => {
+  it("finds cookies orphaned by a URL change", () => {
+    expect(
+      staleAuthCookieNames(
+        c("sb-gbccfqpmoteicpumhkuj-auth-token", "sb-auth-auth-token"),
+        CUSTOM,
+      ),
+    ).toEqual(["sb-gbccfqpmoteicpumhkuj-auth-token"]);
+  });
+
+  it("catches chunked cookies, which are the bulk of the header", () => {
     expect(
       staleAuthCookieNames(
         c(
@@ -33,25 +42,44 @@ describe("staleAuthCookieNames", () => {
           "sb-gbccfqpmoteicpumhkuj-auth-token.1",
           "sb-gbccfqpmoteicpumhkuj-auth-token.2",
         ),
+        CUSTOM,
       ),
     ).toHaveLength(3);
   });
 
-  it("keeps the current cookie and its own chunks", () => {
+  // The regression that broke Google sign-in: the cleanup deleted the cookie
+  // the middleware had just written, because the two disagreed about the
+  // current name. Deleting the live session on every response is an infinite
+  // login loop.
+  it("NEVER deletes the cookie for the current URL", () => {
     expect(
       staleAuthCookieNames(
-        c(AUTH_COOKIE_NAME, `${AUTH_COOKIE_NAME}.0`, `${AUTH_COOKIE_NAME}.1`),
+        c("sb-auth-auth-token", "sb-auth-auth-token.0"),
+        CUSTOM,
       ),
     ).toEqual([]);
-  });
-
-  it("ignores cookies that aren't Supabase auth cookies", () => {
     expect(
-      staleAuthCookieNames(c("theme", "sb-provider-token", "_ga", "session")),
+      staleAuthCookieNames(c("sb-gbccfqpmoteicpumhkuj-auth-token"), RAW),
     ).toEqual([]);
   });
 
-  it("is a no-op on a clean jar", () => {
-    expect(staleAuthCookieNames([])).toEqual([]);
+  it("leaves the PKCE code verifier alone", () => {
+    // Deleting this mid-flow makes the OAuth code exchange fail — which is
+    // exactly how the sign-in loop presented.
+    expect(
+      staleAuthCookieNames(c("sb-auth-auth-token-code-verifier"), CUSTOM),
+    ).toEqual([]);
+  });
+
+  it("ignores non-Supabase cookies", () => {
+    expect(
+      staleAuthCookieNames(c("theme", "_ga", "sb-provider-token"), CUSTOM),
+    ).toEqual([]);
+  });
+
+  it("deletes nothing when the URL is unusable", () => {
+    expect(
+      staleAuthCookieNames(c("sb-anything-auth-token"), "nonsense"),
+    ).toEqual([]);
   });
 });

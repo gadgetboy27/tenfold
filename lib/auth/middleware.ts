@@ -65,7 +65,7 @@ export async function proxy(request: NextRequest) {
   // surfaced as HTTP 431 on every authenticated fetch (empty gallery, missing
   // projects, a credit balance stuck at 0). Users can't be expected to know to
   // clear cookies, so this cleans up for them. See lib/supabase/cookie-name.ts.
-  const stale = staleAuthCookieNames(request.cookies.getAll());
+  const stale = staleAuthCookieNames(request.cookies.getAll(), supabaseUrl);
   const clearStale = (res: NextResponse): NextResponse => {
     for (const name of stale) {
       res.cookies.set(name, "", { maxAge: 0, path: "/" });
