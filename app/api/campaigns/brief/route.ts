@@ -18,12 +18,8 @@ import { recordDecision } from "@/lib/learning/record";
  * to hang a refund off. If this ever becomes expensive enough to charge for,
  * it needs the job-row pattern adding at the same time.
  */
-export const POST = withWorkspace(
+const handler = withWorkspace(
   async (req, { db, session }) => {
-    if (!isEnabled("briefAgent")) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
-
     const parsed = briefRequestSchema.safeParse(await req.json());
     if (!parsed.success) {
       return NextResponse.json(
@@ -78,3 +74,20 @@ export const POST = withWorkspace(
   },
   { rateLimit: 20 },
 );
+
+/**
+ * The flag is checked BEFORE the wrapper runs, not inside the handler.
+ * `withWorkspace` authenticates first, so a flag check inside it answers 401 to
+ * an anonymous caller — which confirms the endpoint exists. A dark-launched
+ * feature has to be genuinely absent (LOGO_PRODUCTION.md §1), so this returns a
+ * real 404 with no auth or rate-limit work done at all.
+ */
+export async function POST(
+  req: Request,
+  ctx?: { params?: Promise<Record<string, never>> },
+): Promise<Response> {
+  if (!isEnabled("briefAgent")) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  return handler(req, ctx);
+}
