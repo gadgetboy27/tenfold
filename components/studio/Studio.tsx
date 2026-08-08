@@ -414,16 +414,24 @@ export function Studio({
   // of relying on `prompt` state having re-rendered first — setPrompt(x)
   // followed immediately by generate() in the same handler would otherwise
   // read the pre-update `prompt` from this closure (stale by one render).
+  /**
+   * The documented flow (CLAUDE.md §1, app/api/CLAUDE.md "Async Job Pattern"):
+   * prompt → POST /api/campaigns → credits debited → creative_job queued →
+   * fal enqueued → we poll the campaign until its 6 images land.
+   *
+   * `generating` disables the button, so the ONE invariant that matters is
+   * that it always comes back false. It previously did not: `poll()` gives up
+   * after 80 attempts and simply falls out of its loop, so a generation that
+   * ran long left `generating` true with no error, no toast and no way to
+   * retry — the button was dead until a page refresh. That is the "Generate
+   * does nothing" report.
+   *
+   * Hence the `finally`: whatever happens — success, HTTP error, poll timeout,
+   * an exception nobody predicted — the button comes back.
+   */
   const generate = async (overridePrompt?: string) => {
     const effectivePrompt = (overridePrompt ?? prompt).trim();
     if (effectivePrompt.length < 3 || generating) return;
-    // `generating` disables the button, so anything that leaves it true strands
-    // the user with no way to retry and no error. The catch below resets it,
-    // but only if the promise settles — this guarantees it does.
-    const stuckGuard = setTimeout(() => {
-      setGenerating(false);
-      toast.error("That took too long to start — please try again.");
-    }, 30_000);
     setGenerating(true);
     setStage(STAGE_LABELS[0][1]);
     setAssets([]);
@@ -453,15 +461,17 @@ export function Studio({
           data.issues?.join(" — ") ?? data.error ?? "Couldn't start generation",
         );
       }
-      clearTimeout(stuckGuard);
       setCampaignId(data.campaignId);
       refreshBalance();
+      // Throws on timeout rather than returning quietly, so the catch below
+      // can tell the user their images are still coming.
       await poll(data.campaignId);
     } catch (err) {
-      clearTimeout(stuckGuard);
-      setGenerating(false);
       setSection("brief");
       toast.error((err as Error).message ?? "Generation failed");
+    } finally {
+      // The invariant. Never leave the button disabled.
+      setGenerating(false);
     }
   };
 
@@ -515,6 +525,13 @@ export function Studio({
         throw new Error("Generation failed — please try again");
       }
     }
+    // Ran out of attempts (~2 minutes). This used to fall through silently,
+    // which left `generating` true and the button permanently disabled. The
+    // images usually DO arrive — the job is queued server-side regardless — so
+    // say that rather than implying it failed.
+    throw new Error(
+      "Still generating — your images are on the way. Open the project from the Gallery in a moment.",
+    );
   };
 
   const pickAnchor = async (id: string) => {

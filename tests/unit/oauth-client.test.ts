@@ -24,9 +24,27 @@ describe("signInWithOAuthProvider", () => {
     expect(res.error).toBeUndefined();
     expect(signInWithOAuth).toHaveBeenCalledWith({
       provider: "linkedin_oidc",
-      options: { redirectTo: "https://app.test/auth/callback" },
+      options: {
+        redirectTo: "https://app.test/auth/callback",
+        queryParams: { prompt: "select_account" },
+      },
     });
   });
+
+  // Without prompt=select_account the provider silently reuses whichever
+  // account the browser is already signed into, so signing in as a different
+  // user is impossible and every attempted new signup returns the existing
+  // one — which reads as broken signup rather than a missing option.
+  it.each(["google", "facebook", "linkedin_oidc"] as const)(
+    "asks %s to show the account chooser",
+    async (provider) => {
+      await signInWithOAuthProvider(provider);
+      const arg = signInWithOAuth.mock.calls[0][0] as {
+        options: { queryParams?: Record<string, string> };
+      };
+      expect(arg.options.queryParams?.prompt).toBe("select_account");
+    },
+  );
 
   it.each(["google", "facebook", "linkedin_oidc"] as const)(
     "routes %s through the /auth/callback handler",
