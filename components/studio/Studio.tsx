@@ -47,6 +47,7 @@ import { CompositorCanvas } from "@/components/studio/CompositorCanvas";
 import { PublishCanvas } from "@/components/studio/PublishCanvas";
 import { ReferencePhotoField } from "@/components/studio/ReferencePhotoField";
 import { GalleryPicker } from "@/components/shared/GalleryPicker";
+import { UserMenu } from "@/components/studio/UserMenu";
 import { BriefAgentPanel } from "@/components/studio/BriefAgentPanel";
 import {
   ProjectBundle,
@@ -1042,6 +1043,9 @@ export function Studio({
               <Share2 className="h-4 w-4" />
             </button>
             <CreditMeter />
+            {/* Studio never inherited TopBar, so the main site had no sign-out
+                and no indication of which account you were using. */}
+            <UserMenu />
             <button
               type="button"
               disabled={!publishReady}

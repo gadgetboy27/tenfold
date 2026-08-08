@@ -29,7 +29,14 @@ export async function signInWithOAuthProvider(
 
   const { error } = await supabase.auth.signInWithOAuth({
     provider,
-    options: { redirectTo: `${appOrigin}/auth/callback` },
+    options: {
+      redirectTo: `${appOrigin}/auth/callback`,
+      // Without this Google silently reuses whichever account the browser is
+      // already signed into, so "sign in with a different account" is
+      // impossible and every new signup lands on the same user. `consent` is
+      // deliberately NOT used — it would re-prompt for permissions every time.
+      queryParams: { prompt: "select_account" },
+    },
   });
 
   return { error: error?.message };
