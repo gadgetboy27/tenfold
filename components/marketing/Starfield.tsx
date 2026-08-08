@@ -23,7 +23,9 @@ export function Starfield({ density = 0.00014 }: { density?: number }) {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const reduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
     let stars: Star[] = [];
     let raf = 0;
     let dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -34,7 +36,9 @@ export function Starfield({ density = 0.00014 }: { density?: number }) {
       canvas.height = window.innerHeight * dpr;
       canvas.style.width = `${window.innerWidth}px`;
       canvas.style.height = `${window.innerHeight}px`;
-      const count = Math.floor(window.innerWidth * window.innerHeight * density);
+      const count = Math.floor(
+        window.innerWidth * window.innerHeight * density,
+      );
       stars = Array.from({ length: count }, () => ({
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,

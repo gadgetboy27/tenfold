@@ -11,7 +11,11 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
  * every entry point.
  */
 
-export const WELCOME_CREDITS = 50;
+// The value lives in a client-safe module because marketing copy needs it too
+// (this file pulls in the service-role admin client). Imported for local use
+// and re-exported so existing importers keep working.
+import { WELCOME_CREDITS } from "@/lib/billing/welcome";
+export { WELCOME_CREDITS };
 
 export interface ProvisionUser {
   id: string;

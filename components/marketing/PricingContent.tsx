@@ -154,8 +154,8 @@ export function PricingContent() {
         <p className="mt-4 text-center text-sm text-muted-foreground">
           A full campaign — image set, 10-second video, music and captions —
           costs about {EXAMPLE_CAMPAIGN_CREDITS} credits. On the Creator plan
-          that&apos;s under ${EXAMPLE_CAMPAIGN_NZD} NZD, a fraction of a
-          single agency hour.
+          that&apos;s under ${EXAMPLE_CAMPAIGN_NZD} NZD, a fraction of a single
+          agency hour.
         </p>
       </div>
     </div>

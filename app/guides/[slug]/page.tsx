@@ -7,6 +7,7 @@ import { Footer } from "@/components/marketing/Footer";
 import { StructuredData } from "@/components/marketing/StructuredData";
 import { GUIDES, getGuide } from "@/lib/marketing/guides";
 import { SITE_URL, SITE_NAME } from "@/lib/seo/schema";
+import { WELCOME_CREDITS } from "@/lib/billing/welcome";
 
 // Static params for every guide: these are pure content with no per-request
 // data, so they prerender and serve as static HTML — which is both fastest for
@@ -118,7 +119,7 @@ export default async function GuidePage({
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
             {SITE_NAME} grants commercial rights to everything you generate.
-            Start with 50 free credits — no card required.
+            Start with {WELCOME_CREDITS} free credits — no card required.
           </p>
           <Link
             href="/signup"

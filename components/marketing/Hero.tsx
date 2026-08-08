@@ -5,6 +5,7 @@ import Image from "next/image";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { useRef } from "react";
 import { ArrowRight, Sparkles } from "lucide-react";
+import { WELCOME_CREDITS } from "@/lib/billing/welcome";
 
 /** Floating, depth-parallax showcase image. */
 function FloatTile({
@@ -99,7 +100,7 @@ export function Hero() {
               href="/signup"
               className="group inline-flex items-center gap-2 rounded-full bg-primary px-7 py-3 font-medium text-primary-foreground shadow-[0_0_40px_-6px] shadow-primary/70 transition-transform hover:scale-[1.03]"
             >
-              Start free — 50 credits
+              Start free — {WELCOME_CREDITS} credits
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
             </Link>
             <a

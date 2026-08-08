@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Toaster } from "react-hot-toast";
 import Script from "next/script";
 import "./globals.css";
+import { WELCOME_CREDITS } from "@/lib/billing/welcome";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://prettymuch.nz"),
@@ -11,8 +12,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
   openGraph: {
     title: "PrettyMuch — one prompt, a whole campaign",
-    description:
-      "Turn one idea into a full campaign — images, video, music, copy — published everywhere. Start free with 50 credits.",
+    description: `Turn one idea into a full campaign — images, video, music, copy — published everywhere. Start free with ${WELCOME_CREDITS} credits.`,
     url: "https://prettymuch.nz",
     siteName: "PrettyMuch",
     images: [

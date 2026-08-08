@@ -286,12 +286,27 @@ export function Studio({
   const [showUpgrade, setShowUpgrade] = useState(false);
 
   const refreshBalance = useCallback(() => {
+    // A failure here used to be swallowed entirely, leaving the meter at its
+    // initial 0 — indistinguishable from genuinely having no credits, and the
+    // reason "0 available" was reported while the account held six figures.
+    // Analytics can fail silently; a number the user makes spending decisions
+    // on cannot.
     api("/api/credits/balance", { workspaceSlug })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d: { balance?: number } | null) => {
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = (await r.json().catch(() => ({}))) as { error?: string };
+          throw new Error(body.error ?? `Balance check failed (${r.status})`);
+        }
+        return r.json() as Promise<{ balance?: number }>;
+      })
+      .then((d) => {
         if (typeof d?.balance === "number") setCreditBalance(d.balance);
       })
-      .catch(() => {});
+      .catch((err: Error) => {
+        toast.error(`Couldn't read your credit balance — ${err.message}`, {
+          id: "balance-error", // one toast, however many times this retries
+        });
+      });
   }, [workspaceSlug, setCreditBalance]);
 
   useEffect(() => {

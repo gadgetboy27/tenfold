@@ -49,7 +49,10 @@ export function PromptDemo() {
     let t: ReturnType<typeof setTimeout>;
     if (phase === "typing") {
       if (text.length < full.length) {
-        t = setTimeout(() => setText(full.slice(0, text.length + 1)), 34 + Math.random() * 46);
+        t = setTimeout(
+          () => setText(full.slice(0, text.length + 1)),
+          34 + Math.random() * 46,
+        );
       } else {
         t = setTimeout(() => setPhase("generating"), 950);
       }

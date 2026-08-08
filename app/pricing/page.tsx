@@ -6,12 +6,12 @@ import { FAQSection, FAQ_ITEMS } from "@/components/marketing/FAQSection";
 import { StructuredData } from "@/components/marketing/StructuredData";
 import { faqPageSchema, faqPlain } from "@/lib/seo/schema";
 import { Footer } from "@/components/marketing/Footer";
+import { WELCOME_CREDITS } from "@/lib/billing/welcome";
 
 export const metadata: Metadata = {
   title: "Pricing — PrettyMuch",
   alternates: { canonical: "/pricing" },
-  description:
-    "Start free with 50 credits — no card required. Simple credit pricing for AI-generated campaigns: images, video, music and copy, published to 13 platforms.",
+  description: `Start free with ${WELCOME_CREDITS} credits — no card required. Simple credit pricing for AI-generated campaigns: images, video, music and copy, published to 13 platforms.`,
 };
 
 export default function PricingPage() {

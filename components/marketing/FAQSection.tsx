@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { WELCOME_CREDITS } from "@/lib/billing/welcome";
 
 export interface FaqItem {
   q: string;
@@ -25,17 +26,16 @@ export const FAQ_ITEMS: FaqItem[] = [
     q: "What happens when my free credits run out?",
     a: (
       <>
-        You start with 50 free credits — no card required. When they run out,
-        top up from $15 or subscribe from $29/month for a monthly credit
-        allowance. See{" "}
+        You start with {WELCOME_CREDITS} free credits — no card required. When
+        they run out, top up from $15 or subscribe from $29/month for a monthly
+        credit allowance. See{" "}
         <Link href="/pricing" className="text-primary hover:underline">
           pricing
         </Link>{" "}
         for the full breakdown.
       </>
     ),
-    plain:
-      "You start with 50 free credits — no card required. When they run out, top up from $15 or subscribe from $29/month for a monthly credit allowance.",
+    plain: `You start with ${WELCOME_CREDITS} free credits — no card required. When they run out, top up from $15 or subscribe from $29/month for a monthly credit allowance.`,
   },
   {
     q: "Do I need design or editing skills?",
