@@ -228,7 +228,12 @@ export function Studio({
   // rename it. Persisted to the campaign once one exists.
   const [campaignName, setCampaignName] = useState(randomCampaignName);
   const [prompt, setPrompt] = useState("");
-  const [variety, setVariety] = useState(true);
+  // Defaults OFF. It used to default ON, but the server rejects variety for
+  // non-Pro users (app/api/campaigns/route.ts) — so every free signup landed
+  // unable to generate anything, and the 403 read as "the button does nothing".
+  // Off is also the cheaper default (12 credits vs 20), which matters most to
+  // exactly the users who start on the free tier.
+  const [variety, setVariety] = useState(false);
   // "Brand Brain" (BrandImportPanel input / BrandAnalysisResults canvas
   // display) — lifted here, not local to CockpitCreate, so results can
   // render in the large right-hand canvas while the URL input stays in the
@@ -431,7 +436,8 @@ export function Studio({
         method: "POST",
         body: JSON.stringify({
           prompt: effectivePrompt,
-          variety,
+          // Belt and braces: entitlements can change between toggle and send.
+          variety: variety && varietyAllowed,
           name: campaignName.trim() || randomCampaignName(),
           ...(referenceUrl ? { referenceImageUrl: referenceUrl } : {}),
         }),
@@ -834,6 +840,11 @@ export function Studio({
     }
   };
 
+  // Mirrors the server gate in app/api/campaigns/route.ts. Entitlements load
+  // async, so this is false until they arrive — briefly showing a Pro badge to
+  // a Pro user is harmless; the reverse sends them into a guaranteed 403.
+  const varietyAllowed = ent?.isPro ?? false;
+
   const anchorPicked = !!anchorId;
   const publishReady = anchorPicked || !!videoUrl; // grows as more of the flow lands
 
@@ -1194,6 +1205,7 @@ export function Studio({
                   prompt={prompt}
                   setPrompt={setPrompt}
                   variety={variety}
+                  varietyAllowed={varietyAllowed}
                   setVariety={setVariety}
                   onGenerate={generate}
                   onReset={() => {
@@ -1377,6 +1389,7 @@ function CockpitCreate({
   prompt,
   setPrompt,
   variety,
+  varietyAllowed,
   setVariety,
   onGenerate,
   onReset,
@@ -1430,6 +1443,7 @@ function CockpitCreate({
   prompt: string;
   setPrompt: (v: string) => void;
   variety: boolean;
+  varietyAllowed: boolean;
   setVariety: (v: boolean) => void;
   onGenerate: () => void;
   onReset: () => void;
@@ -1521,26 +1535,43 @@ function CockpitCreate({
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setVariety(!variety)}
+                    onClick={() => {
+                      if (!varietyAllowed) {
+                        toast.error(
+                          "Variety pack is a Pro feature — upgrade to use it.",
+                        );
+                        return;
+                      }
+                      setVariety(!variety);
+                    }}
                     disabled={!!referenceUrl}
                     title={
                       referenceUrl
                         ? "Variety is off while a reference photo drives generation"
-                        : undefined
+                        : varietyAllowed
+                          ? "Six images across different styles and models"
+                          : "Pro feature — the free tier generates six images from one model"
                     }
                     className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-40 ${
-                      variety && !referenceUrl
+                      variety && !referenceUrl && varietyAllowed
                         ? "border-primary/40 bg-primary/15 text-primary"
-                        : "border-border text-muted-foreground hover:text-foreground"
+                        : !varietyAllowed
+                          ? "border-border text-muted-foreground/50"
+                          : "border-border text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     <Sparkles className="h-3 w-3" /> Variety pack
+                    {!varietyAllowed && (
+                      <span className="rounded-full border border-amber-400/40 px-1 text-[9px] font-semibold uppercase text-amber-400">
+                        Pro
+                      </span>
+                    )}
                   </button>
                   <InfoHint text="On, the 6 images span different styles and compositions — good when you're still exploring. Off, all 6 stay close to your prompt. Costs more because it's a wider spread." />
                   <span className="text-[11px] text-muted-foreground/70">
                     {referenceUrl
                       ? "12 credits · features your photo"
-                      : variety
+                      : variety && varietyAllowed
                         ? "20 credits"
                         : "12 credits"}
                   </span>
