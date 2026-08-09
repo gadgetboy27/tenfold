@@ -192,6 +192,7 @@ export function Studio({
 }) {
   const setWorkspaceSlug = useAppStore((s) => s.setWorkspaceSlug);
   const setStoreCampaignId = useAppStore((s) => s.setCampaignId);
+  const setStoreWorkingImage = useAppStore((s) => s.setWorkingImage);
   const setCreditBalance = useAppStore((s) => s.setCreditBalance);
   const ent = useEntitlements();
 
@@ -346,7 +347,22 @@ export function Studio({
     }
     api(`/api/campaigns/${campaignId}/progress`, { workspaceSlug })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d: ProjectProgress | null) => setProgress(d))
+      .then((d: ProjectProgress | null) => {
+        setProgress(d);
+        // Adopt any image the campaign has gained since this screen loaded —
+        // Product shot and Virtual try-on write real assets, but the picker
+        // only ever showed what generate()/openProject() had fetched, so their
+        // output was invisible and effectively lost.
+        if (d?.bundle.images?.length) {
+          setAssets((prev) => {
+            const known = new Set(prev.map((a) => a.id));
+            const added = d.bundle.images
+              .filter((i) => !known.has(i.id))
+              .map((i) => ({ id: i.id, url: i.url, label: "" }));
+            return added.length ? [...prev, ...added] : prev;
+          });
+        }
+      })
       .catch(() => {});
   }, [campaignId, workspaceSlug]);
   useEffect(() => {
@@ -827,6 +843,15 @@ export function Studio({
 
   // The still on the enhance surface — the anchor, or a Pro-effect result.
   const workingImage = enhancedUrl ?? anchor?.url ?? null;
+
+  // Share it with the self-contained tool panels. Product shot, Virtual try-on
+  // and Spokesperson each asked for their own image, so work done in them
+  // floated free of the project the user thought they were building. Giving
+  // every tool the same starting point is what makes one project feel like one
+  // project.
+  useEffect(() => {
+    setStoreWorkingImage(workingImage);
+  }, [workingImage, setStoreWorkingImage]);
 
   // Pro effect — remove the anchor's background; the cutout becomes the working
   // still on the canvas (and the source for the video).

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Image from "next/image";
 import {
   Mic,
@@ -104,6 +104,7 @@ function Group({
 export function TalkingVideoPanel() {
   const ent = useEntitlements();
   const {
+    workingImage,
     currentCampaignId,
     workspaceSlug,
     creditBalance,
@@ -140,6 +141,17 @@ export function TalkingVideoPanel() {
   const setFeaturesText = (v: string) => patchTalking({ featuresText: v });
   const setCta = (v: string) => patchTalking({ cta: v });
   const setScript = (v: string) => patchTalking({ script: v });
+
+  // Start from the image the project is already built around, rather than
+  // asking for a different one — being asked again is what let a "spokesperson
+  // video" drift into a separate piece of work inside the same project. Only
+  // fills an empty slot, so an explicit choice is never overwritten.
+  useEffect(() => {
+    if (!presenterUrl && workingImage) {
+      queueMicrotask(() => setPresenterUrl(workingImage));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workingImage]);
 
   // Transient UI state — fine to reset on navigation.
   const [uploading, setUploading] = useState(false);

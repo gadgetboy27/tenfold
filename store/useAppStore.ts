@@ -151,6 +151,14 @@ interface AppStore {
   workspaceSlug: string;
   campaignName: string;
   selectedAnchorId: string | null;
+  /**
+   * The campaign's current main image (anchor, or whatever a Pro effect
+   * replaced it with). Mirrored from Studio so the self-contained tool panels
+   * — Product shot, Virtual try-on, Spokesperson — can default to the image
+   * the user already chose instead of asking for another one. Asking again is
+   * what let people build several unrelated things inside one project.
+   */
+  workingImage: string | null;
   generatedAssets: Asset[];
   expansions: Expansions;
   /** Draft inputs that persist across step navigation (Compose ↔ Expand). */
@@ -188,6 +196,7 @@ interface AppStore {
   setWorkspaceSlug: (slug: string) => void;
   setCampaignName: (name: string) => void;
   setAnchorId: (id: string | null) => void;
+  setWorkingImage: (url: string | null) => void;
   setGeneratedAssets: (assets: Asset[]) => void;
   setPlatformCaptions: (captions: Record<string, string>) => void;
   setComposeCaption: (caption: string) => void;
@@ -225,6 +234,7 @@ export const useAppStore = create<AppStore>()((set) => ({
   workspaceSlug: "",
   campaignName: generateCampaignName(),
   selectedAnchorId: null,
+  workingImage: null,
   generatedAssets: [],
   expansions: {},
   expandDrafts: DEFAULT_EXPAND_DRAFTS,
@@ -254,6 +264,7 @@ export const useAppStore = create<AppStore>()((set) => ({
   setWorkspaceSlug: (slug) => set({ workspaceSlug: slug }),
   setCampaignName: (name) => set({ campaignName: name }),
   setAnchorId: (id) => set({ selectedAnchorId: id }),
+  setWorkingImage: (url) => set({ workingImage: url }),
   setGeneratedAssets: (assets) => set({ generatedAssets: assets }),
   setPlatformCaptions: (captions) => set({ platformCaptions: captions }),
   setComposeCaption: (caption) => set({ composeCaption: caption }),
@@ -343,6 +354,7 @@ export const useAppStore = create<AppStore>()((set) => ({
       completedSteps: new Set<number>(),
       campaignName: generateCampaignName(),
       selectedAnchorId: null,
+      workingImage: null,
       generatedAssets: [],
       expansions: {},
       expandDrafts: DEFAULT_EXPAND_DRAFTS,

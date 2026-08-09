@@ -25,13 +25,24 @@ type Status = "idle" | "submitting" | "pending" | "ready" | "failed";
 // into that lifestyle background. Single fal image job, polled via /api/jobs.
 export function ProductShotPanel() {
   const ent = useEntitlements();
-  const { currentCampaignId, workspaceSlug, creditBalance, setCreditBalance } =
-    useAppStore();
+  const {
+    currentCampaignId,
+    workspaceSlug,
+    creditBalance,
+    setCreditBalance,
+    workingImage,
+  } = useAppStore();
   const draft = useAppStore((s) => s.productShotDraft);
   const patch = useAppStore((s) => s.patchProductShotDraft);
 
   const [uploading, setUploading] = useState(false);
   const [picking, setPicking] = useState(false);
+
+  // Offer the project's current image as the product photo instead of starting
+  // from nothing — one click rather than a re-upload of something already here.
+  const useProjectImage = () => {
+    if (workingImage) patch({ productImageUrl: workingImage });
+  };
   const [status, setStatus] = useState<Status>("idle");
   const [resultUrl, setResultUrl] = useState("");
   const [error, setError] = useState("");
@@ -213,6 +224,19 @@ export function ProductShotPanel() {
             label="From gallery"
             className="w-full justify-center px-2"
           />
+          {/* The project already has a main image; offering it removes the
+              step where a user re-uploads something that's already here — and
+              keeps the product shot tied to the project rather than becoming a
+              separate piece of work. */}
+          {workingImage && !draft.productImageUrl && (
+            <button
+              type="button"
+              onClick={useProjectImage}
+              className="w-full rounded-lg border border-primary/40 px-2 py-1.5 text-[11px] text-primary transition-colors hover:bg-primary/10"
+            >
+              Use this project&apos;s image
+            </button>
+          )}
         </div>
 
         {/* Scene + result */}
