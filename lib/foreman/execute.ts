@@ -61,11 +61,7 @@ const CREDIT_KEY: Partial<Record<RunStage, CreditCostKey>> = {
 };
 
 function videoCreditKey(opts: RunOptions): CreditCostKey {
-  return opts.videoDuration === 30
-    ? "video_30s"
-    : opts.videoDuration === 15
-      ? "video_15s"
-      : "video_10s";
+  return opts.videoDuration === 15 ? "video_15s" : "video_10s";
 }
 
 /** Patch one stage in the run's log, leaving the others untouched. */
@@ -249,12 +245,12 @@ export async function runStage(
         ? `video_${options.videoDuration}s`
         : "music_generation";
 
-  const modelKey =
-    stage === "images"
-      ? "image_generation"
-      : stage === "video"
-        ? "video_generation"
-        : "music_generation";
+  // FAL_MODELS keys video by DURATION — video_10s / video_15s / video_30s.
+  // There is no "video_generation" key; guessing one resolved the endpoint to
+  // undefined and the provider router then threw "Cannot read properties of
+  // undefined (reading 'split')". jobType already encodes the right key, so
+  // it IS the model key — restating it is what allowed them to diverge.
+  const modelKey = jobType;
 
   try {
     await admin.from("creative_jobs").insert({

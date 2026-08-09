@@ -33,9 +33,8 @@ const bodySchema = z.object({
       includeVideo: z.boolean().optional(),
       includeMusic: z.boolean().optional(),
       includeCaption: z.boolean().optional(),
-      videoDuration: z
-        .union([z.literal(10), z.literal(15), z.literal(30)])
-        .optional(),
+      // 30s needs the two-segment render the foreman does not implement.
+      videoDuration: z.union([z.literal(10), z.literal(15)]).optional(),
       variety: z.boolean().optional(),
     })
     .optional(),

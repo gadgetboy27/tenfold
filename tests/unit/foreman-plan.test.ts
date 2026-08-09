@@ -39,11 +39,11 @@ describe("foreman quote", () => {
   });
 
   it("prices the chosen video length", () => {
-    expect(stageCost("video", opts({ videoDuration: 30 }))).toBe(
-      CREDIT_COSTS.video_30s,
-    );
     expect(stageCost("video", opts({ videoDuration: 15 }))).toBe(
       CREDIT_COSTS.video_15s,
+    );
+    expect(stageCost("video", opts({ videoDuration: 10 }))).toBe(
+      CREDIT_COSTS.video_10s,
     );
   });
 

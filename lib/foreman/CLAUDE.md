@@ -85,7 +85,7 @@ assembled.
 
 **Video is the cost.** A default run is ~83 credits and video is roughly 75% of
 it. `RunOptions.includeVideo` exists so a cheap run is possible, and the quote
-is itemised rather than a single total — the user should see *why* it costs what
+is itemised rather than a single total — the user should see _why_ it costs what
 it does before committing.
 
 ## Why the executor is a separate change

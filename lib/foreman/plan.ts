@@ -45,7 +45,13 @@ export interface RunOptions {
   includeVideo: boolean;
   includeMusic: boolean;
   includeCaption: boolean;
-  videoDuration: 10 | 15 | 30;
+  /**
+   * 30s is deliberately NOT offered. In app/api/jobs a 30s video is two 15s
+   * Kling segments submitted separately and concatenated by the webhook; the
+   * foreman submits one call per stage and has no segment handling, so
+   * allowing 30 would render 15s and bill for 30.
+   */
+  videoDuration: 10 | 15;
   /** Variety pack costs more but spreads across three models. */
   variety: boolean;
 }
@@ -70,11 +76,9 @@ export function stageCost(stage: RunStage, opts: RunOptions): number {
       return 0;
     case "video":
       if (!opts.includeVideo) return 0;
-      return opts.videoDuration === 30
-        ? CREDIT_COSTS.video_30s
-        : opts.videoDuration === 15
-          ? CREDIT_COSTS.video_15s
-          : CREDIT_COSTS.video_10s;
+      return opts.videoDuration === 15
+        ? CREDIT_COSTS.video_15s
+        : CREDIT_COSTS.video_10s;
     case "music":
       return opts.includeMusic ? CREDIT_COSTS.music_generation : 0;
     case "caption":
