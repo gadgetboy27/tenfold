@@ -31,6 +31,18 @@ export const WORKSPACE_SCOPED_TABLES = new Set<string>([
   "analytics_reports",
   "asset_comments",
   "decision_events",
+  // Added 2026-08-09 after campaign_runs was found missing: its INSERT relied
+  // on the wrapper injecting workspace_id and failed the NOT NULL constraint,
+  // which surfaced the wider gap — six tables carrying workspace_id were never
+  // registered here, so their reads were not tenant-filtered either. Verified
+  // against information_schema; this list now matches every public table with
+  // a workspace_id column.
+  "campaign_runs",
+  "brand_kits",
+  "logo_projects",
+  "workspace_addons",
+  "publish_attempts",
+  "promo_redemptions",
 ]);
 
 type AdminClient = SupabaseClient;
