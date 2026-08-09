@@ -47,6 +47,7 @@ import { CompositorCanvas } from "@/components/studio/CompositorCanvas";
 import { PublishCanvas } from "@/components/studio/PublishCanvas";
 import { ReferencePhotoField } from "@/components/studio/ReferencePhotoField";
 import { GalleryPicker } from "@/components/shared/GalleryPicker";
+import { thumbUrl } from "@/lib/images/thumb";
 import { UserMenu } from "@/components/studio/UserMenu";
 import { AutoRunPanel } from "@/components/studio/AutoRunPanel";
 import { BriefAgentPanel } from "@/components/studio/BriefAgentPanel";
@@ -1878,7 +1879,7 @@ function CockpitCreate({
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={a.url}
+                    src={thumbUrl(a.url, { width: 400 })}
                     alt={a.label || "Option"}
                     className="h-full w-full object-cover"
                   />
@@ -2721,7 +2722,7 @@ function ProjectsCanvas({
                   {p.thumbnailUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={p.thumbnailUrl}
+                      src={thumbUrl(p.thumbnailUrl, { width: 400 })}
                       alt={p.name ?? "Project"}
                       className="h-full w-full object-cover"
                     />
@@ -2779,7 +2780,7 @@ function ProjectsCanvas({
                   {p.thumbnailUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={p.thumbnailUrl}
+                      src={thumbUrl(p.thumbnailUrl, { width: 128 })}
                       alt={p.name ?? "Project"}
                       className="h-full w-full object-cover"
                     />
@@ -2839,7 +2840,7 @@ function ProjectsCanvas({
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={a.url}
+                  src={thumbUrl(a.url, { width: 400 })}
                   alt={a.metadata?.direction ?? "Generated image"}
                   loading="lazy"
                   className="h-full w-full object-cover"

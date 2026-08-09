@@ -10,6 +10,7 @@ import {
   Music,
   Send,
 } from "lucide-react";
+import { thumbUrl } from "@/lib/images/thumb";
 
 /**
  * "Everything under this project name."
@@ -144,9 +145,10 @@ export function ProjectBundle({
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={a.url}
+                      src={thumbUrl(a.url, { width: 128 })}
                       alt=""
                       loading="lazy"
+                      decoding="async"
                       className="h-full w-full object-cover"
                     />
                   </a>

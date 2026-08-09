@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FolderOpen, Loader2, X } from "lucide-react";
 import { api } from "@/lib/api";
+import { thumbUrl } from "@/lib/images/thumb";
 
 /**
  * "Use one you already made" — the counterpart to every file upload in the app.
@@ -236,9 +237,10 @@ export function GalleryPicker({
                   ) : (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={a.url}
+                      src={thumbUrl(a.url, { width: 300 })}
                       alt=""
                       loading="lazy"
+                      decoding="async"
                       className="h-full w-full object-cover"
                     />
                   )}
