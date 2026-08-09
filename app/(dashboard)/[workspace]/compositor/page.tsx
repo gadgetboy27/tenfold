@@ -277,7 +277,9 @@ export default function CompositorPage() {
     // doesn't need passing through either: Studio's openProject picks up the
     // just-created composed_video asset directly from the campaign.
     if (!campaignId) return;
-    router.push(`/${params.workspace}?openProject=${campaignId}&section=publish`);
+    router.push(
+      `/${params.workspace}?openProject=${campaignId}&section=publish`,
+    );
   };
 
   // Back to the compose screen (Step 4) to pick a different video — the brand

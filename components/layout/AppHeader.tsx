@@ -14,6 +14,17 @@ interface AppHeaderProps {
   /** Optional back link shown before the logo. */
   backHref?: string;
   backLabel?: string;
+  /**
+   * The campaign this page is working on, if any.
+   *
+   * Going "home" from a standalone page is a full navigation, so Studio
+   * remounts and loses its React state — which meant landing on an empty Brief
+   * screen as though starting a brand-new project, with the real one abandoned
+   * mid-flow. Studio already knows how to rehydrate from `?openProject=` (it's
+   * how the Compositor's "Continue to publish" works); these links simply
+   * weren't using it.
+   */
+  campaignId?: string | null;
 }
 
 /**
@@ -27,7 +38,12 @@ export function AppHeader({
   workspaceSlug,
   backHref,
   backLabel,
+  campaignId,
 }: AppHeaderProps) {
+  // Carry the current project home so Studio resumes it instead of starting over.
+  const homeHref = campaignId
+    ? `/${workspaceSlug}?openProject=${campaignId}`
+    : `/${workspaceSlug}`;
   const setWorkspaceSlug = useAppStore((s) => s.setWorkspaceSlug);
   const setCreditBalance = useAppStore((s) => s.setCreditBalance);
 
@@ -54,7 +70,7 @@ export function AppHeader({
           </Link>
         ) : null}
         <Link
-          href={`/${workspaceSlug}`}
+          href={homeHref}
           className="flex items-center"
           aria-label="PrettyMuch home"
         >
