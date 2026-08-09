@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
+import { errorMessage } from "@/lib/api/error-message";
 
 const FONTS = [
   "Inter",
@@ -39,7 +40,7 @@ export async function GET(req: Request) {
       .single();
     return NextResponse.json(data ?? {});
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
+    const msg = errorMessage(err, "Unknown error");
     const status = msg === "Unauthorized" ? 401 : 500;
     return NextResponse.json({ error: msg }, { status });
   }
@@ -67,7 +68,7 @@ export async function PATCH(req: Request) {
     if (error) throw new Error(error.message);
     return NextResponse.json(data);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
+    const msg = errorMessage(err, "Unknown error");
     const status = msg === "Unauthorized" ? 401 : 500;
     return NextResponse.json({ error: msg }, { status });
   }

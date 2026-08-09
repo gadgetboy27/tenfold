@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Resend } from "resend";
 import { getSession } from "@/lib/auth/session";
 import { senderAddress } from "@/lib/email/sender";
+import { errorMessage } from "@/lib/api/error-message";
 
 let resendClient: Resend | null = null;
 function getResendClient(): Resend {
@@ -44,7 +45,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true }, { status: 201 });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
+    const msg = errorMessage(err, "Unknown error");
     const status = msg === "Unauthorized" ? 401 : 500;
     return NextResponse.json({ error: msg }, { status });
   }

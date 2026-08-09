@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getInstagramAccount } from "@/lib/social/meta";
+import { errorMessage } from "@/lib/api/error-message";
 
 const schema = z.object({ pageId: z.string().min(1) });
 
@@ -80,7 +81,7 @@ export async function POST(req: Request) {
       instagram: ig?.username ?? null,
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
+    const msg = errorMessage(err, "Unknown error");
     const status = msg === "Unauthorized" ? 401 : 500;
     return NextResponse.json({ error: msg }, { status });
   }

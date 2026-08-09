@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { runContentPipeline } from '@/lib/content-agent';
+import { NextResponse } from "next/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { runContentPipeline } from "@/lib/content-agent";
 
 interface PipelineRequest {
   workspaceId: string;
@@ -16,9 +16,9 @@ export async function POST(
   try {
     const { id } = await params;
     // Verify internal secret (prevents unauthorized pipeline triggers)
-    const secret = req.headers.get('x-internal-secret');
-    if (secret !== (process.env.CRON_SECRET || 'dev-secret')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const secret = req.headers.get("x-internal-secret");
+    if (secret !== (process.env.CRON_SECRET || "dev-secret")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const body: PipelineRequest = await req.json();
@@ -39,9 +39,12 @@ export async function POST(
 
     return NextResponse.json({ scheduled: true }, { status: 201 });
   } catch (error) {
-    console.error('Pipeline trigger error:', error);
+    console.error("Pipeline trigger error:", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Pipeline trigger failed' },
+      {
+        error:
+          error instanceof Error ? error.message : "Pipeline trigger failed",
+      },
       { status: 500 },
     );
   }

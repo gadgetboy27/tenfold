@@ -18,6 +18,7 @@ import {
 import { generateAdScript } from "@/lib/claude/ad-script";
 import { getWorkspaceBrandVoice } from "@/lib/claude/brand-voice";
 import { v4 as uuidv4 } from "uuid";
+import { errorMessage } from "@/lib/api/error-message";
 
 // POST /api/talking-video — dedicated "product launch ad" flow: Claude script →
 // ElevenLabs voice → VEED Fabric lip-sync. Separate from /api/jobs by design.
@@ -97,7 +98,7 @@ export async function POST(req: Request) {
         });
         params.script = result.text;
       } catch (e) {
-        return fail(jobId, e instanceof Error ? e.message : "Script failed");
+        return fail(jobId, errorMessage(e, "Script failed"));
       }
     }
 
@@ -109,10 +110,10 @@ export async function POST(req: Request) {
         { status: 201 },
       );
     } catch (e) {
-      return fail(jobId, e instanceof Error ? e.message : "Submit failed");
+      return fail(jobId, errorMessage(e, "Submit failed"));
     }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
+    const msg = errorMessage(err, "Unknown error");
     const status = msg === "Unauthorized" ? 401 : 500;
     return NextResponse.json({ error: msg }, { status });
   }

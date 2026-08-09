@@ -1,12 +1,15 @@
-import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth/session';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { NextResponse } from "next/server";
+import { getSession } from "@/lib/auth/session";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 const GRANT_AMOUNT = 500;
 
 export async function POST(req: Request) {
-  if (process.env.NODE_ENV === 'production') {
-    return NextResponse.json({ error: 'Not available in production' }, { status: 403 });
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json(
+      { error: "Not available in production" },
+      { status: 403 },
+    );
   }
 
   try {
@@ -14,32 +17,33 @@ export async function POST(req: Request) {
     const admin = createSupabaseAdminClient();
 
     const { data: account } = await admin
-      .from('credit_accounts')
-      .select('cached_balance')
-      .eq('workspace_id', session.workspaceId)
+      .from("credit_accounts")
+      .select("cached_balance")
+      .eq("workspace_id", session.workspaceId)
       .single();
 
-    if (!account) throw new Error('Credit account not found');
+    if (!account) throw new Error("Credit account not found");
 
-    const newBalance = (account as { cached_balance: number }).cached_balance + GRANT_AMOUNT;
+    const newBalance =
+      (account as { cached_balance: number }).cached_balance + GRANT_AMOUNT;
 
-    await admin.from('credit_transactions').insert({
+    await admin.from("credit_transactions").insert({
       workspace_id: session.workspaceId,
-      type: 'grant',
+      type: "grant",
       amount: GRANT_AMOUNT,
       balance_after: newBalance,
-      description: 'Test credit top-up',
+      description: "Test credit top-up",
     });
 
     await admin
-      .from('credit_accounts')
+      .from("credit_accounts")
       .update({ cached_balance: newBalance })
-      .eq('workspace_id', session.workspaceId);
+      .eq("workspace_id", session.workspaceId);
 
     return NextResponse.json({ granted: GRANT_AMOUNT });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unknown error';
-    const status = msg === 'Unauthorized' ? 401 : 500;
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    const status = msg === "Unauthorized" ? 401 : 500;
     return NextResponse.json({ error: msg }, { status });
   }
 }

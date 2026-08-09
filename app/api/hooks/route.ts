@@ -8,6 +8,7 @@ import { CREDIT_COSTS } from "@/lib/credits/costs";
 import { generateHookVariants } from "@/lib/claude/hooks";
 import { getWorkspaceBrandVoice } from "@/lib/claude/brand-voice";
 import { v4 as uuidv4 } from "uuid";
+import { errorMessage } from "@/lib/api/error-message";
 
 const schema = z.object({
   campaignId: z.string().uuid(),
@@ -27,7 +28,11 @@ export async function POST(req: Request) {
 
     const jobId = uuidv4();
     const cost = CREDIT_COSTS.hook_variants;
-    const debit = await debitCredits(session.workspaceId, jobId, "hook_variants");
+    const debit = await debitCredits(
+      session.workspaceId,
+      jobId,
+      "hook_variants",
+    );
     if (!debit.success) {
       return NextResponse.json(
         { error: "Insufficient credits" },
@@ -51,9 +56,9 @@ export async function POST(req: Request) {
     });
 
     try {
-      const brandVoice = await getWorkspaceBrandVoice(session.workspaceId).catch(
-        () => null,
-      );
+      const brandVoice = await getWorkspaceBrandVoice(
+        session.workspaceId,
+      ).catch(() => null);
       const result = await generateHookVariants({
         topic: body.topic,
         platform: body.platform,
@@ -70,7 +75,7 @@ export async function POST(req: Request) {
         { status: 201 },
       );
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Hook generation failed";
+      const msg = errorMessage(e, "Hook generation failed");
       await admin
         .from("creative_jobs")
         .update({ status: "failed", error_message: msg })
@@ -79,7 +84,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: msg }, { status: 500 });
     }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
+    const msg = errorMessage(err, "Unknown error");
     const status = msg === "Unauthorized" ? 401 : 500;
     return NextResponse.json({ error: msg }, { status });
   }

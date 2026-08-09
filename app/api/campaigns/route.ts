@@ -15,6 +15,7 @@ import { CREDIT_COSTS } from "@/lib/credits/costs";
 import { validatePrompt } from "@/lib/fal/prompt-validator";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { v4 as uuidv4 } from "uuid";
+import { errorMessage } from "@/lib/api/error-message";
 
 const ASPECT_TO_IMAGE_SIZE: Record<string, string> = {
   "1:1": "square_hd",
@@ -74,29 +75,42 @@ export async function GET(req: Request) {
     // What's already been done per campaign — surfaced in the Gallery so a
     // user can tell at a glance what's sorted (video/music/caption/composite/
     // published) instead of reopening every project to check.
-    const [{ data: videoAssets }, { data: audioAssets }, { data: compositionRows }] =
-      await Promise.all([
-        admin
-          .from("assets")
-          .select("campaign_id")
-          .in("campaign_id", ids)
-          .in("type", ["video", "composed_video"]),
-        admin
-          .from("assets")
-          .select("campaign_id")
-          .in("campaign_id", ids)
-          .eq("type", "audio"),
-        // publish_records has no campaign_id — it hangs off compositions, so
-        // fetch composition ids here and cross-reference below.
-        admin.from("compositions").select("id, campaign_id").in("campaign_id", ids),
-      ]);
-    const videoCampaigns = new Set((videoAssets ?? []).map((a) => a.campaign_id as string));
-    const audioCampaigns = new Set((audioAssets ?? []).map((a) => a.campaign_id as string));
+    const [
+      { data: videoAssets },
+      { data: audioAssets },
+      { data: compositionRows },
+    ] = await Promise.all([
+      admin
+        .from("assets")
+        .select("campaign_id")
+        .in("campaign_id", ids)
+        .in("type", ["video", "composed_video"]),
+      admin
+        .from("assets")
+        .select("campaign_id")
+        .in("campaign_id", ids)
+        .eq("type", "audio"),
+      // publish_records has no campaign_id — it hangs off compositions, so
+      // fetch composition ids here and cross-reference below.
+      admin
+        .from("compositions")
+        .select("id, campaign_id")
+        .in("campaign_id", ids),
+    ]);
+    const videoCampaigns = new Set(
+      (videoAssets ?? []).map((a) => a.campaign_id as string),
+    );
+    const audioCampaigns = new Set(
+      (audioAssets ?? []).map((a) => a.campaign_id as string),
+    );
     const compositionCampaigns = new Set(
       (compositionRows ?? []).map((c) => c.campaign_id as string),
     );
     const compositionToCampaign = new Map(
-      (compositionRows ?? []).map((c) => [c.id as string, c.campaign_id as string]),
+      (compositionRows ?? []).map((c) => [
+        c.id as string,
+        c.campaign_id as string,
+      ]),
     );
     const publishedCampaigns = new Set<string>();
     if (compositionToCampaign.size > 0) {
@@ -176,9 +190,9 @@ export async function GET(req: Request) {
 
     const enriched = campaigns.map((c) => {
       const id = c.id as string;
-      const expansionData = c.expansion_data as
-        | { script?: { content?: string | null } }
-        | null;
+      const expansionData = c.expansion_data as {
+        script?: { content?: string | null };
+      } | null;
       return {
         ...c,
         thumbnailUrl: thumbMap[id] ?? null,
@@ -193,7 +207,7 @@ export async function GET(req: Request) {
     });
     return NextResponse.json(enriched);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
+    const msg = errorMessage(err, "Unknown error");
     const status =
       msg === "Unauthorized"
         ? 401
@@ -447,7 +461,7 @@ export async function POST(req: Request) {
       { status: 201 },
     );
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
+    const msg = errorMessage(err, "Unknown error");
     const status =
       msg === "Unauthorized" ? 401 : msg === "Insufficient credits" ? 402 : 500;
     return NextResponse.json({ error: msg }, { status });

@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { brandVoiceSchema } from "@/lib/validation/schemas";
 import { analyzeBrandVoice } from "@/lib/claude/brand-voice";
+import { errorMessage } from "@/lib/api/error-message";
 
 // GET — current brand voice profile + the source samples.
 export async function GET(req: Request) {
@@ -19,7 +20,7 @@ export async function GET(req: Request) {
       samples: data?.voice_samples ?? [],
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
+    const msg = errorMessage(err, "Unknown error");
     const status = msg === "Unauthorized" ? 401 : 500;
     return NextResponse.json({ error: msg }, { status });
   }
@@ -53,7 +54,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ profile, samples });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
+    const msg = errorMessage(err, "Unknown error");
     const status = msg === "Unauthorized" ? 401 : 500;
     return NextResponse.json({ error: msg }, { status });
   }

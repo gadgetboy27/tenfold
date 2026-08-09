@@ -7,6 +7,7 @@ import { refundCredits } from "@/lib/credits/refund";
 import { CREDIT_COSTS } from "@/lib/credits/costs";
 import { generateScript } from "@/lib/claude/script";
 import { getWorkspaceBrandVoice } from "@/lib/claude/brand-voice";
+import { errorMessage } from "@/lib/api/error-message";
 
 // POST /api/assets/:id/comments/suggest — AI-draft a caption/comment for an asset.
 // Mirrors the synchronous script_generation path in app/api/jobs/route.ts:
@@ -99,7 +100,7 @@ export const POST = withWorkspace<{ id: string }>(
         { status: 201 },
       );
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Suggestion failed";
+      const msg = errorMessage(err, "Suggestion failed");
       await admin
         .from("creative_jobs")
         .update({ status: "failed", error_message: msg })

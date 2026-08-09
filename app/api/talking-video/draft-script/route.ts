@@ -5,6 +5,7 @@ import { getEntitlements } from "@/lib/billing/entitlements";
 import { generateAdScript } from "@/lib/claude/ad-script";
 import { getLanguage } from "@/lib/fal/talking-video";
 import { getWorkspaceBrandVoice } from "@/lib/claude/brand-voice";
+import { errorMessage } from "@/lib/api/error-message";
 
 const draftSchema = z.object({
   tone: z.enum(["professional", "casual", "playful"]).default("professional"),
@@ -54,7 +55,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ script: result.text });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
+    const msg = errorMessage(err, "Unknown error");
     const status = msg === "Unauthorized" ? 401 : 500;
     return NextResponse.json({ error: msg }, { status });
   }

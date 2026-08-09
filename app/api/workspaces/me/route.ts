@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth/session';
+import { NextResponse } from "next/server";
+import { getSession } from "@/lib/auth/session";
 
 export async function GET(req: Request) {
   try {
@@ -10,9 +10,14 @@ export async function GET(req: Request) {
       role: session.role,
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unknown error';
+    const msg = err instanceof Error ? err.message : "Unknown error";
     const stack = err instanceof Error ? err.stack : undefined;
-    const status = msg === 'Unauthorized' ? 401 : msg === 'Not a workspace member' ? 404 : 500;
+    const status =
+      msg === "Unauthorized"
+        ? 401
+        : msg === "Not a workspace member"
+          ? 404
+          : 500;
     return NextResponse.json({ error: msg, detail: stack }, { status });
   }
 }

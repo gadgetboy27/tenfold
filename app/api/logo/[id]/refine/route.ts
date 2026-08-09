@@ -9,7 +9,10 @@ import { debitCredits } from "@/lib/credits/debit";
 import { refundCredits } from "@/lib/credits/refund";
 import { enqueueJob } from "@/lib/fal/queue";
 import { logoBriefSchema } from "@/lib/logo/brief";
-import { composeLogoPrompt, composeRefinePrompt } from "@/lib/logo/promptComposer";
+import {
+  composeLogoPrompt,
+  composeRefinePrompt,
+} from "@/lib/logo/promptComposer";
 import { ensureLogoCampaign } from "@/app/api/logo/route";
 
 // POST /api/logo/:id/refine — "more like this". Recraft image-to-image rejects
@@ -85,7 +88,11 @@ export async function POST(
       workspace_id: session.workspaceId,
       type: "logo_refine",
       status: "queued",
-      input_params: { logoProjectId: id, anchorAssetId: anchorId, prompt: refinePrompt },
+      input_params: {
+        logoProjectId: id,
+        anchorAssetId: anchorId,
+        prompt: refinePrompt,
+      },
       credits_charged: cost,
     });
     if (jobErr) {

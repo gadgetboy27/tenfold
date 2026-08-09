@@ -1,8 +1,8 @@
-import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth/session';
-import { getOrCreateStripeCustomer } from '@/lib/stripe/subscriptions';
-import { createCheckoutSession } from '@/lib/stripe/checkout';
-import { purchaseCreditsSchema } from '@/lib/validation/schemas';
+import { NextResponse } from "next/server";
+import { getSession } from "@/lib/auth/session";
+import { getOrCreateStripeCustomer } from "@/lib/stripe/subscriptions";
+import { createCheckoutSession } from "@/lib/stripe/checkout";
+import { purchaseCreditsSchema } from "@/lib/validation/schemas";
 
 export async function POST(req: Request) {
   try {
@@ -24,8 +24,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ url });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unknown error';
-    const status = msg === 'Unauthorized' ? 401 : 500;
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    const status = msg === "Unauthorized" ? 401 : 500;
     return NextResponse.json({ error: msg }, { status });
   }
 }

@@ -16,6 +16,7 @@ import {
   isValidBlendCount,
   type CompositeParams,
 } from "@/lib/compositing/ops";
+import { errorMessage } from "@/lib/api/error-message";
 
 // POST /api/compositing — AI compositing ops (cutout, inpaint, relight, blend,
 // depth). Same async pattern as bg-remove/upscale: debit → creative_job → fal
@@ -135,7 +136,7 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
       .update({ fal_request_id: requestId, status: "processing" })
       .eq("id", jobId);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Submission failed";
+    const msg = errorMessage(err, "Submission failed");
     await admin
       .from("creative_jobs")
       .update({ status: "failed", error_message: msg })

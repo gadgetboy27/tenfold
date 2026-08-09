@@ -1,7 +1,7 @@
-import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth/session';
-import { getMetaOAuthUrl } from '@/lib/social/meta';
-import { signOAuthState } from '@/lib/social/oauth-state';
+import { NextResponse } from "next/server";
+import { getSession } from "@/lib/auth/session";
+import { getMetaOAuthUrl } from "@/lib/social/meta";
+import { signOAuthState } from "@/lib/social/oauth-state";
 
 export async function GET(req: Request) {
   try {
@@ -11,8 +11,8 @@ export async function GET(req: Request) {
     const url = getMetaOAuthUrl(signOAuthState(session.workspaceId));
     return NextResponse.redirect(url);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unauthorized';
-    const status = msg === 'Unauthorized' ? 401 : 500;
+    const msg = err instanceof Error ? err.message : "Unauthorized";
+    const status = msg === "Unauthorized" ? 401 : 500;
     return NextResponse.json({ error: msg }, { status });
   }
 }

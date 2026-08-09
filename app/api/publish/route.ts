@@ -13,6 +13,7 @@ import { getEntitlements } from "@/lib/billing/entitlements";
 import { composeVideo } from "@/lib/composition/video";
 import { pickForPlatform } from "@/lib/composition/formats";
 import { v4 as uuidv4 } from "uuid";
+import { errorMessage } from "@/lib/api/error-message";
 
 interface SocialProfile {
   platform: string;
@@ -251,9 +252,8 @@ export async function POST(req: Request) {
         .eq("id", resolvedCampaignId)
         .eq("workspace_id", session.workspaceId)
         .single();
-      const approvalStatus = (
-        campaign as { approval_status?: string } | null
-      )?.approval_status;
+      const approvalStatus = (campaign as { approval_status?: string } | null)
+        ?.approval_status;
       if (approvalStatus && approvalStatus !== "approved") {
         return NextResponse.json(
           {
@@ -376,7 +376,7 @@ export async function POST(req: Request) {
         }
         platformResults[platform] = postId;
       } catch (err) {
-        errors[platform] = err instanceof Error ? err.message : "Unknown error";
+        errors[platform] = errorMessage(err, "Unknown error");
         // Surface the real reason server-side — the client only shows a generic
         // failure, so without this the actual cause (bad token, media, etc.) is
         // invisible.
@@ -434,7 +434,7 @@ export async function POST(req: Request) {
       { status: 201 },
     );
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
+    const msg = errorMessage(err, "Unknown error");
     const status =
       msg === "Unauthorized"
         ? 401

@@ -4,6 +4,7 @@ import { withWorkspace } from "@/lib/api/with-workspace";
 import { composeVideoSchema } from "@/lib/validation/schemas";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { composeVideo, CAPTION_PRESETS } from "@/lib/composition/video";
+import { errorMessage } from "@/lib/api/error-message";
 
 // POST /api/compositions/video — layer existing assets (campaign video + music
 // + caption) into one MP4 via FFmpeg. Composes assets already owned, so it
@@ -70,7 +71,7 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
       campaignId: body.campaignId,
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Composition failed";
+    const msg = errorMessage(err, "Composition failed");
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 

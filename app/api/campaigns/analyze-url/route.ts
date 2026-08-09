@@ -11,6 +11,7 @@ import {
 import { extractBrandSignals } from "@/lib/claude/brand-scrape";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
+import { errorMessage } from "@/lib/api/error-message";
 
 // Users routinely type "example.com" without a scheme — z.string().url()
 // rejects that outright ("Invalid URL"), which was surfacing as a raw Zod
@@ -301,7 +302,7 @@ export async function POST(req: Request) {
         brandKitApplied,
       });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Brand analysis failed";
+      const msg = errorMessage(e, "Brand analysis failed");
       await admin
         .from("creative_jobs")
         .update({ status: "failed", error_message: msg })
@@ -318,7 +319,7 @@ export async function POST(req: Request) {
           : (issue?.message ?? "Invalid request");
       return NextResponse.json({ error: msg }, { status: 400 });
     }
-    const msg = err instanceof Error ? err.message : "Unknown error";
+    const msg = errorMessage(err, "Unknown error");
     if (msg === "Unauthorized")
       return NextResponse.json({ error: msg }, { status: 401 });
     if (msg.includes("aborted") || msg.includes("timeout")) {

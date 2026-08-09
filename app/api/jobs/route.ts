@@ -15,6 +15,7 @@ import { prepareVideoStartImage } from "@/lib/composition/video-image";
 import { MUSIC_GENRE_TAGS } from "@/lib/fal/prompts";
 import { buildFalInput } from "@/lib/fal/build-input";
 import { v4 as uuidv4 } from "uuid";
+import { errorMessage } from "@/lib/api/error-message";
 
 export async function POST(req: Request) {
   try {
@@ -166,7 +167,7 @@ export async function POST(req: Request) {
           }),
         );
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "Submit failed";
+        const msg = errorMessage(e, "Submit failed");
         await admin
           .from("creative_jobs")
           .update({ status: "failed", error_message: msg })
@@ -281,7 +282,7 @@ export async function POST(req: Request) {
       { status: 201 },
     );
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
+    const msg = errorMessage(err, "Unknown error");
     const status = msg === "Unauthorized" ? 401 : 500;
     return NextResponse.json({ error: msg }, { status });
   }

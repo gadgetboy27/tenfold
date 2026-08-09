@@ -9,6 +9,7 @@ import { CREDIT_COSTS } from "@/lib/credits/costs";
 import { enqueueWithFallback } from "@/lib/fal/queue";
 import { PRODUCT_SHOT_MODEL, productShotInput } from "@/lib/fal/product-shot";
 import { v4 as uuidv4 } from "uuid";
+import { errorMessage } from "@/lib/api/error-message";
 
 const schema = z.object({
   campaignId: z.string().uuid(),
@@ -40,7 +41,11 @@ export async function POST(req: Request) {
 
     const jobId = uuidv4();
     const cost = CREDIT_COSTS.product_shot;
-    const debit = await debitCredits(session.workspaceId, jobId, "product_shot");
+    const debit = await debitCredits(
+      session.workspaceId,
+      jobId,
+      "product_shot",
+    );
     if (!debit.success) {
       return NextResponse.json(
         { error: "Insufficient credits" },
@@ -82,7 +87,7 @@ export async function POST(req: Request) {
         { status: 201 },
       );
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Submit failed";
+      const msg = errorMessage(e, "Submit failed");
       await admin
         .from("creative_jobs")
         .update({ status: "failed", error_message: msg })
@@ -91,7 +96,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: msg }, { status: 500 });
     }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
+    const msg = errorMessage(err, "Unknown error");
     const status = msg === "Unauthorized" ? 401 : 500;
     return NextResponse.json({ error: msg }, { status });
   }

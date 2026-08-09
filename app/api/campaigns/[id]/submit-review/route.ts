@@ -37,7 +37,11 @@ export async function POST(
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     const status =
-      msg === "Unauthorized" ? 401 : msg === "Not a workspace member" ? 403 : 500;
+      msg === "Unauthorized"
+        ? 401
+        : msg === "Not a workspace member"
+          ? 403
+          : 500;
     return NextResponse.json({ error: msg }, { status });
   }
 }
