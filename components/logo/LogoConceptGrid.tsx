@@ -16,6 +16,10 @@ interface LogoConceptGridProps {
   anchorId: string | null;
   onAnchor: (assetId: string) => void;
   anchoring: boolean;
+  /** True once we've stopped waiting — see LogoStallNotice. Suppresses both
+   *  the "Generating…" line and the shimmer, neither of which is true any
+   *  more, and which together were the whole "stuck at 0 of 6" experience. */
+  stalled?: boolean;
 }
 
 export function LogoConceptGrid({
@@ -24,17 +28,20 @@ export function LogoConceptGrid({
   anchorId,
   onAnchor,
   anchoring,
+  stalled = false,
 }: LogoConceptGridProps) {
-  const pending = Math.max(0, expected - concepts.length);
+  const pending = stalled ? 0 : Math.max(0, expected - concepts.length);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
         <h2 className="text-xl font-semibold">Pick your favourite</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          {concepts.length < expected
-            ? `Generating… ${concepts.length} of ${expected} ready`
-            : "Tap a concept to refine it into your final logo."}
+          {concepts.length === 0
+            ? "Nothing to pick from yet."
+            : stalled || concepts.length >= expected
+              ? "Tap a concept to refine it into your final logo."
+              : `Generating… ${concepts.length} of ${expected} ready`}
         </p>
       </div>
 

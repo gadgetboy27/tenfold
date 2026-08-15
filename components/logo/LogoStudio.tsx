@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { LogoBrief } from "./LogoBrief";
 import { LogoConceptGrid, type LogoAsset } from "./LogoConceptGrid";
+import { LogoStallNotice, type LogoStall } from "./LogoStallNotice";
 import { LogoRefine } from "./LogoRefine";
 import { LogoEditor } from "./LogoEditor";
 import { LogoUpload } from "./LogoUpload";
@@ -19,6 +20,16 @@ import { api } from "@/lib/api";
 // are derived from the project's status + which assets exist, so a refresh
 // mid-flow rehydrates correctly from the server rather than local state.
 
+interface LogoJob {
+  id: string;
+  type: string;
+  status: string;
+  errorMessage: string | null;
+  createdAt: string;
+  /** How many fal requests this job is waiting on; null if it never set one. */
+  expectedImages: number | null;
+}
+
 interface ProjectState {
   project: {
     id: string;
@@ -31,9 +42,20 @@ interface ProjectState {
   finalized: LogoAsset[];
   edited: LogoAsset[];
   mockups: LogoAsset[];
+  jobs: LogoJob[];
 }
 
 const POLL_MS = 2500;
+
+// This poll had no bound at all: it ran every 2.5s for as long as the tab was
+// open, and its only exit was the project reaching `finalized`. A concepts job
+// whose fal webhook never arrives sits in `processing` forever — nothing
+// server-side ever marks it failed — so the grid showed "Generating… 0 of 6
+// ready" indefinitely with no reason and no way out. These two thresholds are
+// counted in ticks rather than wall-clock so that a backgrounded tab (where
+// browsers throttle intervals) under-counts rather than false-alarming.
+const SLOW_AFTER_TICKS = 30; // ~75s — usually landed well before here
+const GIVE_UP_AFTER_TICKS = 120; // ~5min — stop hitting the endpoint
 
 export function LogoStudio() {
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -66,6 +88,11 @@ export function LogoStudio() {
   const [projects, setProjects] = useState<LogoProjectSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Poll ticks since this project was opened (or since "Keep waiting").
+  const [ticks, setTicks] = useState(0);
+  // "Use what arrived" — the user has accepted the partial set, so stop
+  // explaining the shortfall and let them get on with picking one.
+  const [stallDismissed, setStallDismissed] = useState(false);
 
   // The "your logos" list, for re-opening past projects. Refreshed whenever we
   // return to the landing (no active project) so a just-finished logo appears.
@@ -128,6 +155,7 @@ export function LogoStudio() {
     setExpectedMockups(0);
     setState(null);
     setError(null);
+    setStallDismissed(false);
     setProjectId(id);
   }
 
@@ -172,13 +200,31 @@ export function LogoStudio() {
   // synchronously in the effect body.
   useEffect(() => {
     if (!projectId) return;
-    const tick = () => void refresh(projectId);
-    queueMicrotask(tick);
+    const tick = () => {
+      setTicks((t) => t + 1);
+      void refresh(projectId);
+    };
+    // The primed call resets the stall clock rather than advancing it, and
+    // runs in a microtask so the setState lands in a callback rather than
+    // synchronously in the effect body (react-hooks/set-state-in-effect).
+    queueMicrotask(() => {
+      setTicks(0);
+      void refresh(projectId);
+    });
     pollRef.current = setInterval(tick, POLL_MS);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, [projectId, refresh]);
+
+  // The hard stop. Without this the interval outlives any hope of the job
+  // finishing and just burns requests against a project that will never move.
+  useEffect(() => {
+    if (ticks >= GIVE_UP_AFTER_TICKS && pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, [ticks]);
 
   // Stop polling once the project is fully settled: finalized, and any
   // requested mockups have all arrived. Before finalize (concepts/refine) it
@@ -378,6 +424,64 @@ export function LogoStudio() {
     </div>
   );
 
+  // How many concepts to actually wait for. `expected` is seeded from the POST
+  // response, which is only right for a generation started in this session —
+  // reopening a project left it at the default 6 even when fewer were ever
+  // submitted, so the grid could never reach "done". The job's own
+  // expected_images is the authoritative count; fall back to local state.
+  const conceptsJob = state?.jobs?.find((j) => j.type === "logo_concepts");
+  const expectedConcepts = conceptsJob?.expectedImages ?? expected;
+
+  // Why has this stopped moving? Only asked while concepts are still short —
+  // a settled job (completed/failed) or a full grid needs no explanation.
+  const stall: LogoStall | null = (() => {
+    if (!state || !conceptsJob || stallDismissed) return null;
+    const arrived = state.concepts.length;
+    if (arrived >= expectedConcepts) return null;
+    // The anchor is already chosen — the user has moved past this phase and a
+    // late-arriving concept is no longer something they're waiting on.
+    if (state.project.anchor_asset_id) return null;
+
+    if (conceptsJob.status === "failed") {
+      return {
+        kind: "failed",
+        detail: conceptsJob.errorMessage,
+        arrived,
+        expected: expectedConcepts,
+      };
+    }
+    // `completed` with a short grid means the webhook gate settled on a partial
+    // set (some fal requests failed). Nothing more is coming — say so rather
+    // than spinning on a count that will never complete.
+    if (conceptsJob.status === "completed") {
+      return {
+        kind: "stuck",
+        detail: `${arrived} of ${expectedConcepts} concepts rendered; the rest failed at the renderer.`,
+        arrived,
+        expected: expectedConcepts,
+      };
+    }
+    if (ticks >= GIVE_UP_AFTER_TICKS) {
+      return { kind: "stuck", arrived, expected: expectedConcepts };
+    }
+    if (ticks >= SLOW_AFTER_TICKS) {
+      return { kind: "slow", arrived, expected: expectedConcepts };
+    }
+    return null;
+  })();
+
+  // "Keep waiting" — reset the clock and put the interval back if the hard
+  // stop already killed it.
+  const keepWaiting = () => {
+    setTicks(0);
+    if (!pollRef.current && projectId) {
+      pollRef.current = setInterval(() => {
+        setTicks((t) => t + 1);
+        void refresh(projectId);
+      }, POLL_MS);
+    }
+  };
+
   // A back link, shown in every in-project view, to return to "your logos".
   const backBar = (
     <div className="mx-auto mb-4 max-w-3xl">
@@ -512,12 +616,31 @@ export function LogoStudio() {
     <div className="px-4 py-10">
       {banner}
       {backBar}
+      {stall && (
+        <LogoStallNotice
+          stall={stall}
+          // Only worth offering while there's still something in flight —
+          // a failed or settled job will not produce more however long we sit.
+          onKeepWaiting={
+            conceptsJob &&
+            conceptsJob.status !== "failed" &&
+            stall.kind !== "stuck"
+              ? keepWaiting
+              : undefined
+          }
+          onContinue={() => setStallDismissed(true)}
+          onStartOver={backToLibrary}
+        />
+      )}
       <LogoConceptGrid
         concepts={state.concepts}
-        expected={expected}
+        expected={expectedConcepts}
         anchorId={state.project.anchor_asset_id}
         onAnchor={anchor}
         anchoring={busy}
+        stalled={
+          stallDismissed || stall?.kind === "stuck" || stall?.kind === "failed"
+        }
       />
     </div>
   );

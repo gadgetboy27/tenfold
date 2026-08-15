@@ -43,8 +43,36 @@ export async function GET(
       created_at: string;
     }>;
 
+    // This route's contract has always claimed to return "its jobs' status",
+    // but never actually selected them — so a failed concepts job was
+    // invisible to the poller, which sat on "Generating… 0 of 6 ready"
+    // forever with no way to learn why. Every logo job tags itself with
+    // input_params.logoProjectId (see app/api/logo/route.ts and siblings).
+    const { data: jobs } = await admin
+      .from("creative_jobs")
+      .select("id, type, status, error_message, created_at, input_params")
+      .eq("workspace_id", session.workspaceId)
+      .eq("input_params->>logoProjectId", id)
+      .order("created_at", { ascending: true });
+
     return NextResponse.json({
       project,
+      jobs: (jobs ?? []).map((j) => ({
+        id: j.id,
+        type: j.type,
+        status: j.status,
+        errorMessage: j.error_message,
+        createdAt: j.created_at,
+        // How many fal requests this job is waiting on. The 6 concepts are one
+        // job across 6 requests, and partial submit failure is tolerated at
+        // creation time — so "expected" can legitimately be under 6, and the
+        // UI must not wait for images that were never submitted.
+        expectedImages:
+          Number(
+            (j.input_params as { expected_images?: number } | null)
+              ?.expected_images ?? 0,
+          ) || null,
+      })),
       concepts: rows.filter((a) => a.metadata?.logo_stage === "logo_concepts"),
       refined: rows.filter((a) => a.metadata?.logo_stage === "logo_refine"),
       finalized: rows.filter((a) => a.metadata?.logo_stage === "logo_finalize"),
