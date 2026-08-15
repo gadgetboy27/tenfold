@@ -127,6 +127,11 @@ the chosen video length.
 Rule: `debitCredits()` returns `{ success: false }` → reject with HTTP 402.
 Never create the `creative_job` row. Never call fal.ai.
 
+Refunds happen in the fal webhook — which means a webhook that never arrives
+strands the credits permanently. `lib/jobs/sweep.ts` (`GET /api/cron/sweep-jobs`)
+is the only thing that recovers those; see `app/api/CLAUDE.md` for its rules and
+why it must not be scheduled without registering the Railway cron by hand.
+
 The async job creation pattern (check credits → insert job → enqueue →
 respond) lives in `app/api/CLAUDE.md`.
 

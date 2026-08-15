@@ -64,6 +64,44 @@ workflows.
 Webhook handler: log first (idempotency) → find job → handle success/failure → mark processed.
 Client: Supabase Realtime `postgres_changes` on `creative_jobs` table.
 
+### The webhook is a single point of failure for refunds — hence the sweeper
+
+Every terminal outcome for a fal job runs through the webhook, **including
+`refundCredits`**. So a webhook that never arrives (fal drops it, `APP_URL` is
+wrong, the service redeploys mid-fire) leaves the job in `processing` forever
+and the user's credits gone with no recovery path anywhere else in the app.
+
+`lib/jobs/sweep.ts` + `GET /api/cron/sweep-jobs` is that path. Auth mirrors the
+other crons (Bearer `CRON_SECRET`). **Not scheduled automatically** — Railway
+crons are configured per-service in the dashboard (Settings → Cron Schedule),
+so this needs registering by hand; hourly (`0 * * * *`) is the intent.
+
+Three rules it must keep:
+
+- **Zero assets → `failed` + refund. Any assets → `completed`, no refund.**
+  The second half mirrors `finalizeMultiImage`'s existing partial-success rule
+  (any image ≥ 1 completes the job and charges for it). Diverge and the same
+  half-delivered outcome costs a user nothing or everything depending purely on
+  whether a webhook happened to land.
+- **Status is `failed`, never a new enum value.** A dozen client polls across
+  Studio, the Pro panels and the Compositor branch on `status === "failed"`; a
+  novel status would be silently unrecognised by every one of them — exactly
+  the never-resolving spinner this work exists to remove. The
+  swept-vs-genuinely-failed distinction lives in `fal_raw_error.swept_by`.
+- **A swept job is ignored by the webhook** (alongside the existing `cancelled`
+  check), or a late webhook re-completes a job whose credits were already
+  returned and the user gets both. Gated on the `swept_by` marker specifically,
+  **not** on `status === "failed"` — a multi-direction job is marked failed by
+  its first failing direction while siblings are still legitimately in flight.
+
+Both writes are guarded on the status still being in-flight (`.in("status",
+["queued","processing"])` on the UPDATE, refund only if a row came back), so a
+webhook that wins the race keeps its outcome. `refund_credits` (migration 0005)
+is itself atomic and idempotent, so this is belt-and-braces rather than the only
+defence. Threshold is 45 minutes — an order of magnitude past the slowest real
+job (`video_30s`, two Kling segments). Run `?dryRun=1` first; `?minutes=N`
+overrides the threshold, floored at 15.
+
 ### Claude-only (non-fal) credit-charged actions
 
 A synchronous Claude-only route (e.g. `app/api/hooks/route.ts`,

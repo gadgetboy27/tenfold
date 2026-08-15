@@ -3,6 +3,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { advanceRunForJob } from "@/lib/foreman/advance";
 import { falWebhookPayloadSchema, isSuccessStatus } from "@/lib/fal/webhooks";
 import { refundCredits } from "@/lib/credits/refund";
+import { SWEPT_MARKER } from "@/lib/jobs/sweep";
 import { recordJobCost } from "@/lib/costs/tracker";
 import { analyzeJobFailure } from "@/lib/fal/error-analyzer";
 import { concatVideos } from "@/lib/composition/concat";
@@ -17,6 +18,8 @@ interface CreativeJob {
   credits_charged: number;
   input_params: Record<string, unknown>;
   fal_request_id: string | null;
+  /** Carries the stalled-job sweeper's marker when it settled this job. */
+  fal_raw_error: { swept_by?: string } | null;
 }
 
 export async function POST(req: Request) {
@@ -72,7 +75,7 @@ export async function POST(req: Request) {
   const jobQuery = admin
     .from("creative_jobs")
     .select(
-      "id, campaign_id, workspace_id, type, status, credits_charged, input_params, fal_request_id",
+      "id, campaign_id, workspace_id, type, status, credits_charged, input_params, fal_request_id, fal_raw_error",
     );
 
   const { data: jobRow } = jobId
@@ -147,6 +150,20 @@ export async function POST(req: Request) {
     await admin
       .from("webhook_logs")
       .update({ processed: true })
+      .eq("event_id", requestId);
+    return NextResponse.json({ ok: true });
+  }
+
+  // Same reasoning, for a job the stalled-job sweeper already settled: its
+  // credits have been refunded, so processing this now would hand the user the
+  // asset AND their money back. Gated on the sweeper's own marker rather than
+  // `status === "failed"` — a multi-direction job is marked failed by the first
+  // failing direction while its siblings are still legitimately in flight, and
+  // blanket-ignoring failed jobs would drop those.
+  if (job.fal_raw_error?.swept_by === SWEPT_MARKER) {
+    await admin
+      .from("webhook_logs")
+      .update({ error: "job already swept", processed: true })
       .eq("event_id", requestId);
     return NextResponse.json({ ok: true });
   }
