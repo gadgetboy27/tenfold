@@ -45,6 +45,10 @@ const STAGE_LABEL: Record<RunStage, string> = {
   caption: "Caption",
 };
 
+/** Polls (at 4s) a single stage may sit on before we call it stalled — ~4min.
+ *  Video is the slowest stage and lands well inside this. */
+const STALL_TICKS = 60;
+
 /** Where the manual flow should resume if a run stops at this stage. */
 const STAGE_SECTION: Record<RunStage, string> = {
   images: "images",
@@ -68,9 +72,17 @@ export function AutoRunPanel({
   const [balance, setBalance] = useState(0);
   const [run, setRun] = useState<RunState | null>(null);
   const [busy, setBusy] = useState(false);
+  const [stalled, setStalled] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   // Toast once per stage, not once per poll.
   const announced = useRef<Set<string>>(new Set());
+  // Polls since the run started, and the stage we last saw it on. A run that
+  // never leaves `running` polled forever — the only exits were a terminal
+  // status or the component unmounting. A stage that stops advancing is the
+  // signal, not total elapsed time: the full run legitimately takes minutes,
+  // but no single stage should sit still for one.
+  const ticks = useRef(0);
+  const lastStage = useRef<RunStage | null>(null);
 
   const stopPolling = useCallback(() => {
     if (timer.current) clearInterval(timer.current);
@@ -87,6 +99,19 @@ export function AutoRunPanel({
       const { run: r } = (await res.json()) as { run: RunState | null };
       if (!r) return;
       setRun(r);
+
+      // Stage advanced — the run is alive, so reset the stall clock.
+      if (r.current_stage !== lastStage.current) {
+        lastStage.current = r.current_stage;
+        ticks.current = 0;
+        setStalled(false);
+      } else if (++ticks.current >= STALL_TICKS) {
+        // Same stage for ~4 minutes. Stop polling and say so; the run row is
+        // still there and the manual flow can pick up whatever landed.
+        stopPolling();
+        setStalled(true);
+        return;
+      }
 
       for (const s of r.stages) {
         const key = `${s.stage}:${s.status}`;
@@ -161,6 +186,9 @@ export function AutoRunPanel({
       if (!res.ok || !d.runId) throw new Error(d.error ?? "Couldn't start");
       setQuote(null);
       announced.current.clear();
+      ticks.current = 0;
+      lastStage.current = null;
+      setStalled(false);
       toast.success("Off it goes — I'll keep you posted at each step.");
       stopPolling();
       timer.current = setInterval(() => void poll(), 4000);
@@ -272,6 +300,44 @@ export function AutoRunPanel({
             ))}
           {run.error && (
             <p className="text-[11px] text-destructive">{run.error}</p>
+          )}
+
+          {/* Stopped watching, but deliberately NOT claiming it failed — the
+              stage may still be running server-side, and everything finished
+              before it is already saved on the campaign. The handover the rest
+              of this component is built around is the honest offer here. */}
+          {stalled && (
+            <div className="space-y-1.5 border-t border-border pt-2">
+              <p className="text-[11px] leading-relaxed text-amber-400">
+                {STAGE_LABEL[run.current_stage ?? "images"]} has been going a
+                while with no update. It may still finish on its own — anything
+                already done is saved.
+              </p>
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    ticks.current = 0;
+                    setStalled(false);
+                    stopPolling();
+                    timer.current = setInterval(() => void poll(), 4000);
+                    void poll();
+                  }}
+                  className="rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold text-foreground"
+                >
+                  Keep watching
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onHandover(STAGE_SECTION[run.current_stage ?? "images"])
+                  }
+                  className="rounded-lg border border-primary/40 px-2.5 py-1 text-[11px] font-semibold text-primary"
+                >
+                  Take over from here
+                </button>
+              </div>
+            </div>
           )}
         </div>
       )}

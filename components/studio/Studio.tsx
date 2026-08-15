@@ -52,9 +52,10 @@ import { UserMenu } from "@/components/studio/UserMenu";
 import { AutoRunPanel } from "@/components/studio/AutoRunPanel";
 import { BriefAgentPanel } from "@/components/studio/BriefAgentPanel";
 import {
-  ProjectBundle,
+  ProjectStrip,
   type ProjectProgress,
-} from "@/components/studio/ProjectBundle";
+  type StripFocus,
+} from "@/components/studio/ProjectStrip";
 import {
   BrandImportPanel,
   type AnalyzeResult,
@@ -115,6 +116,23 @@ const SECTION_LABELS: Record<SectionId, string> = {
   compositor: "Compositor",
   logo: "Logo & brand",
   publish: "Publish",
+};
+
+/** Which project-strip group each section is operating on. See `stripFocus`. */
+const SECTION_FOCUS: Record<SectionId, StripFocus> = {
+  projects: null,
+  brief: "images",
+  images: "images",
+  video: "video",
+  music: "audio",
+  caption: "caption",
+  productshot: "images",
+  tryon: "images",
+  talking: "video",
+  autocaption: "video",
+  compositor: null,
+  logo: null,
+  publish: null,
 };
 
 interface ProjectSummary {
@@ -756,7 +774,8 @@ export function Studio({
         throw new Error(data.error ?? "Couldn't start the video");
       }
       refreshBalance();
-      for (let i = 0; i < 160; i++) {
+      let landed = false;
+      for (let i = 0; i < 160 && !landed; i++) {
         await new Promise((r) => setTimeout(r, 2000));
         const elapsed = i * 2;
         setVideoStage(
@@ -773,9 +792,20 @@ export function Studio({
           setVideoUrl(job.outputUrls[0]);
           refreshBalance();
           toast.success("Your video is ready");
+          landed = true;
           break;
         }
         if (job.status === "failed") throw new Error("Video generation failed");
+      }
+      // Ran out of attempts (~5min). This used to fall out of the loop in
+      // silence: the spinner stopped, nothing appeared, and no message
+      // explained why. The job is still queued server-side, so say that rather
+      // than implying it failed. Checked on the flag, not the loop index, so a
+      // run of failed status fetches (which `continue`) still reports.
+      if (!landed) {
+        throw new Error(
+          "Still rendering — your video is on the way. Reopen this project from the Gallery in a few minutes.",
+        );
       }
     } catch (err) {
       toast.error((err as Error).message ?? "Video generation failed");
@@ -819,7 +849,8 @@ export function Studio({
         throw new Error(data.error ?? "Couldn't start the music");
       }
       refreshBalance();
-      for (let i = 0; i < 80; i++) {
+      let landed = false;
+      for (let i = 0; i < 80 && !landed; i++) {
         await new Promise((r) => setTimeout(r, 1500));
         const jr = await api(`/api/jobs/${data.jobId}`, { workspaceSlug });
         if (!jr.ok) continue;
@@ -831,9 +862,17 @@ export function Studio({
           setMusicUrl(job.outputUrls[0]);
           refreshBalance();
           toast.success(`Audio attached to "${campaignName}"`);
+          landed = true;
           break;
         }
         if (job.status === "failed") throw new Error("Music generation failed");
+      }
+      // Same silent fall-through as video above — ~2min of nothing, then the
+      // spinner just stopped. The track is still queued server-side.
+      if (!landed) {
+        throw new Error(
+          "Still composing — your track is on the way. Reopen this project from the Gallery in a moment.",
+        );
       }
     } catch (err) {
       toast.error((err as Error).message ?? "Music generation failed");
@@ -907,6 +946,11 @@ export function Studio({
 
   const anchorPicked = !!anchorId;
   const publishReady = anchorPicked || !!videoUrl; // grows as more of the flow lands
+
+  // Which group in the project strip the current section is actually working
+  // on, so the rail says "this one" rather than just listing everything.
+  // Publish and Compositor consume the whole bundle, so neither singles one out.
+  const stripFocus: StripFocus = SECTION_FOCUS[section];
 
   // Every nav item stays IN Studio (setSection) — no item flings you to the
   // classic app on click. classicHref is only for the deliberate "Open in
@@ -1150,7 +1194,7 @@ export function Studio({
               videoUrl={videoUrl}
               publishReady={publishReady}
             />
-            <div className="min-w-0 flex-1">
+            <div className="min-h-0 min-w-0 flex-1">
               {section === "projects" ? (
                 <ProjectsCanvas
                   workspaceSlug={workspaceSlug}
@@ -1216,41 +1260,24 @@ export function Studio({
                 // lockable layer in the SAME layer system the classic Compositor
                 // uses — reused, not forked.
                 //
-                // The bundle strip sits above it: this is the point where a
-                // user is assembling the finished piece, so it's where seeing
-                // everything the project has produced actually helps.
-                <div className="flex h-full min-h-0 flex-col gap-3">
-                  <ProjectBundle
-                    progress={progress}
-                    projectName={campaignName}
-                  />
-                  <div className="min-h-0 flex-1">
-                    <CompositorCanvas
-                      workspaceSlug={workspaceSlug}
-                      campaignId={campaignId}
-                      anchorUrl={workingImage}
-                      classicHref={`/${workspaceSlug}/compositor?campaign=${campaignId}`}
-                      initialOp={compositorInitialOp}
-                    />
-                  </div>
-                </div>
+                // The project strip used to be mounted here and on Publish only;
+                // it's now pinned below <main> for every section instead.
+                <CompositorCanvas
+                  workspaceSlug={workspaceSlug}
+                  campaignId={campaignId}
+                  anchorUrl={workingImage}
+                  classicHref={`/${workspaceSlug}/compositor?campaign=${campaignId}`}
+                  initialOp={compositorInitialOp}
+                />
               ) : section === "publish" ? (
-                <div className="flex h-full min-h-0 flex-col gap-3">
-                  <ProjectBundle
-                    progress={progress}
-                    projectName={campaignName}
-                  />
-                  <div className="min-h-0 flex-1">
-                    <PublishCanvas
-                      workspaceSlug={workspaceSlug}
-                      campaignId={campaignId}
-                      anchorId={anchorId}
-                      workingImage={workingImage}
-                      videoUrl={videoUrl}
-                      initialCaption={caption}
-                    />
-                  </div>
-                </div>
+                <PublishCanvas
+                  workspaceSlug={workspaceSlug}
+                  campaignId={campaignId}
+                  anchorId={anchorId}
+                  workingImage={workingImage}
+                  videoUrl={videoUrl}
+                  initialCaption={caption}
+                />
               ) : (
                 <CockpitCreate
                   tools={tools}
@@ -1316,6 +1343,18 @@ export function Studio({
             </div>
           </div>
         </main>
+
+        {/* Pinned below <main>, outside its scroll container, so the project
+            stays on screen for every section rather than only the two that
+            used to mount it. Hidden on the Gallery, which is a list of OTHER
+            projects — a strip describing the open one would misread there. */}
+        {section !== "projects" && (
+          <ProjectStrip
+            progress={progress}
+            projectName={campaignName}
+            focus={stripFocus}
+          />
+        )}
       </div>
 
       <UpgradeModal

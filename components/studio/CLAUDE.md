@@ -293,7 +293,7 @@ Two behaviours worth knowing:
   looks the URL up under the session's `workspace_id`. Accepting a client-supplied
   URL would hand an arbitrary address to a fal job and cross the tenant boundary.
 
-## Project progress — nav ticks + the bundle strip
+## Project progress — nav ticks + the project strip
 
 `GET /api/campaigns/[id]/progress` derives, from the campaign's own
 jobs/assets/compositions/publish records, both a `done` map keyed by `SectionId`
@@ -304,14 +304,80 @@ and a `bundle` of the actual assets. One fetch, two views:
   only knew about the section it was driving, and reopening a project lost the
   rest. Local state is still OR'd in (`!!videoUrl || progress?.done.video`) so a
   tick never blinks off while the fetch is in flight.
-- **`ProjectBundle`** (`components/studio/ProjectBundle.tsx`) — a collapsible
-  "Everything in <project name>" strip above the Compositor and Publish canvases,
-  the two screens where you assemble/ship and actually need the whole picture.
+- **`ProjectStrip`** (`components/studio/ProjectStrip.tsx`, 2026-08-11) — a
+  thumbnail rail of everything the project has produced, **pinned below
+  `<main>` and rendered for every section**. Was `ProjectBundle`: same payload,
+  same thumbnails, but mounted only inside the Compositor and Publish branches
+  and `defaultOpen: false`, so on the ten other sections the project you were
+  making was invisible. That's the identical "architecturally absent on most
+  screens" shape `StudioNav` was hoisted out of above, and the fix is the same
+  one — render it once, outside the per-section conditional. The two old
+  in-branch mounts are gone; `CompositorCanvas`/`PublishCanvas` are now plain
+  direct children of the canvas column like every other section, which is why
+  that column gained `min-h-0`.
+
+  It sits **outside `<main>`'s scroll container** deliberately — inside it, the
+  strip would scroll away on a long canvas, which is the problem it exists to
+  solve. Hidden on `projects` (the Gallery lists OTHER projects; a strip
+  describing the open one misreads there) and self-hiding when the campaign has
+  produced nothing yet, so the Brief screen doesn't carry an empty bar.
+
+  `SECTION_FOCUS` (in `Studio.tsx`) maps each `SectionId` to the strip group
+  that section actually operates on, tinting it. `compositor`/`publish` map to
+  `null` on purpose: both consume the whole bundle, so singling one group out
+  would be a lie about what those screens use.
 
 Refetched on `campaignId` change, when a Studio generation settles, and on
 **every section change** — the four Pro panels and `CaptionCanvas` are
 self-contained and never report back to Studio, so navigating away from one is
 the only moment to re-read what it produced.
+
+## Stalled phases — every poll needs a bound AND a reason (2026-08-11)
+
+Reported as "Logo & Brand stuck on `Generating… 0 of 6 ready`". The rule that
+came out of it: **a polling loop must have a bound, and running out of it must
+say something.** A silent exit reads to the user as a frozen app.
+
+Root cause was two separate gaps:
+
+- `LogoStudio`'s poll had **no bound at all** — 2.5s forever, and its only exit
+  was the project reaching `finalized`, which the concepts phase never does.
+- `GET /api/logo/[id]` claimed in its own header comment to return "the
+  project, **its jobs' status**, and its logo assets" but selected only
+  `logo_projects` + `assets`. With no job status on the wire the client could
+  not tell "still rendering" from "failed an hour ago". It now returns `jobs`
+  (status, `errorMessage`, `expectedImages`) keyed off
+  `input_params->>logoProjectId`, the tag every logo route already writes.
+
+**The three stall states are NOT interchangeable, because refunds differ** —
+see `LogoStallNotice.tsx`, which exists to keep them apart:
+
+| State    | Server reality                                                                  | What the user is told          |
+| -------- | ------------------------------------------------------------------------------- | ------------------------------ |
+| `failed` | webhook hit `finalizeMultiImage`'s zero-image branch → `refundCredits` ran      | credits are back, start over   |
+| `slow`   | still `processing`, under the give-up threshold                                 | nothing's wrong, keep waiting  |
+| `stuck`  | still `processing` past it — **webhook never arrived, so nothing ever refunds** | credits were spent, contact us |
+
+Do not collapse `stuck` into `failed`. Nothing server-side marks a
+never-webhooked job failed, so promising a refund there would be a lie.
+
+Thresholds are counted in **poll ticks, not wall-clock**, so a backgrounded tab
+(where browsers throttle intervals) under-counts and false-alarms rather than
+the reverse.
+
+`expected` was also seeded only from the POST response, so a _reopened_ project
+sat at the default 6 even when fewer were ever submitted (partial submit
+failure is tolerated at creation — see `app/api/logo/route.ts`) and could never
+reach a complete grid. It now prefers the job's own `expectedImages`.
+
+Same pass fixed the other unbounded/silent loops: `AutoRunPanel` (polled
+forever while a run sat in `running`; now stalls on a _stage_ that stops
+advancing, offering "Keep watching" / "Take over from here" rather than
+claiming failure), and Studio's video + music loops, which were bounded but
+fell out of their `for` in silence — the spinner just stopped. Both now report,
+checking a `landed` flag rather than the loop index so a run of failed status
+fetches (which `continue`) still gets a message. Studio's image `poll()` and
+`removeBg` already did this correctly and are the pattern to copy.
 
 `done.logo` is **workspace-level, not per-campaign**: logo projects hang off the
 shared "Logos" holding campaign (`app/api/logo/route.ts`), so it means "this
