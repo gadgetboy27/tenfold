@@ -125,6 +125,10 @@ export const publishSchema = z.object({
   // raw (unmixed) clip instead of the music-mixed one for this batch of
   // platforms — e.g. LinkedIn defaults to no music bed.
   noMusic: z.boolean().optional(),
+  // Direct-backend targets that need a destination the caption can't carry
+  // (lib/social/direct/). Both fall back to the connection's stored default.
+  subreddit: z.string().max(50).optional(),
+  pinterestBoardId: z.string().max(64).optional(),
 });
 
 export const purchaseCreditsSchema = z.object({

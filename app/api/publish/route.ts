@@ -9,6 +9,11 @@ import {
   publishVideoToInstagram,
 } from "@/lib/social/meta";
 import { ayrsharePost } from "@/lib/ayrshare/client";
+import {
+  isDirectPlatform,
+  publishDirect,
+  type DirectProfile,
+} from "@/lib/social/direct";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { composeVideo } from "@/lib/composition/video";
 import { pickForPlatform } from "@/lib/composition/formats";
@@ -17,11 +22,16 @@ import { errorMessage } from "@/lib/api/error-message";
 
 interface SocialProfile {
   platform: string;
+  handle: string | null;
   platform_page_id: string | null;
   platform_account_id: string | null;
   access_token: string;
+  refresh_token: string | null;
+  token_expires_at: string | null;
   metadata?: {
     facebook_pages?: { id: string; name: string; access_token: string }[];
+    default_subreddit?: string;
+    default_board_id?: string;
   } | null;
 }
 
@@ -274,22 +284,27 @@ export async function POST(req: Request) {
     const { data: profiles } = await admin
       .from("social_profiles")
       .select(
-        "platform, platform_page_id, platform_account_id, access_token, metadata",
+        "platform, handle, platform_page_id, platform_account_id, access_token, refresh_token, token_expires_at, metadata",
       )
       .eq("workspace_id", session.workspaceId)
       .in("platform", body.platforms);
 
-    // Two publishing backends:
+    // Three publishing backends, in order of preference per platform:
     //  • Facebook + Instagram → Meta Graph directly (free, all tiers) when the
     //    workspace has connected that account here.
-    //  • Every other network → Ayrshare (Pro feature; uses the workspace's
-    //    Ayrshare profile key + its linked socials).
-    const metaByPlatform = new Map<string, SocialProfile>(
+    //  • Bluesky, Reddit, Pinterest → our own direct backend
+    //    (lib/social/direct/) — also free, no platform review, all tiers.
+    //  • Everything left (X, LinkedIn, TikTok, YouTube, …) → Ayrshare, whose
+    //    per-profile subscription is the reason the two above exist. Kept
+    //    intact but gated on AYRSHARE_ENABLED so the spend can be switched off
+    //    without deleting the integration.
+    const profileByPlatform = new Map<string, SocialProfile>(
       (profiles ?? []).map((p) => [
         (p as SocialProfile).platform,
         p as SocialProfile,
       ]),
     );
+    const ayrshareEnabled = process.env.AYRSHARE_ENABLED === "true";
 
     const { data: ws } = await admin
       .from("workspaces")
@@ -321,7 +336,7 @@ export async function POST(req: Request) {
       const platformCaption = body.platformCaptions?.[platform] ?? fullCaption;
       const platformAsset = assetForPlatform(platform);
       try {
-        const meta = metaByPlatform.get(platform);
+        const meta = profileByPlatform.get(platform);
         let postId: string;
         if (platform === "facebook" && meta) {
           // Per-publish Page override: resolve the chosen Page's id + token from
@@ -353,8 +368,54 @@ export async function POST(req: Request) {
             platformAsset,
             platformCaption,
           );
+        } else if (isDirectPlatform(platform)) {
+          // Bluesky / Reddit / Pinterest — our own code, no Ayrshare, no tier
+          // gate. A workspace that hasn't linked the account yet falls through
+          // to Ayrshare below only when that's still enabled; otherwise it gets
+          // a connect prompt rather than a silent skip.
+          if (!meta) {
+            if (!ayrshareEnabled || !ayrshareKey) {
+              errors[platform] =
+                `Connect ${platform} in Settings → Social first.`;
+              continue;
+            }
+            const result = await ayrsharePost(ayrshareKey, {
+              post: platformCaption,
+              platforms: [platform],
+              mediaUrls: [platformAsset.url],
+              ...(body.scheduledAt ? { scheduleDate: body.scheduledAt } : {}),
+            });
+            postId = result.postIds?.[0]?.id ?? result.id ?? "posted";
+            if (result.id) ayrshareIds[platform] = result.id;
+            platformResults[platform] = postId;
+            continue;
+          }
+          // Ayrshare accepted a scheduleDate and held the post itself. The
+          // direct backend has no scheduler, so a scheduled publish here would
+          // go out IMMEDIATELY while being recorded as "scheduled" — the user
+          // would never know it fired early. Refuse instead.
+          if (body.scheduledAt) {
+            errors[platform] =
+              `Scheduling isn't available for ${platform} yet — publish it now instead.`;
+            continue;
+          }
+          postId = await publishDirect({
+            platform,
+            profile: meta as DirectProfile,
+            workspaceId: session.workspaceId,
+            mediaUrl: platformAsset.url,
+            isVideo: isVideoAsset(platformAsset),
+            caption: platformCaption,
+            subreddit: body.subreddit,
+            boardId: body.pinterestBoardId,
+          });
         } else {
           // Everything else goes through Ayrshare (Pro).
+          if (!ayrshareEnabled) {
+            errors[platform] =
+              "This network is temporarily unavailable — Facebook, Instagram, Bluesky, Reddit and Pinterest are still live.";
+            continue;
+          }
           if (!ent.isPro) {
             errors[platform] =
               "Publishing beyond Facebook & Instagram is a Pro feature — upgrade to reach this network.";

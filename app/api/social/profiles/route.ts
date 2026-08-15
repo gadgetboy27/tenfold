@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getConnectedPlatforms } from "@/lib/ayrshare/profiles";
+import { isDirectPlatform } from "@/lib/social/direct";
 
 interface OutProfile {
   id: string;
@@ -9,9 +10,14 @@ interface OutProfile {
   handle: string | null;
   profile_display_name: string | null;
   connected_at: string | null;
-  source: "native" | "ayrshare";
+  source: "native" | "direct" | "ayrshare";
   activePageId?: string | null;
   availablePages?: { id: string; name: string }[];
+  // Direct-backend destination (Reddit subreddit / Pinterest board), so the
+  // settings UI can show what a post would actually go to — and flag the
+  // connections that can't publish yet because nothing is chosen.
+  destination?: { label: string; value: string | null } | null;
+  availableBoards?: { id: string; name: string }[];
 }
 
 export async function GET(req: Request) {
@@ -35,7 +41,12 @@ export async function GET(req: Request) {
         handle: string | null;
         profile_display_name: string | null;
         platform_page_id: string | null;
-        metadata: { facebook_pages?: { id: string; name: string }[] } | null;
+        metadata: {
+          facebook_pages?: { id: string; name: string }[];
+          default_subreddit?: string;
+          default_board_id?: string;
+          pinterest_boards?: { id: string; name: string }[];
+        } | null;
         connected_at: string | null;
       };
       const base: OutProfile = {
@@ -44,7 +55,7 @@ export async function GET(req: Request) {
         handle: row.handle,
         profile_display_name: row.profile_display_name,
         connected_at: row.connected_at,
-        source: "native",
+        source: isDirectPlatform(row.platform) ? "direct" : "native",
       };
       if (row.platform === "facebook" && row.metadata?.facebook_pages?.length) {
         return {
@@ -54,6 +65,25 @@ export async function GET(req: Request) {
             id: fp.id,
             name: fp.name,
           })),
+        };
+      }
+      if (row.platform === "reddit") {
+        const sub = row.metadata?.default_subreddit ?? null;
+        return {
+          ...base,
+          destination: { label: "Subreddit", value: sub ? `r/${sub}` : null },
+        };
+      }
+      if (row.platform === "pinterest") {
+        const boards = row.metadata?.pinterest_boards ?? [];
+        const activeId = row.metadata?.default_board_id ?? null;
+        return {
+          ...base,
+          destination: {
+            label: "Board",
+            value: boards.find((b) => b.id === activeId)?.name ?? null,
+          },
+          availableBoards: boards,
         };
       }
       return base;
@@ -73,7 +103,11 @@ export async function GET(req: Request) {
       workspace as { ayrshare_profile_key: string | null } | null
     )?.ayrshare_profile_key;
 
-    if (profileKey) {
+    // Skip the Ayrshare round-trip entirely when the integration is switched
+    // off — otherwise every settings page load pays a network call to a service
+    // we're no longer publishing through, and surfaces stale "connected" chips
+    // for networks that would now be rejected at publish time.
+    if (profileKey && process.env.AYRSHARE_ENABLED === "true") {
       try {
         const nativePlatforms = new Set(out.map((p) => p.platform));
         const ayrsharePlatforms = await getConnectedPlatforms(profileKey);

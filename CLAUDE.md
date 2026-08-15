@@ -160,6 +160,51 @@ Agency/Business add-on gating. See the `image-compositing` skill
 
 ---
 
+## 7d. Publishing Backends — three, not one
+
+`POST /api/publish` fans each requested platform out to one of three backends.
+Which one handles a platform is decided by cost of _access_, not by code taste:
+
+| Backend                           | Platforms                                                      | Cost               |
+| --------------------------------- | -------------------------------------------------------------- | ------------------ |
+| Meta Graph (`lib/social/meta.ts`) | Facebook, Instagram                                            | free               |
+| Direct (`lib/social/direct/`)     | Bluesky, Reddit, Pinterest                                     | free               |
+| Ayrshare (`lib/ayrshare/`)        | X, LinkedIn, TikTok, YouTube, Threads, Snapchat, GMB, Telegram | $599/mo (Business) |
+
+**Ayrshare is opt-in as of 2026-08-15** — gated on `AYRSHARE_ENABLED === "true"`
+in the publish route and the profiles route. The code is deliberately kept
+whole, not deleted: it's turned back on with one env var once paying customers
+justify the subscription. Anything that touches publishing must keep working
+with it off.
+
+The direct backend exists because Bluesky, Reddit and Pinterest are the only
+networks in our list whose posting API is reachable without a paid tier or a
+platform app review. **That is the selection rule** — X, LinkedIn, TikTok and
+YouTube are not "not done yet", they are on Ayrshare precisely because their
+access costs money and weeks of review queue. Don't move one down a tier
+without checking that's changed.
+
+Per-network notes worth knowing before touching `lib/social/direct/`:
+
+- **Bluesky** has no developer app at all. The user pastes a handle + app
+  password; it lives in `social_profiles.access_token` and never expires
+  (revoked, not aged out — hence `token_expires_at = null`). Blobs are capped
+  at 1MB, so images get re-encoded down (`fitImageForBlob`) rather than
+  rejected, and text is 300 _graphemes_.
+- **Reddit** posts `kind=link` at the asset's public Storage URL, not a native
+  image upload — see the rationale in `reddit.ts`. It needs a **title**, not a
+  caption, and it reports failures inside a **200** response body, so `res.ok`
+  alone is not success. Tokens live one hour and are refreshed + persisted.
+- **Pinterest** cannot post video here (needs the `/v5/media` upload flow) and
+  every pin must name a board — both surface as clear errors, never a silent
+  substitution.
+
+Reddit and Pinterest need a destination the caption can't carry; it's stored on
+`social_profiles.metadata` (`default_subreddit` / `default_board_id`) via
+`POST /api/social/destination` and overridable per publish.
+
+---
+
 ## 8. Forbidden Patterns
 
 ```typescript

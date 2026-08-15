@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 const envSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
@@ -15,7 +15,18 @@ const envSchema = z.object({
   STRIPE_PRICE_CREATOR_MONTHLY: z.string().min(1),
   STRIPE_PRICE_BUSINESS_MONTHLY: z.string().min(1),
   STRIPE_PRICE_AGENCY_MONTHLY: z.string().min(1),
-  AYRSHARE_API_KEY: z.string().min(1),
+  // Ayrshare is now opt-in: the integration is kept intact but stays dark
+  // unless AYRSHARE_ENABLED === "true", so a deployment that isn't paying for
+  // the subscription must be able to boot without the key. Publishing falls
+  // back to the Meta and direct backends (lib/social/direct/).
+  AYRSHARE_ENABLED: z.enum(["true", "false"]).optional(),
+  AYRSHARE_API_KEY: z.string().min(1).optional(),
+  // Direct backend (lib/social/direct/). Bluesky needs no app credentials at
+  // all — the user supplies an app password — which is why it has no entry.
+  REDDIT_CLIENT_ID: z.string().min(1).optional(),
+  REDDIT_CLIENT_SECRET: z.string().min(1).optional(),
+  PINTEREST_APP_ID: z.string().min(1).optional(),
+  PINTEREST_APP_SECRET: z.string().min(1).optional(),
   ANTHROPIC_API_KEY: z.string().min(1),
   RESEND_API_KEY: z.string().min(1),
   APP_URL: z.string().url(),
@@ -28,7 +39,7 @@ export type Env = z.infer<typeof envSchema>;
 function validateEnv(): Env {
   const parsed = envSchema.safeParse(process.env);
   if (!parsed.success) {
-    const missing = parsed.error.issues.map((i) => i.path.join('.')).join(', ');
+    const missing = parsed.error.issues.map((i) => i.path.join(".")).join(", ");
     throw new Error(`prettymuch: missing or invalid env vars: ${missing}`);
   }
   return parsed.data;

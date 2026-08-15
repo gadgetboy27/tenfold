@@ -22,6 +22,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { BlueskyConnectDialog } from "@/components/settings/BlueskyConnectDialog";
+import { DestinationPicker } from "@/components/settings/DestinationPicker";
 
 interface SocialProfile {
   id: string;
@@ -29,11 +31,15 @@ interface SocialProfile {
   handle: string | null;
   profile_display_name: string | null;
   connected_at: string | null;
-  /** How it was linked: direct Meta OAuth ("native") or Ayrshare's hosted flow. */
-  source?: "native" | "ayrshare";
+  /** How it was linked: Meta OAuth ("native"), our own direct backend
+   *  ("direct" — Bluesky/Reddit/Pinterest), or Ayrshare's hosted flow. */
+  source?: "native" | "direct" | "ayrshare";
   /** Facebook only: which Page is active + all managed Pages for the picker. */
   activePageId?: string | null;
   availablePages?: { id: string; name: string }[];
+  /** Reddit/Pinterest: where posts actually land (null until chosen). */
+  destination?: { label: string; value: string | null } | null;
+  availableBoards?: { id: string; name: string }[];
 }
 
 interface ChecklistItem {
@@ -388,6 +394,79 @@ const PLATFORMS: PlatformGuide[] = [
     ],
   },
   {
+    id: "bluesky",
+    label: "Bluesky",
+    color: "#0085FF",
+    bg: "bg-[#0085FF]/10",
+    description: "Posts & images",
+    accountType: "Any Bluesky account — no business account needed",
+    steps: [
+      {
+        instruction:
+          "In the Bluesky app, go to Settings → Privacy and security → App passwords",
+        link: {
+          text: "Open Bluesky settings",
+          url: "https://bsky.app/settings/app-passwords",
+        },
+      },
+      {
+        instruction:
+          "Tap 'Add App Password', name it 'PrettyMuch', and copy the xxxx-xxxx-xxxx-xxxx code it shows once",
+      },
+      {
+        instruction:
+          "Paste your handle and that app password below — never your real account password (an app password can be revoked on its own)",
+      },
+    ],
+    checklist: [
+      {
+        key: "handle_ready",
+        label: "Your Bluesky handle to hand",
+        required: true,
+      },
+      {
+        key: "app_password",
+        label: "App password generated and copied",
+        required: true,
+      },
+    ],
+  },
+  {
+    id: "reddit",
+    label: "Reddit",
+    color: "#FF4500",
+    bg: "bg-[#FF4500]/10",
+    description: "Subreddit posts",
+    accountType: "Any Reddit account with posting privileges",
+    steps: [
+      {
+        instruction:
+          "Make sure your account can post in the subreddit you're targeting — many require minimum karma or account age",
+        link: { text: "Your Reddit profile", url: "https://www.reddit.com" },
+      },
+      {
+        instruction:
+          "Read that subreddit's rules — self-promotion is banned outright in many, and posts get removed without warning",
+      },
+      {
+        instruction:
+          "After connecting, choose the subreddit to post to (you can change it per post)",
+      },
+    ],
+    checklist: [
+      {
+        key: "posting_allowed",
+        label: "Account meets the subreddit's karma/age rules",
+        required: true,
+      },
+      {
+        key: "rules_read",
+        label: "Subreddit allows this kind of post",
+        required: true,
+      },
+    ],
+  },
+  {
     id: "gmb",
     label: "Google Business",
     color: "#4285F4",
@@ -472,6 +551,8 @@ function PlatformCard({
   connecting,
   onSwitchPage,
   onDisconnect,
+  workspaceSlug,
+  onDestinationSaved,
 }: {
   platform: PlatformGuide;
   profile: SocialProfile | undefined;
@@ -483,6 +564,8 @@ function PlatformCard({
   connecting: boolean;
   onSwitchPage?: (pageId: string) => void;
   onDisconnect: () => void;
+  workspaceSlug: string;
+  onDestinationSaved: () => void;
 }) {
   const connected = !!profile;
   const requiredItems = platform.checklist.filter((i) => i.required);
@@ -711,6 +794,19 @@ function PlatformCard({
                           </span>
                         )}
                       </div>
+                    )}
+                  {/* Reddit/Pinterest destination — a connection without one
+                      looks healthy but can't publish, so it's shown here. */}
+                  {profile &&
+                    (platform.id === "reddit" ||
+                      platform.id === "pinterest") && (
+                      <DestinationPicker
+                        platform={platform.id}
+                        workspaceSlug={workspaceSlug}
+                        current={profile.destination?.value ?? null}
+                        boards={profile.availableBoards}
+                        onSaved={onDestinationSaved}
+                      />
                     )}
                 </div>
               ) : readyToConnect ? (
@@ -1050,6 +1146,8 @@ export default function SocialSettingsPage() {
   const [ayrshareLoading, setAyrshareLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsUpgrade, setNeedsUpgrade] = useState(false);
+  // Bluesky connects via a credential form, not an OAuth redirect.
+  const [blueskyOpen, setBlueskyOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [checklist, setChecklist] = useState<ChecklistState>({});
 
@@ -1159,7 +1257,22 @@ export default function SocialSettingsPage() {
       return;
     }
 
-    // Every other network connects through Ayrshare.
+    // Bluesky has no OAuth at all — the user pastes a handle + app password, so
+    // it opens a form here instead of navigating anywhere.
+    if (platformId === "bluesky") {
+      setBlueskyOpen(true);
+      setConnecting(null);
+      return;
+    }
+
+    // Reddit and Pinterest: our own OAuth apps (CLAUDE.md §7d direct backend).
+    if (platformId === "reddit" || platformId === "pinterest") {
+      // eslint-disable-next-line react-hooks/immutability -- intentional full-page navigation to start OAuth
+      window.location.href = `/api/social/connect/${platformId}?workspace=${workspaceSlug}`;
+      return;
+    }
+
+    // Everything left (X, LinkedIn, TikTok, YouTube, …) still needs Ayrshare.
     handleAyrshareConnect().finally(() => setConnecting(null));
   };
 
@@ -1384,8 +1497,9 @@ export default function SocialSettingsPage() {
             Social Connections
           </h1>
           <p className="text-muted-foreground text-sm">
-            Follow each platform&apos;s setup checklist, then connect. PrettyMuch
-            publishes to all connected accounts when you publish a campaign.
+            Follow each platform&apos;s setup checklist, then connect.
+            PrettyMuch publishes to all connected accounts when you publish a
+            campaign.
           </p>
         </div>
         {!wizardMode && (
@@ -1606,6 +1720,8 @@ export default function SocialSettingsPage() {
               onDisconnect={() =>
                 disconnectPlatform(platform.id, platform.label)
               }
+              workspaceSlug={workspaceSlug}
+              onDestinationSaved={() => fetchProfiles(true)}
             />
           </motion.div>
         ))}
@@ -1637,6 +1753,14 @@ export default function SocialSettingsPage() {
           social passwords.
         </p>
       </div>
+
+      {blueskyOpen && (
+        <BlueskyConnectDialog
+          workspaceSlug={workspaceSlug}
+          onClose={() => setBlueskyOpen(false)}
+          onConnected={() => fetchProfiles(true)}
+        />
+      )}
     </div>
   );
 }
