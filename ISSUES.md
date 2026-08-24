@@ -301,7 +301,7 @@ timeout or fake timers. **Fixed:** both cases now carry an explicit 20s
 timeout. It had already masked real signal twice — the worst kind of flake,
 because it trains you to ignore red.
 
-### 🟡 20. LinkedIn moved off Ayrshare — TikTok and YouTube still to do
+### 🟡 20. All six marketing networks now publish direct — awaiting credentials
 
 Of the six networks that actually matter for marketing, four were already
 direct: **Facebook, Instagram** (Meta Graph) and **Reddit, Pinterest** (own
@@ -323,10 +323,21 @@ answers 503 saying so.
   against a working developer app and this one couldn't be. A 400 from
   `/rest/posts` or `/rest/images` means check that file first.
 
-**Still on Ayrshare: TikTok and YouTube.** Both gate posting behind platform
-review — TikTok's Content Posting API needs an audit for direct post, YouTube's
-`youtube.upload` is a restricted Google scope needing verification. Code is
-buildable now but neither can go live without that approval.
+**TikTok and YouTube are now built too** — same pattern, both video-only
+(`IMAGE_CAPABLE` is the new inverse of `VIDEO_CAPABLE`). Neither is verified
+against its live API, for the same reason as LinkedIn.
+
+Nothing but approvals now stands between these and working:
+
+| network | needs |
+| --- | --- |
+| LinkedIn | app + `LINKEDIN_CLIENT_ID/SECRET`. Member feed only; no video |
+| TikTok | app + `TIKTOK_CLIENT_KEY/SECRET`, **app audit** (else SELF_ONLY only), **domain verification** for PULL_FROM_URL on the Supabase Storage host. Video only |
+| YouTube | Google project + `YOUTUBE_CLIENT_ID/SECRET`, **OAuth verification** (restricted `youtube.upload` scope). Video only; defaults to unlisted; ~6 uploads/day on default quota |
+
+**Only X, Threads, Snapchat, GMB and Telegram remain Ayrshare-only** — the
+"fluff" tier. With Ayrshare gated off they show the honest unavailable state
+(#​: see the Ayrshare gate commit) rather than a dead Connect button.
 
 ### 🔴 12. Compositor ops not folded into the three-pane rail
 
