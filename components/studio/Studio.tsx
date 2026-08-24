@@ -2054,13 +2054,13 @@ function CockpitCreate({
                 <span className="text-xs text-muted-foreground">{stage}</span>
               </div>
             )}
-            <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(140px,1fr))]">
+            <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(130px,1fr))]">
               {assets.map((a) => (
                 <button
                   key={a.id}
                   type="button"
                   onClick={() => onPick(a.id)}
-                  className={`group relative aspect-square overflow-hidden rounded-xl border-2 transition-all ${
+                  className={`group relative h-[130px] overflow-hidden rounded-xl border-2 transition-all ${
                     anchorId === a.id
                       ? "border-primary shadow-[0_0_0_3px] shadow-primary/25"
                       : "border-border hover:border-primary/50"
@@ -2901,7 +2901,13 @@ function ProjectsCanvas({
           </div>
         ) : view === "grid" ? (
           // Container-driven, same reasoning as the Images tab below.
-          <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(160px,1fr))]">
+          // Fixed tile height, NOT aspect-square. `aspect-square` here sat on a
+          // flex item whose <img> child is `h-full`: the ratio wants height from
+          // width while the image wants height from its parent, and the browser
+          // breaks that circle in favour of the image's natural height — so a
+          // portrait thumbnail rendered as a tall, thin card. A fixed height
+          // with object-cover cannot be argued with.
+          <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(130px,1fr))]">
             {list.map((p) => (
               <div
                 key={p.id}
@@ -2910,7 +2916,7 @@ function ProjectsCanvas({
                 <button
                   type="button"
                   onClick={() => onOpen(p.id)}
-                  className="flex aspect-square items-center justify-center bg-background text-left"
+                  className="flex h-[120px] w-full shrink-0 items-center justify-center overflow-hidden bg-background text-left"
                 >
                   {p.thumbnailUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -3030,11 +3036,11 @@ function ProjectsCanvas({
           // window, so they kept sizing tiles for a full-width <main> that is
           // no longer there. Fixed tile height keeps browsing compact — a wall
           // of square tiles made scanning a long gallery mostly scrolling.
-          <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]">
+          <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(120px,1fr))]">
             {images.map((a) => (
               <div
                 key={a.id}
-                className="group relative h-[150px] overflow-hidden rounded-xl border border-border bg-card"
+                className="group relative h-[120px] overflow-hidden rounded-xl border border-border bg-card"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img

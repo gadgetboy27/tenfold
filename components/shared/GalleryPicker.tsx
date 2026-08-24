@@ -226,7 +226,7 @@ export function GalleryPicker({
                     onClose();
                   }}
                   title={a.campaignName ?? undefined}
-                  className="aspect-square overflow-hidden rounded-lg border border-border bg-background transition-colors hover:border-primary/60"
+                  className="h-[110px] overflow-hidden rounded-lg border border-border bg-background transition-colors hover:border-primary/60"
                 >
                   {kind === "video" ? (
                     <video
