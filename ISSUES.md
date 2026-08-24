@@ -259,6 +259,14 @@ this surfaced), plus an explicit warning naming how many overlays will be
 dropped and pointing at video as the path that does composite. Better a screen
 that admits the limit than one that silently discards the user's work.
 
+### 🔴 18. `video-segments.test.ts` flakes under load
+
+Passes 2/2 in isolation and in a quiet full run, but timed out at 5000ms
+during a full run on a loaded machine (56s vs the usual ~20s). It does real
+async work against a 5s default timeout, so it will flake in CI on a busy
+runner and read as a regression that isn't one. Needs an explicit longer
+timeout or fake timers.
+
 ### 🔴 12. Compositor ops not folded into the three-pane rail
 
 On `feat/three-pane-ad-studio` the Compositor still takes the full width and the
