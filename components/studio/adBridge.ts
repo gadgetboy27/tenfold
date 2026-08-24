@@ -3,11 +3,13 @@
 import { v4 as uuidv4 } from "uuid";
 import { useCompositorStore } from "@/store/useCompositorStore";
 import {
+  ASPECT_DESIGN,
   CAPTION_LAYER_ID,
   type CompositionAspect,
   type ImageLayer,
   type TextLayer,
 } from "@/lib/composition/layers";
+import { wrapText } from "@/lib/composition/brand-apply";
 
 /**
  * The one bridge between the generation rail (right) and the Ad stage (centre).
@@ -110,15 +112,27 @@ export function addCaptionToAd(text: string): AddResult | null {
   // No doc means no backdrop to caption yet — the caller shows the reason.
   if (!s.doc) return null;
 
+  // Fit the caption to the artboard. The first version hardcoded 64px and did
+  // no wrapping at all, so a real 277-character social caption rendered as
+  // three giant lines running off both edges of the frame.
+  //
+  // A social caption is body copy, not a headline, and its length varies
+  // hugely — so the wrap width scales with it and the size follows the wrap,
+  // using the ratio brand-apply already established (wrap 26 -> width/22,
+  // wrap 32 -> width/26, i.e. size ~= width / (wrapChars * 0.83)).
+  const wrapChars = trimmed.length > 180 ? 42 : trimmed.length > 90 ? 32 : 26;
+  const design = ASPECT_DESIGN[s.doc.aspect];
+  const sizePx = Math.round(design.width / (wrapChars * 0.83));
+
   const layer: TextLayer = {
     ...baseLayer(CAPTION_LAYER_ID),
     // Matches brand-apply's tagline placement, so a generated caption and a
     // brand-kit tagline land in the same spot rather than fighting.
     pos: { mode: "fraction" as const, nx: 0.5, ny: 0.84 },
     kind: "text",
-    text: trimmed,
+    text: wrapText(trimmed, wrapChars),
     font: "Inter",
-    sizePx: 64,
+    sizePx,
     color: "#ffffff",
     align: "center",
     bg: { color: "#000000", opacity: 0.45, padPx: 20 },
