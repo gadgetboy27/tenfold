@@ -231,6 +231,34 @@ scrolling parent pins its top out of reach. One scroller now: the rail.
 **Rule:** panels inside the rail size to their content. Do not give them
 `h-full` or their own `overflow-y-auto`.
 
+### 🔴 17. Publishing an image drops every overlay — no still-image export
+
+**The most significant gap found. Discovered by walking the full flow:**
+image -> caption -> Add to ad -> Publish.
+
+The Ad stage composes correctly and the layer lands. Then the Publish preview
+shows the RAW image with no caption on it — because that is genuinely what
+gets posted.
+
+- `PublishCanvas` sends `body.assetId = anchorId` for an image publish and
+  never a `compositionId`.
+- `/api/publish` *does* prefer "the composition's output"... but that output
+  only exists for **video**. `/api/compositions/export` renders layered docs to
+  MP4 via FFmpeg; there is **no still-image equivalent** anywhere.
+
+So the whole point of the three-pane shell — build an ad out of layers — does
+not survive a photo post. Video is fine.
+
+Fixing it properly means a server-side renderer that flattens a
+`CompositionDoc` to a still, and it has to agree with BOTH the canvas preview
+and the FFmpeg export or the published ad won't look like what was designed.
+That's a feature, not a wiring fix, so it is not attempted here.
+
+**Shipped meanwhile:** the publish preview shows the true asset (which is how
+this surfaced), plus an explicit warning naming how many overlays will be
+dropped and pointing at video as the path that does composite. Better a screen
+that admits the limit than one that silently discards the user's work.
+
 ### 🔴 12. Compositor ops not folded into the three-pane rail
 
 On `feat/three-pane-ad-studio` the Compositor still takes the full width and the

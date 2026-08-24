@@ -25,6 +25,7 @@ import { api } from "@/lib/api";
 import { PLATFORM_FORMATS, type PlatformId } from "@/lib/composition/formats";
 import { PLATFORM_GUIDE } from "@/lib/social/caption-guide";
 import { thumbUrl } from "@/lib/images/thumb";
+import { useCompositorStore } from "@/store/useCompositorStore";
 import { InfoHint } from "@/components/ui/info-hint";
 import { platformDefaults } from "@/lib/social/platform-defaults";
 
@@ -88,6 +89,9 @@ export function PublishCanvas({
 }) {
   const hasVideo = !!videoUrl;
   const hasImage = !!workingImage;
+  // The Ad stage is mounted alongside this panel and owns the composition, so
+  // its store is the truthful source for "what has the user actually built".
+  const overlayCount = useCompositorStore((st) => st.doc?.layers.length ?? 0);
   const [target, setTarget] = useState<"video" | "image">(
     hasVideo ? "video" : "image",
   );
@@ -687,6 +691,21 @@ export function PublishCanvas({
               <p className="text-[11px] text-muted-foreground">
                 Goes out to every selected account with the caption below.
               </p>
+              {/* Publishing an image posts the ANCHOR asset, not the composed
+                  ad: /api/publish prefers a composition's output, but that
+                  output only exists for video — the export pipeline renders
+                  layered docs to MP4 via FFmpeg and there is no still-image
+                  equivalent yet. So overlays built on the stage are silently
+                  dropped from a photo post. Say so rather than let someone
+                  publish believing their layers went with it. */}
+              {target === "image" && overlayCount > 0 && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                  {overlayCount} overlay{overlayCount === 1 ? "" : "s"} on your
+                  ad {overlayCount === 1 ? "is" : "are"} not included — a photo
+                  post sends this image on its own. Make it a video to publish
+                  the composed ad.
+                </p>
+              )}
               <a
                 href={(target === "video" ? videoUrl : workingImage) ?? "#"}
                 target="_blank"
