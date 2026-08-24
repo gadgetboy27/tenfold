@@ -8,6 +8,7 @@ import {
   PenLine,
   Images as ImagesIcon,
   Play,
+  Plus,
   Music,
   MessageSquare,
   Layers,
@@ -34,6 +35,8 @@ import {
   Captions,
 } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
+import { AdStage } from "./AdStage";
+import { addImageToAd, addVideoToAd } from "./adBridge";
 import { Spinner } from "@/components/brand/Spinner";
 import CreditMeter from "@/components/shared/CreditMeter";
 import UpgradeModal from "@/components/billing/UpgradeModal";
@@ -102,6 +105,19 @@ type SectionId =
 // Human-readable label for the Gallery's "Back to X" button — keyed
 // separately from the nav `tools` array since "brief" is repurposed there
 // as a second Gallery shortcut, not a real destination.
+/**
+ * Sections that get the wide rail. These aren't "generate one thing and place
+ * it" panels — they're browsers and multi-step flows (a gallery grid, Logo
+ * Studio's brief→concepts→finalise, the publish targets, the compositor's op
+ * controls) that are unusable in a single narrow column.
+ */
+const RAIL_WIDE = new Set<SectionId>([
+  "projects",
+  "logo",
+  "publish",
+  "compositor",
+]);
+
 const SECTION_LABELS: Record<SectionId, string> = {
   projects: "Gallery",
   brief: "Images",
@@ -617,6 +633,17 @@ export function Studio({
     setAnchorId(id);
     setEnhancedUrl(null); // a fresh pick = a fresh working image
     setVideoUrl(null);
+
+    // Choosing an option puts it on the ad — the centre stage is the point of
+    // picking. The first image becomes the backdrop (it's what creates the
+    // composition); later picks replace that backdrop rather than stacking a
+    // full-bleed image on top of the previous one.
+    const picked = assets.find((a) => a.id === id);
+    if (picked) {
+      addImageToAd(picked.url, { asBackground: true });
+      toast.success("Added to your ad");
+    }
+
     try {
       await api(`/api/campaigns/${campaignId}`, {
         method: "PATCH",
@@ -1211,7 +1238,7 @@ export function Studio({
           </div>
         </header>
 
-        <main className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+        <main className="min-h-0 flex-1 overflow-hidden p-4 sm:p-5">
           <div className="flex h-full min-h-0 gap-4">
             <StudioNav
               tools={tools}
@@ -1221,7 +1248,44 @@ export function Studio({
               videoUrl={videoUrl}
               publishReady={publishReady}
             />
-            <div className="min-h-0 min-w-0 flex-1">
+
+            {/* ── CENTRE: the ad being built. Mounted once and NEVER unmounted
+                as the user moves between tools — that's the whole point of the
+                three-pane shell. Every tool in the rail adds to this canvas
+                instead of replacing the screen, so the thing you're making
+                stays in front of you until it's published.
+                
+                Hidden for the Compositor alone: that section renders the SAME
+                composition on its own canvas (its inpaint mask overlay is
+                positioned against it), so showing the stage too would put two
+                identical canvases side by side. It reads the same store, so
+                nothing is lost by standing down while it's open. ── */}
+            {section !== "compositor" && (
+              <div className="min-h-0 min-w-0 flex-1">
+                {/* Keyed on the campaign so switching projects starts the stage
+                    clean. It deliberately does NOT key on `section` — staying
+                    mounted across tool changes is the point. */}
+                <AdStage
+                  key={campaignId ?? "no-campaign"}
+                  campaignId={campaignId}
+                  workspaceSlug={workspaceSlug}
+                />
+              </div>
+            )}
+
+            {/* ── RIGHT: the generation rail. Whichever tool is selected does
+                its work here. Browsers and multi-step tools (Gallery, Logo
+                Studio, Publish, Compositor) need real room, so the rail widens
+                for them rather than squeezing them into a column. ── */}
+            <aside
+              className={`min-h-0 overflow-y-auto rounded-2xl border border-border bg-card/40 p-3 transition-[width] duration-200 ${
+                section === "compositor"
+                  ? "min-w-0 flex-1"
+                  : RAIL_WIDE.has(section)
+                    ? "w-[min(46vw,620px)] shrink-0"
+                    : "w-[min(32vw,400px)] shrink-0"
+              }`}
+            >
               {section === "projects" ? (
                 <ProjectsCanvas
                   workspaceSlug={workspaceSlug}
@@ -1367,7 +1431,7 @@ export function Studio({
                   }}
                 />
               )}
-            </div>
+            </aside>
           </div>
         </main>
 
@@ -1659,8 +1723,11 @@ function CockpitCreate({
   ];
 
   return (
-    <div className="grid h-full grid-cols-1 gap-4 lg:grid-cols-[minmax(280px,320px)_1fr]">
-      {/* ── LEFT: input controls (nav is StudioNav, rendered by Studio) ── */}
+    // One column: this now lives in the right-hand generation rail, not the
+    // full <main>, so the old inputs|results split has nowhere to split into.
+    // Controls on top, results under them, the whole rail scrolling as one.
+    <div className="flex h-full flex-col gap-4">
+      {/* ── Input controls (nav is StudioNav, rendered by Studio) ── */}
       <div className="flex min-h-0 flex-col gap-3 overflow-y-auto rounded-2xl border border-border bg-card p-3">
         {isCreate ? (
           <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -1904,13 +1971,29 @@ function CockpitCreate({
         </div>
 
         {isVideo ? (
-          <div className="flex flex-1 items-center justify-center">
+          <div className="flex flex-1 flex-col items-center justify-center gap-3">
             <VideoResult
               generating={videoGenerating}
               stage={videoStage}
               url={videoUrl}
               stillUrl={workingImage}
             />
+            {videoUrl && !videoGenerating && (
+              // A clip can only ever be the ad's BACKDROP — the layer union is
+              // image|text, so there is no video layer to stack. Labelled as
+              // such rather than offering an "add" that silently replaces.
+              <button
+                type="button"
+                onClick={() => {
+                  addVideoToAd(videoUrl);
+                  toast.success("Your ad now runs on this clip");
+                }}
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Use as ad backdrop
+              </button>
+            )}
           </div>
         ) : !isCreate ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
@@ -1963,7 +2046,7 @@ function CockpitCreate({
                 <span className="text-xs text-muted-foreground">{stage}</span>
               </div>
             )}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(140px,1fr))]">
               {assets.map((a) => (
                 <button
                   key={a.id}
@@ -2809,7 +2892,8 @@ function ProjectsCanvas({
             </button>
           </div>
         ) : view === "grid" ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          // Container-driven, same reasoning as the Images tab below.
+          <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(160px,1fr))]">
             {list.map((p) => (
               <div
                 key={p.id}
@@ -2933,11 +3017,16 @@ function ProjectsCanvas({
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          // Auto-fill on the CONTAINER's width, not viewport breakpoints: this
+          // grid lives in the generation rail now, and `sm:`/`lg:` measure the
+          // window, so they kept sizing tiles for a full-width <main> that is
+          // no longer there. Fixed tile height keeps browsing compact — a wall
+          // of square tiles made scanning a long gallery mostly scrolling.
+          <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]">
             {images.map((a) => (
               <div
                 key={a.id}
-                className="group relative aspect-square overflow-hidden rounded-xl border border-border bg-card"
+                className="group relative h-[150px] overflow-hidden rounded-xl border border-border bg-card"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
