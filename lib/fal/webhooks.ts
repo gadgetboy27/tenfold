@@ -1,12 +1,16 @@
 import { z } from 'zod';
 
+// Every field but `url` is nullish, not optional: fal omits some metadata on
+// some models and sends an explicit `null` on others (Recraft's webp output
+// returns `file_size: null`). `.optional()` accepts undefined but REJECTS null,
+// which silently binned whole batches of finished images at the webhook door.
 const falMediaObject = z.object({
   url: z.string(),
-  width: z.number().optional(),
-  height: z.number().optional(),
-  content_type: z.string().optional(),
-  file_name: z.string().optional(),
-  file_size: z.number().optional(),
+  width: z.number().nullish(),
+  height: z.number().nullish(),
+  content_type: z.string().nullish(),
+  file_name: z.string().nullish(),
+  file_size: z.number().nullish(),
 }).passthrough();
 
 // fal.ai sends status as 'OK'/'ERROR' in older format and 'COMPLETED'/'FAILED' in newer.
