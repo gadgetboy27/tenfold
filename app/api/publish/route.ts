@@ -14,11 +14,18 @@ import {
   publishDirect,
   type DirectProfile,
 } from "@/lib/social/direct";
+import {
+  shouldBroker,
+  publishViaBroker,
+  type BrokerPlatform,
+} from "@/lib/social/broker/outstand";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { composeVideo } from "@/lib/composition/video";
 import { pickForPlatform } from "@/lib/composition/formats";
 import { v4 as uuidv4 } from "uuid";
 import { errorMessage } from "@/lib/api/error-message";
+import { debitCredits } from "@/lib/credits/debit";
+import { refundCredits } from "@/lib/credits/refund";
 
 interface SocialProfile {
   platform: string;
@@ -409,6 +416,40 @@ export async function POST(req: Request) {
             subreddit: body.subreddit,
             boardId: body.pinterestBoardId,
           });
+        } else if (shouldBroker(platform, false)) {
+          // Paid broker: a third party's approved apps reach networks our own
+          // review hasn't cleared yet. It bills per post, so unlike the free
+          // backends above this one is charged to the workspace that used it.
+          //
+          // Debited BEFORE the call and refunded if it throws — the same
+          // contract as every fal job (CLAUDE.md §1): never charge for work
+          // that didn't happen, never do work that wasn't charged.
+          // One id per attempt: the debit and its refund need to agree with
+          // each other, nothing more, and job_id is a uuid column.
+          const brokerJob = uuidv4();
+          const debit = await debitCredits(
+            session.workspaceId,
+            brokerJob,
+            "brokered_publish",
+          );
+          if (!debit.success) {
+            errors[platform] =
+              "Not enough credits to publish to this network. Connect it directly in Settings → Social to publish free.";
+            continue;
+          }
+          try {
+            const brokered = await publishViaBroker({
+              accountId: session.workspaceId,
+              platform: platform as BrokerPlatform,
+              mediaUrl: platformAsset.url,
+              caption: platformCaption,
+              ...(body.scheduledAt ? { scheduledAt: body.scheduledAt } : {}),
+            });
+            postId = brokered.id;
+          } catch (err) {
+            await refundCredits(brokerJob);
+            throw err;
+          }
         } else {
           // Everything else goes through Ayrshare (Pro).
           if (!ayrshareEnabled) {

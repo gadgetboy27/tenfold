@@ -38,6 +38,11 @@ export const PROVIDER_COST_USD: Record<string, number> = {
   music_generation: 0.02,
   // Anthropic — claude-sonnet-4-6 (~200 in + 100 out tokens typical)
   script_generation: 0.002,
+  // Outstand — per post, per network. The first social cost that attributes to
+  // a single customer action instead of a flat monthly bill nobody can
+  // apportion (Ayrshare was $599/mo). Retires network-by-network as our own
+  // direct adapters clear platform review.
+  brokered_publish: 0.007,
   // Anthropic — claude-sonnet-4-6, one larger call for "Brand Brain" (full
   // page text in ~1.5-2k tokens, 4 campaign angles + brand suggestion out
   // ~1.5k tokens). Estimate, not yet measured against real usage — see

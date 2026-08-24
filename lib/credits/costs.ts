@@ -32,6 +32,23 @@ export const CREDIT_COSTS = {
   music_generation: 8,
   script_generation: 1,
   layout_autofix: 3,
+  /**
+   * One post to ONE network through the paid broker (lib/social/broker).
+   *
+   * Publishing to a network we reach ourselves is FREE and must stay free —
+   * a direct post costs us nothing marginal, and charging for it would tax the
+   * path that is better for the customer AND cheaper for us. This charge
+   * exists only where a third party bills us per post.
+   *
+   * Benchmarked against the cheapest existing band rather than invented:
+   * script_generation is 1 credit at $0.002 raw, and a brokered post is
+   * ~$0.007 — about 3.5×, rounded to 2 so a multi-network publish stays
+   * legible to the person paying for it.
+   *
+   * It should trend to zero. Every network that clears its own platform review
+   * moves to lib/social/direct/* and stops being charged at all.
+   */
+  brokered_publish: 2,
   // "Brand Brain" (PRODUCT_STRATEGY.md §3/§4.6, 2026-07-26): one Claude call
   // analyzing a pasted URL into a campaign brief + brand palette/font
   // suggestion. Available to every tier — the flat charge is the gate, not a
