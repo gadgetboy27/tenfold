@@ -6,6 +6,7 @@ import {
   createAyrshareProfile,
   generateSocialConnectUrl,
 } from "@/lib/ayrshare/profiles";
+import { AyrshareDisabledError } from "@/lib/ayrshare/enabled";
 
 export async function GET(req: Request) {
   try {
@@ -72,6 +73,14 @@ export async function GET(req: Request) {
     const connectUrl = await generateSocialConnectUrl(profileKey, redirect);
     return NextResponse.json({ connectUrl });
   } catch (err) {
+    // Ayrshare being switched off is a known state, not a fault. Returning 500
+    // here is what surfaced a suspended third party as a broken Connect button.
+    if (err instanceof AyrshareDisabledError) {
+      return NextResponse.json(
+        { error: err.message, ayrshareDisabled: true },
+        { status: 503 },
+      );
+    }
     const msg = err instanceof Error ? err.message : "Unknown error";
     const status = msg === "Unauthorized" ? 401 : 500;
     return NextResponse.json({ error: msg }, { status });

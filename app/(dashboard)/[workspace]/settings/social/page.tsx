@@ -60,6 +60,23 @@ interface PlatformGuide {
   checklist: ChecklistItem[];
 }
 
+/**
+ * The networks that ONLY reach their API through Ayrshare. Facebook, Instagram,
+ * Bluesky, Reddit and Pinterest each connect directly (CLAUDE.md §7d), so they
+ * are unaffected when Ayrshare is off or its account is suspended.
+ */
+const AYRSHARE_ONLY = new Set([
+  "x",
+  "twitter",
+  "linkedin",
+  "tiktok",
+  "youtube",
+  "threads",
+  "snapchat",
+  "gmb",
+  "telegram",
+]);
+
 const PLATFORMS: PlatformGuide[] = [
   {
     id: "instagram",
@@ -553,6 +570,7 @@ function PlatformCard({
   onDisconnect,
   workspaceSlug,
   onDestinationSaved,
+  unavailable,
 }: {
   platform: PlatformGuide;
   profile: SocialProfile | undefined;
@@ -562,6 +580,8 @@ function PlatformCard({
   onCheckItem: (key: string, value: boolean) => void;
   onConnect: () => void;
   connecting: boolean;
+  /** Ayrshare unreachable — this network can't be connected right now. */
+  unavailable?: boolean;
   onSwitchPage?: (pageId: string) => void;
   onDisconnect: () => void;
   workspaceSlug: string;
@@ -809,6 +829,18 @@ function PlatformCard({
                       />
                     )}
                 </div>
+              ) : unavailable ? (
+                // A button that can only fail is worse than no button. This
+                // network publishes solely through Ayrshare, which is off.
+                <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+                  <Circle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                  <p className="text-xs text-amber-600 dark:text-amber-400">
+                    {platform.label} isn&apos;t available at the moment — it
+                    publishes through a provider that&apos;s currently
+                    unavailable. Facebook, Instagram, Bluesky, Reddit and
+                    Pinterest connect directly and are unaffected.
+                  </p>
+                </div>
               ) : readyToConnect ? (
                 <Button
                   onClick={onConnect}
@@ -931,6 +963,7 @@ function WizardPlatformStep({
   onConnect,
   onNext,
   onSkipPlatform,
+  unavailable,
 }: {
   platform: PlatformGuide;
   checklist: Record<string, boolean>;
@@ -942,6 +975,8 @@ function WizardPlatformStep({
   onConnect: () => void;
   onNext: () => void;
   onSkipPlatform: () => void;
+  /** Ayrshare unreachable — offer Skip rather than a button that can't work. */
+  unavailable?: boolean;
 }) {
   const requiredItems = platform.checklist.filter((i) => i.required);
   const allRequiredChecked = requiredItems.every((i) => checklist[i.key]);
@@ -1088,16 +1123,29 @@ function WizardPlatformStep({
               PrettyMuch never sees your password — it&apos;s handled securely.
             </p>
           </div>
-          <Button
-            onClick={onConnect}
-            disabled={isConnecting}
-            className="w-full bg-primary hover:bg-primary/90 text-white gap-2"
-          >
-            <ExternalLink className="w-4 h-4" />
-            {isConnecting
-              ? "Opening secure window…"
-              : `Connect ${platform.label}`}
-          </Button>
+          {unavailable ? (
+            // Don't march someone through a wizard step that dead-ends. Tell
+            // them, and let them move on to a network that does work.
+            <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+              <Circle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                {platform.label} isn&apos;t available at the moment. Skip it for
+                now — Facebook, Instagram, Bluesky, Reddit and Pinterest connect
+                directly and are unaffected.
+              </p>
+            </div>
+          ) : (
+            <Button
+              onClick={onConnect}
+              disabled={isConnecting}
+              className="w-full bg-primary hover:bg-primary/90 text-white gap-2"
+            >
+              <ExternalLink className="w-4 h-4" />
+              {isConnecting
+                ? "Opening secure window…"
+                : `Connect ${platform.label}`}
+            </Button>
+          )}
         </div>
       ) : (
         <div className="flex items-center gap-2 p-3 rounded-lg bg-secondary border border-border">
@@ -1152,6 +1200,9 @@ export default function SocialSettingsPage() {
   const [checklist, setChecklist] = useState<ChecklistState>({});
 
   // Wizard state
+  // True once we know Ayrshare can't be reached — drives the "unavailable"
+  // treatment on the eight networks that only publish through it.
+  const [ayrshareDown, setAyrshareDown] = useState(false);
   const [wizardMode, setWizardMode] = useState<"picker" | "platform" | null>(
     null,
   );
@@ -1290,7 +1341,16 @@ export default function SocialSettingsPage() {
       const data = (await res.json().catch(() => ({}))) as {
         connectUrl?: string;
         error?: string;
+        ayrshareDisabled?: boolean;
       };
+      if (data.ayrshareDisabled) {
+        linkTab?.close();
+        setAyrshareDown(true);
+        toast.error(
+          "X, LinkedIn, TikTok and YouTube aren't available right now. Facebook, Instagram, Bluesky, Reddit and Pinterest connect directly and still work.",
+        );
+        return;
+      }
       if (!res.ok || !data.connectUrl)
         throw new Error(data.error ?? "Could not start the connection");
       if (linkTab) linkTab.location.href = data.connectUrl;
@@ -1298,8 +1358,17 @@ export default function SocialSettingsPage() {
     } catch (err) {
       linkTab?.close();
       const msg = (err as Error).message ?? "";
+      // Ayrshare switched off (or its account suspended — code 276) is not a
+      // transient failure the user can retry past. Say what still works
+      // instead of inviting them to try a dead button again.
+      if (/switched off|suspended|\b276\b/i.test(msg)) {
+        setAyrshareDown(true);
+        toast.error(
+          "X, LinkedIn, TikTok and YouTube aren't available right now. Facebook, Instagram, Bluesky, Reddit and Pinterest connect directly and still work.",
+        );
+      }
       // Ayrshare returns 403 code 167 when the account isn't on the Business Plan.
-      if (/business plan|\b167\b/i.test(msg)) {
+      else if (/business plan|\b167\b/i.test(msg)) {
         setNeedsUpgrade(true);
         toast.error(
           "Connecting more networks needs the Ayrshare Business Plan — Facebook & Instagram are free and ready.",
@@ -1455,6 +1524,9 @@ export default function SocialSettingsPage() {
                     handleCheckItem(wizardCurrentPlatformId, key, value)
                   }
                   onConnect={() => handleConnect(wizardCurrentPlatformId)}
+                  unavailable={
+                    ayrshareDown && AYRSHARE_ONLY.has(wizardCurrentPlatformId)
+                  }
                   onNext={handleWizardNext}
                   onSkipPlatform={handleWizardNext}
                 />
@@ -1713,6 +1785,7 @@ export default function SocialSettingsPage() {
                 handleCheckItem(platform.id, key, value)
               }
               onConnect={() => handleConnect(platform.id)}
+              unavailable={ayrshareDown && AYRSHARE_ONLY.has(platform.id)}
               connecting={connecting === platform.id}
               onSwitchPage={
                 platform.id === "facebook" ? switchFbPage : undefined

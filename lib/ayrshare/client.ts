@@ -1,3 +1,5 @@
+import { assertAyrshareEnabled } from "./enabled";
+
 const AYRSHARE_BASE = 'https://app.ayrshare.com/api';
 
 export interface AyrsharePostPayload {
@@ -19,6 +21,7 @@ export async function ayrsharePost(
   profileKey: string,
   payload: AyrsharePostPayload,
 ): Promise<AyrsharePostResult> {
+  assertAyrshareEnabled("posting");
   const res = await fetch(`${AYRSHARE_BASE}/post`, {
     method: 'POST',
     headers: {
@@ -52,6 +55,7 @@ export async function ayrsharePostAnalytics(
   profileKey: string,
   ayrsharePostId: string,
 ): Promise<AyrsharePostAnalytics> {
+  assertAyrshareEnabled("fetching post analytics");
   const res = await fetch(`${AYRSHARE_BASE}/analytics/post`, {
     method: 'POST',
     headers: {
@@ -76,6 +80,7 @@ export async function ayrsharePostAnalytics(
 }
 
 export async function ayrshareGetProfiles(profileKey: string): Promise<unknown> {
+  assertAyrshareEnabled("reading connected accounts");
   const res = await fetch(`${AYRSHARE_BASE}/user`, {
     headers: {
       Authorization: `Bearer ${process.env.AYRSHARE_API_KEY}`,

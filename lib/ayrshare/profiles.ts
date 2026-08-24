@@ -1,3 +1,5 @@
+import { assertAyrshareEnabled } from "./enabled";
+
 const AYRSHARE_BASE = "https://app.ayrshare.com/api";
 
 interface AyrshareProfileResponse {
@@ -16,6 +18,7 @@ interface AyrshareSocialConnectResponse {
 export async function createAyrshareProfile(
   title: string,
 ): Promise<{ profileKey: string }> {
+  assertAyrshareEnabled("creating a publishing profile");
   const res = await fetch(`${AYRSHARE_BASE}/profiles`, {
     method: "POST",
     headers: {
@@ -43,6 +46,7 @@ export async function unlinkAyrshareSocial(
   profileKey: string,
   platform: string,
 ): Promise<void> {
+  assertAyrshareEnabled("disconnecting an account");
   const res = await fetch(`${AYRSHARE_BASE}/profiles/social`, {
     method: "DELETE",
     headers: {
@@ -61,6 +65,7 @@ export async function unlinkAyrshareSocial(
 export async function getConnectedPlatforms(
   profileKey: string,
 ): Promise<string[]> {
+  assertAyrshareEnabled("reading connected accounts");
   const res = await fetch(`${AYRSHARE_BASE}/user`, {
     headers: {
       Authorization: `Bearer ${process.env.AYRSHARE_API_KEY}`,
@@ -81,6 +86,7 @@ export async function generateSocialConnectUrl(
   // never sit stranded on the hosted linkage screen.
   redirect?: string,
 ): Promise<string> {
+  assertAyrshareEnabled("connecting an account");
   const domain = process.env.AYRSHARE_DOMAIN;
   // PEM stored in env with literal \n — restore real newlines.
   const privateKey = process.env.AYRSHARE_PRIVATE_KEY?.replace(/\\n/g, "\n");
