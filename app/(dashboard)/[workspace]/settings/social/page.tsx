@@ -68,7 +68,6 @@ interface PlatformGuide {
 const AYRSHARE_ONLY = new Set([
   "x",
   "twitter",
-  "linkedin",
   "tiktok",
   "youtube",
   "threads",
@@ -1316,8 +1315,14 @@ export default function SocialSettingsPage() {
       return;
     }
 
-    // Reddit and Pinterest: our own OAuth apps (CLAUDE.md §7d direct backend).
-    if (platformId === "reddit" || platformId === "pinterest") {
+    // Our own OAuth apps (CLAUDE.md §7d direct backend). LinkedIn joined these
+    // when Ayrshare stopped being an option — member feed only, see
+    // lib/social/direct/linkedin.ts.
+    if (
+      platformId === "reddit" ||
+      platformId === "pinterest" ||
+      platformId === "linkedin"
+    ) {
       // eslint-disable-next-line react-hooks/immutability -- intentional full-page navigation to start OAuth
       window.location.href = `/api/social/connect/${platformId}?workspace=${workspaceSlug}`;
       return;

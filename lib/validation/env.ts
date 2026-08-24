@@ -25,6 +25,11 @@ const envSchema = z.object({
   // all — the user supplies an app password — which is why it has no entry.
   REDDIT_CLIENT_ID: z.string().min(1).optional(),
   REDDIT_CLIENT_SECRET: z.string().min(1).optional(),
+  // Optional like the rest: a deployment without a LinkedIn app simply can't
+  // offer LinkedIn, and the connect route answers 503 saying so rather than
+  // failing boot for everyone who doesn't use it.
+  LINKEDIN_CLIENT_ID: z.string().min(1).optional(),
+  LINKEDIN_CLIENT_SECRET: z.string().min(1).optional(),
   PINTEREST_APP_ID: z.string().min(1).optional(),
   PINTEREST_APP_SECRET: z.string().min(1).optional(),
   ANTHROPIC_API_KEY: z.string().min(1),

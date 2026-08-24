@@ -291,13 +291,42 @@ the "Type a prompt above to enable Generate" hint disappears and the "Do the
 rest for me" card appears mid-generation. A click aimed at one control can
 land on another. (Also noted in #11.)
 
-### 🔴 18. `video-segments.test.ts` flakes under load
+### ✅ 18. `video-segments.test.ts` flakes under load *(fixed)*
 
 Passes 2/2 in isolation and in a quiet full run, but timed out at 5000ms
 during a full run on a loaded machine (56s vs the usual ~20s). It does real
 async work against a 5s default timeout, so it will flake in CI on a busy
 runner and read as a regression that isn't one. Needs an explicit longer
-timeout or fake timers.
+timeout or fake timers. **Fixed:** both cases now carry an explicit 20s
+timeout. It had already masked real signal twice — the worst kind of flake,
+because it trains you to ignore red.
+
+### 🟡 20. LinkedIn moved off Ayrshare — TikTok and YouTube still to do
+
+Of the six networks that actually matter for marketing, four were already
+direct: **Facebook, Instagram** (Meta Graph) and **Reddit, Pinterest** (own
+OAuth apps). **LinkedIn** is now built the same way — `lib/social/direct/
+linkedin.ts`, connect + callback routes, dispatcher entry, UI routing.
+
+**Needs before it works:** a LinkedIn app with *Sign In with LinkedIn using
+OpenID Connect* + *Share on LinkedIn*, redirect
+`{APP_URL}/api/social/callback/linkedin`, and `LINKEDIN_CLIENT_ID` /
+`LINKEDIN_CLIENT_SECRET` in Railway. Until those exist the connect route
+answers 503 saying so.
+
+**Honest limits, both deliberate:**
+- **Member feed only.** Company Pages need LinkedIn's Community Management
+  review. Adding them later is a scope change plus an organization URN.
+- **No video.** LinkedIn video uses a separate upload flow with its own
+  processing wait; it refuses rather than posting the caption alone.
+- **Not verified against the live API** — every other adapter here was written
+  against a working developer app and this one couldn't be. A 400 from
+  `/rest/posts` or `/rest/images` means check that file first.
+
+**Still on Ayrshare: TikTok and YouTube.** Both gate posting behind platform
+review — TikTok's Content Posting API needs an audit for direct post, YouTube's
+`youtube.upload` is a restricted Google scope needing verification. Code is
+buildable now but neither can go live without that approval.
 
 ### 🔴 12. Compositor ops not folded into the three-pane rail
 

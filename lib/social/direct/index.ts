@@ -2,19 +2,32 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { publishToBluesky } from "./bluesky";
 import { publishToReddit, refreshRedditToken } from "./reddit";
 import { publishToPinterest, refreshPinterestToken } from "./pinterest";
+import {
+  publishToLinkedIn,
+  refreshLinkedInToken,
+} from "./linkedin";
 
 /**
  * The "direct" publishing backend: networks we reach with our own code and our
  * own (free, review-free) developer apps, as opposed to the Meta Graph backend
  * (lib/social/meta.ts) or the Ayrshare backend (lib/ayrshare/*).
  *
- * These three were chosen because none of them gates posting behind a platform
- * app review: Bluesky needs no developer app at all, Reddit and Pinterest need
- * one that is free and self-serve. X / LinkedIn / TikTok / YouTube stay on
- * Ayrshare precisely because their access is the part that costs money and
- * calendar time.
+ * Bluesky, Reddit and Pinterest were first because none of them gates posting
+ * behind a platform app review: Bluesky needs no developer app at all, and the
+ * other two are free and self-serve.
+ *
+ * LinkedIn joined them once Ayrshare stopped being an option. It is NOT
+ * review-free — posting to a Company Page needs LinkedIn's Community
+ * Management review — so this covers the member's own feed, which the standard
+ * `w_member_social` scope allows. That is the honest boundary: see
+ * publishToLinkedIn.
  */
-export const DIRECT_PLATFORMS = ["bluesky", "reddit", "pinterest"] as const;
+export const DIRECT_PLATFORMS = [
+  "bluesky",
+  "reddit",
+  "pinterest",
+  "linkedin",
+] as const;
 
 export type DirectPlatform = (typeof DIRECT_PLATFORMS)[number];
 
@@ -29,6 +42,10 @@ const VIDEO_CAPABLE: Record<DirectPlatform, boolean> = {
   bluesky: true,
   reddit: true, // link post; Reddit unfurls the MP4 URL
   pinterest: false,
+  // LinkedIn video uses a separate initializeUpload flow with its own
+  // processing wait, which isn't built — refuse rather than post the caption
+  // alone and call it a success.
+  linkedin: false,
 };
 
 // Snake_case on purpose: this is the social_profiles row as Supabase returns
@@ -99,7 +116,9 @@ async function freshAccessToken(
   const tokens =
     platform === "reddit"
       ? await refreshRedditToken(profile.refresh_token)
-      : await refreshPinterestToken(profile.refresh_token);
+      : platform === "linkedin"
+        ? await refreshLinkedInToken(profile.refresh_token)
+        : await refreshPinterestToken(profile.refresh_token);
 
   const admin = createSupabaseAdminClient();
   await admin
@@ -161,6 +180,21 @@ export async function publishDirect(
     // than the whole multi-paragraph caption with its hashtag block.
     const title = caption.split("\n")[0].trim() || caption.trim();
     return publishToReddit({ accessToken, subreddit, title, mediaUrl });
+  }
+
+  if (platform === "linkedin") {
+    // Posts are authored as the member URN captured at connect time.
+    if (!profile.platform_account_id) {
+      throw new Error("Reconnect LinkedIn in Settings → Social.");
+    }
+    const { id } = await publishToLinkedIn({
+      accessToken,
+      memberId: profile.platform_account_id,
+      mediaUrl,
+      isVideo,
+      caption,
+    });
+    return id;
   }
 
   const boardId = params.boardId ?? profile.metadata?.default_board_id;

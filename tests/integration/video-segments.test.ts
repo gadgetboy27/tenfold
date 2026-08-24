@@ -186,6 +186,11 @@ function segPayload(reqId: string, ok: boolean) {
   });
 }
 
+// Explicit 20s timeouts: both cases drive the real webhook handler end to end
+// through mocks and comfortably exceed vitest's 5s default on a loaded machine.
+// They passed in isolation and failed in full runs, which reads as a regression
+// when it is only contention — the worst kind of flake, because it trains you
+// to ignore red.
 describe("real-30s two-segment webhook", () => {
   beforeEach(() => {
     s = {
@@ -215,7 +220,7 @@ describe("real-30s two-segment webhook", () => {
     expect(s.videoAssets).toBe(1);
     expect(s.refunds).toBe(0);
     expect(s.jobStatus).toBe("completed");
-  });
+  }, 20_000);
 
   it("refunds when a segment fails (a partial 30s is unusable)", async () => {
     const { POST } = await import("@/app/api/webhooks/fal/route");
@@ -226,5 +231,5 @@ describe("real-30s two-segment webhook", () => {
     expect(s.videoAssets).toBe(0);
     expect(s.refunds).toBe(1);
     expect(s.jobStatus).toBe("failed");
-  });
+  }, 20_000);
 });

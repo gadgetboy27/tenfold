@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 /**
- * The direct publishing backend talks to three third-party APIs we can't hit in
+ * The direct publishing backend talks to third-party APIs we can't hit in
  * a test, so what's asserted here is the logic that sits *around* those calls —
  * the parts that would otherwise fail silently in production: routing a
  * platform to the right backend, refusing to post video where it can't work,
@@ -56,17 +56,64 @@ afterEach(() => {
 });
 
 describe("platform routing", () => {
-  it("claims exactly the three no-review networks", () => {
-    expect([...DIRECT_PLATFORMS]).toEqual(["bluesky", "reddit", "pinterest"]);
+  it("claims exactly the networks it has an implementation for", () => {
+    // LinkedIn joined the original three when Ayrshare's account was suspended
+    // and stopped being an option. It is the one entry here that is NOT
+    // review-free — member-feed posting works on the standard w_member_social
+    // scope; Company Pages would need LinkedIn's Community Management review.
+    expect([...DIRECT_PLATFORMS]).toEqual([
+      "bluesky",
+      "reddit",
+      "pinterest",
+      "linkedin",
+    ]);
   });
 
-  it("does not claim networks that still need Ayrshare", () => {
-    // A false positive here would route X/LinkedIn/TikTok into a backend with
-    // no implementation for them, turning a working publish into a 500.
-    for (const p of ["twitter", "linkedin", "tiktok", "youtube", "facebook"]) {
+  it("does not claim networks with no implementation behind them", () => {
+    // A false positive here routes a platform into this backend with nothing
+    // to handle it, turning a working publish into a 500. Facebook and
+    // Instagram are absent on purpose — they publish through the Meta Graph
+    // backend, not this one.
+    for (const p of ["twitter", "x", "tiktok", "youtube", "facebook"]) {
       expect(isDirectPlatform(p)).toBe(false);
     }
     for (const p of DIRECT_PLATFORMS) expect(isDirectPlatform(p)).toBe(true);
+  });
+
+  it("refuses LinkedIn without the member URN captured at connect", () => {
+    // Every post is authored as urn:li:person:<id>. A profile missing it would
+    // otherwise reach LinkedIn and be rejected with an opaque 400.
+    return expect(
+      publishDirect({
+        platform: "linkedin",
+        profile: profile({
+          platform: "linkedin",
+          platform_account_id: null,
+          metadata: null,
+        }),
+        workspaceId: "ws1",
+        mediaUrl: "https://cdn.example/a.jpg",
+        isVideo: false,
+        caption: "hello",
+      }),
+    ).rejects.toThrow(/reconnect linkedin/i);
+  });
+
+  it("refuses LinkedIn video rather than posting the caption alone", () => {
+    return expect(
+      publishDirect({
+        platform: "linkedin",
+        profile: profile({
+          platform: "linkedin",
+          platform_account_id: "abc123",
+          metadata: null,
+        }),
+        workspaceId: "ws1",
+        mediaUrl: "https://cdn.example/clip.mp4",
+        isVideo: true,
+        caption: "hello",
+      }),
+    ).rejects.toThrow(/can't post video/i);
   });
 });
 
