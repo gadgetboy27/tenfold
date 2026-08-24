@@ -27,6 +27,57 @@ interface FalResult {
   requestId: string;
 }
 
+/**
+ * Claim one fal request for whichever path gets there first.
+ *
+ * The webhook and this poller both save a request's assets, and both used to
+ * do it. The webhook is idempotent via the unique index on
+ * `webhook_logs (source, event_id)`; this poller only ever checked a SNAPSHOT
+ * of already-saved assets taken before it started, then spent ten-plus seconds
+ * downloading and re-uploading images. Every webhook that landed inside that
+ * window was invisible to it, so it inserted a second copy anyway — which is
+ * how 8.5% of image requests ended up duplicated.
+ *
+ * A snapshot can't fix a race; a claim can. Both paths now compete for the
+ * same unique row BEFORE doing any work, so exactly one of them owns a given
+ * request. Losing the claim is the normal, expected outcome — not an error.
+ */
+export async function claimFalRequest(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  requestId: string,
+): Promise<boolean> {
+  const { error } = await admin.from("webhook_logs").insert({
+    source: "fal",
+    event_id: requestId,
+    payload: { claimed_by: CLAIM_MARKER },
+    processed: true,
+  });
+  if (!error) return true;
+  if (error.code === "23505") return false; // the webhook (or an earlier poll) owns it
+  // Anything else is unknown — refuse rather than risk double-saving.
+  return false;
+}
+
+/**
+ * Give a claim back when the work behind it failed, so the real webhook (or the
+ * next poll) can still deliver the image. Scoped to rows THIS module wrote —
+ * deleting a genuine webhook log would destroy the payload and the audit trail.
+ */
+export async function releaseFalRequest(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  requestId: string,
+): Promise<void> {
+  await admin
+    .from("webhook_logs")
+    .delete()
+    .eq("source", "fal")
+    .eq("event_id", requestId)
+    .eq("payload->>claimed_by", CLAIM_MARKER);
+}
+
+/** Marks a webhook_logs row as a poller claim rather than a real delivery. */
+const CLAIM_MARKER = "result-fetcher";
+
 export async function fetchAndProcessFalJob(job: StuckJob): Promise<boolean> {
   const admin = createSupabaseAdminClient();
 
@@ -72,6 +123,11 @@ export async function fetchAndProcessFalJob(job: StuckJob): Promise<boolean> {
   } catch {
     return false;
   }
+
+  // Claim before any work. If the webhook already owns this request it has
+  // saved (or is saving) the assets, and a second copy is not "acceptable" —
+  // it is the duplicate the user sees in their options grid.
+  if (!(await claimFalRequest(admin, job.fal_request_id))) return false;
 
   try {
     const result = (await fal.queue.result(modelId as FalModelKey, {
@@ -185,13 +241,15 @@ export async function fetchAndProcessFalJob(job: StuckJob): Promise<boolean> {
       await admin.from("assets").insert(assetInserts);
     }
 
-    // If the webhook already processed this job, assets may be duplicated — that's acceptable.
     await admin
       .from("creative_jobs")
       .update({ status: "completed", completed_at: new Date().toISOString() })
       .eq("id", job.id)
       .eq("status", "processing");
   } catch {
+    // Hand the claim back before retreating, or the webhook that arrives next
+    // would be turned away as a duplicate and the image lost for good.
+    await releaseFalRequest(admin, job.fal_request_id);
     // Revert job status so polling can retry
     await admin
       .from("creative_jobs")
@@ -217,6 +275,8 @@ async function fetchMultiImage(
     FAL_MODELS.image_generation ??
     "image_generation";
 
+  // A cheap pre-filter only — it is a SNAPSHOT and says nothing about what
+  // lands while the loop below is downloading. The claim is the real guard.
   const { data: existing } = await admin
     .from("assets")
     .select("metadata")
@@ -231,11 +291,20 @@ async function fetchMultiImage(
   const inserts: Record<string, unknown>[] = [];
   for (const d of directions) {
     if (!d.requestId || savedReqIds.has(d.requestId)) continue;
+    // Claimed per direction, not per job: each direction is its own fal
+    // request with its own webhook, so they are won and lost independently.
+    if (!(await claimFalRequest(admin, d.requestId))) continue;
+    let claimed = true;
     try {
       const status = await fal.queue.status(modelId, {
         requestId: d.requestId,
       });
-      if (status.status !== "COMPLETED") continue;
+      if (status.status !== "COMPLETED") {
+        // Not ready — give it back so the webhook isn't locked out.
+        await releaseFalRequest(admin, d.requestId);
+        claimed = false;
+        continue;
+      }
       const result = (await fal.queue.result(modelId as FalModelKey, {
         requestId: d.requestId,
       })) as FalResult;
@@ -270,7 +339,9 @@ async function fetchMultiImage(
         });
       }
     } catch {
-      // skip this direction; retry on the next poll
+      // skip this direction; retry on the next poll — but only after handing
+      // the claim back, or nothing can ever deliver it.
+      if (claimed) await releaseFalRequest(admin, d.requestId);
     }
   }
 
