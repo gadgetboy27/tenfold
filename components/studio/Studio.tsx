@@ -541,13 +541,19 @@ export function Studio({
   const poll = async (id: string) => {
     pollRef.current = true;
     let attempts = 0;
+    let landedCount = 0;
     while (pollRef.current && attempts < 80) {
       attempts++;
       await new Promise((r) => setTimeout(r, 1500));
       const elapsed = attempts * 1.5;
+      // Deliberately no denominator: how many options a run produces is the
+      // tier's `maxVariations`, not a fixed six, and the old hardcoded copy
+      // was already wrong about it. A count that only ever grows is honest.
       setStage(
-        [...STAGE_LABELS].reverse().find(([t]) => elapsed >= t)?.[1] ??
-          STAGE_LABELS[0][1],
+        landedCount > 0
+          ? `${landedCount} option${landedCount === 1 ? "" : "s"} ready — still rendering the rest…`
+          : ([...STAGE_LABELS].reverse().find(([t]) => elapsed >= t)?.[1] ??
+            STAGE_LABELS[0][1]),
       );
       const res = await api(`/api/campaigns/${id}`, { workspaceSlug });
       if (!res.ok) continue;
@@ -559,14 +565,25 @@ export function Studio({
           metadata?: { direction?: string; model?: string; hd?: boolean };
         }[];
       };
+
+      const imgs = camp.assets
+        .filter((a) => a.url && !a.metadata?.hd)
+        .map((a) => ({
+          id: a.id,
+          url: a.url,
+          label: a.metadata?.model ?? a.metadata?.direction ?? "",
+        }));
+
+      // Show each option the moment it lands, rather than holding the whole
+      // batch back until the last one finishes. This poll ALREADY had these
+      // images in hand every 1.5s — measured across production, the first
+      // result arrives at ~23s and the batch completes at ~45s, so waiting for
+      // `ready` meant ~22 seconds of staring at a spinner while finished work
+      // sat undisplayed. That dead air is where people leave.
+      if (imgs.length > 0) setAssets(imgs);
+      landedCount = imgs.length;
+
       if (camp.status === "ready") {
-        const imgs = camp.assets
-          .filter((a) => a.url && !a.metadata?.hd)
-          .map((a) => ({
-            id: a.id,
-            url: a.url,
-            label: a.metadata?.model ?? a.metadata?.direction ?? "",
-          }));
         setAssets(imgs);
         setGenerating(false);
         refreshBalance();
@@ -1441,6 +1458,12 @@ function StudioNav({
                 }`}
               />
               <span>{t.label}</span>
+              {/* "Made it" and "you could make it" must not be the same mark.
+                  They were both emerald, separated only by a pulse — so
+                  picking an anchor lit up Video, Caption, Compositor and
+                  Publish at once, indistinguishable from work already done,
+                  and you could not tell what was actually left to do. A solid
+                  filled dot means done; a hollow ring means available next. */}
               <span
                 className={`ml-auto h-1.5 w-1.5 rounded-full ${
                   t.done
@@ -1450,9 +1473,16 @@ function StudioNav({
                         ? "bg-pro"
                         : "bg-primary"
                       : justUnlocked
-                        ? "animate-pulse bg-emerald-500"
+                        ? "animate-pulse border border-emerald-500 bg-transparent"
                         : "bg-border"
                 }`}
+                title={
+                  t.done
+                    ? `${t.label} — done`
+                    : justUnlocked
+                      ? `${t.label} — ready for you`
+                      : undefined
+                }
               />
             </>
           );
@@ -1585,6 +1615,19 @@ function CockpitCreate({
 }) {
   const isCreate = section === "brief" || section === "images";
   const isVideo = section === "video";
+
+  // Picking an option is the hinge of the whole flow — and the panel telling
+  // you what to do next renders BELOW a grid of up to a dozen images, so on a
+  // normal screen choosing one appeared to do nothing at all. Scroll it into
+  // view rather than trusting the user to go looking for it.
+  const nextStepRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!anchorId) return;
+    nextStepRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+    });
+  }, [anchorId]);
   const hasResult = generating || assets.length > 0;
   const activeTool = tools.find((t) => t.id === section);
   const next: {
@@ -1894,7 +1937,7 @@ function CockpitCreate({
             <p className="max-w-[16rem] text-sm text-muted-foreground">
               {prompt.trim().length < 3
                 ? "Write a brief on the left, then hit Generate."
-                : "Ready when you are — hit Generate on the left and your six options land right here."}
+                : "Ready when you are — hit Generate on the left and your options land right here as they render."}
             </p>
           </div>
         ) : generating && assets.length === 0 ? (
@@ -1904,6 +1947,12 @@ function CockpitCreate({
           </div>
         ) : (
           <>
+            {generating && (
+              <div className="mb-3 flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2">
+                <Spinner size={14} />
+                <span className="text-xs text-muted-foreground">{stage}</span>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {assets.map((a) => (
                 <button
@@ -1937,7 +1986,10 @@ function CockpitCreate({
             </div>
 
             {anchorId && (
-              <div className="mt-auto rounded-xl border border-border bg-background p-3">
+              <div
+                ref={nextStepRef}
+                className="mt-auto rounded-xl border border-border bg-background p-3"
+              >
                 <p className="mb-2 text-xs font-medium text-muted-foreground">
                   What would you like to do next?
                 </p>

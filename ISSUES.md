@@ -58,7 +58,7 @@ you would check to catch a broken refund was the report that couldn't.
   counts as `errored`. `lib/jobs/sweep.ts`.
 - Commit `a72b23a`.
 
-### 🟡 4. A poller races the webhook and duplicates images
+### ✅ 4. A poller races the webhook and duplicates images
 
 **Found by walking a real campaign.** `GET /api/campaigns/[id]` — which Studio
 polls while generating — treats any job `processing` for >20s as stuck and calls
@@ -79,8 +79,9 @@ Every webhook landing inside that window was invisible to it.
   be turned away and the image lost. A snapshot can't fix a race; a claim can.
 - The old code carried the comment "assets may be duplicated — that's
   acceptable". At 8.5% it isn't.
+- Commit `22a7aae`.
 
-### 🟡 5. Captions invented a brand name and pre-filled the publish box
+### ✅ 5. Captions invented a brand name and pre-filled the publish box
 
 `businessName` was fed the campaign's **auto-generated project name**, so a
 caption read *"**Bright Canvas** hot sauce is small-batch for a reason"* —
@@ -97,24 +98,73 @@ from a real social account.
   workspace, not something a caption request gets to assert.
 - Deliberately does **not** fall back to `workspaces.name`/slug: those default
   to the signup handle, and publishing that is the same failure as inventing.
+- Commit `0cee5d5`.
+
+---
+
+## 2026-08-24 (later) — flow & engagement pass
+
+### ✅ 13. Finished images were held back behind a spinner
+
+The single biggest drop-off risk found. `poll()` fetched `camp.assets` every
+1.5s — it **already had the images** — but only called `setAssets` once
+`camp.status === "ready"`.
+
+- **Measured across production:** first result lands at **~23s**, the batch
+  completes at **~45s**. So there were **~22 seconds** where finished options
+  sat in hand, undisplayed, behind "Painting your options…". That dead air is
+  where people leave.
+- **Fix:** each option renders the moment it lands; a live line above the grid
+  reports `N options ready — still rendering the rest…` so a half-full grid
+  reads as progress, not as the final answer.
+- No denominator on purpose — see #7; the count is the tier's `maxVariations`
+  and the hardcoded "six" was already wrong.
+
+### ✅ 14. "Six options" was hardcoded and untrue
+
+Empty-state copy promised six. The real count is `ent.maxVariations` (this
+account submits **8**). Copy is now count-agnostic.
+
+### ✅ 15. Picking an option looked like it did nothing
+
+"What would you like to do next?" renders *below* a grid of up to a dozen
+images, so on a normal screen the one moment the flow hinges on — choosing
+your image — produced no visible change. Now scrolled into view on pick.
+
+### ✅ 6. Nav dots meant two different things in the same colour *(was open)*
+
+`done` and "now unlocked" were both emerald, separated only by a pulse. Picking
+an anchor lit up Video, Caption, Compositor and Publish at once,
+indistinguishable from work already done. Now: **solid dot = done**, **hollow
+ring = available next**, plus a title tooltip on each.
+
+### ⚪ Logos are NOT slow — that was this bug, not render time
+
+Worth recording because the assumption keeps resurfacing. Measured from
+`creative_jobs`: `logo_concepts` renders in **~17 seconds** (submit 13:54:44 →
+last webhook 13:55:01) and `logo_finalize` in **15.6s**. The only
+`logo_concepts` row showing 4567s is the job recovered by hand, not a render.
+
+Logos *felt* like they took forever because of #1 — they never completed at
+all, and the UI had no way to say so. The fix was correctness plus feedback,
+not speed. For reference, the genuinely slow jobs are video: `video_10s`
+median 91s, `video_15s` median **342s**.
 
 ---
 
 ## 🔴 Open
 
-### 🔴 6. Nav dots mean two different things in the same colour
+### 🔴 7. The image count doesn't agree with itself *(partly addressed by #14)*
 
 `done` is `bg-emerald-500`; "now unlocked" is `animate-pulse bg-emerald-500`.
 Identical hue, distinguished only by a pulse. Picking an anchor turns Video,
 Caption, Compositor and Publish green at once — indistinguishable from "you
 already made these". `Studio.tsx`, `justUnlocked`.
 
-### 🔴 7. The image count doesn't agree with itself
-
-The empty state promises "your **six** options"; the job submits **8**
-directions; **14** assets arrived (see #4). `expected_images: 8` also means
-`finalizeMultiImage` completes the job at 8 while more are still landing —
-which is why the strip counted 12, then 14, after it said "Completed".
+Copy no longer claims six, and #4 stopped the duplicates. Still open: the job
+submits `maxVariations` directions but `expected_images` lets
+`finalizeMultiImage` mark the job complete while more are still landing, so
+the strip count can still climb after it says "Completed".
 
 ### 🔴 8. The Publish screen has no preview
 
@@ -137,9 +187,8 @@ output nobody can publish.
 
 ### 🔴 11. Smaller UI friction (from the walkthrough)
 
-- Results grid is clipped — six tiles fill the pane, the rest are below the fold
-  with no indication, and the "what next?" panel after picking an anchor is
-  off-screen entirely.
+- Results grid is clipped — tiles fill the pane and the rest are below the fold
+  with no indication. (The "what next?" half of this is fixed — see #15.)
 - Layout jumps mid-wait: "Do the rest for me" appears *during* generation and
   shoves the prompt upward.
 - The placeholder prompt reads like real content ("A coffee roastery
