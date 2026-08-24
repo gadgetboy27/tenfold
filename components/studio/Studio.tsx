@@ -1987,7 +1987,7 @@ function CockpitCreate({
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(140px,1fr))]">
               {assets.map((a) => (
                 <button
                   key={a.id}
@@ -2830,7 +2830,8 @@ function ProjectsCanvas({
             </button>
           </div>
         ) : view === "grid" ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          // Container-driven, same reasoning as the Images tab below.
+          <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(160px,1fr))]">
             {list.map((p) => (
               <div
                 key={p.id}
@@ -2954,11 +2955,16 @@ function ProjectsCanvas({
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          // Auto-fill on the CONTAINER's width, not viewport breakpoints: this
+          // grid lives in the generation rail now, and `sm:`/`lg:` measure the
+          // window, so they kept sizing tiles for a full-width <main> that is
+          // no longer there. Fixed tile height keeps browsing compact — a wall
+          // of square tiles made scanning a long gallery mostly scrolling.
+          <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]">
             {images.map((a) => (
               <div
                 key={a.id}
-                className="group relative aspect-square overflow-hidden rounded-xl border border-border bg-card"
+                className="group relative h-[150px] overflow-hidden rounded-xl border border-border bg-card"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img

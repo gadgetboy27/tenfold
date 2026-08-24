@@ -214,7 +214,9 @@ export function GalleryPicker({
                   : "No images yet — generate some first, or upload a file."}
             </p>
           ) : (
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
+            // Container-driven: this modal is also opened from inside the
+            // generation rail, where viewport breakpoints misjudge width.
+            <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(120px,1fr))]">
               {shown.map((a) => (
                 <button
                   key={a.id}
