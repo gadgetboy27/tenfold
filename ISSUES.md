@@ -259,6 +259,38 @@ this surfaced), plus an explicit warning naming how many overlays will be
 dropped and pointing at video as the path that does composite. Better a screen
 that admits the limit than one that silently discards the user's work.
 
+### 🔴 19. An 83-credit auto-run started that I did not intend to trigger
+
+During the layers test, a full foreman run appeared on the **Sunlit Bloom**
+campaign — not the one being worked in — and spent **83 credits**:
+
+| stage | credits |
+| --- | --- |
+| image_generation | 12 |
+| video_10s | 62 |
+| music_generation | 8 |
+| script_generation | 1 |
+
+Run `95605974-…`, created `19:45:10`, now `awaiting_publish` — so it will NOT
+post anything on its own, and nothing was published.
+
+What is known: the only code path that creates a run is
+`POST /api/campaigns/run` with `confirm: true`, called from `AutoRunPanel`'s
+`start()` behind an explicit button. `AutoRunPanel` has no auto-start on mount,
+and `advanceRunForJob` only advances a run that already exists. So this should
+have required a deliberate click on "Do the rest for me" → confirm.
+
+I cannot attribute it to a click I intended to make, and I was not interacting
+with the browser at 19:45. Either a click landed on the confirm button as the
+layout shifted, or something else can start a run. **Worth finding out**: a
+flow that can spend 83 credits — over half a Creator month's allowance — with
+no clear user intent is exactly the complaint that loses an account.
+
+Related and probably contributing: the Generate button moves vertically when
+the "Type a prompt above to enable Generate" hint disappears and the "Do the
+rest for me" card appears mid-generation. A click aimed at one control can
+land on another. (Also noted in #11.)
+
 ### 🔴 18. `video-segments.test.ts` flakes under load
 
 Passes 2/2 in isolation and in a quiet full run, but timed out at 5000ms
