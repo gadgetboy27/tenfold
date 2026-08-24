@@ -507,10 +507,20 @@ export function Studio({
         campaignId?: string;
         error?: string;
         issues?: string[];
+        modelSwitchedForText?: string;
       };
       if (!res.ok || !data.campaignId) {
         throw new Error(
           data.issues?.join(" — ") ?? data.error ?? "Couldn't start generation",
+        );
+      }
+      // Say it out loud. The server switches models when a brief will contain
+      // lettering, and a look that changes between runs with no explanation is
+      // worse than the garbled text it's avoiding.
+      if (data.modelSwitchedForText) {
+        toast(
+          `Your brief has text in it — using ${data.modelSwitchedForText}, which renders lettering properly.`,
+          { icon: "✍️" },
         );
       }
       setCampaignId(data.campaignId);

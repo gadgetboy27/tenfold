@@ -6,13 +6,13 @@ import { debitCreditsAmount } from "@/lib/credits/debit";
 import { refundCredits } from "@/lib/credits/refund";
 import { enqueueWithFallback } from "@/lib/fal/queue";
 import {
-  getImageModel,
   imageFallbackEndpoints,
   VARIETY_IMAGE_MODELS,
   imageInputFor,
 } from "@/lib/fal/models";
 import { CREDIT_COSTS } from "@/lib/credits/costs";
 import { validatePrompt } from "@/lib/fal/prompt-validator";
+import { resolveImageModel } from "@/lib/fal/text-in-image";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { v4 as uuidv4 } from "uuid";
 import { errorMessage } from "@/lib/api/error-message";
@@ -230,7 +230,18 @@ export async function POST(req: Request) {
 
     // Resolve the chosen image model (fal gateway). Premium models are gated to
     // paid tiers — reject before touching credits.
-    const imageModel = getImageModel(body.model);
+    //
+    // With no explicit choice, a brief that will produce lettering is routed to
+    // a model that can actually spell — FLUX is the better photographic model
+    // but renders text as garbage ("AUNCEAAN FLEANCE" on a hot-sauce label),
+    // which is unpublishable for a tool that sells brand assets. An explicit
+    // pick is always honoured. See lib/fal/text-in-image.ts.
+    const resolved = resolveImageModel({
+      requested: body.model,
+      prompt: body.prompt ?? "",
+      isPro: ent.isPro,
+    });
+    const imageModel = resolved.model;
     if (imageModel.proOnly && !ent.isPro) {
       return NextResponse.json(
         {
@@ -456,6 +467,11 @@ export async function POST(req: Request) {
         status: "generating",
         promptRefined,
         effectivePrompt,
+        // So the UI can SAY it switched. Silently changing the model would
+        // leave a user wondering why the look changed between runs.
+        modelSwitchedForText: resolved.switchedForText
+          ? imageModel.label
+          : undefined,
         directions: submitted.map((s) => s.label),
       },
       { status: 201 },

@@ -24,6 +24,7 @@ import {
 import { api } from "@/lib/api";
 import { PLATFORM_FORMATS, type PlatformId } from "@/lib/composition/formats";
 import { PLATFORM_GUIDE } from "@/lib/social/caption-guide";
+import { thumbUrl } from "@/lib/images/thumb";
 import { InfoHint } from "@/components/ui/info-hint";
 import { platformDefaults } from "@/lib/social/platform-defaults";
 
@@ -650,8 +651,52 @@ export function PublishCanvas({
         )}
       </div>
 
-      {/* RIGHT: caption, hashtags, schedule, publish */}
+      {/* RIGHT: what's going out, caption, hashtags, schedule, publish */}
       <div className="flex min-h-0 flex-col gap-4 overflow-y-auto rounded-2xl border border-border bg-card p-4">
+        {/* This screen had NO preview at all: you were one click from posting
+            to real accounts and the thing being posted appeared nowhere on it.
+            Shows whichever asset `target` will actually publish, so the picker
+            above and this stay in step. */}
+        {(target === "video" ? videoUrl : workingImage) && (
+          <div className="flex gap-3 rounded-xl border border-border bg-background p-3">
+            <div className="h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-card">
+              {target === "video" && videoUrl ? (
+                <video
+                  src={videoUrl}
+                  className="h-full w-full object-cover"
+                  muted
+                  loop
+                  playsInline
+                  autoPlay
+                />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={thumbUrl(workingImage ?? "", { width: 200 })}
+                  alt="What will be published"
+                  className="h-full w-full object-cover"
+                />
+              )}
+            </div>
+            <div className="flex min-w-0 flex-col justify-center gap-1">
+              <p className="text-xs font-medium">
+                {target === "video" ? "Publishing this video" : "Publishing this image"}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                Goes out to every selected account with the caption below.
+              </p>
+              <a
+                href={(target === "video" ? videoUrl : workingImage) ?? "#"}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-fit text-[11px] text-primary hover:underline"
+              >
+                View full size
+              </a>
+            </div>
+          </div>
+        )}
+
         {approvalStatus && approvalStatus !== "approved" && (
           <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
             <span className="flex items-center gap-1.5">

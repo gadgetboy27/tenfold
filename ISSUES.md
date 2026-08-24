@@ -166,24 +166,47 @@ submits `maxVariations` directions but `expected_images` lets
 `finalizeMultiImage` mark the job complete while more are still landing, so
 the strip count can still climb after it says "Completed".
 
-### 🔴 8. The Publish screen has no preview
+### ✅ 8. The Publish screen has no preview *(fixed)*
 
-You are one click from posting an ad and the image appears nowhere on that
-screen. Header also reads "Ready — publish" (green) while the button reads
-"Publish · 0 platforms" and is disabled.
+You were one click from posting to real accounts and the thing being posted
+appeared nowhere on the screen. A preview now sits at the top of the publish
+column, showing whichever asset `target` will actually send (video or image),
+so the target picker and the preview stay in step, plus a "view full size"
+link.
+
+Still open, same screen: the header reads "Ready — publish" (green) while the
+button reads "Publish · 0 platforms" and is disabled — contradictory signals.
 
 ### 🔴 9. Credit badge goes stale
 
 Image generation decrements it correctly (106411 → 106399). The caption's
 1 credit never updated the header — displayed 106399, actual 106398.
 
-### 🔴 10. Default image model mangles all text
+### ✅ 10. Default image model mangles all text *(fixed)*
 
 Every generated bottle label was gibberish — "AUNCEAAN FLEANCE", "RAME FOOUCH
-Côtlene HOTO". The default is Sharp/FLUX, which is weak at text. `IMAGE_MODELS`
-already has "Typeset" (Ideogram), described as best-in-class for in-image text,
-but it's Pro-gated. For any product with a label, the free default produces
-output nobody can publish.
+Côtlene HOTO" — from a brief that never mentioned text.
+
+The fix is deliberately NOT a new global default. FLUX is the better
+photographic model and most briefs contain no lettering; changing it for
+everyone would trade good output on the common case for good output on the
+rare one. Instead `lib/fal/text-in-image.ts` detects a brief that WILL produce
+lettering and routes that one job:
+
+- **Pro → "Typeset"** (Ideogram), best-in-class typography.
+- **Free → "Fusion"** (Nano Banana), which handles in-image text, is **not**
+  Pro-gated and costs the **same 12 credits**. No upgrade wall and no surprise
+  on the invoice, which is what makes it safe to do automatically — and the
+  free tier is exactly where unusable output loses a signup.
+- An **explicit** model choice is always honoured; auto-switching under someone
+  who deliberately picked a model overrides an instruction, which is worse than
+  the garbled text.
+- The switch is announced in the UI. A look that changes between runs with no
+  explanation is its own bug.
+
+Detection covers explicit signals (quoted phrases, "sign", "poster", "logo",
+"says"…) **and** packaged goods — nobody writes "with a legible label", they
+write "three bottles on weathered timber", and the model letters them anyway.
 
 ### 🔴 11. Smaller UI friction (from the walkthrough)
 
