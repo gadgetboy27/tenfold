@@ -18,6 +18,28 @@ export async function getWorkspaceBrandVoice(
 }
 
 /**
+ * The workspace's real brand name, or undefined when it hasn't set one.
+ *
+ * Deliberately returns undefined rather than falling back to `workspaces.name`
+ * or the slug: those are account identifiers (they default to the signup
+ * handle, e.g. "iamgadgetboy"), not brands, and writing one into a published
+ * caption is the same failure as inventing one. Callers pass the result
+ * straight to generateScript, which omits the brand entirely when it's absent.
+ */
+export async function getWorkspaceBrandName(
+  workspaceId: string,
+): Promise<string | undefined> {
+  const admin = createSupabaseAdminClient();
+  const { data } = await admin
+    .from("workspaces")
+    .select("brand_name")
+    .eq("id", workspaceId)
+    .maybeSingle();
+  const name = (data?.brand_name as string | null) ?? null;
+  return name && name.trim() ? name.trim() : undefined;
+}
+
+/**
  * Extract a concise, reusable brand-voice profile from a handful of the
  * business's best posts. The returned text is injected verbatim into the
  * caption/script generator so output sounds like the brand instead of generic

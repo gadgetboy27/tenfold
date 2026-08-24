@@ -8,7 +8,7 @@ import { CREDIT_COSTS, type CreditCostKey } from "@/lib/credits/costs";
 import { enqueueJob, enqueueFirstOf } from "@/lib/fal/queue";
 import { getMusicModel } from "@/lib/fal/models";
 import { generateScript } from "@/lib/claude/script";
-import { getWorkspaceBrandVoice } from "@/lib/claude/brand-voice";
+import { getWorkspaceBrandVoice, getWorkspaceBrandName } from "@/lib/claude/brand-voice";
 import { generateJingleLyrics } from "@/lib/claude/jingle";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { prepareVideoStartImage } from "@/lib/composition/video-image";
@@ -92,9 +92,17 @@ export async function POST(req: Request) {
     if (body.type === "script_generation") {
       try {
         const brandVoice = await getWorkspaceBrandVoice(session.workspaceId);
+        // Resolved SERVER-side from the workspace, never from the request body.
+        // Studio was sending the campaign's auto-generated project name here
+        // ("Bright Canvas"), which the model wrote into the copy as the
+        // customer's actual brand. A brand name is a property of the workspace,
+        // not something a caption request gets to assert — and when the
+        // workspace hasn't set one, we send nothing and generateScript tells
+        // the model not to invent one.
+        const brandName = await getWorkspaceBrandName(session.workspaceId);
         const result = await generateScript({
           imageDescription: (body.params.imageDescription as string) ?? "",
-          businessName: (body.params.businessName as string) ?? "",
+          businessName: brandName,
           platform: (body.params.platform as string) ?? "instagram",
           tone:
             (body.params.tone as "professional" | "casual" | "playful") ??

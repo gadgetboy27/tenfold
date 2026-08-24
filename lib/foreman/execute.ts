@@ -6,6 +6,7 @@ import { enqueueJob } from "@/lib/fal/queue";
 import { buildFalInput } from "@/lib/fal/build-input";
 import { FAL_MODELS } from "@/lib/fal/models";
 import { generateScript } from "@/lib/claude/script";
+import { getWorkspaceBrandName } from "@/lib/claude/brand-voice";
 import { CREDIT_COSTS, type CreditCostKey } from "@/lib/credits/costs";
 import {
   nextStage,
@@ -179,7 +180,9 @@ export async function runStage(
         // The campaign prompt describes the scene, which is what this field
         // means — see lib/claude/script.ts.
         imageDescription: ctx.prompt,
-        businessName: ctx.campaignName,
+        // NOT ctx.campaignName — that's the auto-generated project name, and
+        // the model writes it in as the customer's brand. See script.ts.
+        businessName: await getWorkspaceBrandName(run.workspace_id),
         platform: "instagram",
         tone: "professional",
         maxWords: 60,

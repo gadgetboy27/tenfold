@@ -6,7 +6,7 @@ import { debitCredits } from "@/lib/credits/debit";
 import { refundCredits } from "@/lib/credits/refund";
 import { CREDIT_COSTS } from "@/lib/credits/costs";
 import { generateScript } from "@/lib/claude/script";
-import { getWorkspaceBrandVoice } from "@/lib/claude/brand-voice";
+import { getWorkspaceBrandVoice, getWorkspaceBrandName } from "@/lib/claude/brand-voice";
 import { errorMessage } from "@/lib/api/error-message";
 
 // POST /api/assets/:id/comments/suggest — AI-draft a caption/comment for an asset.
@@ -62,10 +62,13 @@ export const POST = withWorkspace<{ id: string }>(
 
     try {
       const brandVoice = await getWorkspaceBrandVoice(session.workspaceId);
+      // The workspace SLUG is an account handle, not a brand — passing it made
+      // captions read "iamgadgetboy hot sauce". Omit unless a real one is set.
+      const brandName = await getWorkspaceBrandName(session.workspaceId);
       const result = await generateScript({
         imageDescription:
           (a.metadata?.prompt as string) ?? body.context ?? `a ${a.type}`,
-        businessName: session.workspaceSlug,
+        businessName: brandName,
         platform: body.platform ?? "instagram",
         tone: body.tone ?? "professional",
         maxWords: body.maxWords ?? 40,

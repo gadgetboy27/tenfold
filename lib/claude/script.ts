@@ -5,7 +5,15 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 interface GenerateScriptParams {
   imageDescription: string;
-  businessName: string;
+  /**
+   * The real brand this is for. OPTIONAL, and deliberately so: callers used to
+   * pass the campaign's own auto-generated project name ("Bright Canvas"),
+   * which the model then wrote into the copy as though it were the customer's
+   * brand — "Bright Canvas hot sauce is small-batch for a reason". That caption
+   * flows straight into the Publish box, so an invented name is one click from
+   * going out on a real account. Pass nothing rather than pass a guess.
+   */
+  businessName?: string;
   platform: string;
   tone: "professional" | "casual" | "playful";
   maxWords: number;
@@ -26,6 +34,12 @@ export interface ScriptResult {
 export async function generateScript(
   params: GenerateScriptParams,
 ): Promise<ScriptResult> {
+  // With no real brand name, say so rather than leaving the model to fill the
+  // gap — asked for a caption about a business with no name, it will invent one.
+  const businessLine = params.businessName?.trim()
+    ? `Business: ${params.businessName.trim()}\n`
+    : `The brand's name is NOT provided. Write the caption WITHOUT naming the brand — never invent, guess, or imply a business name.\n`;
+
   const directionLine = params.variationDirection
     ? `\nSpecial direction: ${params.variationDirection}`
     : "";
@@ -52,8 +66,7 @@ Craft rules:
       {
         role: "user",
         content: `Write ONE ${params.tone} caption for ${params.platform}.
-Business: ${params.businessName}
-What's in the image: ${params.imageDescription}
+${businessLine}What's in the image: ${params.imageDescription}
 Hard max: ${params.maxWords} words${directionLine}${voiceBlock}
 Return only the caption — no preamble, no quotes, no "Caption:" label, no options.`,
       },
