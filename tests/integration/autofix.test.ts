@@ -48,9 +48,20 @@ const admin = {
       return makeBuilder({ data: campaignRow, error: null });
     if (table === "creative_jobs")
       return makeBuilder({ data: null, error: jobInsertError });
+    // refundCredits() resolves (workspace, cost) from the job's own spend row.
+    // A job that was charged has one; if the debit never landed there is
+    // nothing to refund, and the refund must decline rather than mint credits.
+    if (table === "credit_transactions")
+      return makeBuilder({
+        data:
+          ledger.debits > 0
+            ? { workspace_id: "ws-1", amount: -COST, description: "autofix job" }
+            : null,
+        error: null,
+      });
     return makeBuilder({ data: null, error: null });
   },
-  rpc(name: string) {
+  rpc(name: string, args?: Record<string, unknown>) {
     if (name === "debit_credits") {
       if (ledger.balance < COST) {
         return Promise.resolve({
@@ -70,10 +81,12 @@ const admin = {
       });
     }
     if (name === "refund_credits") {
-      ledger.balance += COST;
+      // Credit back exactly what the caller asked for — a refund that passed
+      // the wrong p_cost (or a negative one) must not net out to zero here.
+      ledger.balance += Number(args?.p_cost ?? 0);
       ledger.refunds += 1;
       return Promise.resolve({
-        data: { success: true, balance: ledger.balance },
+        data: [{ success: true, balance: ledger.balance }],
         error: null,
       });
     }

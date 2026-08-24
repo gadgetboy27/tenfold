@@ -62,6 +62,18 @@ function makeQuery(table: string) {
       };
     if (table === "webhook_logs")
       return { count: s.loggedWebhooks.size, data: [], error: null };
+    // refundCredits() resolves (workspace, cost) from the job's own spend row,
+    // so a job that was charged must have one here or the refund correctly
+    // refuses to fire.
+    if (table === "credit_transactions" && filters.type === "spend")
+      return {
+        data: {
+          workspace_id: "ws-1",
+          amount: -jobBase.credits_charged,
+          description: "video_30s job",
+        },
+        error: null,
+      };
     return { data: [], count: 0, error: null };
   };
 
@@ -115,6 +127,7 @@ function makeQuery(table: string) {
   q.in = () => q;
   q.order = () => q;
   q.single = () => Promise.resolve(read());
+  q.maybeSingle = () => Promise.resolve(read());
   q.then = (r: (v: unknown) => unknown) => {
     if (op === "update") return r(applyUpdate());
     if (op === "delete" || op === "insert") return r({ error: null });
@@ -129,7 +142,7 @@ const admin = {
     if (name === "refund_credits") {
       s.refunds += 1;
       return Promise.resolve({
-        data: { success: true, balance: 100 },
+        data: [{ success: true, balance: 100 }],
         error: null,
       });
     }
