@@ -214,7 +214,12 @@ export async function POST(req: Request) {
     }
     const campaignId = (campaign as { id: string }).id;
 
-    await admin.from("creative_jobs").insert({
+    // Refund before bailing. The credits are already debited, and with no job
+    // row nothing downstream can give them back — refundCredits keys off the
+    // job, and the webhook that refunds a failure never fires for a job that
+    // was never enqueued. Silently swallowing this error is how the charge
+    // vanishes. (A bad campaignId tripping the FK is the likeliest cause.)
+    const { error: jobErr } = await admin.from("creative_jobs").insert({
       id: jobId,
       campaign_id: campaignId,
       workspace_id: session.workspaceId,
@@ -222,6 +227,10 @@ export async function POST(req: Request) {
       status: "queued",
       credits_charged: 8,
     });
+    if (jobErr) {
+      await refundCredits(jobId);
+      throw new Error(jobErr.message);
+    }
 
     try {
       const signals = extractBrandSignals(html);

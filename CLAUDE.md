@@ -26,7 +26,14 @@ At each step the user can fine-tune, add text overlays, and apply their brand ki
 The final composed asset publishes directly to 1–13 social platforms via Ayrshare.
 
 The business model is **credits + subscriptions**. Every generative action costs credits
-at a 10× markup on raw inference cost. Subscriptions bundle credits at a discount.
+at a markup on raw inference cost. Subscriptions bundle credits at a discount.
+
+**The markup is not uniform, and cannot be.** Where inference is nearly free the
+margin is huge (script ~25×, music ~20×). Video is the opposite: Kling bills
+~$0.095/second, so video is priced at **~3×** and always will be. 10× on a 10s
+clip works out to 188 credits — one video a month on Creator — or Creator at
+NZD 218 instead of 29. The cheap actions fund video; video cannot fund itself.
+Check the real numbers with `lib/costs/rates.ts`, never by assuming a multiple.
 
 ---
 
@@ -118,7 +125,18 @@ sketched.
 
 `lib/credits/costs.ts` is the single source of truth — never hardcode a cost
 elsewhere; import `CREDIT_COSTS`. Read that file for current values rather
-than a copy here that can drift out of sync.
+than a copy here that can drift out of sync. A second copy of a source of
+truth is just a lie with a delay: the table that used to sit here drifted
+until it claimed `video_10s: 15` and a `video_60s` that never existed.
+
+Two files move together and neither is optional:
+
+| file | holds |
+|---|---|
+| `lib/credits/costs.ts` | what we charge the user, in credits |
+| `lib/costs/rates.ts` | what the provider charges us, in USD |
+
+Changing one without the other silently changes the margin.
 
 Video lengths are **10 / 15 / 30s** (5s was dropped; 60s never shipped). 30s is
 Pro-gated and renders as two 15s Kling segments concatenated. Music is sized to
