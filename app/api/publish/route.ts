@@ -16,16 +16,14 @@ import {
 } from "@/lib/social/direct";
 import {
   shouldBroker,
-  publishViaBroker,
   type BrokerPlatform,
 } from "@/lib/social/broker/outstand";
+import { publishBrokeredWithCredits } from "@/lib/social/broker/charge";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { composeVideo } from "@/lib/composition/video";
 import { pickForPlatform } from "@/lib/composition/formats";
 import { v4 as uuidv4 } from "uuid";
 import { errorMessage } from "@/lib/api/error-message";
-import { debitCredits } from "@/lib/credits/debit";
-import { refundCredits } from "@/lib/credits/refund";
 
 interface SocialProfile {
   platform: string;
@@ -381,6 +379,25 @@ export async function POST(req: Request) {
           // to Ayrshare below only when that's still enabled; otherwise it gets
           // a connect prompt rather than a silent skip.
           if (!meta) {
+            // A direct adapter exists but this workspace hasn't connected the
+            // account. For TikTok and YouTube that is the normal state until
+            // their platform reviews clear, so the broker bridges them — this
+            // is the case shouldBroker's `hasDirectConnection` argument is for.
+            if (shouldBroker(platform, false)) {
+              const outcome = await publishBrokeredWithCredits({
+                workspaceId: session.workspaceId,
+                platform: platform as BrokerPlatform,
+                mediaUrl: platformAsset.url,
+                caption: platformCaption,
+                ...(body.scheduledAt ? { scheduledAt: body.scheduledAt } : {}),
+              });
+              if (!outcome.ok) {
+                errors[platform] = outcome.error;
+                continue;
+              }
+              platformResults[platform] = outcome.postId;
+              continue;
+            }
             if (!ayrshareEnabled || !ayrshareKey) {
               errors[platform] =
                 `Connect ${platform} in Settings → Social first.`;
@@ -417,39 +434,22 @@ export async function POST(req: Request) {
             boardId: body.pinterestBoardId,
           });
         } else if (shouldBroker(platform, false)) {
-          // Paid broker: a third party's approved apps reach networks our own
-          // review hasn't cleared yet. It bills per post, so unlike the free
-          // backends above this one is charged to the workspace that used it.
-          //
-          // Debited BEFORE the call and refunded if it throws — the same
-          // contract as every fal job (CLAUDE.md §1): never charge for work
-          // that didn't happen, never do work that wasn't charged.
-          // One id per attempt: the debit and its refund need to agree with
-          // each other, nothing more, and job_id is a uuid column.
-          const brokerJob = uuidv4();
-          const debit = await debitCredits(
-            session.workspaceId,
-            brokerJob,
-            "brokered_publish",
-          );
-          if (!debit.success) {
-            errors[platform] =
-              "Not enough credits to publish to this network. Connect it directly in Settings → Social to publish free.";
+          // Networks with no direct adapter at all (X, Threads, GMB, Telegram).
+          // The paid broker reaches them through its own approved apps, and
+          // bills per post — so unlike every backend above, this one charges
+          // the workspace that used it.
+          const outcome = await publishBrokeredWithCredits({
+            workspaceId: session.workspaceId,
+            platform: platform as BrokerPlatform,
+            mediaUrl: platformAsset.url,
+            caption: platformCaption,
+            ...(body.scheduledAt ? { scheduledAt: body.scheduledAt } : {}),
+          });
+          if (!outcome.ok) {
+            errors[platform] = outcome.error;
             continue;
           }
-          try {
-            const brokered = await publishViaBroker({
-              accountId: session.workspaceId,
-              platform: platform as BrokerPlatform,
-              mediaUrl: platformAsset.url,
-              caption: platformCaption,
-              ...(body.scheduledAt ? { scheduledAt: body.scheduledAt } : {}),
-            });
-            postId = brokered.id;
-          } catch (err) {
-            await refundCredits(brokerJob);
-            throw err;
-          }
+          postId = outcome.postId;
         } else {
           // Everything else goes through Ayrshare (Pro).
           if (!ayrshareEnabled) {
