@@ -1725,10 +1725,16 @@ function CockpitCreate({
   return (
     // One column: this now lives in the right-hand generation rail, not the
     // full <main>, so the old inputs|results split has nowhere to split into.
-    // Controls on top, results under them, the whole rail scrolling as one.
-    <div className="flex h-full flex-col gap-4">
+    // Controls on top, results under them, THE RAIL scrolling as one.
+    //
+    // No `h-full` and no inner `overflow-y-auto`: the rail is already a scroll
+    // container, and nesting a second one inside a fixed-height child clipped
+    // the top of this panel with no way to scroll back up to it — the
+    // "Write a prompt / Import from website" tabs became unreachable. One
+    // scroller, sized by its content.
+    <div className="flex flex-col gap-4">
       {/* ── Input controls (nav is StudioNav, rendered by Studio) ── */}
-      <div className="flex min-h-0 flex-col gap-3 overflow-y-auto rounded-2xl border border-border bg-card p-3">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-3">
         {isCreate ? (
           <div className="flex min-h-0 flex-1 flex-col gap-3">
             <div className="flex overflow-hidden rounded-md border border-border">
@@ -1944,8 +1950,10 @@ function CockpitCreate({
         )}
       </div>
 
-      {/* ── RIGHT: the persistent result ────────────────────── */}
-      <div className="flex min-h-0 flex-col gap-3 overflow-y-auto rounded-2xl border border-border bg-card p-4">
+      {/* ── The results panel. Sits UNDER the controls in the rail now, not
+           beside them — and like them it must not be its own scroll container
+           (see the note on the wrapper above). ── */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold">Result</h2>
           {isCreate && assets.length > 0 && !generating && (
