@@ -219,6 +219,18 @@ write "three bottles on weathered timber", and the model letters them anyway.
   enable Generate".
 - The project renamed itself Bold Echo → Bright Canvas between two renders.
 
+### ✅ 16. Generation rail was clipped and unscrollable *(fixed)*
+
+First look at the merged three-pane layout in production: the rail was clipped
+at the top with no way to scroll back up — the "Write a prompt / Import from
+website" tabs were on screen but unreachable. `CockpitCreate` still carried
+`h-full` plus `overflow-y-auto` on both inner panels, laid out for the old
+full-width `<main>`. A fixed-height child with its own scroller inside a
+scrolling parent pins its top out of reach. One scroller now: the rail.
+
+**Rule:** panels inside the rail size to their content. Do not give them
+`h-full` or their own `overflow-y-auto`.
+
 ### 🔴 12. Compositor ops not folded into the three-pane rail
 
 On `feat/three-pane-ad-studio` the Compositor still takes the full width and the
