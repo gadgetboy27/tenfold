@@ -514,7 +514,9 @@ export function PublishCanvas({
   }
 
   return (
-    <div className="mx-auto grid h-full max-w-4xl grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
+    // Single column: this renders in the generation rail (the ad itself owns
+    // the centre), so the old sidebar+body split has nowhere to split into.
+    <div className="flex h-full flex-col gap-4">
       {/* LEFT: connected platforms */}
       <div className="flex min-h-0 flex-col gap-3 overflow-y-auto rounded-2xl border border-border bg-card p-3">
         <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">

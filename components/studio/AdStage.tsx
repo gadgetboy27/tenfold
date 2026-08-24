@@ -1,0 +1,298 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { Layers, Trash2, ChevronUp, ChevronDown, Lock, Unlock } from "lucide-react";
+import toast from "react-hot-toast";
+import { CompositorCanvas as LayeredCanvas } from "@/components/compositor/CompositorCanvas";
+import { useCompositorStore } from "@/store/useCompositorStore";
+import { setAdAspect } from "./adBridge";
+import { api } from "@/lib/api";
+import type {
+  CompositionAspect,
+  CompositionDoc,
+  Layer,
+} from "@/lib/composition/layers";
+
+const ASPECTS: { id: CompositionAspect; label: string; box: string }[] = [
+  { id: "9:16", label: "9:16", box: "h-6 w-[13.5px]" },
+  { id: "1:1", label: "1:1", box: "h-6 w-6" },
+  { id: "16:9", label: "16:9", box: "h-[13.5px] w-6" },
+];
+
+/**
+ * The Ad stage — the permanent centre pane.
+ *
+ * Unlike every other Studio surface this NEVER unmounts as the user moves
+ * between tools: it is the thing being built, and the rail on the right feeds
+ * it. Owning the composition doc here (rather than inside the Compositor
+ * section, as before) is what makes "everything overlays onto the ad" possible
+ * — a generated image chosen in the rail becomes a layer on a canvas that is
+ * already on screen.
+ *
+ * Before a doc exists it shows a placeholder artboard. That's deliberate:
+ * `background.src` is a required URL, so an "empty" composition can't be
+ * persisted — the first image chosen creates the real doc at whichever aspect
+ * was picked here (see adBridge.ts).
+ */
+export function AdStage({
+  campaignId,
+  workspaceSlug,
+}: {
+  campaignId: string | null;
+  workspaceSlug: string;
+}) {
+  const doc = useCompositorStore((s) => s.doc);
+  const pendingAspect = useCompositorStore((s) => s.pendingAspect);
+  const selectedLayerId = useCompositorStore((s) => s.selectedLayerId);
+  const load = useCompositorStore((s) => s.load);
+  const reset = useCompositorStore((s) => s.reset);
+  const selectLayer = useCompositorStore((s) => s.selectLayer);
+  const removeLayer = useCompositorStore((s) => s.removeLayer);
+  const moveLayer = useCompositorStore((s) => s.moveLayer);
+  const updateLayer = useCompositorStore((s) => s.updateLayer);
+
+  // Keyed on campaignId so switching projects re-mounts this state rather than
+  // needing a setState inside the effect below.
+  const [loading, setLoading] = useState(!!campaignId);
+
+  // Load this campaign's saved composition, if it has one. No campaign (or no
+  // saved doc) simply leaves the placeholder up — not an error state.
+  useEffect(() => {
+    if (!campaignId) {
+      reset();
+      return;
+    }
+    let active = true;
+    (async () => {
+      try {
+        const campRes = await api(`/api/campaigns/${campaignId}`, {
+          workspaceSlug,
+        });
+        if (!campRes.ok) return;
+        const camp = (await campRes.json()) as {
+          latestCompositionId?: string | null;
+        };
+        if (!camp.latestCompositionId) return;
+
+        const compRes = await api(
+          `/api/compositions/${camp.latestCompositionId}`,
+          { workspaceSlug },
+        );
+        if (!compRes.ok) return;
+        const row = (await compRes.json()) as {
+          id: string;
+          aspect: CompositionAspect;
+          background: CompositionDoc["background"];
+          layers: Layer[];
+          overrides?: CompositionDoc["overrides"];
+        };
+        if (active) {
+          load({
+            id: row.id,
+            aspect: row.aspect,
+            background: row.background,
+            layers: row.layers,
+            overrides: row.overrides,
+          });
+        }
+      } catch {
+        if (active) toast.error("Couldn't load this campaign's ad");
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+      // Switching campaigns must not carry the previous ad's layers across.
+      reset();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaignId, workspaceSlug]);
+
+  // Autosave. The rail mutates the doc from outside this component (addLayer),
+  // and the canvas writes drag/resize straight to the store, so there is no
+  // single "save" moment to hook — debounce on the doc itself instead.
+  const lastSavedRef = useRef<string>("");
+  useEffect(() => {
+    if (!doc || !campaignId) return;
+    const serialized = JSON.stringify(doc);
+    if (serialized === lastSavedRef.current) return;
+    const t = setTimeout(() => {
+      lastSavedRef.current = serialized;
+      void api("/api/compositions/save", {
+        method: "POST",
+        body: JSON.stringify({ doc, campaignId }),
+        workspaceSlug,
+      }).catch(() => {});
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [doc, campaignId, workspaceSlug]);
+
+  const aspect = doc?.aspect ?? pendingAspect;
+  const layers = doc?.layers ?? [];
+
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      {/* ── The artboard ── */}
+      <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border border-border bg-card p-4">
+        {doc ? (
+          <div className="relative h-full w-full">
+            <LayeredCanvas playing={false} onTick={() => {}} onEnded={() => {}} />
+          </div>
+        ) : (
+          <EmptyArtboard aspect={aspect} loading={loading} />
+        )}
+      </div>
+
+      {/* ── Aspect picker + layer stack ── */}
+      <div className="flex shrink-0 flex-wrap items-center gap-3 rounded-2xl border border-border bg-card px-3 py-2">
+        <div className="flex items-center gap-1">
+          {ASPECTS.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => setAdAspect(a.id)}
+              title={`${a.label} artboard`}
+              className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors ${
+                aspect === a.id
+                  ? "bg-primary/15 text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <span
+                className={`${a.box} rounded-[2px] border ${
+                  aspect === a.id ? "border-primary" : "border-muted-foreground/50"
+                }`}
+              />
+              {a.label}
+            </button>
+          ))}
+        </div>
+
+        <span className="h-5 w-px bg-border" />
+
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
+          <Layers className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          {layers.length === 0 ? (
+            <span className="text-xs text-muted-foreground">
+              {doc ? "No overlays yet" : "Nothing on the ad yet"}
+            </span>
+          ) : (
+            // Front-most first, matching how a designer reads a stack.
+            [...layers].reverse().map((l) => (
+              <button
+                key={l.id}
+                type="button"
+                onClick={() => selectLayer(l.id)}
+                className={`shrink-0 rounded-md px-2 py-1 text-xs transition-colors ${
+                  selectedLayerId === l.id
+                    ? "bg-primary/15 text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {l.kind === "text" ? `“${l.text.slice(0, 14)}”` : "Image"}
+              </button>
+            ))
+          )}
+        </div>
+
+        {selectedLayerId && (
+          <div className="flex shrink-0 items-center gap-1">
+            <IconBtn
+              title="Bring forward"
+              onClick={() => moveLayer(selectedLayerId, "up")}
+            >
+              <ChevronUp className="h-3.5 w-3.5" />
+            </IconBtn>
+            <IconBtn
+              title="Send backward"
+              onClick={() => moveLayer(selectedLayerId, "down")}
+            >
+              <ChevronDown className="h-3.5 w-3.5" />
+            </IconBtn>
+            <IconBtn
+              title={
+                layers.find((l) => l.id === selectedLayerId)?.locked
+                  ? "Unlock layer"
+                  : "Lock layer"
+              }
+              onClick={() => {
+                const cur = layers.find((l) => l.id === selectedLayerId);
+                updateLayer(selectedLayerId, { locked: !cur?.locked });
+              }}
+            >
+              {layers.find((l) => l.id === selectedLayerId)?.locked ? (
+                <Lock className="h-3.5 w-3.5" />
+              ) : (
+                <Unlock className="h-3.5 w-3.5" />
+              )}
+            </IconBtn>
+            <IconBtn
+              title="Remove from ad"
+              onClick={() => {
+                removeLayer(selectedLayerId);
+                toast.success("Removed from the ad");
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </IconBtn>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function IconBtn({
+  title,
+  onClick,
+  children,
+}: {
+  title: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+    >
+      {children}
+    </button>
+  );
+}
+
+/** The placeholder artboard, drawn at the picked aspect so choosing a shape is
+ *  meaningful before there's anything to show in it. */
+function EmptyArtboard({
+  aspect,
+  loading,
+}: {
+  aspect: CompositionAspect;
+  loading: boolean;
+}) {
+  const ratio =
+    aspect === "9:16" ? "9 / 16" : aspect === "16:9" ? "16 / 9" : "1 / 1";
+  return (
+    <div
+      className="flex max-h-full max-w-full items-center justify-center rounded-xl border-2 border-dashed border-border bg-background/40"
+      style={{ aspectRatio: ratio, height: "100%" }}
+    >
+      <p className="px-6 text-center text-sm text-muted-foreground">
+        {loading ? (
+          "Loading your ad…"
+        ) : (
+          <>
+            Your ad builds here.
+            <br />
+            <span className="text-xs text-muted-foreground/70">
+              Generate something on the right and choose it to place it.
+            </span>
+          </>
+        )}
+      </p>
+    </div>
+  );
+}

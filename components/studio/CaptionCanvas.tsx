@@ -2,7 +2,15 @@
 
 import { useState } from "react";
 import toast from "react-hot-toast";
-import { MessageSquare, Loader2, Copy, RefreshCw, Check } from "lucide-react";
+import {
+  MessageSquare,
+  Loader2,
+  Copy,
+  RefreshCw,
+  Check,
+  Plus,
+} from "lucide-react";
+import { addCaptionToAd } from "./adBridge";
 import { api } from "@/lib/api";
 import {
   StudioSelect,
@@ -120,7 +128,9 @@ export function CaptionCanvas({
   }
 
   return (
-    <div className="mx-auto grid h-full max-w-4xl grid-cols-1 gap-4 lg:grid-cols-2">
+    // Single column: this renders in the generation rail, which is one
+    // column wide by design — the ad itself owns the centre.
+    <div className="flex h-full flex-col gap-4">
       {/* LEFT: inputs */}
       <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-4">
         <div>
@@ -201,18 +211,36 @@ export function CaptionCanvas({
             <div className="flex-1 whitespace-pre-wrap rounded-xl border border-border bg-background p-4 text-sm leading-relaxed">
               {caption}
             </div>
-            <button
-              type="button"
-              onClick={copy}
-              className="flex items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {copied ? (
-                <Check className="h-3.5 w-3.5 text-emerald-500" />
-              ) : (
-                <Copy className="h-3.5 w-3.5" />
-              )}
-              {copied ? "Copied" : "Copy to clipboard"}
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  // Nothing to caption until the ad has a backdrop — say so
+                  // rather than silently doing nothing.
+                  if (addCaptionToAd(caption) === null) {
+                    toast.error("Add an image to your ad first");
+                    return;
+                  }
+                  toast.success("Caption added to your ad");
+                }}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add to ad
+              </button>
+              <button
+                type="button"
+                onClick={copy}
+                className="flex items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {copied ? (
+                  <Check className="h-3.5 w-3.5 text-emerald-500" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+                {copied ? "Copied" : "Copy"}
+              </button>
+            </div>
           </div>
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-muted-foreground">

@@ -33,6 +33,15 @@ interface CompositorState {
 
   load: (doc: CompositionDoc) => void;
   reset: () => void;
+  /**
+   * Aspect for the Ad stage BEFORE a doc exists. `background.src` is a required
+   * URL, so an empty artboard can't be a persisted doc — the stage renders a
+   * placeholder at this aspect instead, and the first image chosen creates the
+   * real doc with it. Lives here, not in AdStage's local state, because the
+   * generation rail creates the doc from outside that component.
+   */
+  pendingAspect: CompositionAspect;
+  setPendingAspect: (aspect: CompositionAspect) => void;
   markSaved: () => void;
   selectLayer: (id: string | null) => void;
   setOverrideMode: (on: boolean) => void;
@@ -75,6 +84,9 @@ export const useCompositorStore = create<CompositorState>((set) => ({
   selectedLayerId: null,
   dirty: false,
   overrideMode: false,
+  pendingAspect: "1:1",
+
+  setPendingAspect: (pendingAspect) => set({ pendingAspect }),
 
   // Auto-select the top layer so the properties/effects panel is visible
   // immediately — users shouldn't have to click around to discover it.
