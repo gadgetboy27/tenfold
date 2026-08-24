@@ -151,17 +151,35 @@ export async function sweepStalledJobs(
       }
 
       // Nothing delivered. Fail it and give the credits back.
-      await failAndRefund(job, ageMinutes);
-      const credits = job.credits_charged ?? 0;
+      const outcome = await failAndRefund(job, ageMinutes);
+
+      // A webhook beat us to it — not ours to report either way.
+      if (!outcome.settled) continue;
+
+      if (!outcome.refunded) {
+        // Marked failed but the money didn't move. Counting this as a refund
+        // is what hid a broken refund path for months.
+        result.errored++;
+        result.details.push({
+          jobId: job.id,
+          type: job.type,
+          ageMinutes,
+          outcome: "error",
+          assets: 0,
+          credits: 0,
+        });
+        continue;
+      }
+
       result.refunded++;
-      result.creditsRefunded += credits;
+      result.creditsRefunded += outcome.credits;
       result.details.push({
         jobId: job.id,
         type: job.type,
         ageMinutes,
         outcome: "refunded",
         assets: 0,
-        credits,
+        credits: outcome.credits,
       });
     } catch {
       // One bad job must not abort the sweep — the rest still need settling,
@@ -203,7 +221,23 @@ function sweptError(ageMinutes: number, note: string) {
   };
 }
 
-async function failAndRefund(job: StalledJob, ageMinutes: number) {
+/**
+ * What actually happened to one stalled job. The caller tallies from THIS, not
+ * from its own assumptions: for months the sweep reported `creditsRefunded`
+ * straight off `credits_charged` whether or not a single credit moved, which
+ * is how a completely broken `refundCredits()` produced a clean-looking
+ * "refunded=3 creditsRefunded=38" in the cron log while returning nothing.
+ * A number nobody can trust is worse than no number.
+ */
+type FailOutcome =
+  | { settled: false }
+  | { settled: true; refunded: true; credits: number }
+  | { settled: true; refunded: false; credits: number };
+
+async function failAndRefund(
+  job: StalledJob,
+  ageMinutes: number,
+): Promise<FailOutcome> {
   const admin = createSupabaseAdminClient();
 
   // Guard on status so we never overwrite a job a webhook settled between our
@@ -219,13 +253,30 @@ async function failAndRefund(job: StalledJob, ageMinutes: number) {
     .in("status", IN_FLIGHT)
     .select("id");
 
-  // Lost the race — a webhook settled it first. Leave its outcome alone.
-  if (!updated || updated.length === 0) return;
+  // Lost the race — a webhook settled it first. Leave its outcome alone, and
+  // report nothing refunded: this job is not ours to count.
+  if (!updated || updated.length === 0) return { settled: false };
 
   // refund_credits (migration 0005) is atomic and idempotent: it locks the job
   // row and skips if a refund transaction already exists, so racing this
   // against a late webhook cannot double-refund.
-  await refundCredits(job.id);
+  const credits = job.credits_charged ?? 0;
+  const refund = await refundCredits(job.id);
+
+  if (!refund.success) {
+    // The job is already claimed as failed, so the next run won't re-examine
+    // it (the select is in-flight only) — the credits are stranded exactly the
+    // way this sweeper exists to prevent. Say so ON the job, so it is findable
+    // by query rather than only in a log line that scrolls away.
+    await admin
+      .from("creative_jobs")
+      .update({
+        error_message: `No response from the renderer after ${ageMinutes} minutes — REFUND FAILED, ${credits} credits still owed.`,
+        fal_raw_error: sweptError(ageMinutes, "refund failed — credits owed"),
+      })
+      .eq("id", job.id);
+    return { settled: true, refunded: false, credits };
+  }
 
   // An image job that delivered nothing leaves its campaign with no assets —
   // same reasoning as the webhook's own failure path.
@@ -244,6 +295,8 @@ async function failAndRefund(job: StalledJob, ageMinutes: number) {
     input_params: job.input_params ?? {},
     status: "failed",
   }).catch(() => {});
+
+  return { settled: true, refunded: true, credits };
 }
 
 async function settleAsCompleted(
