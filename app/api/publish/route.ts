@@ -369,8 +369,8 @@ export async function POST(req: Request) {
             platformCaption,
           );
         } else if (isDirectPlatform(platform)) {
-          // Bluesky / Reddit / Pinterest — our own code, no Ayrshare, no tier
-          // gate. A workspace that hasn't linked the account yet falls through
+          // Bluesky / Reddit / Pinterest / LinkedIn / TikTok / YouTube — our
+          // own code, no Ayrshare, no tier gate. A workspace that hasn't linked the account yet falls through
           // to Ayrshare below only when that's still enabled; otherwise it gets
           // a connect prompt rather than a silent skip.
           if (!meta) {

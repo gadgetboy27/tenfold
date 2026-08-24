@@ -30,6 +30,10 @@ const envSchema = z.object({
   // failing boot for everyone who doesn't use it.
   LINKEDIN_CLIENT_ID: z.string().min(1).optional(),
   LINKEDIN_CLIENT_SECRET: z.string().min(1).optional(),
+  TIKTOK_CLIENT_KEY: z.string().min(1).optional(),
+  TIKTOK_CLIENT_SECRET: z.string().min(1).optional(),
+  YOUTUBE_CLIENT_ID: z.string().min(1).optional(),
+  YOUTUBE_CLIENT_SECRET: z.string().min(1).optional(),
   PINTEREST_APP_ID: z.string().min(1).optional(),
   PINTEREST_APP_SECRET: z.string().min(1).optional(),
   ANTHROPIC_API_KEY: z.string().min(1),

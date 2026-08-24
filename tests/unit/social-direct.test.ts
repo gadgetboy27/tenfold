@@ -66,6 +66,8 @@ describe("platform routing", () => {
       "reddit",
       "pinterest",
       "linkedin",
+      "tiktok",
+      "youtube",
     ]);
   });
 
@@ -74,7 +76,7 @@ describe("platform routing", () => {
     // to handle it, turning a working publish into a 500. Facebook and
     // Instagram are absent on purpose — they publish through the Meta Graph
     // backend, not this one.
-    for (const p of ["twitter", "x", "tiktok", "youtube", "facebook"]) {
+    for (const p of ["twitter", "x", "threads", "snapchat", "facebook"]) {
       expect(isDirectPlatform(p)).toBe(false);
     }
     for (const p of DIRECT_PLATFORMS) expect(isDirectPlatform(p)).toBe(true);
@@ -98,6 +100,29 @@ describe("platform routing", () => {
       }),
     ).rejects.toThrow(/reconnect linkedin/i);
   });
+
+  it.each(["tiktok", "youtube"] as const)(
+    "refuses an image on %s, which only takes video",
+    (platform) => {
+      // The inverse of the Pinterest case. Without IMAGE_CAPABLE these reach
+      // the adapter and fail with a message about the platform's API instead
+      // of the plain truth: this network needs a video.
+      return expect(
+        publishDirect({
+          platform,
+          profile: profile({
+            platform,
+            platform_account_id: "acct_1",
+            metadata: null,
+          }),
+          workspaceId: "ws1",
+          mediaUrl: "https://cdn.example/a.jpg",
+          isVideo: false,
+          caption: "hello",
+        }),
+      ).rejects.toThrow(/needs a video/i);
+    },
+  );
 
   it("refuses LinkedIn video rather than posting the caption alone", () => {
     return expect(

@@ -68,8 +68,6 @@ interface PlatformGuide {
 const AYRSHARE_ONLY = new Set([
   "x",
   "twitter",
-  "tiktok",
-  "youtube",
   "threads",
   "snapchat",
   "gmb",
@@ -1321,7 +1319,9 @@ export default function SocialSettingsPage() {
     if (
       platformId === "reddit" ||
       platformId === "pinterest" ||
-      platformId === "linkedin"
+      platformId === "linkedin" ||
+      platformId === "tiktok" ||
+      platformId === "youtube"
     ) {
       // eslint-disable-next-line react-hooks/immutability -- intentional full-page navigation to start OAuth
       window.location.href = `/api/social/connect/${platformId}?workspace=${workspaceSlug}`;

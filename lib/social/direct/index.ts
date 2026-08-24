@@ -6,6 +6,8 @@ import {
   publishToLinkedIn,
   refreshLinkedInToken,
 } from "./linkedin";
+import { publishToTikTok, refreshTikTokToken } from "./tiktok";
+import { publishToYouTube, refreshYouTubeToken } from "./youtube";
 
 /**
  * The "direct" publishing backend: networks we reach with our own code and our
@@ -27,6 +29,8 @@ export const DIRECT_PLATFORMS = [
   "reddit",
   "pinterest",
   "linkedin",
+  "tiktok",
+  "youtube",
 ] as const;
 
 export type DirectPlatform = (typeof DIRECT_PLATFORMS)[number];
@@ -46,6 +50,24 @@ const VIDEO_CAPABLE: Record<DirectPlatform, boolean> = {
   // processing wait, which isn't built — refuse rather than post the caption
   // alone and call it a success.
   linkedin: false,
+  tiktok: true,
+  youtube: true,
+};
+
+/**
+ * The inverse, and it is not redundant: TikTok and YouTube are video-ONLY.
+ * Every other network here takes a still, so "can't do video" was the only
+ * constraint worth naming until now. Without this, an image-only campaign
+ * published to TikTok would reach the adapter and fail with a message about
+ * TikTok's API rather than the plain truth — this network needs a video.
+ */
+const IMAGE_CAPABLE: Record<DirectPlatform, boolean> = {
+  bluesky: true,
+  reddit: true,
+  pinterest: true,
+  linkedin: true,
+  tiktok: false,
+  youtube: false,
 };
 
 // Snake_case on purpose: this is the social_profiles row as Supabase returns
@@ -113,12 +135,27 @@ async function freshAccessToken(
     );
   }
 
-  const tokens =
-    platform === "reddit"
-      ? await refreshRedditToken(profile.refresh_token)
-      : platform === "linkedin"
-        ? await refreshLinkedInToken(profile.refresh_token)
-        : await refreshPinterestToken(profile.refresh_token);
+  const refreshers: Record<
+    Exclude<DirectPlatform, "bluesky">,
+    (rt: string) => Promise<{
+      accessToken: string;
+      refreshToken: string | null;
+      expiresAt: Date;
+    }>
+  > = {
+    reddit: refreshRedditToken,
+    pinterest: refreshPinterestToken,
+    linkedin: refreshLinkedInToken,
+    tiktok: refreshTikTokToken,
+    youtube: refreshYouTubeToken,
+  };
+  // A map rather than a ternary chain: adding the fifth and sixth network made
+  // the chain the kind of thing you get wrong by editing the wrong branch, and
+  // the Record type makes a missing entry a compile error rather than a
+  // silently-wrong refresh at publish time.
+  const tokens = await refreshers[
+    platform as Exclude<DirectPlatform, "bluesky">
+  ](profile.refresh_token);
 
   const admin = createSupabaseAdminClient();
   await admin
@@ -148,6 +185,11 @@ export async function publishDirect(
   if (isVideo && !VIDEO_CAPABLE[platform]) {
     throw new Error(
       `${platform} can't post video yet — publish the image instead.`,
+    );
+  }
+  if (!isVideo && !IMAGE_CAPABLE[platform]) {
+    throw new Error(
+      `${platform} needs a video — make one from this image first, then publish.`,
     );
   }
 
@@ -190,6 +232,28 @@ export async function publishDirect(
     const { id } = await publishToLinkedIn({
       accessToken,
       memberId: profile.platform_account_id,
+      mediaUrl,
+      isVideo,
+      caption,
+    });
+    return id;
+  }
+
+  if (platform === "tiktok") {
+    const { publishId } = await publishToTikTok({
+      accessToken,
+      mediaUrl,
+      isVideo,
+      caption,
+    });
+    // TikTok accepts for processing rather than publishing synchronously, so
+    // this id means "queued", not "live" — see checkTikTokStatus.
+    return publishId;
+  }
+
+  if (platform === "youtube") {
+    const { id } = await publishToYouTube({
+      accessToken,
       mediaUrl,
       isVideo,
       caption,
