@@ -1,16 +1,69 @@
 # components/studio — Studio, the main site
 
 `components/studio/Studio.tsx`, rendered directly at `/[workspace]`, **is the
-main site** — there is no separate classic homepage anymore. The frame stays
-put; only the canvas morphs per `SectionId` (brief → images → video → music →
-caption → compositor → logo → publish). It drives the SAME endpoints the
-classic flow used — a surface over existing functionality, not a new engine.
+main site** — there is no separate classic homepage anymore. It drives the
+SAME endpoints the classic flow used — a surface over existing functionality,
+not a new engine.
+
+## The three-pane shell (2026-08-24) — read this before touching the layout
+
+`<main>` is **tools left │ the ad centre │ generation right**. Picking a tool
+no longer replaces the screen; it changes only what the right rail is doing.
+
+| Pane   | What                    | Component                                    |
+| ------ | ----------------------- | -------------------------------------------- |
+| Left   | section nav, `w-200px`  | `StudioNav` (inside `Studio.tsx`)            |
+| Centre | **the ad being built**  | `AdStage.tsx` — mounted once, never unmounts |
+| Right  | the selected tool       | the per-`SectionId` switch, in an `<aside>`  |
+
+**The centre never unmounts on a section change.** That's the whole design: it
+owns the campaign's `CompositionDoc` (loads `latestCompositionId`, autosaves
+on change), so a tool in the rail adds to a canvas already on screen. It IS
+keyed on `campaignId`, so switching projects starts clean — don't key it on
+`section`.
+
+**`adBridge.ts` is the only supported way to put something on the ad.**
+`addImageToAd` / `addVideoToAd` / `addCaptionToAd`. They reach the zustand
+store imperatively (`getState()`) rather than taking an `onAddToAd` prop: the
+rail is a deep tree of self-contained panels (the four Pro panels take no
+props at all), and threading a callback through all of them is exactly the
+prop-drilling this avoids. Add a new tool's "Add to ad" here, not inline.
+
+Three constraints that shaped this and will bite anyone who forgets them:
+
+- **A clip can only ever be the BACKDROP.** `layerSchema` is a discriminated
+  union of image|text — there is no video layer. Never offer "add clip as a
+  layer"; `addVideoToAd` replaces the background and says so.
+- **An empty artboard cannot be persisted.** `background.src` is a required
+  URL, so there is no such thing as a doc with no backdrop. Before anything is
+  placed, `AdStage` draws a *placeholder* at the store's new `pendingAspect`,
+  and the first image chosen creates the real doc at that aspect.
+- **Captions reuse `CAPTION_LAYER_ID`.** Regenerating replaces the caption
+  rather than stacking two overlapping text blocks — the same stable-id
+  contract the caption-style presets rely on.
+
+**Rail width is a property of the tool, not a preference.** `RAIL_WIDE`
+(`Studio.tsx`) widens it to ~620px for Gallery, Logo Studio and Publish —
+browsers and multi-step flows, as opposed to "generate one thing and place
+it" panels at ~400px. A panel that renders in the narrow rail must be ONE
+column; several (`CockpitCreate`, `CaptionCanvas`, `PublishCanvas`) had
+`lg:grid-cols-[…]` splits sized for the old full-width `<main>` and were
+collapsed. Note `lg:` is a *viewport* breakpoint, not a container one, so it
+does NOT protect you inside a narrow rail — it will happily render two
+columns in 400px.
+
+**The Compositor is the one section that keeps the full width, and the stage
+stands down for it.** It renders the same composition on its own canvas, and
+its inpaint mask overlay is absolutely positioned against that canvas — show
+both and you get two identical canvases side by side. Both read the same
+store, so nothing is lost. Folding its ops into the rail (so the centre is
+the only canvas) is the obvious next step and is NOT done.
 
 - **There is only one layout now.** The earlier Simple/Cockpit split was
   removed (`BriefCanvas`, `ImagesCanvas`, `VideoCanvas`, `PlaceholderCanvas`,
   the layout toggle, and the `tf-studio-layout` localStorage key are gone).
   Don't reintroduce a second layout without a real reason.
-- **Section nav is `StudioNav`, rendered once above every section (2026-07-26).**
+- **Section nav is `StudioNav`, rendered once beside every section (2026-07-26).**
   It used to live only inside `CockpitCreate`, which several sections
   (`ProjectsCanvas`, `MusicCanvas`, `LogoStudio`, `CompositorCanvas`,
   `PublishCanvas`) bypass entirely to take over the full `<main>` area — so
