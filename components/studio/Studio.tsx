@@ -974,10 +974,21 @@ export function Studio({
       for (let i = 0; i < 450 && !landed; i++) {
         await new Promise((r) => setTimeout(r, 2000));
         const elapsed = i * 2;
-        setVideoStage(
+        // A live counter alongside the label. The labels are 100 seconds apart
+        // in the middle of the range, so a 139-second render spent its last 59
+        // seconds on one unchanging sentence — which reads exactly like the
+        // thing having stopped. Something has to move every tick to prove it
+        // hasn't.
+        const label =
           [...VIDEO_STAGE_LABELS].reverse().find(([t]) => elapsed >= t)?.[1] ??
-            VIDEO_STAGE_LABELS[0][1],
-        );
+          VIDEO_STAGE_LABELS[0][1];
+        const mins = Math.floor(elapsed / 60);
+        const secs = elapsed % 60;
+        const clock =
+          mins > 0 ? `${mins}m ${String(secs).padStart(2, "0")}s` : `${secs}s`;
+        // No clock for the first few seconds — "0s" beside "Submitting your
+        // shot…" is noise, not reassurance.
+        setVideoStage(elapsed >= 10 ? `${label} · ${clock}` : label);
         const jr = await api(`/api/jobs/${data.jobId}`, { workspaceSlug });
         if (!jr.ok) continue;
         const job = (await jr.json()) as {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { wrapText } from "./brand-apply";
 import {
   ASPECT_DESIGN,
   BRAND_FONTS,
@@ -206,11 +207,42 @@ export function refitTextLayer(
 ): TextLayer {
   if (!textOverflows(layer, aspect)) return layer;
 
+  const width = ASPECT_DESIGN[aspect].width;
+
+  // A single unbroken line has no line breaks to protect, so wrap it rather
+  // than shrinking it into the floor. Shrink-only turned a 52-character
+  // caption into 36px type on a 1080px frame — technically fitting, visibly
+  // tiny, and the obvious answer was two lines at nearly double the size.
+  //
+  // Text that ALREADY has line breaks is left broken exactly as it is and only
+  // shrunk: those breaks were somebody's decision, and re-flowing them is the
+  // thing this deliberately won't do.
+  const hasOwnBreaks = layer.text.includes("\n");
+
+  if (!hasOwnBreaks) {
+    const wrapChars =
+      layer.text.length > 180 ? 42 : layer.text.length > 90 ? 32 : 26;
+    const wrapped = wrapText(layer.text, wrapChars);
+    const longest = Math.max(
+      ...wrapped.split("\n").map((l) => l.trim().length),
+      1,
+    );
+    return {
+      ...layer,
+      text: wrapped,
+      sizePx: Math.round(
+        Math.min(400, Math.max(8, (width * 0.92) / (longest * 0.5))),
+      ),
+    };
+  }
+
   const longest = Math.max(
     ...layer.text.split("\n").map((l) => l.trim().length),
     1,
   );
-  const target = (ASPECT_DESIGN[aspect].width * 0.88) / (longest * 0.5);
+  // 0.92 sits just under textOverflows' 0.94, so a re-fit always clears the
+  // check without shrinking further than it has to.
+  const target = (width * 0.92) / (longest * 0.5);
   return {
     ...layer,
     // Clamped to the schema's own bounds, or the re-fit produces a layer the

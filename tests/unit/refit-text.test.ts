@@ -72,29 +72,38 @@ describe("textOverflows", () => {
 });
 
 describe("refitTextLayer", () => {
-  it("shrinks until it fits", () => {
+  it("wraps an unbroken line rather than shrinking it into the floor", () => {
+    // The reported problem: shrink-only turned a 52-character caption into
+    // ~36px type on a 1080px frame. Technically fitting, visibly tiny, when
+    // the obvious answer was two lines at nearly double the size. A single
+    // line has no breaks to protect, so wrapping it is free.
     const before = legacyCaption(LONG);
     const after = refitTextLayer(before, "1:1");
 
-    expect(after.sizePx).toBeLessThan(before.sizePx);
     expect(textOverflows(after, "1:1")).toBe(false);
+    expect(after.text.split("\n").length).toBeGreaterThan(1);
+    // Bigger than it started, not smaller — that is the whole point.
+    expect(after.sizePx).toBeGreaterThan(before.sizePx);
+    // Wrapping only inserts line breaks; the words themselves are untouched.
+    expect(after.text.replace(/\n/g, " ")).toBe(before.text);
   });
 
   it("never touches the wording or the line breaks", () => {
     // The whole reason this shrinks instead of re-wrapping: a two-line headline
     // silently becoming three is a worse outcome than slightly smaller type.
-    const before = legacyCaption("Two deliberate\\nlines of copy that overflow badly");
+    const before = legacyCaption("Two deliberate\nlines of copy that overflow badly");
     const after = refitTextLayer(before, "9:16");
 
     expect(after.text).toBe(before.text);
-    expect(after.text.split("\\n")).toHaveLength(2);
+    expect(after.text.split("\n")).toHaveLength(2);
   });
 
-  it("changes nothing but the size", () => {
-    const before = legacyCaption(LONG);
-    const after = refitTextLayer(before, "1:1");
+  it("changes nothing but the size when line breaks must be preserved", () => {
+    const before = legacyCaption("Two deliberate\nlines of copy that overflow badly");
+    const after = refitTextLayer(before, "9:16");
 
     expect({ ...after, sizePx: 0 }).toEqual({ ...before, sizePx: 0 });
+    expect(after.sizePx).toBeLessThan(before.sizePx);
   });
 
   it("returns the layer untouched when it already fits", () => {
@@ -134,7 +143,12 @@ describe("refitTextLayer", () => {
       expect(textOverflows(after, aspect), `overflowed at ${aspect}`).toBe(
         false,
       );
-      expect(after.sizePx * LONG.length * 0.5).toBeLessThan(
+      // Measure the widest LINE, not the whole string — the string is wrapped
+      // now, so measuring it whole would test a line that never renders.
+      const widest = Math.max(
+        ...after.text.split("\n").map((l) => l.trim().length),
+      );
+      expect(widest * after.sizePx * 0.5).toBeLessThan(
         ASPECT_DESIGN[aspect].width,
       );
     }
