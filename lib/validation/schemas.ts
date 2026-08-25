@@ -6,6 +6,23 @@ export const createCampaignSchema = z.object({
   name: z.string().max(200).optional(),
   aspectRatio: z.enum(["1:1", "4:5", "16:9", "9:16"]).optional(),
   style: z.string().max(100).optional(),
+  /** Wording typed BEFORE generating, so every direction is composed to leave
+   *  its zone clear. The words themselves never reach the image model — only
+   *  the zone does (lib/fal/reserve-space.ts). */
+  words: z.string().max(500).optional(),
+  wordsZone: z
+    .enum([
+      "top-left",
+      "top",
+      "top-right",
+      "left",
+      "center",
+      "right",
+      "bottom-left",
+      "bottom",
+      "bottom-right",
+    ])
+    .optional(),
   model: z.string().max(40).optional(),
   /** Variety pack: spread the anchor set across the top image models (2 each)
    *  instead of one, so the user picks the look they like — and we learn which

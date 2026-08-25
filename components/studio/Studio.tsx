@@ -38,7 +38,9 @@ import {
 import { Logo } from "@/components/brand/Logo";
 import { AdStage } from "./AdStage";
 import { WordsCanvas } from "./WordsCanvas";
-import { addImageToAd, addVideoToAd } from "./adBridge";
+import { addImageToAd, addVideoToAd, addWordsToAd } from "./adBridge";
+import { DEFAULT_TREATMENT, WORD_ZONES } from "@/lib/composition/words";
+import type { LayerAnchor } from "@/lib/composition/layers";
 import { Spinner } from "@/components/brand/Spinner";
 import CreditMeter from "@/components/shared/CreditMeter";
 import UpgradeModal from "@/components/billing/UpgradeModal";
@@ -354,6 +356,10 @@ export function Studio({
   const [videoGenerating, setVideoGenerating] = useState(false);
   const [videoStage, setVideoStage] = useState("");
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  // Wording typed BEFORE generating. Held here rather than in CockpitCreate so
+  // it survives section changes and is still around when an anchor is picked.
+  const [adWords, setAdWords] = useState("");
+  const [adWordsZone, setAdWordsZone] = useState<LayerAnchor>("bottom");
 
   // Music — the track is sized to the chosen video length. Genre + engine reuse
   // the classic flow's curated lists (MUSIC_GENRES / MUSIC_MODELS).
@@ -555,6 +561,10 @@ export function Studio({
         method: "POST",
         body: JSON.stringify({
           prompt: effectivePrompt,
+          // Only the zone shapes the image; the words are drawn by us later.
+          ...(adWords.trim()
+            ? { words: adWords.trim(), wordsZone: adWordsZone }
+            : {}),
           // Belt and braces: entitlements can change between toggle and send.
           variety: variety && varietyAllowed,
           name: campaignName.trim() || randomCampaignName(),
@@ -684,7 +694,20 @@ export function Studio({
     const picked = assets.find((a) => a.id === id);
     if (picked) {
       addImageToAd(picked.url, { asBackground: true });
-      toast.success("Added to your ad");
+      // The image was composed to leave this zone quiet, so drop the wording
+      // straight in rather than making the user go and re-type it.
+      if (adWords.trim()) {
+        addWordsToAd(adWords.trim(), {
+          ...DEFAULT_TREATMENT,
+          zone: adWordsZone,
+          // No scrim: the whole point of reserving the space is that the type
+          // doesn't need rescuing with a dark panel.
+          scrim: false,
+        });
+        toast.success("Added to your ad, with your wording in place");
+      } else {
+        toast.success("Added to your ad");
+      }
     }
 
     try {
@@ -1450,6 +1473,10 @@ export function Studio({
                   onChooseWebsiteAngle={chooseWebsiteAngle}
                   prompt={prompt}
                   setPrompt={setPrompt}
+                  adWords={adWords}
+                  setAdWords={setAdWords}
+                  adWordsZone={adWordsZone}
+                  setAdWordsZone={setAdWordsZone}
                   variety={variety}
                   varietyAllowed={varietyAllowed}
                   setVariety={setVariety}
@@ -1665,6 +1692,10 @@ function CockpitCreate({
   onChooseWebsiteAngle,
   prompt,
   setPrompt,
+  adWords,
+  setAdWords,
+  adWordsZone,
+  setAdWordsZone,
   variety,
   varietyAllowed,
   setVariety,
@@ -1722,6 +1753,12 @@ function CockpitCreate({
   onChooseWebsiteAngle: (angle: CampaignAngle) => void;
   prompt: string;
   setPrompt: (v: string) => void;
+  /** Wording typed before generating — lifted to Studio so it survives a
+   *  section change and is still there when an anchor is picked. */
+  adWords: string;
+  setAdWords: (v: string) => void;
+  adWordsZone: LayerAnchor;
+  setAdWordsZone: (v: LayerAnchor) => void;
   variety: boolean;
   varietyAllowed: boolean;
   setVariety: (v: boolean) => void;
@@ -1835,6 +1872,53 @@ function CockpitCreate({
               />
             ) : (
               <>
+                {/* Wording first. Typing it here means every generated option
+                    is composed to leave that area quiet, so the type lands on
+                    clean space instead of being stamped over a focal point and
+                    rescued with a scrim. The letters are still drawn by us —
+                    the model is only told WHERE to leave room, and told to
+                    render no text at all. */}
+                <div className="flex flex-col gap-1.5 rounded-xl border border-border bg-background p-2.5">
+                  <label className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+                    <Type className="h-3 w-3" /> Wording on the ad{" "}
+                    <span className="font-normal opacity-70">· optional</span>
+                  </label>
+                  <input
+                    value={adWords}
+                    onChange={(e) => setAdWords(e.target.value)}
+                    maxLength={200}
+                    placeholder="Headline, offer or brand name…"
+                    className="w-full rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs outline-none focus:border-primary/60"
+                  />
+                  {adWords.trim() && (
+                    <>
+                      <span className="text-[11px] text-muted-foreground">
+                        Leave room:
+                      </span>
+                      <div className="grid grid-cols-3 gap-1">
+                        {WORD_ZONES.map((z) => (
+                          <button
+                            key={z.id}
+                            type="button"
+                            onClick={() => setAdWordsZone(z.id)}
+                            className={`rounded px-1.5 py-1 text-[10px] transition-colors ${
+                              adWordsZone === z.id
+                                ? "bg-primary/15 text-primary"
+                                : "text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            {z.label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground/70">
+                        We draw these letters ourselves — the image model never
+                        sees them, so they can&apos;t come out misspelled.
+                      </p>
+                    </>
+                  )}
+                </div>
+
                 {/* Room above the prompt for effects/other controls as they land
                 here — the prompt + Generate stay pinned to the bottom. */}
                 <div className="flex flex-wrap items-center gap-2">

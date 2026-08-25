@@ -1,3 +1,5 @@
+import { compositionGuidance } from "./reserve-space";
+import type { LayerAnchor } from "@/lib/composition/layers";
 import Anthropic from "@anthropic-ai/sdk";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -63,13 +65,19 @@ const FALLBACK_LENSES: Array<{ label: string; modifier: string }> = [
 export function fallbackDirections(
   basePrompt: string,
   count = 4,
+  /** Same reservation the Claude path applies — the fallback is used whenever
+   *  Claude is unavailable or returns nothing usable, and a direction that
+   *  forgets the guidance would quietly reintroduce invented lettering and
+   *  leave no room for the overlay. */
+  reserveZone: LayerAnchor | null = null,
 ): CreativeDirection[] {
+  const guidance = compositionGuidance(reserveZone);
   return FALLBACK_LENSES.slice(
     0,
     Math.max(1, Math.min(count, FALLBACK_LENSES.length)),
   ).map((l) => ({
     label: l.label,
-    prompt: `${basePrompt}, ${l.modifier}`,
+    prompt: `${basePrompt}, ${l.modifier}. ${guidance}`,
   }));
 }
 
@@ -77,6 +85,10 @@ function normalizeDirections(
   raw: unknown,
   basePrompt: string,
   count: number,
+  // Topped-up directions must carry the same guidance as the ones Claude
+  // wrote, or a short response silently yields directions with no reserved
+  // space and no text suppression.
+  reserveZone: LayerAnchor | null = null,
 ): CreativeDirection[] {
   if (Array.isArray(raw)) {
     const cleaned = raw
@@ -92,17 +104,28 @@ function normalizeDirections(
     if (cleaned.length >= count) return cleaned.slice(0, count);
     // Model returned some but not enough — top up with fallback lenses.
     if (cleaned.length > 0) {
-      const extra = fallbackDirections(basePrompt, count).slice(cleaned.length);
+      const extra = fallbackDirections(
+        basePrompt,
+        count,
+        reserveZone,
+      ).slice(cleaned.length);
       return [...cleaned, ...extra].slice(0, count);
     }
   }
-  return fallbackDirections(basePrompt, count);
+  return fallbackDirections(basePrompt, count, reserveZone);
 }
 
 export async function validatePrompt(
   prompt: string,
   style: string,
   count = 4,
+  /**
+   * Where an overlay will sit, when the user typed their wording before
+   * generating. Every direction is then composed to leave that area quiet, so
+   * the type lands on clean space instead of being stamped over a focal point
+   * and rescued with a scrim. The WORDS are never passed — only the zone.
+   */
+  reserveZone: LayerAnchor | null = null,
 ): Promise<PromptValidation> {
   if (!prompt || prompt.trim().length < 5) {
     return {
@@ -110,7 +133,11 @@ export async function validatePrompt(
       isValid: false,
       issues: ["Prompt is too short — describe a subject, setting, and mood."],
       refinedPrompt: null,
-      directions: fallbackDirections(prompt || "a clean product shot", count),
+      directions: fallbackDirections(
+        prompt || "a clean product shot",
+        count,
+        reserveZone,
+      ),
     };
   }
 
@@ -141,6 +168,9 @@ Do TWO things and return JSON only — no other text:
 
 2) Produce exactly ${count} "directions": ${count} DISTINCT image prompts that keep the SAME subject, brand and motif but contrast strongly in composition, framing, mood and lighting (so the user has genuinely different options to choose from — not near-duplicates). Each needs a short 1-2 word "label" (e.g. "Wide", "Close-up", "Flat-lay", "Dramatic", "Macro", "Aerial", "Lifestyle", "Studio") and a full "prompt". Tailor the angles to the subject — pick the contrasts that actually make sense for it.
 
+EVERY direction prompt must end with this guidance, word for word:
+${compositionGuidance(reserveZone)}
+
 {
   "score": <0-100>,
   "issues": ["<issue if any>"],
@@ -160,7 +190,7 @@ Do TWO things and return JSON only — no other text:
         isValid: true,
         issues: [],
         refinedPrompt: null,
-        directions: fallbackDirections(prompt, count),
+        directions: fallbackDirections(prompt, count, reserveZone),
       };
     }
 
@@ -180,7 +210,12 @@ Do TWO things and return JSON only — no other text:
       isValid: score >= 40,
       issues: Array.isArray(parsed.issues) ? parsed.issues : [],
       refinedPrompt: parsed.refinedPrompt ?? null,
-      directions: normalizeDirections(parsed.directions, base, count),
+      directions: normalizeDirections(
+        parsed.directions,
+        base,
+        count,
+        reserveZone,
+      ),
     };
   } catch {
     // On any failure, never block generation — accept and use fallback lenses.
@@ -189,7 +224,7 @@ Do TWO things and return JSON only — no other text:
       isValid: true,
       issues: [],
       refinedPrompt: null,
-      directions: fallbackDirections(prompt, count),
+      directions: fallbackDirections(prompt, count, reserveZone),
     };
   }
 }

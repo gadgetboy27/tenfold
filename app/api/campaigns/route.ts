@@ -274,10 +274,17 @@ export async function POST(req: Request) {
     //    rather than blocks: a weak prompt is auto-upgraded to the AI-refined
     //    version and generation proceeds. We only hard-reject when there is
     //    nothing usable to generate from (e.g. prohibited/empty content).
+    // Wording typed before generating: every direction is composed to leave
+    // that zone quiet, so the overlay lands on clean space rather than being
+    // stamped over a focal point. Only the ZONE is passed — the words stay out
+    // of the image model entirely (lib/fal/reserve-space.ts).
+    const reserveZone = body.words?.trim() ? (body.wordsZone ?? "bottom") : null;
+
     const validation = await validatePrompt(
       body.prompt,
       body.style ?? "Photorealistic",
       ent.maxVariations,
+      reserveZone,
     );
     let effectivePrompt = body.prompt;
     let promptRefined = false;
@@ -479,6 +486,9 @@ export async function POST(req: Request) {
         modelSwitchedForText: resolved.switchedForText
           ? imageModel.label
           : undefined,
+        // Echoed so the client can place the wording the moment an anchor is
+        // chosen, without having to remember what it sent.
+        reservedZone: reserveZone ?? undefined,
         directions: submitted.map((s) => s.label),
       },
       { status: 201 },

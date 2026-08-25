@@ -5,6 +5,33 @@ main site** — there is no separate classic homepage anymore. It drives the
 SAME endpoints the classic flow used — a surface over existing functionality,
 not a new engine.
 
+## Wording BEFORE generation — reserve the space (2026-08-25)
+
+The Brief carries an optional **"Wording on the ad"** field and a zone. When
+filled, every generated direction is composed to leave that area visually quiet,
+and the wording is placed automatically the moment an anchor is picked.
+
+This is strictly better than placing type afterwards, and the reason is worth
+keeping: stamping a headline onto whatever the model happened to compose lands
+it on a focal point, which is why the Words tool needs a scrim so often. Saying
+it up front lets the model compose *around* the gap, so the result looks
+designed rather than covered up — and the auto-placed layer sets `scrim: false`,
+because reserved space doesn't need rescuing.
+
+**Only the ZONE reaches the model.** `reserveSpaceInstruction()` takes a zone
+and nothing else — there is no parameter through which letters could reach a
+prompt, which is the same guarantee the Words tool makes, enforced the same way.
+
+`NO_TEXT_INSTRUCTION` is appended **unconditionally**, reserved zone or not:
+image models add invented signage, labels and watermarks to product scenes
+unasked and it is always wrong. That is where "AUNCEAAN FLEANCE" came from — a
+brief that never mentioned text.
+
+The guidance is threaded through **every** path that can produce a direction:
+the Claude prompt, `normalizeDirections`'s top-up when Claude returns too few,
+and `fallbackDirections` when Claude is unreachable. Miss one and that path
+silently generates artwork with no room and invented lettering.
+
 ## Words — the model designs, the compositor spells (2026-08-25)
 
 `WordsCanvas` in the rail. You type the exact wording; it becomes a text layer
