@@ -37,6 +37,22 @@ export const WORD_ZONES: { id: LayerAnchor; label: string }[] = [
 ];
 
 /**
+ * Size presets, expressed as the fraction of frame width the block spans.
+ *
+ * Not point sizes: the actual sizePx is derived from this AND the length of
+ * the wording (see sizeForWords), so "Large" means large relative to the
+ * frame rather than a number that overflows the moment someone types a longer
+ * headline. It also survives an aspect change, which a fixed pixel size does
+ * not.
+ */
+export const WORD_SIZES: { label: string; widthFrac: number }[] = [
+  { label: "Small", widthFrac: 0.35 },
+  { label: "Medium", widthFrac: 0.55 },
+  { label: "Large", widthFrac: 0.75 },
+  { label: "Full width", widthFrac: 0.9 },
+];
+
+/**
  * A styling proposal. Note what is ABSENT: the text itself. A treatment can
  * never carry letters, which is what stops a model's spelling reaching the
  * canvas even if it tries to send some.

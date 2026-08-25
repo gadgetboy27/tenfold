@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { BRAND_FONTS } from "@/lib/composition/layers";
 import {
   WORD_ZONES,
+  WORD_SIZES,
   DEFAULT_TREATMENT,
   type WordTreatment,
 } from "@/lib/composition/words";
@@ -173,6 +174,31 @@ export function WordsCanvas({
             </button>
           ))}
         </div>
+
+        <label className="text-[11px] text-muted-foreground">Size</label>
+        <div className="flex flex-wrap gap-1">
+          {WORD_SIZES.map((sz) => (
+            <button
+              key={sz.label}
+              type="button"
+              onClick={() =>
+                setTreatment({ ...treatment, widthFrac: sz.widthFrac })
+              }
+              className={`rounded-md border px-2 py-1 text-xs transition-colors ${
+                treatment.widthFrac === sz.widthFrac
+                  ? "border-primary text-primary"
+                  : "border-border text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {sz.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-[11px] text-muted-foreground/70">
+          Size is how much of the frame the block spans — the point size follows
+          from that and the wording&apos;s length, so long text can&apos;t
+          overflow the frame.
+        </p>
 
         <label className="text-[11px] text-muted-foreground">Font</label>
         <div className="flex flex-wrap gap-1">

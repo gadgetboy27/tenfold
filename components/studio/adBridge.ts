@@ -250,14 +250,31 @@ export async function applyBrandKitToAd(
   // and then quietly ignored.
   const resolved: BrandKitInfo = { ...kit, logo_url: logoSrc };
 
+  // Carry through wording the user has already written. brandKitLayers writes
+  // its main text to CAPTION_LAYER_ID, so passing null here would silently
+  // replace a caption they generated with the kit's tagline — their words gone,
+  // no warning, discovered later. The `caption` parameter exists for exactly
+  // this: when present it becomes the main text and the tagline moves to the
+  // end card, so both survive.
+  const existingCaption = s.doc.layers.find(
+    (l) => l.id === CAPTION_LAYER_ID && l.kind === "text",
+  );
+  const carried =
+    existingCaption && existingCaption.kind === "text"
+      ? existingCaption.text
+      : null;
+
   const layers = brandKitLayers(
     resolved,
     s.doc.aspect,
     clipDurationSec,
     null,
-    null,
+    carried,
   );
   for (const layer of layers) {
+    // Never touch the Words layer: it holds wording the user typed by hand, in
+    // a zone they chose, and the brand kit has no business rewriting it.
+    if (layer.id === WORDS_LAYER_ID) continue;
     const existing = s.doc.layers.find((l) => l.id === layer.id);
     // Stable-id layers (the caption) must replace, not stack — same contract
     // as addCaptionToAd.

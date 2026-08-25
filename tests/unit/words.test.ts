@@ -6,6 +6,7 @@ import {
   wordTreatmentsSchema,
   DEFAULT_TREATMENT,
   WORD_ZONES,
+  WORD_SIZES,
 } from "@/lib/composition/words";
 import { ASPECT_DESIGN, layerSchema } from "@/lib/composition/layers";
 
@@ -150,5 +151,41 @@ describe("sizeForWords", () => {
     // would otherwise produce a size the layer schema rejects.
     expect(sizeForWords("a".repeat(400), 0.9, "9:16")).toBeGreaterThanOrEqual(8);
     expect(sizeForWords("A", 0.9, "16:9")).toBeLessThanOrEqual(400);
+  });
+});
+
+describe("size presets", () => {
+  it("every preset is a width the schema accepts", () => {
+    // widthFrac is bounded 0.2-0.9; a preset outside that would build a layer
+    // the document rejects, i.e. text that silently never appears.
+    for (const sz of WORD_SIZES) {
+      expect(
+        wordTreatmentSchema.safeParse({
+          ...DEFAULT_TREATMENT,
+          widthFrac: sz.widthFrac,
+        }).success,
+      ).toBe(true);
+    }
+  });
+
+  it("bigger presets really do produce bigger type", () => {
+    const text = "Launch Week";
+    const sizes = WORD_SIZES.map((sz) =>
+      sizeForWords(text, sz.widthFrac, "1:1"),
+    );
+    for (let i = 1; i < sizes.length; i++) {
+      expect(sizes[i]).toBeGreaterThan(sizes[i - 1]);
+    }
+  });
+
+  it("even the largest preset keeps long wording inside the frame", () => {
+    // The point of sizing by width fraction rather than point size: "Full
+    // width" on a long headline must shrink the type, not overflow.
+    const longest = WORD_SIZES[WORD_SIZES.length - 1];
+    const text = "Our biggest clearance event of the entire year, ends Sunday";
+    const size = sizeForWords(text, longest.widthFrac, "9:16");
+    expect(text.length * size * 0.5).toBeLessThanOrEqual(
+      ASPECT_DESIGN["9:16"].width,
+    );
   });
 });
