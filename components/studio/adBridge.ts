@@ -14,6 +14,14 @@ import {
   buildWordsLayer,
   type WordTreatment,
 } from "@/lib/composition/words";
+import {
+  brandKitLayers,
+  type BrandKitInfo,
+} from "@/lib/composition/brand-apply";
+import {
+  pickContrastingLogo,
+  sampleBackdropLuminance,
+} from "@/lib/composition/backdrop";
 
 /**
  * The one bridge between the generation rail (right) and the Ad stage (centre).
@@ -203,4 +211,63 @@ export function currentAdWords(): string {
     .getState()
     .doc?.layers.find((l) => l.id === WORDS_LAYER_ID);
   return layer && layer.kind === "text" ? layer.text : "";
+}
+
+export type BrandApplyOutcome =
+  | { ok: true; layers: number; variant: "light" | "dark" | "only" }
+  | { ok: false; reason: "no-ad" | "no-logo" };
+
+/**
+ * Stamp the workspace's brand kit onto the ad.
+ *
+ * None of the hard part is new — `brandKitLayers` has always built the logo
+ * end-card and the tagline/caption layers, and `brandBridge` has always turned
+ * a finalized logo into white and black transparent marks. Both were only ever
+ * reachable from the CLASSIC compositor, so the Studio people actually use
+ * couldn't apply the brand it had just designed. This connects them.
+ *
+ * The one genuinely new part is choosing WHICH mark. `pickKitLogo` picks by
+ * availability, which puts a white logo on a white product shot as soon as both
+ * variants exist. Here the backdrop is measured and the contrasting one wins.
+ */
+export async function applyBrandKitToAd(
+  kit: BrandKitInfo,
+  clipDurationSec = 10,
+): Promise<BrandApplyOutcome> {
+  const s = useCompositorStore.getState();
+  if (!s.doc) return { ok: false, reason: "no-ad" };
+
+  const hasBoth = !!kit.logo_url && !!kit.logo_dark_url;
+  // Only worth measuring when there's a real choice to make.
+  const luminance = hasBoth
+    ? await sampleBackdropLuminance(s.doc.background.src)
+    : null;
+  const logoSrc = pickContrastingLogo(kit, luminance);
+  if (!logoSrc) return { ok: false, reason: "no-logo" };
+
+  // brandKitLayers re-reads the logo from the kit via pickKitLogo, so hand it a
+  // kit whose primary IS the mark we chose. Otherwise the measurement is done
+  // and then quietly ignored.
+  const resolved: BrandKitInfo = { ...kit, logo_url: logoSrc };
+
+  const layers = brandKitLayers(
+    resolved,
+    s.doc.aspect,
+    clipDurationSec,
+    null,
+    null,
+  );
+  for (const layer of layers) {
+    const existing = s.doc.layers.find((l) => l.id === layer.id);
+    // Stable-id layers (the caption) must replace, not stack — same contract
+    // as addCaptionToAd.
+    if (existing) s.replaceLayer(layer.id, layer);
+    else s.addLayer(layer);
+  }
+
+  return {
+    ok: true,
+    layers: layers.length,
+    variant: !hasBoth ? "only" : logoSrc === kit.logo_dark_url ? "dark" : "light",
+  };
 }

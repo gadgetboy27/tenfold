@@ -1,11 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Layers, Trash2, ChevronUp, ChevronDown, Lock, Unlock } from "lucide-react";
+import {
+  Layers,
+  Trash2,
+  ChevronUp,
+  ChevronDown,
+  Lock,
+  Unlock,
+  Stamp,
+} from "lucide-react";
 import toast from "react-hot-toast";
 import { CompositorCanvas as LayeredCanvas } from "@/components/compositor/CompositorCanvas";
 import { useCompositorStore } from "@/store/useCompositorStore";
-import { setAdAspect } from "./adBridge";
+import { setAdAspect, applyBrandKitToAd } from "./adBridge";
 import { api } from "@/lib/api";
 import type {
   CompositionAspect,
@@ -131,6 +139,42 @@ export function AdStage({
   const aspect = doc?.aspect ?? pendingAspect;
   const layers = doc?.layers ?? [];
 
+  const [branding, setBranding] = useState(false);
+
+  // Stamp the workspace's logo and tagline onto the ad. The machinery has
+  // always existed (brandKitLayers) but was only reachable from the classic
+  // compositor — so the Studio could design a logo it could never apply.
+  const applyBrand = async () => {
+    setBranding(true);
+    try {
+      const res = await api("/api/brand-kit", { workspaceSlug });
+      const kit = (await res.json().catch(() => ({}))) as {
+        logo_url?: string | null;
+        logo_dark_url?: string | null;
+        tagline?: string | null;
+        font_family?: string | null;
+      };
+      const outcome = await applyBrandKitToAd(kit);
+      if (!outcome.ok) {
+        toast.error(
+          outcome.reason === "no-ad"
+            ? "Put something on the ad first."
+            : "No brand logo yet — finish one in Logo & brand, then use it as your brand mark.",
+        );
+        return;
+      }
+      toast.success(
+        outcome.variant === "only"
+          ? "Brand applied"
+          : `Brand applied — used the ${outcome.variant} mark for this backdrop`,
+      );
+    } catch {
+      toast.error("Couldn't load your brand kit");
+    } finally {
+      setBranding(false);
+    }
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       {/* ── The artboard ── */}
@@ -195,6 +239,17 @@ export function AdStage({
             ))
           )}
         </div>
+
+        <button
+          type="button"
+          onClick={applyBrand}
+          disabled={!doc || branding}
+          title="Stamp your brand logo and tagline onto this ad"
+          className="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+        >
+          <Stamp className="h-3.5 w-3.5" />
+          {branding ? "Applying…" : "Brand"}
+        </button>
 
         {selectedLayerId && (
           <div className="flex shrink-0 items-center gap-1">
