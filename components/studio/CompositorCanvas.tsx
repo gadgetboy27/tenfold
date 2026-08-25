@@ -92,6 +92,25 @@ const MECHANICAL_OPS = new Set<CompositeOp>([
   "gradientMerge",
   "softGlow",
 ]);
+
+/**
+ * Ops that return a transformed copy of the WHOLE source frame, as opposed to
+ * something meant to sit on top of it.
+ *
+ * These have to REPLACE what they were applied to. Adding a full-frame result
+ * as a new layer leaves the original underneath it — a soft glow on a photo
+ * produced two copies of that photo stacked, and the top one arrives locked, so
+ * it reads as one immovable image that can't be separated. Only `cutout`
+ * genuinely produces a new element to place; `depth` isn't placeable at all.
+ */
+const FULL_FRAME_OPS = new Set<CompositeOp>([
+  "inpaint",
+  "relight",
+  "blend",
+  "textureOverlay",
+  "gradientMerge",
+  "softGlow",
+]);
 // Free-tier ops that still need a second image picked from the gallery.
 const NEEDS_SECOND_IMAGE = new Set<CompositeOp>([
   "blend",
@@ -484,26 +503,46 @@ export function CompositorCanvas({
         op: activeOp,
         params,
       };
-      const newLayer: Layer = {
-        id: uuidv4(),
-        kind: "image",
-        src: url,
-        pos: { mode: "fraction", nx: 0.5, ny: 0.5 },
-        scale: 1,
-        rotationDeg: 0,
-        opacity: 1,
-        blend: "normal",
-        appearAt: 0,
-        disappearAt: null,
-        fadeSec: 0,
-        locked: true, // auto-locked once done — protects the finished step
-        producedBy: provenance,
-      };
-      addLayer(newLayer);
-      await persist(useCompositorStore.getState().doc ?? undefined);
-      toast.success(`${OP_META[activeOp].label} done — added as a new layer`, {
-        id: t,
-      });
+      if (FULL_FRAME_OPS.has(activeOp)) {
+        // Replace the thing it was applied to. `sourceImageUrl` above resolves
+        // to the selected image layer, else the background — so put the result
+        // back exactly where the source came from.
+        //
+        // Trade-off taken knowingly: a background carries no `producedBy`, so
+        // replacing it loses the "Redo this op" affordance that a layer would
+        // have kept. Two stacked copies of the same photo is the worse outcome,
+        // and the op panel is right here to run again.
+        if (selectedLayer?.kind === "image") {
+          updateLayer(selectedLayer.id, { src: url, producedBy: provenance });
+        } else {
+          useCompositorStore.getState().setBackground({ kind: "image", src: url });
+        }
+        await persist(useCompositorStore.getState().doc ?? undefined);
+        toast.success(`${OP_META[activeOp].label} applied`, { id: t });
+      } else {
+        const newLayer: Layer = {
+          id: uuidv4(),
+          kind: "image",
+          src: url,
+          pos: { mode: "fraction", nx: 0.5, ny: 0.5 },
+          scale: 1,
+          rotationDeg: 0,
+          opacity: 1,
+          blend: "normal",
+          appearAt: 0,
+          disappearAt: null,
+          fadeSec: 0,
+          // NOT auto-locked. Locking made the result click-through on the
+          // canvas, so a user who didn't want it couldn't select it to delete
+          // it — "protecting the finished step" cost them control of it.
+          producedBy: provenance,
+        };
+        addLayer(newLayer);
+        await persist(useCompositorStore.getState().doc ?? undefined);
+        toast.success(`${OP_META[activeOp].label} done — added as a new layer`, {
+          id: t,
+        });
+      }
       resetForm();
     } catch (err) {
       toast.error((err as Error).message ?? "That operation failed", { id: t });

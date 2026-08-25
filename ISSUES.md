@@ -378,6 +378,58 @@ to buffer in a `<video>` tag, which makes a working video *look* broken, and it
 is a real storage and egress cost per render. Worth an encode pass
 (bitrate/CRF cap) in the concat step.
 
+### ✅ 23. Full-frame compositing ops stacked instead of replacing *(fixed)*
+
+Traced from "Bright Pulse": two copies of the same photo, the top one
+apparently undeletable.
+
+`softGlow` transforms the WHOLE frame, but every op result was added as a new
+image layer at 0.5/0.5 — so the glowed copy sat on top of the original. And it
+arrived `locked: true` ("protects the finished step"), which makes a layer
+click-through on the canvas, so it couldn't be selected to delete. Protecting
+the step cost the user control of it.
+
+**Fixed:** ops that return a transformed copy of the whole frame
+(`inpaint`, `relight`, `blend`, `textureOverlay`, `gradientMerge`, `softGlow`)
+now REPLACE what they were applied to — the selected layer, or the background.
+Only `cutout` still adds a layer, because only it produces a new element to
+place. Results are no longer auto-locked.
+
+Known trade-off: a background carries no `producedBy`, so replacing it loses
+the "Redo this op" affordance a layer kept. Two stacked copies is the worse
+outcome and the op panel is right there.
+
+### 🔴 24. Publishing to Facebook fails on a pre-scope connection
+
+"Bright Pulse" couldn't publish. Meta returned:
+
+> Any of the pages_read_engagement, pages_manage_metadata,
+> pages_read_user_content, pages_manage_ads, pages_show_list or
+> pages_messaging permission(s) must be granted before impersonating a user's
+> page.
+
+The connection dates from **2026-07-07** and predates the current scope list
+(`pages_show_list`, `pages_manage_posts`, `pages_read_engagement`). A stale
+grant keeps working for reads and fails only at the moment someone posts — so
+it surfaces at the worst possible time, as a wall of Facebook constants.
+
+**Partly fixed:** `actionableError()` in the publish route now translates this
+into "reconnect it in Settings → Social, and make sure the Page is ticked".
+**The connection itself still needs reconnecting by the user** — no code can
+re-grant a permission.
+
+### 🔴 25. A finalized logo is never adopted as the brand mark
+
+Also from "Bright Pulse": the logo banner never appeared because there was no
+logo to place — `brand_kits.logo_url` is null even though a logo was finalized.
+`POST /api/logo/[id]/use-as-brand` exists and nothing prompts anyone to call
+it, so finishing a logo leaves it sitting in Logo Studio while every ad that
+would use it has nothing to stamp.
+
+Related: `brand_kits.tagline` currently holds a **200-character paragraph**
+scraped by brand import, not a tagline. Applying the brand would stamp that
+whole paragraph onto the ad as text.
+
 ### 🔴 12. Compositor ops not folded into the three-pane rail
 
 On `feat/three-pane-ad-studio` the Compositor still takes the full width and the

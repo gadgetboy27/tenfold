@@ -101,6 +101,34 @@ async function publishToInstagram(
   );
 }
 
+/**
+ * Turn a platform's own error into something the user can act on.
+ *
+ * Meta answers a stale page grant with a wall of permission names — "Any of the
+ * pages_read_engagement, pages_manage_metadata, pages_read_user_content,
+ * pages_manage_ads, pages_show_list or pages_messaging permission(s) must be
+ * granted before impersonating a user's page." Accurate, useless to whoever is
+ * reading it, and it hides the one-line fix: reconnect the account.
+ *
+ * It happens to connections made before the current scope list. Those keep
+ * working for reads and fail only at the moment someone tries to post — so the
+ * first time anyone sees it is the worst possible time to be handed a list of
+ * Facebook permission constants.
+ */
+function actionableError(platform: string, raw: string): string {
+  if (
+    /permission\(s\) must be granted|pages_manage_posts|pages_show_list/i.test(
+      raw,
+    )
+  ) {
+    return `${platform} needs reconnecting — its permissions are out of date. Go to Settings → Social, reconnect it, and make sure the Page is ticked.`;
+  }
+  if (/expired|invalid.*token|OAuthException/i.test(raw)) {
+    return `${platform} needs reconnecting — the connection has expired. Settings → Social.`;
+  }
+  return raw;
+}
+
 export async function POST(req: Request) {
   try {
     const session = await getSession(req);
@@ -478,7 +506,10 @@ export async function POST(req: Request) {
         }
         platformResults[platform] = postId;
       } catch (err) {
-        errors[platform] = errorMessage(err, "Unknown error");
+        errors[platform] = actionableError(
+          platform,
+          errorMessage(err, "Unknown error"),
+        );
         // Surface the real reason server-side — the client only shows a generic
         // failure, so without this the actual cause (bad token, media, etc.) is
         // invisible.
