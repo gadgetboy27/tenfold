@@ -210,12 +210,20 @@ const STAGE_LABELS = [
 const VIDEO_LENGTHS = [10, 15, 30] as const;
 const VIDEO_STYLES = ["Cinematic", "Fast-cut", "Dramatic", "Smooth"] as const;
 
+// Video is the slowest thing this product makes — a 15s clip takes ~342s at the
+// median and a 10s one has been seen at 500s. The labels used to stop at 80s,
+// so a normal render spent five more minutes on "Finishing the cut…", which
+// reads as a hang. They now run the length of a real render and say plainly
+// that it's minutes, not seconds.
 const VIDEO_STAGE_LABELS = [
   [0, "Submitting your shot…"],
   [4, "Waiting for a GPU…"],
   [12, "Animating your scene…"],
   [40, "Rendering the motion…"],
-  [80, "Finishing the cut…"],
+  [80, "Still rendering — video takes a few minutes…"],
+  [180, "Rendering the motion — about halfway…"],
+  [300, "Nearly there — stitching the cut…"],
+  [420, "Taking longer than usual, but still going…"],
 ] as const;
 
 export function Studio({
@@ -835,7 +843,16 @@ export function Studio({
       }
       refreshBalance();
       let landed = false;
-      for (let i = 0; i < 160 && !landed; i++) {
+      // 450 x 2s = 15 minutes. The old bound was 160 (5m20s), which sat BELOW
+      // the median render time for a 15s video (342s measured across
+      // production — 4 of 6 runs exceeded it). So the most common outcome for
+      // that length was a perfectly good video reported to the user as a
+      // failure: the file existed, was stitched, was playable, and the UI had
+      // already given up on it. The slowest observed run was 500s.
+      //
+      // Polling longer costs nothing — the job is queued server-side either
+      // way, and each tick is one cheap status read.
+      for (let i = 0; i < 450 && !landed; i++) {
         await new Promise((r) => setTimeout(r, 2000));
         const elapsed = i * 2;
         setVideoStage(
@@ -863,8 +880,10 @@ export function Studio({
       // than implying it failed. Checked on the flag, not the loop index, so a
       // run of failed status fetches (which `continue`) still reports.
       if (!landed) {
+        // Fifteen minutes is well past anything observed, so this is now a
+        // genuine anomaly rather than the routine case it used to describe.
         throw new Error(
-          "Still rendering — your video is on the way. Reopen this project from the Gallery in a few minutes.",
+          "Still rendering after 15 minutes — your video is queued and will finish. Reopen this project from the Gallery shortly.",
         );
       }
     } catch (err) {

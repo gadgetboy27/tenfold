@@ -339,6 +339,45 @@ Nothing but approvals now stands between these and working:
 "fluff" tier. With Ayrshare gated off they show the honest unavailable state
 (#​: see the Ayrshare gate commit) rather than a dead Connect button.
 
+### ✅ 21. "Video isn't working" — it was, the UI gave up first *(fixed)*
+
+Reported after two failed attempts. Both attempts had in fact **succeeded**:
+valid stitched MP4s, HTTP 200, ~75MB each, sitting in storage.
+
+The UI polled `160 x 2s = 320s` and then reported failure. Measured across
+production:
+
+| type | median | runs over the 320s bound |
+| --- | --- | --- |
+| `video_15s` | **342s** | **4 of 6** |
+| `video_10s` | 115s (max 500s) | 2 of 24 |
+| `video_30s` | 143s (max 327s) | 1 of 18 |
+
+So the timeout sat **below the median finish time for 15s video** — the most
+common outcome for that length was a good render reported as a failure. The
+reported 30s attempt missed by 8 seconds (328s vs 320s).
+
+- **Fix:** bound raised to `450 x 2s = 15 minutes`, comfortably past the 500s
+  slowest observed. Polling longer is free — the job is queued server-side
+  regardless and each tick is one cheap status read.
+- Stage labels stopped at 80s, so a normal render spent five minutes on
+  "Finishing the cut…", which reads as a hang. They now run to 420s and say
+  plainly that video takes minutes.
+- The timeout message described the routine case as if it were an anomaly; at
+  15 minutes it now genuinely is one.
+- `tests/unit/video-poll-bound.test.ts` pins the bound against the slowest
+  observed render **with 1.5x headroom** — the old margin failed by 8 seconds,
+  and a thinner margin means the next slightly slower model silently brings the
+  bug back.
+
+### 🔴 22. Rendered videos are ~75MB for 30 seconds
+
+Both completed renders were ~75MB — roughly 20 Mbps for short-form social
+video, several times what the platforms themselves re-encode to. That is slow
+to buffer in a `<video>` tag, which makes a working video *look* broken, and it
+is a real storage and egress cost per render. Worth an encode pass
+(bitrate/CRF cap) in the concat step.
+
 ### 🔴 12. Compositor ops not folded into the three-pane rail
 
 On `feat/three-pane-ad-studio` the Compositor still takes the full width and the
