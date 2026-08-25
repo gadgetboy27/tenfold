@@ -138,6 +138,18 @@ export type SectionId =
  */
 type RailMode = "narrow" | "wide" | "full";
 
+/**
+ * "full" hides the Ad stage, which is only right when the tool actually puts
+ * its own canvas there. The Compositor does — but only once it has a campaign
+ * and an image to composite; without those it renders a one-line "Open
+ * Compositor" link, and taking the stage away for that leaves a near-empty
+ * screen with the ad nowhere to be seen.
+ */
+function railModeFor(section: SectionId, canCompose: boolean): RailMode {
+  if (section === "compositor" && !canCompose) return "wide";
+  return RAIL_MODE[section];
+}
+
 const RAIL_MODE: Record<SectionId, RailMode> = {
   brief: "narrow",
   images: "narrow",
@@ -1392,7 +1404,7 @@ export function Studio({
                 Logo editor has its own canvas and control columns that simply
                 do not fit a rail. Both read from the same state, so nothing is
                 lost by standing down while they're open. ── */}
-            {RAIL_MODE[section] !== "full" && (
+            {railModeFor(section, !!campaignId && !!workingImage) !== "full" && (
               <div className="min-h-0 min-w-0 flex-1">
                 {/* Keyed on the campaign so switching projects starts the stage
                     clean. It deliberately does NOT key on `section` — staying
@@ -1411,9 +1423,10 @@ export function Studio({
                 for them rather than squeezing them into a column. ── */}
             <aside
               className={`min-h-0 overflow-y-auto overflow-x-auto rounded-2xl border border-border bg-card/40 p-3 transition-[width] duration-200 ${
-                RAIL_MODE[section] === "full"
+                railModeFor(section, !!campaignId && !!workingImage) === "full"
                   ? "min-w-0 flex-1"
-                  : RAIL_MODE[section] === "wide"
+                  : railModeFor(section, !!campaignId && !!workingImage) ===
+                      "wide"
                     ? "w-[min(46vw,620px)] shrink-0"
                     : "w-[min(32vw,400px)] shrink-0"
               }`}
@@ -1440,6 +1453,7 @@ export function Studio({
                   setDirection={setMusicDirection}
                   durationSec={videoDuration}
                   hasVideo={!!videoUrl}
+                  campaignId={campaignId}
                   generating={musicGenerating}
                   stage={musicStage}
                   url={musicUrl}
@@ -2599,6 +2613,7 @@ function MusicCanvas({
   setDirection,
   durationSec,
   hasVideo,
+  campaignId,
   generating,
   stage,
   url,
@@ -2616,6 +2631,8 @@ function MusicCanvas({
   setDirection: (d: string) => void;
   durationSec: 10 | 15 | 30;
   hasVideo: boolean;
+  /** No campaign means nothing to attach a soundtrack to. */
+  campaignId: string | null;
   generating: boolean;
   stage: string;
   url: string | null;
@@ -2769,10 +2786,18 @@ function MusicCanvas({
           </div>
         )}
 
+        {/* Music was the only generative tool offering a live button with no
+            campaign behind it — Video says "Pick an image first", Caption says
+            "Generate an image first", and this cheerfully offered to compose a
+            soundtrack for a project that doesn't exist, while claiming it was
+            "matched to your 10s video". */}
         <button
           type="button"
           onClick={() => onGenerate()}
-          disabled={generating}
+          disabled={generating || !campaignId}
+          title={
+            campaignId ? undefined : "Generate an image first — music is sized to your campaign's video."
+          }
           className="flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity disabled:opacity-40"
         >
           {generating ? (
@@ -2785,6 +2810,11 @@ function MusicCanvas({
             </>
           )}
         </button>
+        {!campaignId && (
+          <p className="text-center text-[11px] text-muted-foreground">
+            Generate an image first — a soundtrack is sized to your video.
+          </p>
+        )}
         <p className="text-center text-[11px] text-muted-foreground/70">
           {isNatural
             ? "Natural renders a fixed ~30s bed"
