@@ -9,6 +9,7 @@ import {
   Images as ImagesIcon,
   Play,
   Plus,
+  Type,
   Music,
   MessageSquare,
   Layers,
@@ -36,6 +37,7 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { AdStage } from "./AdStage";
+import { WordsCanvas } from "./WordsCanvas";
 import { addImageToAd, addVideoToAd } from "./adBridge";
 import { Spinner } from "@/components/brand/Spinner";
 import CreditMeter from "@/components/shared/CreditMeter";
@@ -94,6 +96,7 @@ type SectionId =
   | "video"
   | "music"
   | "caption"
+  | "words"
   | "productshot"
   | "tryon"
   | "talking"
@@ -125,6 +128,7 @@ const SECTION_LABELS: Record<SectionId, string> = {
   video: "Video",
   music: "Music",
   caption: "Caption",
+  words: "Words",
   productshot: "Product shot",
   tryon: "Virtual try-on",
   talking: "Spokesperson",
@@ -142,6 +146,8 @@ const SECTION_FOCUS: Record<SectionId, StripFocus> = {
   video: "video",
   music: "audio",
   caption: "caption",
+  // Words is drawn onto the ad itself, not a produced asset — no strip group.
+  words: null,
   productshot: "images",
   tryon: "images",
   talking: "video",
@@ -1109,6 +1115,14 @@ export function Studio({
       done: !!progress?.done.caption,
     },
     {
+      id: "words",
+      label: "Words",
+      icon: Type,
+      // Not derived from progress: words live on the composition, and the
+      // stage's own layer list is the truth for whether any are placed.
+      done: false,
+    },
+    {
       id: "compositor",
       label: "Compositor",
       icon: Layers,
@@ -1315,6 +1329,8 @@ export function Studio({
                   onBack={() => setSection("video")}
                   onContinue={() => setSection("compositor")}
                 />
+              ) : section === "words" ? (
+                <WordsCanvas workspaceSlug={workspaceSlug} context={prompt} />
               ) : section === "caption" ? (
                 <CaptionCanvas
                   workspaceSlug={workspaceSlug}
@@ -1504,7 +1520,10 @@ function StudioNav({
           const justUnlocked =
             !t.done &&
             !active &&
-            (t.id === "video" || t.id === "caption" || t.id === "compositor"
+            (t.id === "video" ||
+            t.id === "caption" ||
+            t.id === "words" ||
+            t.id === "compositor"
               ? !!anchorId
               : t.id === "music"
                 ? !!videoUrl

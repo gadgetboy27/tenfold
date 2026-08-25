@@ -5,6 +5,41 @@ main site** — there is no separate classic homepage anymore. It drives the
 SAME endpoints the classic flow used — a surface over existing functionality,
 not a new engine.
 
+## Words — the model designs, the compositor spells (2026-08-25)
+
+`WordsCanvas` in the rail. You type the exact wording; it becomes a text layer
+on the Ad stage. **The letters never reach an image model.**
+
+That distinction is the whole feature. Asking an image model for specific text
+is a request, not a constraint — a hot-sauce brief that never mentioned text
+came back with bottles reading "AUNCEAAN FLEANCE" and "RAME FOOUCH Côtlene
+HOTO". Routing text-bearing briefs to Ideogram (`lib/fal/text-in-image.ts`)
+made that much better; it did not make it *guaranteed*. This does.
+
+- **Claude proposes how type should LOOK, never what it says.**
+  `wordTreatmentSchema` has zone, font, colour, width and scrim — and **no
+  field for letters**. A model that tries to send wording has it stripped by
+  Zod. Don't add a `text` field "for convenience": that is the day the
+  guarantee dies, and a test pins it.
+- **Zones are the nine existing anchors**, not new geometry. Anchor mode is why
+  a corner lock-up survives a 1:1 → 9:16 re-render; fraction mode would drift.
+- **Fonts are restricted to `BRAND_FONTS`** because those are the five with
+  real `.ttf` files in `public/fonts/`. The browser will happily render any
+  family, but the FFmpeg export resolves through `FONT_FILES` and silently
+  falls back to Inter — accepting an unknown font gives a correct preview and a
+  wrong video. A test rejects fonts we have no file for.
+- **One layer, replaced not stacked** (`WORDS_LAYER_ID`), same contract as
+  `CAPTION_LAYER_ID`. Words are edited iteratively; a fresh uuid per edit would
+  pile up overlapping copies, each hiding the last, discovered only at export.
+- **Suggestions are free** — one small Claude call. Charging per suggestion
+  would tax the exploration the tool exists to encourage.
+
+Still open: font *weight* isn't in the schema (each weight is another font file
+to ship), and a user-supplied family needs upload + registration in
+`FONT_FILES`, plus a licensing confirmation — many commercial fonts forbid
+server-side embedding. Until then, don't offer a free-text font box: it would
+preview correctly and export wrong.
+
 ## The three-pane shell (2026-08-24) — read this before touching the layout
 
 `<main>` is **tools left │ the ad centre │ generation right**. Picking a tool

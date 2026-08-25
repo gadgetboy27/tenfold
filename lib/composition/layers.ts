@@ -295,7 +295,11 @@ export function centerToPos(
 
 // ── Layers ───────────────────────────────────────────────────────────────────
 
-const BRAND_FONTS = [
+// Exported: the Words tool offers these by name, and the FFmpeg export resolves
+// each one to a real .ttf in public/fonts. Anything not in this list has no
+// font file, so it would preview correctly in the browser and silently fall
+// back to Inter in the render — keep the two in step.
+export const BRAND_FONTS = [
   "Inter",
   "Montserrat",
   "Playfair Display",

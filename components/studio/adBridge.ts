@@ -10,6 +10,10 @@ import {
   type TextLayer,
 } from "@/lib/composition/layers";
 import { wrapText } from "@/lib/composition/brand-apply";
+import {
+  buildWordsLayer,
+  type WordTreatment,
+} from "@/lib/composition/words";
 
 /**
  * The one bridge between the generation rail (right) and the Ad stage (centre).
@@ -154,4 +158,49 @@ export function setAdAspect(aspect: CompositionAspect) {
 /** True once the ad has a real, persistable composition behind it. */
 export function adHasDoc(): boolean {
   return useCompositorStore.getState().doc !== null;
+}
+
+/**
+ * The stable id for the Words layer. Like CAPTION_LAYER_ID, a fixed id rather
+ * than a uuid: the Words tool is used iteratively — retype, restyle, move the
+ * zone — and each pass must REPLACE the block. Generating a new id per edit
+ * would stack a dozen overlapping copies of the same headline, each hiding the
+ * last, and the user would only find out at export.
+ */
+export const WORDS_LAYER_ID = "words";
+
+/**
+ * Put exact wording on the ad, styled by a treatment.
+ *
+ * Returns null when there is nothing to put it on: type floating over an empty
+ * artboard is not a design, and silently doing nothing is worse than saying so.
+ */
+export function addWordsToAd(
+  text: string,
+  treatment: WordTreatment,
+): AddResult | null {
+  const s = useCompositorStore.getState();
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  if (!s.doc) return null;
+
+  const layer = buildWordsLayer({
+    id: WORDS_LAYER_ID,
+    text: trimmed,
+    treatment,
+    aspect: s.doc.aspect,
+  });
+
+  const existing = s.doc.layers.find((l) => l.id === WORDS_LAYER_ID);
+  if (existing) s.replaceLayer(WORDS_LAYER_ID, layer);
+  else s.addLayer(layer);
+  return "layer";
+}
+
+/** The wording currently on the ad, so the tool reopens on what is there. */
+export function currentAdWords(): string {
+  const layer = useCompositorStore
+    .getState()
+    .doc?.layers.find((l) => l.id === WORDS_LAYER_ID);
+  return layer && layer.kind === "text" ? layer.text : "";
 }
