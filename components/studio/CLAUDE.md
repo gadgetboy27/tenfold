@@ -77,10 +77,29 @@ Three constraints that shaped this and will bite anyone who forgets them:
   rather than stacking two overlapping text blocks — the same stable-id
   contract the caption-style presets rely on.
 
-**Rail width is a property of the tool, not a preference.** `RAIL_WIDE`
-(`Studio.tsx`) widens it to ~620px for Gallery, Logo Studio and Publish —
-browsers and multi-step flows, as opposed to "generate one thing and place
-it" panels at ~400px. A panel that renders in the narrow rail must be ONE
+**Rail width is a property of the tool, not a preference.** `RAIL_MODE`
+(`Studio.tsx`) is a `Record<SectionId, "narrow" | "wide" | "full">` — a Record
+rather than a Set on purpose, so **adding a SectionId is a compile error until
+you declare its width**. The alternative is a new tool silently inheriting the
+narrow default and overflowing off-screen, which is exactly how the Logo editor
+ended up rendering "Apply brand pale…" and "Sa[ve version]" clipped at the
+viewport edge.
+
+| mode | who | the Ad stage |
+|---|---|---|
+| `narrow` (~400px) | generate-one-thing panels | keeps the centre |
+| `wide` (~620px) | Gallery, Publish — browsers and multi-step flows | keeps the centre |
+| `full` | Compositor, Logo — editors with their own canvas | **stands down** |
+
+`full` replaced a hardcoded `section === "compositor"` exception. Anything with
+its own canvas and its own control columns belongs there: two canvases side by
+side is worse than one, and squeezing an editor into a column is worse than
+both. A `full` tool must not carry a `max-w-*` wrapper either — that re-creates
+the squeeze it was widened to escape.
+
+The rail also allows horizontal scroll. Content wider than the pane used to be
+clipped silently, which is why this was invisible until someone sent a
+screenshot. A panel that renders in the narrow rail must be ONE
 column; several (`CockpitCreate`, `CaptionCanvas`, `PublishCanvas`) had
 `lg:grid-cols-[…]` splits sized for the old full-width `<main>` and were
 collapsed. Note `lg:` is a *viewport* breakpoint, not a container one, so it

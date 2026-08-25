@@ -114,12 +114,41 @@ type SectionId =
  * Studio's brief→concepts→finalise, the publish targets, the compositor's op
  * controls) that are unusable in a single narrow column.
  */
-const RAIL_WIDE = new Set<SectionId>([
-  "projects",
-  "logo",
-  "publish",
-  "compositor",
-]);
+/**
+ * How much room each tool needs. A Record, not a Set, so adding a SectionId is
+ * a compile error until you decide — the alternative is a new tool silently
+ * inheriting the narrow default and overflowing off-screen, which is exactly
+ * how the Logo editor ended up with "Apply brand pale…" and "Sa[ve version]"
+ * cut off at the viewport edge.
+ *
+ * - narrow: generate one thing and place it. The ad keeps the centre.
+ * - wide:   a browser or multi-step flow. The ad keeps the centre, rail grows.
+ * - full:   a full editor with its own canvas. The Ad stage STANDS DOWN and
+ *           the tool takes the whole area, because two canvases side by side
+ *           is worse than one, and squeezing an editor into a column is worse
+ *           than both.
+ */
+type RailMode = "narrow" | "wide" | "full";
+
+const RAIL_MODE: Record<SectionId, RailMode> = {
+  brief: "narrow",
+  images: "narrow",
+  video: "narrow",
+  music: "narrow",
+  caption: "narrow",
+  words: "narrow",
+  productshot: "narrow",
+  tryon: "narrow",
+  talking: "narrow",
+  autocaption: "narrow",
+  projects: "wide",
+  publish: "wide",
+  // Both are editors with their own canvas and their own control columns.
+  // The Compositor already behaved this way via a hardcoded special case;
+  // Logo needs it for the same reason and now says so in the same place.
+  compositor: "full",
+  logo: "full",
+};
 
 const SECTION_LABELS: Record<SectionId, string> = {
   projects: "Gallery",
@@ -1288,12 +1317,14 @@ export function Studio({
                 instead of replacing the screen, so the thing you're making
                 stays in front of you until it's published.
                 
-                Hidden for the Compositor alone: that section renders the SAME
-                composition on its own canvas (its inpaint mask overlay is
-                positioned against it), so showing the stage too would put two
-                identical canvases side by side. It reads the same store, so
-                nothing is lost by standing down while it's open. ── */}
-            {section !== "compositor" && (
+                Hidden for any tool declared "full" in RAIL_MODE. The
+                Compositor renders the SAME composition on its own canvas (its
+                inpaint mask overlay is positioned against it), so showing the
+                stage too would put two identical canvases side by side; the
+                Logo editor has its own canvas and control columns that simply
+                do not fit a rail. Both read from the same state, so nothing is
+                lost by standing down while they're open. ── */}
+            {RAIL_MODE[section] !== "full" && (
               <div className="min-h-0 min-w-0 flex-1">
                 {/* Keyed on the campaign so switching projects starts the stage
                     clean. It deliberately does NOT key on `section` — staying
@@ -1311,10 +1342,10 @@ export function Studio({
                 Studio, Publish, Compositor) need real room, so the rail widens
                 for them rather than squeezing them into a column. ── */}
             <aside
-              className={`min-h-0 overflow-y-auto rounded-2xl border border-border bg-card/40 p-3 transition-[width] duration-200 ${
-                section === "compositor"
+              className={`min-h-0 overflow-y-auto overflow-x-auto rounded-2xl border border-border bg-card/40 p-3 transition-[width] duration-200 ${
+                RAIL_MODE[section] === "full"
                   ? "min-w-0 flex-1"
-                  : RAIL_WIDE.has(section)
+                  : RAIL_MODE[section] === "wide"
                     ? "w-[min(46vw,620px)] shrink-0"
                     : "w-[min(32vw,400px)] shrink-0"
               }`}
@@ -1378,7 +1409,9 @@ export function Studio({
                 // The full world-class Logo & Brand studio, delivered into the big
                 // canvas — its own multi-phase flow (brief → concepts → refine →
                 // vectorize → brand kit), same engine as the classic page.
-                <div className="mx-auto h-full max-w-5xl">
+                // No max-width: this is a "full" tool now, and capping it at
+                // 1024px would re-create the squeeze it was widened to escape.
+                <div className="h-full min-w-0">
                   <LogoStudio />
                 </div>
               ) : section === "compositor" && campaignId && workingImage ? (
