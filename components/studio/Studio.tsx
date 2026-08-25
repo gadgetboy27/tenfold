@@ -40,6 +40,12 @@ import { AdStage } from "./AdStage";
 import { WordsCanvas } from "./WordsCanvas";
 import { addImageToAd, addVideoToAd, addWordsToAd } from "./adBridge";
 import { DEFAULT_TREATMENT, WORD_ZONES } from "@/lib/composition/words";
+import {
+  resumeSection,
+  remainingSteps,
+  STEP_ACTION,
+  type DoneMap,
+} from "@/lib/studio/flow";
 import type { LayerAnchor } from "@/lib/composition/layers";
 import { Spinner } from "@/components/brand/Spinner";
 import CreditMeter from "@/components/shared/CreditMeter";
@@ -91,7 +97,7 @@ import { api } from "@/lib/api";
  * Compositor/Logo offering a deliberate "Open in classic" link.
  */
 
-type SectionId =
+export type SectionId =
   | "projects"
   | "brief"
   | "images"
@@ -304,9 +310,33 @@ export function Studio({
   // anywhere, but Gallery is the one screen someone lands on by clicking the
   // logo/Gallery shortcut without necessarily registering the rail as "back".
   const [lastWorkSection, setLastWorkSection] = useState<SectionId>("images");
+
+  /** Where this project was last open, so reopening resumes rather than
+   *  guesses. Per campaign and per browser — a position is a personal thing,
+   *  not workspace state worth a column and a migration. */
+  const rememberSection = (campaign: string | null, sec: SectionId) => {
+    if (!campaign) return;
+    try {
+      localStorage.setItem(`tf_last_section_${campaign}`, sec);
+    } catch {
+      /* private mode / storage disabled — resuming falls back to the flow */
+    }
+  };
+  const recallSection = (campaign: string): SectionId | null => {
+    try {
+      return (localStorage.getItem(`tf_last_section_${campaign}`) as
+        | SectionId
+        | null) ?? null;
+    } catch {
+      return null;
+    }
+  };
   const setSection = (s: SectionId) => {
     if (s !== "compositor") setCompositorInitialOp(null);
     if (section !== "projects" && section !== s) setLastWorkSection(section);
+    // The Gallery is a way OUT of a project, never a place inside one — saving
+    // it would resume people onto a list of other projects.
+    if (s !== "projects") rememberSection(campaignId, s);
     setSectionRaw(s);
   };
   // Pre-fill a friendly random project name; the user can keep it, clear it, or
@@ -723,12 +753,23 @@ export function Studio({
 
   // Open a past project into the canvas — rehydrate its state and land on the
   // right stage. Never leaves the surface. Pass `goto` to jump straight to a
-  // specific section (e.g. "publish") instead of the default anchor/images/
-  // brief heuristic — used by the Gallery's Publish quick-action.
+  // specific section (e.g. "publish") instead of resuming — used by the
+  // Gallery's Publish quick-action.
   const openProject = async (id: string, goto?: SectionId) => {
     try {
-      const res = await api(`/api/campaigns/${id}`, { workspaceSlug });
+      // Progress alongside the campaign, not after it: resuming needs to know
+      // what's finished, and the effect that normally fetches this only runs
+      // once campaignId has already changed — too late to choose a section.
+      const [res, progRes] = await Promise.all([
+        api(`/api/campaigns/${id}`, { workspaceSlug }),
+        api(`/api/campaigns/${id}/progress`, { workspaceSlug }).catch(
+          () => null,
+        ),
+      ]);
       if (!res.ok) throw new Error("Couldn't open that project");
+      const prog = progRes?.ok
+        ? ((await progRes.json()) as { done?: DoneMap })
+        : null;
       const camp = (await res.json()) as {
         name?: string | null;
         anchor_asset_id?: string | null;
@@ -778,9 +819,13 @@ export function Studio({
       setMusicUrl(music);
       setReferenceUrl(null);
       setGenerating(false);
+      // Resume where they actually were, else the first unfinished step.
+      // The old guess here was `anchor ? "video" : images ? "images" : "brief"`,
+      // which sent anyone who had reached Music back to Video — while the
+      // progress map, already fetched below, knew exactly what was finished.
+      const doneMap = (prog?.done ?? {}) as DoneMap;
       setSection(
-        goto ??
-          (camp.anchor_asset_id ? "video" : imgs.length ? "images" : "brief"),
+        goto ?? resumeSection(doneMap, recallSection(id)) ?? "brief",
       );
     } catch (err) {
       toast.error((err as Error).message ?? "Couldn't open that project");
@@ -1505,6 +1550,7 @@ export function Studio({
                   assets={assets}
                   anchorId={anchorId}
                   onPick={pickAnchor}
+                  doneMap={(progress?.done ?? {}) as DoneMap}
                   videoDuration={videoDuration}
                   setVideoDuration={setVideoDuration}
                   videoStyle={videoStyle}
@@ -1713,6 +1759,7 @@ function CockpitCreate({
   generating,
   stage,
   assets,
+  doneMap,
   anchorId,
   onPick,
   videoDuration,
@@ -1776,6 +1823,9 @@ function CockpitCreate({
   generating: boolean;
   stage: string;
   assets: Anchor[];
+  /** What's already finished, so the next-step list reflects reality
+   *  instead of offering the same three suggestions forever. */
+  doneMap: DoneMap;
   anchorId: string | null;
   onPick: (id: string) => void;
   videoDuration: 10 | 15 | 30;
@@ -1812,23 +1862,26 @@ function CockpitCreate({
   }, [anchorId]);
   const hasResult = generating || assets.length > 0;
   const activeTool = tools.find((t) => t.id === section);
-  const next: {
-    label: string;
-    icon: typeof Play;
-    onSelect: () => void;
-  }[] = [
-    { label: "Make it move", icon: Play, onSelect: () => setSection("video") },
-    {
-      label: "Write a caption",
-      icon: MessageSquare,
-      onSelect: () => setSection("caption"),
-    },
-    {
-      label: "Open compositor",
-      icon: Layers,
-      onSelect: () => setSection("compositor"),
-    },
-  ];
+  // Derived from what's actually finished, not a fixed list. The three
+  // hardcoded suggestions here used to say "Make it move" to someone who had
+  // already made the video, and never mentioned Words or Publish at all —
+  // while `progress.done` knew precisely what was outstanding.
+  const STEP_ICON: Partial<Record<SectionId, typeof Play>> = {
+    images: ImagesIcon,
+    words: Type,
+    video: Play,
+    music: Music,
+    caption: MessageSquare,
+    compositor: Layers,
+    publish: Send,
+  };
+  const upcoming = remainingSteps(doneMap).filter((s) => s !== "images");
+  const next = upcoming.slice(0, 3).map((step) => ({
+    step,
+    label: STEP_ACTION[step] ?? String(step),
+    icon: STEP_ICON[step] ?? Play,
+    onSelect: () => setSection(step),
+  }));
 
   return (
     // One column: this now lives in the right-hand generation rail, not the
