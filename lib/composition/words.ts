@@ -164,3 +164,58 @@ export function buildWordsLayer(params: {
       : {}),
   };
 }
+
+/**
+ * How wide a text block renders, in design pixels.
+ *
+ * ~0.5em per character for a sans face — the same approximation sizeForWords
+ * uses, so "will it fit" and "what size makes it fit" can never disagree.
+ */
+function blockWidthPx(text: string, sizePx: number): number {
+  const longest = Math.max(
+    ...text.split("\n").map((l) => l.trim().length),
+    1,
+  );
+  return longest * sizePx * 0.5;
+}
+
+/** Does this text layer run off the frame at its current size? */
+export function textOverflows(
+  layer: TextLayer,
+  aspect: CompositionAspect,
+): boolean {
+  // 0.94 rather than 1.0: type touching the exact frame edge still reads as
+  // broken, and anchored layers carry a margin of their own.
+  return (
+    blockWidthPx(layer.text, layer.sizePx) >
+    ASPECT_DESIGN[aspect].width * 0.94
+  );
+}
+
+/**
+ * Shrink a text layer until it fits, and change nothing else.
+ *
+ * Deliberately does NOT re-wrap. Re-flowing the text would destroy line breaks
+ * someone typed on purpose — a two-line headline becoming three because we
+ * decided differently is a worse outcome than the size being slightly small.
+ * Only sizePx moves, so the result is predictable and the wording is untouched.
+ */
+export function refitTextLayer(
+  layer: TextLayer,
+  aspect: CompositionAspect,
+): TextLayer {
+  if (!textOverflows(layer, aspect)) return layer;
+
+  const longest = Math.max(
+    ...layer.text.split("\n").map((l) => l.trim().length),
+    1,
+  );
+  const target = (ASPECT_DESIGN[aspect].width * 0.88) / (longest * 0.5);
+  return {
+    ...layer,
+    // Clamped to the schema's own bounds, or the re-fit produces a layer the
+    // document rejects — which would lose the text entirely rather than
+    // shrink it.
+    sizePx: Math.round(Math.min(400, Math.max(8, target))),
+  };
+}

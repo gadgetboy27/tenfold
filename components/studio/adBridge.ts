@@ -12,6 +12,8 @@ import {
 import { wrapText } from "@/lib/composition/brand-apply";
 import {
   buildWordsLayer,
+  refitTextLayer,
+  textOverflows,
   type WordTreatment,
 } from "@/lib/composition/words";
 import {
@@ -287,4 +289,41 @@ export async function applyBrandKitToAd(
     layers: layers.length,
     variant: !hasBoth ? "only" : logoSrc === kit.logo_dark_url ? "dark" : "light",
   };
+}
+
+/** How many text layers currently run off the frame. Drives whether the
+ *  re-fit action is worth showing at all. */
+export function countOverflowingText(): number {
+  const doc = useCompositorStore.getState().doc;
+  if (!doc) return 0;
+  return doc.layers.filter(
+    (l) => l.kind === "text" && textOverflows(l, doc.aspect),
+  ).length;
+}
+
+/**
+ * Shrink any text that overflows the frame, and change nothing else.
+ *
+ * User-triggered on purpose. Layers created before the sizing fix keep their
+ * old 64px unwrapped size and overflow, but silently rewriting someone's saved
+ * composition on load — because we now disagree with its sizing — is worse than
+ * leaving it visibly wrong. They press this when they want it.
+ *
+ * Returns how many layers changed, so the caller can say something true rather
+ * than claiming success on a no-op.
+ */
+export function refitAdText(): number {
+  const s = useCompositorStore.getState();
+  if (!s.doc) return 0;
+
+  let fixed = 0;
+  for (const layer of s.doc.layers) {
+    if (layer.kind !== "text") continue;
+    const refitted = refitTextLayer(layer, s.doc.aspect);
+    if (refitted.sizePx !== layer.sizePx) {
+      s.updateLayer(layer.id, { sizePx: refitted.sizePx });
+      fixed++;
+    }
+  }
+  return fixed;
 }

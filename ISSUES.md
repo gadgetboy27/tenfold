@@ -449,17 +449,23 @@ them. So on any reopened project:
 The subject was in the response the whole time — the campaign GET does
 `select("*")` and has always returned `prompt`. Nothing read it. One line.
 
-### 🔴 27. Old caption layers keep their pre-fix sizing
+### ✅ 27. Old caption layers keep their pre-fix sizing *(fixed — user-triggered)*
 
 The caption-fitting fix (`sizeForWords`) applies when a caption is ADDED. Layers
 created before it keep their 64px unwrapped sizing and still run off both edges
 — visible on "Neon Launch" today. Re-generating the caption and re-adding it
 fixes that layer; nothing heals it automatically.
 
-Deliberately not auto-repaired on load: silently rewriting a user's saved
+**Fixed** with a "Re-fit text" action on the Ad stage, shown only when a layer
+actually overflows. Still not automatic on load: silently rewriting a saved
 composition because we now disagree with its sizing is worse than leaving it
-visibly wrong, and a "re-fit text" action they choose to press would be the
-honest fix.
+visibly wrong.
+
+It shrinks and changes nothing else — **it never re-wraps**. Re-flowing would
+destroy line breaks someone typed on purpose, and a two-line headline silently
+becoming three is a worse outcome than slightly smaller type. Text that cannot
+fit at any size (one enormous unbroken word) clamps at the schema floor and
+stays visibly overflowing rather than being silently re-flowed.
 
 ### 🔴 12. Compositor ops not folded into the three-pane rail
 

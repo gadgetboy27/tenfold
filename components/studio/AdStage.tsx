@@ -9,11 +9,17 @@ import {
   Lock,
   Unlock,
   Stamp,
+  WrapText,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { CompositorCanvas as LayeredCanvas } from "@/components/compositor/CompositorCanvas";
 import { useCompositorStore } from "@/store/useCompositorStore";
-import { setAdAspect, applyBrandKitToAd } from "./adBridge";
+import {
+  setAdAspect,
+  applyBrandKitToAd,
+  refitAdText,
+  countOverflowingText,
+} from "./adBridge";
 import { api } from "@/lib/api";
 import type {
   CompositionAspect,
@@ -141,6 +147,11 @@ export function AdStage({
 
   const [branding, setBranding] = useState(false);
 
+  // Recomputed from the doc on every render, so the action appears the moment
+  // an overflowing layer exists and disappears once it's been fixed. Cheap —
+  // it's a character count over at most twenty layers.
+  const overflowing = doc ? countOverflowingText() : 0;
+
   // Stamp the workspace's logo and tagline onto the ad. The machinery has
   // always existed (brandKitLayers) but was only reachable from the classic
   // compositor — so the Studio could design a logo it could never apply.
@@ -239,6 +250,29 @@ export function AdStage({
             ))
           )}
         </div>
+
+        {overflowing > 0 && (
+          // Only offered when there's something to fix. Text created before the
+          // sizing rules keeps its old size and runs off the frame; this is the
+          // deliberate, user-pressed repair rather than a silent rewrite of a
+          // saved composition on load.
+          <button
+            type="button"
+            onClick={() => {
+              const fixed = refitAdText();
+              toast.success(
+                fixed === 1
+                  ? "Re-fitted 1 text layer"
+                  : `Re-fitted ${fixed} text layers`,
+              );
+            }}
+            title="Shrink text that runs off the frame. Your wording and line breaks are left exactly as they are."
+            className="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs text-amber-600 transition-colors hover:bg-muted dark:text-amber-400"
+          >
+            <WrapText className="h-3.5 w-3.5" />
+            Re-fit text
+          </button>
+        )}
 
         <button
           type="button"
