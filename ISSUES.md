@@ -430,6 +430,37 @@ Related: `brand_kits.tagline` currently holds a **200-character paragraph**
 scraped by brand import, not a tagline. Applying the brand would stamp that
 whole paragraph onto the ad as text.
 
+### ✅ 26. Reopening a project forgot what the ad was ABOUT *(fixed)*
+
+Found by walking the flow rather than reading code. Reopening "Neon Launch" — a
+ramen bar — and going to Caption showed *"A coffee roastery overlooking the bay
+at golden hour…"*: the placeholder, because the field prefills from Studio's
+`prompt`, and `openProject` never restored it.
+
+It brought back the campaign name, every asset, the anchor, the video and the
+music — everything the project had PRODUCED — and not the brief that produced
+them. So on any reopened project:
+
+- **Caption** offered to write about nothing (or, visually, about a coffee
+  roastery that isn't yours).
+- **Words → Suggest treatments** passed an empty `context`, asking Claude to
+  design type for an ad it knew nothing about.
+
+The subject was in the response the whole time — the campaign GET does
+`select("*")` and has always returned `prompt`. Nothing read it. One line.
+
+### 🔴 27. Old caption layers keep their pre-fix sizing
+
+The caption-fitting fix (`sizeForWords`) applies when a caption is ADDED. Layers
+created before it keep their 64px unwrapped sizing and still run off both edges
+— visible on "Neon Launch" today. Re-generating the caption and re-adding it
+fixes that layer; nothing heals it automatically.
+
+Deliberately not auto-repaired on load: silently rewriting a user's saved
+composition because we now disagree with its sizing is worse than leaving it
+visibly wrong, and a "re-fit text" action they choose to press would be the
+honest fix.
+
 ### 🔴 12. Compositor ops not folded into the three-pane rail
 
 On `feat/three-pane-ad-studio` the Compositor still takes the full width and the

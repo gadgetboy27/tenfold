@@ -784,6 +784,7 @@ export function Studio({
         : null;
       const camp = (await res.json()) as {
         name?: string | null;
+        prompt?: string | null;
         anchor_asset_id?: string | null;
         assets?: {
           id: string;
@@ -824,6 +825,15 @@ export function Studio({
         null;
       setCampaignId(id);
       setCampaignName(camp.name?.trim() || randomCampaignName());
+      // Restore what the ad is ABOUT, not just what it produced.
+      //
+      // This was the flow break: reopening a project brought back every asset
+      // but not the brief, so Caption prefilled its topic from an empty prompt
+      // and offered to write about nothing, and the Words tool asked Claude to
+      // design type for an ad it knew nothing about. The subject was sitting
+      // in the response the whole time — select("*") has always returned it,
+      // nothing read it.
+      setPrompt(camp.prompt?.trim() ?? "");
       setAssets(imgs);
       setAnchorId(camp.anchor_asset_id ?? null);
       setEnhancedUrl(null);
