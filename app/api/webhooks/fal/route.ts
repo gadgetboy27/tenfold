@@ -278,9 +278,26 @@ async function handleSuccess(
 
       const imgRes = await fetch(img.url);
       const buffer = await imgRes.arrayBuffer();
-      await admin.storage.from("assets").upload(storagePath, buffer, {
-        contentType: img.content_type ?? "image/jpeg",
-      });
+      const { error: upErr } = await admin.storage
+        .from("assets")
+        .upload(storagePath, buffer, {
+          contentType: img.content_type ?? "image/jpeg",
+        });
+      // This result used to be discarded, and that is how a finalized logo
+      // ended up as a row in `assets` pointing at an object that was never
+      // written: the bucket's allowed_mime_types had no image/svg+xml, every
+      // SVG upload was rejected, and the webhook recorded success anyway. The
+      // branding screen then 404'd with NoSuchKey and nothing upstream knew.
+      //
+      // Throwing routes into the existing failure path — the job is marked
+      // failed and the credits are refunded, which is the honest outcome. A
+      // dangling asset row is strictly worse than a failed job: it looks like
+      // success everywhere except the one screen that tries to render it.
+      if (upErr) {
+        throw new Error(
+          `Could not store the generated ${img.content_type ?? "image"}: ${upErr.message}`,
+        );
+      }
 
       const { data: urlData } = admin.storage
         .from("assets")
