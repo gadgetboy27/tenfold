@@ -1559,13 +1559,26 @@ export function Studio({
                 //
                 // The project strip used to be mounted here and on Publish only;
                 // it's now pinned below <main> for every section instead.
-                <CompositorCanvas
-                  workspaceSlug={workspaceSlug}
-                  campaignId={campaignId}
-                  anchorUrl={workingImage}
-                  classicHref={`/${workspaceSlug}/compositor?campaign=${campaignId}`}
-                  initialOp={compositorInitialOp}
-                />
+                // The Compositor renders its own full-width canvas rather than
+                // going through CockpitCreate, so it misses the rail's
+                // done-footer. It's a flow step like any other and was the one
+                // remaining dead end — mounted explicitly here.
+                <>
+                  <CompositorCanvas
+                    workspaceSlug={workspaceSlug}
+                    campaignId={campaignId}
+                    anchorUrl={workingImage}
+                    classicHref={`/${workspaceSlug}/compositor?campaign=${campaignId}`}
+                    initialOp={compositorInitialOp}
+                  />
+                  <div className="mt-3">
+                    <StepStatus
+                      section="compositor"
+                      doneMap={(progress?.done ?? {}) as DoneMap}
+                      onGo={setSection}
+                    />
+                  </div>
+                </>
               ) : section === "publish" ? (
                 <PublishCanvas
                   workspaceSlug={workspaceSlug}
@@ -1865,10 +1878,17 @@ function StepStatus({
         </span>
         <p className="text-sm font-semibold">{label}</p>
       </div>
+      {/* The two halves are string EXPRESSIONS, not JSX text. As plain text
+          this rendered "newrender" on screen: the space after </strong> sits at
+          a line break Prettier chose, and gets eaten. Explicit {" "} doesn't
+          survive either — Prettier folds it straight back. Inside braces the
+          whitespace is part of a string literal, so nothing can touch it. */}
       <p className="text-xs leading-relaxed text-muted-foreground">
-        This is already part of your ad. The settings above start a{" "}
-        <strong className="font-medium text-foreground">new</strong> render and
-        cost credits again — they don&apos;t change what&apos;s on the canvas.
+        {"This is already part of your ad. The settings above start a "}
+        <strong className="font-medium text-foreground">new</strong>
+        {
+          " render and cost credits again — they don't change what's on the canvas."
+        }
       </p>
       <div className="flex flex-wrap gap-2 pt-0.5">
         {suggestions.map((step) => {
