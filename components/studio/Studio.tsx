@@ -43,6 +43,7 @@ import { DEFAULT_TREATMENT, WORD_ZONES } from "@/lib/composition/words";
 import {
   resumeSection,
   remainingSteps,
+  STUDIO_FLOW,
   STEP_ACTION,
   type DoneMap,
 } from "@/lib/studio/flow";
@@ -336,9 +337,11 @@ export function Studio({
   };
   const recallSection = (campaign: string): SectionId | null => {
     try {
-      return (localStorage.getItem(`tf_last_section_${campaign}`) as
-        | SectionId
-        | null) ?? null;
+      return (
+        (localStorage.getItem(
+          `tf_last_section_${campaign}`,
+        ) as SectionId | null) ?? null
+      );
     } catch {
       return null;
     }
@@ -674,7 +677,7 @@ export function Studio({
         landedCount > 0
           ? `${landedCount} option${landedCount === 1 ? "" : "s"} ready — still rendering the rest…`
           : ([...STAGE_LABELS].reverse().find(([t]) => elapsed >= t)?.[1] ??
-            STAGE_LABELS[0][1]),
+              STAGE_LABELS[0][1]),
       );
       const res = await api(`/api/campaigns/${id}`, { workspaceSlug });
       if (!res.ok) continue;
@@ -780,7 +783,16 @@ export function Studio({
       ]);
       if (!res.ok) throw new Error("Couldn't open that project");
       const prog = progRes?.ok
-        ? ((await progRes.json()) as { done?: DoneMap })
+        ? ((await progRes.json()) as {
+            done?: DoneMap;
+            settings?: {
+              video: {
+                durationSec: number | null;
+                style: string | null;
+                direction: string | null;
+              } | null;
+            };
+          })
         : null;
       const camp = (await res.json()) as {
         name?: string | null;
@@ -841,14 +853,36 @@ export function Studio({
       setMusicUrl(music);
       setReferenceUrl(null);
       setGenerating(false);
+      // Put the controls back to what actually made this ad.
+      //
+      // Without this the rail reset to its own defaults — "10 seconds", the
+      // first style in the list, an empty direction — while a 30-second
+      // Cinematic clip played on the canvas beside it. The panel wasn't
+      // describing the ad, it was describing a render that hadn't happened,
+      // and nothing said so. Anything the project never produced keeps the
+      // default rather than being blanked.
+      const vs = prog?.settings?.video;
+      if (vs) {
+        if (
+          vs.durationSec &&
+          (VIDEO_LENGTHS as readonly number[]).includes(vs.durationSec)
+        ) {
+          setVideoDuration(vs.durationSec as 10 | 15 | 30);
+        }
+        if (
+          vs.style &&
+          (VIDEO_STYLES as readonly string[]).includes(vs.style)
+        ) {
+          setVideoStyle(vs.style as (typeof VIDEO_STYLES)[number]);
+        }
+        setVideoDirection(vs.direction ?? "");
+      }
       // Resume where they actually were, else the first unfinished step.
       // The old guess here was `anchor ? "video" : images ? "images" : "brief"`,
       // which sent anyone who had reached Music back to Video — while the
       // progress map, already fetched below, knew exactly what was finished.
       const doneMap = (prog?.done ?? {}) as DoneMap;
-      setSection(
-        goto ?? resumeSection(doneMap, recallSection(id)) ?? "brief",
-      );
+      setSection(goto ?? resumeSection(doneMap, recallSection(id)) ?? "brief");
     } catch (err) {
       toast.error((err as Error).message ?? "Couldn't open that project");
     }
@@ -1425,7 +1459,8 @@ export function Studio({
                 Logo editor has its own canvas and control columns that simply
                 do not fit a rail. Both read from the same state, so nothing is
                 lost by standing down while they're open. ── */}
-            {railModeFor(section, !!campaignId && !!workingImage) !== "full" && (
+            {railModeFor(section, !!campaignId && !!workingImage) !==
+              "full" && (
               <div className="min-h-0 min-w-0 flex-1">
                 {/* Keyed on the campaign so switching projects starts the stage
                     clean. It deliberately does NOT key on `section` — staying
@@ -1761,6 +1796,106 @@ function StudioNav({
       persistent result). Section nav is StudioNav above, rendered once by
       Studio itself — CockpitCreate only needs `tools` for the "not yet
       ported" fallback's label lookup, not to render the nav. ── */
+/** One icon per flow step, shared by the "what's next" prompts. */
+const STEP_ICON: Partial<Record<SectionId, typeof Play>> = {
+  images: ImagesIcon,
+  words: Type,
+  video: Play,
+  music: Music,
+  caption: MessageSquare,
+  compositor: Layers,
+  publish: Send,
+};
+
+/** Plain statement of what this step already contributed to the ad. */
+const DONE_LABEL: Partial<Record<SectionId, string>> = {
+  images: "Your image is chosen",
+  words: "Your wording is on the ad",
+  video: "Your video is made",
+  music: "Your soundtrack is added",
+  caption: "Your caption is written",
+  compositor: "Your composition is saved",
+  publish: "This ad has been published",
+};
+
+/**
+ * What this step has already produced, and where to go from here.
+ *
+ * The gap this fills: the "what would you like to do next?" prompt existed only
+ * on the Images step. Every other tool dead-ended — reopen a finished project,
+ * land on Video, and the rail showed a Generate button and nothing else. No
+ * sign the video was already made, no route onward. The controls above look
+ * live, so people change them and wait for the canvas to react; it never does,
+ * because those inputs configure the NEXT render rather than describing the
+ * finished one.
+ *
+ * So this states all three things the screen was missing: that the step is
+ * done, that the controls above start a fresh render rather than editing this
+ * one, and what the remaining steps are — always ending at Publish.
+ *
+ * Deliberately not a hard lock. Greying the controls out would strand anyone
+ * who genuinely wants a different video, which is a normal thing to want. The
+ * honest fix is to say what the buttons do, not to take them away.
+ */
+function StepStatus({
+  section,
+  doneMap,
+  onGo,
+}: {
+  section: SectionId;
+  doneMap: DoneMap;
+  onGo: (s: SectionId) => void;
+}) {
+  // Only speaks up once this step has actually produced something — before
+  // that the panel's own controls are the obvious next action, and a nag here
+  // would just be noise.
+  if (!STUDIO_FLOW.includes(section) || !doneMap[section]) return null;
+
+  const rest = remainingSteps(doneMap).filter((s) => s !== section);
+  // Publish is the destination even when it's the only thing left; showing it
+  // twice isn't useful, hence the filter.
+  const suggestions = rest.filter((s) => s !== "publish").slice(0, 2);
+  const label = DONE_LABEL[section] ?? "Done";
+
+  return (
+    <div className="flex flex-col gap-2.5 rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.06] p-4">
+      <div className="flex items-center gap-2">
+        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-500">
+          <Check className="h-3 w-3" />
+        </span>
+        <p className="text-sm font-semibold">{label}</p>
+      </div>
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        This is already part of your ad. The settings above start a{" "}
+        <strong className="font-medium text-foreground">new</strong> render and
+        cost credits again — they don&apos;t change what&apos;s on the canvas.
+      </p>
+      <div className="flex flex-wrap gap-2 pt-0.5">
+        {suggestions.map((step) => {
+          const Icon = STEP_ICON[step] ?? Play;
+          return (
+            <button
+              key={step}
+              type="button"
+              onClick={() => onGo(step)}
+              className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs transition-colors hover:border-primary/50 hover:text-primary"
+            >
+              <Icon className="h-3.5 w-3.5" /> {STEP_ACTION[step] ?? step}
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          onClick={() => onGo("publish")}
+          className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+        >
+          <Send className="h-3.5 w-3.5" /> Publish it
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function CockpitCreate({
   tools,
   section,
@@ -1901,15 +2036,6 @@ function CockpitCreate({
   // hardcoded suggestions here used to say "Make it move" to someone who had
   // already made the video, and never mentioned Words or Publish at all —
   // while `progress.done` knew precisely what was outstanding.
-  const STEP_ICON: Partial<Record<SectionId, typeof Play>> = {
-    images: ImagesIcon,
-    words: Type,
-    video: Play,
-    music: Music,
-    caption: MessageSquare,
-    compositor: Layers,
-    publish: Send,
-  };
   const upcoming = remainingSteps(doneMap).filter((s) => s !== "images");
   const next = upcoming.slice(0, 3).map((step) => ({
     step,
@@ -2162,6 +2288,7 @@ function CockpitCreate({
             )}
             <VideoInputs
               hasAnchor={!!anchorId}
+              hasExisting={!!videoUrl}
               duration={videoDuration}
               setDuration={setVideoDuration}
               style={videoStyle}
@@ -2359,6 +2486,13 @@ function CockpitCreate({
           </>
         )}
       </div>
+
+      {/* Images has its own "what next" prompt inside the results panel, tuned
+          to the moment an anchor is picked. Every OTHER step had nothing —
+          this is that missing footer. */}
+      {section !== "images" && (
+        <StepStatus section={section} doneMap={doneMap} onGo={setSection} />
+      )}
     </div>
   );
 }
@@ -2366,6 +2500,7 @@ function CockpitCreate({
 /* ── Video: shared controls + result, used in both Simple and Cockpit ──────── */
 function VideoInputs({
   hasAnchor,
+  hasExisting,
   duration,
   setDuration,
   style,
@@ -2376,6 +2511,9 @@ function VideoInputs({
   onGenerate,
 }: {
   hasAnchor: boolean;
+  /** A video already exists for this project — so this button replaces rather
+   *  than creates, and saying "Generate" would misdescribe what it does. */
+  hasExisting: boolean;
   duration: 10 | 15 | 30;
   setDuration: (d: 10 | 15 | 30) => void;
   style: (typeof VIDEO_STYLES)[number];
@@ -2460,12 +2598,14 @@ function VideoInputs({
           </>
         ) : (
           <>
-            <Sparkles className="h-4 w-4" /> Generate video
+            <Sparkles className="h-4 w-4" />{" "}
+            {hasExisting ? "Render a new video" : "Generate video"}
           </>
         )}
       </button>
       <p className="text-center text-[11px] text-muted-foreground/70">
         {duration === 30 ? "30s · a longer film · Pro" : `${duration}s clip`}
+        {hasExisting && " · replaces the clip on your canvas"}
       </p>
     </div>
   );
@@ -2817,7 +2957,9 @@ function MusicCanvas({
           onClick={() => onGenerate()}
           disabled={generating || !campaignId}
           title={
-            campaignId ? undefined : "Generate an image first — music is sized to your campaign's video."
+            campaignId
+              ? undefined
+              : "Generate an image first — music is sized to your campaign's video."
           }
           className="flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity disabled:opacity-40"
         >
