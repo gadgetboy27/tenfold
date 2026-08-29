@@ -1573,22 +1573,22 @@ export function Studio({
                 // going through CockpitCreate, so it misses the rail's
                 // done-footer. It's a flow step like any other and was the one
                 // remaining dead end — mounted explicitly here.
-                <>
-                  <CompositorCanvas
-                    workspaceSlug={workspaceSlug}
-                    campaignId={campaignId}
-                    anchorUrl={workingImage}
-                    classicHref={`/${workspaceSlug}/compositor?campaign=${campaignId}`}
-                    initialOp={compositorInitialOp}
-                  />
-                  <div className="mt-3">
+                <CompositorCanvas
+                  workspaceSlug={workspaceSlug}
+                  campaignId={campaignId}
+                  anchorUrl={workingImage}
+                  classicHref={`/${workspaceSlug}/compositor?campaign=${campaignId}`}
+                  initialOp={compositorInitialOp}
+                  // Inside the controls column, not after the pane: this
+                  // component is h-full, so a sibling lands below the fold.
+                  footer={
                     <StepStatus
                       section="compositor"
                       doneMap={(progress?.done ?? {}) as DoneMap}
                       onGo={setSection}
                     />
-                  </div>
-                </>
+                  }
+                />
               ) : section === "publish" ? (
                 <PublishCanvas
                   workspaceSlug={workspaceSlug}

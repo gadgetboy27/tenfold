@@ -159,11 +159,18 @@ export function CompositorCanvas({
   anchorUrl,
   classicHref,
   initialOp = null,
+  footer = null,
 }: {
   workspaceSlug: string;
   campaignId: string;
   anchorUrl: string;
   classicHref: string;
+  /** Rendered at the bottom of the controls column. The done-footer used to
+   *  be mounted as a sibling AFTER this component, which sits at h-full — so
+   *  it landed a full screen below the fold and you had to scroll a pane that
+   *  looked like it didn't scroll to find it. Inside the column it's in the
+   *  natural flow of the controls instead. */
+  footer?: React.ReactNode;
   /** Preselects an op (e.g. jumping here from the video step's Pro-effects
    *  panel) instead of landing on the bare toolbar. */
   initialOp?: CompositeOp | null;
@@ -515,7 +522,9 @@ export function CompositorCanvas({
         if (selectedLayer?.kind === "image") {
           updateLayer(selectedLayer.id, { src: url, producedBy: provenance });
         } else {
-          useCompositorStore.getState().setBackground({ kind: "image", src: url });
+          useCompositorStore
+            .getState()
+            .setBackground({ kind: "image", src: url });
         }
         await persist(useCompositorStore.getState().doc ?? undefined);
         toast.success(`${OP_META[activeOp].label} applied`, { id: t });
@@ -539,9 +548,12 @@ export function CompositorCanvas({
         };
         addLayer(newLayer);
         await persist(useCompositorStore.getState().doc ?? undefined);
-        toast.success(`${OP_META[activeOp].label} done — added as a new layer`, {
-          id: t,
-        });
+        toast.success(
+          `${OP_META[activeOp].label} done — added as a new layer`,
+          {
+            id: t,
+          },
+        );
       }
       resetForm();
     } catch (err) {
@@ -655,11 +667,18 @@ export function CompositorCanvas({
         </Link>
       </div>
 
-      {/* LEFT: op menu + active op form + layer stack/properties, all in one
-          scrolling panel — RIGHT: the big canvas. Same split as the rest of
-          Studio's Cockpit (menu left, result right). */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(280px,320px)_1fr]">
-        <div className="flex min-h-0 flex-col gap-3 overflow-y-auto rounded-2xl border border-border bg-card p-3">
+      {/* Canvas LEFT, controls RIGHT — matching the three-pane shell, where
+          the thing you're making is central and every control lives in the
+          right rail. This pane used to be the other way round, following the
+          old two-column Cockpit convention it was written against: the result
+          was a second tools column on the left, directly beside the nav's tools
+          column, which read as two menus competing.
+
+          The order is flipped in CSS rather than by moving the markup, so the
+          DOM keeps controls-then-canvas for reading order and nothing in the
+          canvas measuring code below has to change. */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[1fr_minmax(280px,320px)]">
+        <div className="flex min-h-0 flex-col gap-3 overflow-y-auto rounded-2xl border border-border bg-card p-3 lg:order-2">
           {/* Op menu — a vertical list (not a wrapping pill row) since the
               left column has the height to spare. */}
           <nav className="flex flex-col gap-0.5">
@@ -891,13 +910,14 @@ export function CompositorCanvas({
               />
             </div>
           )}
+          {footer}
         </div>
 
         {/* Preview — the classic Compositor's real canvas: click to select,
             drag to move, edge/corner handles to resize/rotate. Fills the
             available space (canvas intrinsic size + max-w/max-h), no more
             capped-small mock. */}
-        <div className="flex min-h-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-card p-4">
+        <div className="flex min-h-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-card p-4 lg:order-1">
           <div ref={previewContainerRef} className="relative h-full w-full">
             <LayeredCanvas
               playing={false}
