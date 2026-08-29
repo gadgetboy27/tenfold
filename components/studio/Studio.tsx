@@ -1850,6 +1850,25 @@ const STEP_ICON: Partial<Record<SectionId, typeof Play>> = {
   publish: Send,
 };
 
+/**
+ * Why the controls beside a finished step look inert.
+ *
+ * On the generation steps the inputs configure the NEXT render and leave the
+ * finished asset alone — that is the whole confusion this footer exists to
+ * clear up. The Compositor is the opposite: its ops each add a layer to the
+ * canvas immediately, so the generation wording is simply false there, and
+ * saying "they don't change what's on the canvas" under a tool whose entire
+ * job is changing the canvas is worse than saying nothing.
+ */
+const DONE_NOTE: Partial<Record<SectionId, string>> = {
+  compositor:
+    "Your layers save as you go. The ops above add to the canvas and cost " +
+    "credits each — nothing here is waiting on you.",
+};
+
+const DEFAULT_DONE_NOTE_TAIL =
+  " render and cost credits again — they don't change what's on the canvas.";
+
 /** Plain statement of what this step already contributed to the ad. */
 const DONE_LABEL: Partial<Record<SectionId, string>> = {
   images: "Your image is chosen",
@@ -1914,11 +1933,15 @@ function StepStatus({
           survive either — Prettier folds it straight back. Inside braces the
           whitespace is part of a string literal, so nothing can touch it. */}
       <p className="text-xs leading-relaxed text-muted-foreground">
-        {"This is already part of your ad. The settings above start a "}
-        <strong className="font-medium text-foreground">new</strong>
-        {
-          " render and cost credits again — they don't change what's on the canvas."
-        }
+        {DONE_NOTE[section] ? (
+          DONE_NOTE[section]
+        ) : (
+          <>
+            {"This is already part of your ad. The settings above start a "}
+            <strong className="font-medium text-foreground">new</strong>
+            {DEFAULT_DONE_NOTE_TAIL}
+          </>
+        )}
       </p>
       <div className="flex flex-wrap gap-2 pt-0.5">
         {suggestions.map((step) => {
