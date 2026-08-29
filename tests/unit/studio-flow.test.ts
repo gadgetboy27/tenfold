@@ -68,16 +68,34 @@ describe("nextStep", () => {
     expect(nextStep(done)).toBe("video");
   });
 
+  it("puts music after the composition, not in the middle of it", () => {
+    // Music is the most skippable step (social video autoplays muted) and it
+    // used to block the view of the assembled ad. Safe to sit here only because
+    // publish re-muxes a late track onto the export — see late-music.ts.
+    expect(STUDIO_FLOW.indexOf("music")).toBeGreaterThan(
+      STUDIO_FLOW.indexOf("compositor"),
+    );
+    // The caption is post copy, so it belongs beside Publish, not before the
+    // Compositor which never renders it.
+    expect(STUDIO_FLOW.indexOf("caption")).toBeGreaterThan(
+      STUDIO_FLOW.indexOf("compositor"),
+    );
+  });
+
   it("skips ahead over anything already finished, in any order", () => {
     // Work doesn't happen in order — someone may caption before filming.
-    const done: DoneMap = { images: true, words: true, video: true, music: true, caption: true };
+    const done: DoneMap = {
+      images: true,
+      words: true,
+      video: true,
+      music: true,
+      caption: true,
+    };
     expect(nextStep(done)).toBe("compositor");
   });
 
   it("returns null when the ad is finished", () => {
-    const done: DoneMap = Object.fromEntries(
-      STUDIO_FLOW.map((s) => [s, true]),
-    );
+    const done: DoneMap = Object.fromEntries(STUDIO_FLOW.map((s) => [s, true]));
     expect(nextStep(done)).toBeNull();
   });
 
@@ -104,9 +122,7 @@ describe("resumeSection", () => {
   });
 
   it("lands on publish rather than images when everything is done", () => {
-    const done: DoneMap = Object.fromEntries(
-      STUDIO_FLOW.map((s) => [s, true]),
-    );
+    const done: DoneMap = Object.fromEntries(STUDIO_FLOW.map((s) => [s, true]));
     // Sending a finished ad back to the start is the old heuristic's mistake
     // in the other direction.
     expect(resumeSection(done, null)).toBe("publish");
@@ -117,9 +133,9 @@ describe("remainingSteps / flowProgress", () => {
   it("lists what's left, in order", () => {
     expect(remainingSteps({ images: true, video: true })).toEqual([
       "words",
-      "music",
-      "caption",
       "compositor",
+      "caption",
+      "music",
       "publish",
     ]);
   });

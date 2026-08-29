@@ -35,7 +35,7 @@ describe("a finished step always has somewhere to go", () => {
 
   it("offers the real remaining work, in flow order", () => {
     const done: DoneMap = { images: true, video: true };
-    expect(suggestionsFor("video", done)).toEqual(["words", "music"]);
+    expect(suggestionsFor("video", done)).toEqual(["words", "compositor"]);
   });
 
   it("falls back to Publish alone when nothing else is left", () => {

@@ -19,14 +19,33 @@ import type { SectionId } from "@/components/studio/Studio";
  * lists, each honest about its own job.
  */
 
-/** Steps that make up a finished ad, in the order they naturally happen. */
+/**
+ * Steps that make up a finished ad, in the order they naturally happen.
+ *
+ * Ordered so the ad LOOKS finished as early as possible. Music used to sit
+ * between video and the composition work, which meant waiting out a second
+ * generation before you could see your ad assembled at all — and music is the
+ * most skippable thing here, since most social video autoplays muted.
+ *
+ * Two things decide this order, and neither is taste:
+ *
+ * - **Music must precede the final export, not the Compositor.** FFmpeg muxes
+ *   the audio when it renders, so an export made before the music exists is
+ *   permanently silent. That used to pin music ahead of the Compositor; publish
+ *   now re-muxes a late track onto the export (`lib/composition/late-music.ts`),
+ *   which is what frees it to move down here.
+ * - **The caption is post copy, not artwork.** It rides as the post text
+ *   (see `captionStyle: "none"` in app/api/publish/route.ts), so nothing
+ *   downstream renders it and it belongs beside Publish. On-image lettering is
+ *   the Words step, which is a different thing and stays up top.
+ */
 export const STUDIO_FLOW: readonly SectionId[] = [
   "images",
   "words",
   "video",
-  "music",
-  "caption",
   "compositor",
+  "caption",
+  "music",
   "publish",
 ] as const;
 

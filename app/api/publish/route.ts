@@ -21,6 +21,16 @@ import {
 import { publishBrokeredWithCredits } from "@/lib/social/broker/charge";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { composeVideo } from "@/lib/composition/video";
+import { needsMusicRemux } from "@/lib/composition/late-music";
+
+/** A stored composed_video row, with the fields the remux + fan-out need. */
+interface ComposedRow {
+  id: string;
+  url: string;
+  type: string;
+  metadata?: { aspect?: string } | null;
+  created_at: string;
+}
 import { pickForPlatform } from "@/lib/composition/formats";
 import { v4 as uuidv4 } from "uuid";
 import { errorMessage } from "@/lib/api/error-message";
@@ -168,31 +178,87 @@ export async function POST(req: Request) {
         const { data: rawVideo } = await pick("video");
         asset = rawVideo as unknown as Asset | null;
       } else {
-        // All fan-out formats for this campaign, newest-first, indexed by aspect
-        // (first/newest wins per aspect). Untagged mixes just don't get indexed.
+        // All fan-out formats for this campaign, newest-first (first/newest
+        // wins per aspect). Untagged mixes just don't get indexed by aspect.
         const { data: composed } = await admin
           .from("assets")
-          .select("id, url, type, metadata")
+          .select("id, url, type, metadata, created_at")
           .eq("campaign_id", body.campaignId)
           .eq("workspace_id", session.workspaceId)
           .eq("type", "composed_video")
           .order("created_at", { ascending: false });
-        for (const row of composed ?? []) {
-          const r = row as unknown as {
-            id: string;
-            url: string;
-            type: string;
-            metadata?: { aspect?: string } | null;
-          };
+
+        // An export is a permanent snapshot of the music that existed when
+        // FFmpeg ran. Generate the soundtrack AFTER using the Compositor —
+        // which the nav has always allowed, and which the step order now
+        // actively encourages — and the export is silent. It was reused
+        // unconditionally, so the post went out with no sound and nothing
+        // said so.
+        //
+        // Re-mux onto the EXPORT, never back onto the raw clip: the export
+        // carries the overlays and brand work that rebuilding would discard.
+        // Every aspect is checked, not just the one about to be posted — each
+        // is its own render, and pickForPlatform chooses between them per
+        // network, so one stale cut is one silent platform.
+        const { data: lateMusic } = await admin
+          .from("assets")
+          .select("url, created_at")
+          .eq("campaign_id", body.campaignId)
+          .eq("workspace_id", session.workspaceId)
+          .eq("type", "audio")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const lm = lateMusic as unknown as {
+          url: string;
+          created_at: string;
+        } | null;
+
+        const rows = (composed ?? []) as unknown as ComposedRow[];
+        const fresh: ComposedRow[] = [];
+        for (const r of rows) {
+          if (lm && needsMusicRemux(r.created_at, lm.created_at)) {
+            try {
+              const mix = await composeVideo({
+                videoUrl: r.url,
+                audioUrl: lm.url,
+                captionStyle: "none", // caption rides as the post text
+                workspaceId: session.workspaceId,
+                campaignId: body.campaignId,
+              });
+              const freshId = uuidv4();
+              await admin.from("assets").insert({
+                id: freshId,
+                campaign_id: body.campaignId,
+                workspace_id: session.workspaceId,
+                type: "composed_video",
+                url: mix.url,
+                storage_path: mix.storagePath,
+                // Carry the aspect tag across or the fan-out stops matching
+                // formats to platforms.
+                metadata: r.metadata ?? null,
+              });
+              fresh.push({ ...r, id: freshId, url: mix.url });
+              continue;
+            } catch {
+              // A dead music URL or a failed FFmpeg run must not block
+              // publishing — the silent export still goes out. Worse than
+              // sound, better than nothing.
+            }
+          }
+          fresh.push(r);
+        }
+
+        for (const r of fresh) {
           const asp = r.metadata?.aspect;
           if (asp && !assetsByAspect.has(asp)) {
             assetsByAspect.set(asp, { id: r.id, url: r.url, type: r.type });
           }
         }
 
-        const { data: existing } = await pick("composed_video");
+        const existing = fresh[0] ?? null;
         if (existing) {
-          asset = existing as unknown as Asset;
+          asset = { id: existing.id, url: existing.url, type: existing.type };
         } else {
           const { data: rawVideo } = await pick("video");
           const { data: music } = await pick("audio", "url");

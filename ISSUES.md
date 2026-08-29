@@ -502,6 +502,58 @@ canvas" instead — the consequence stated rather than the capability removed.
 defect; video was the one with real settings recorded per job. The `settings`
 key on the progress route is shaped to take them.
 
+### ✅ 29. Music generated after a Compositor export was silently dropped *(fixed)*
+
+FFmpeg muxes the soundtrack **at export time** — `audioUrl` is an input to both
+`lib/composition/video.ts` and `lib/composition/export.ts` — so a
+`composed_video` is a permanent snapshot of whatever music existed the moment it
+rendered.
+
+Publish reused any existing `composed_video` **unconditionally**, with no
+freshness check. The nav has always let you jump to any tool at any time, so:
+use the Compositor, then generate music, then publish → **the post goes out
+silent**, and nothing anywhere says so. Same failure class as the null
+`file_size` and the broken refund RPC: a real failure swallowed and reported as
+success.
+
+**Fixed** in `POST /api/publish`. If the newest audio asset is newer than an
+export, the music is re-muxed **onto the export** — never back onto the raw
+clip, which would silently discard the overlays and brand work to rescue the
+audio. Every fan-out aspect is checked, not just the one about to be posted:
+each aspect is its own render, and `pickForPlatform` chooses between them per
+network, so one stale cut is one silent platform. The aspect tag is carried
+across to the rebuilt asset or the fan-out stops matching formats to platforms.
+
+A dead music URL or a failed FFmpeg run still publishes the silent export rather
+than blocking — same posture as the existing mix path.
+
+Selection rule is `lib/composition/late-music.ts`, kept pure so it's testable
+without FFmpeg or a database.
+
+### ✅ 30. Music sat in the middle of the flow, blocking the view of the ad *(changed)*
+
+`STUDIO_FLOW` was images → words → video → **music** → caption → compositor →
+publish, so you waited out a second generation before you could see the ad
+assembled at all — and music is the most skippable step here, since social video
+largely autoplays muted.
+
+Now images → words → video → **compositor** → **caption** → **music** → publish.
+
+Two constraints decided this, neither of them taste:
+
+- **Music must precede the final export, not the Compositor.** That distinction
+  is what frees it to move: #29's re-mux means a late track still reaches the
+  post. Without that fix this reorder would have made silent published video the
+  *default* path rather than an edge case.
+- **The caption is post copy, not artwork.** It rides as the post text
+  (`captionStyle: "none"` in the publish route), so nothing downstream renders
+  it and it belongs beside Publish. On-image lettering is the Words step — a
+  different thing, which stays up top.
+
+**Logo was already correct** and is deliberately not in `STUDIO_FLOW`: it's
+workspace-level (`done.logo` means "this workspace has a mark"), so it can't
+sequence a single ad. The real logo problem is #25, not its position.
+
 ### 🔴 12. Compositor ops not folded into the three-pane rail
 
 On `feat/three-pane-ad-studio` the Compositor still takes the full width and the
