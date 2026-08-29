@@ -467,6 +467,41 @@ becoming three is a worse outcome than slightly smaller type. Text that cannot
 fit at any size (one enormous unbroken word) clamps at the schema floor and
 stays visibly overflowing rather than being silently re-flowed.
 
+### ✅ 28. A reopened project's control panel described a render that never happened *(fixed)*
+
+Reopening a finished project restored every asset but none of the inputs that
+made them. The rail came back at its own defaults — "10 seconds", the first
+style in the list, an empty creative direction — while the finished clip played
+on the canvas beside it. **"Bright Pulse" is exactly this**: `video_30s`,
+Cinematic, with a written creative direction, redisplayed as 10s and blank.
+
+So the panel was not describing the ad. It was describing a render that had not
+happened, and nothing on screen said so. Changing a control then appeared inert,
+because those inputs configure the NEXT render rather than editing the finished
+one.
+
+`creative_jobs.input_params` has recorded this the whole time and nothing read
+it back. `/api/campaigns/:id/progress` already queried that table for
+`type, status`; it now also returns the settings of the newest completed render
+per kind, and `openProject` applies them. Duration comes from the job type
+(`video_15s`) — the only place it is recorded, as it is not in `input_params`.
+
+The second half of the same report was having no way onward. The "what would
+you like to do next?" prompt existed **only** on the Images step, so every other
+tool dead-ended. `StepStatus` now renders under any flow step that has produced
+something, stating the three things the screen was missing: that the step is
+done, that the controls above start a fresh render and charge credits again, and
+what is left — always ending at Publish.
+
+**Not greyed out**, though that was the suggested fix: locking the controls
+would strand anyone who genuinely wants a different video, which is a normal
+thing to want. The button says "Render a new video · replaces the clip on your
+canvas" instead — the consequence stated rather than the capability removed.
+
+**Only video rehydrates so far.** Music, caption tone and aspect have the same
+defect; video was the one with real settings recorded per job. The `settings`
+key on the progress route is shaped to take them.
+
 ### 🔴 12. Compositor ops not folded into the three-pane rail
 
 On `feat/three-pane-ad-studio` the Compositor still takes the full width and the
