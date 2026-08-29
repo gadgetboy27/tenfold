@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   STUDIO_FLOW,
+  NAV_ORDER,
+  navRank,
   STEP_ACTION,
   nextStep,
   remainingSteps,
@@ -145,5 +147,50 @@ describe("remainingSteps / flowProgress", () => {
       done: 2,
       total: STUDIO_FLOW.length,
     });
+  });
+});
+
+/**
+ * The left rail was hand-ordered independently of STUDIO_FLOW, so the two
+ * disagreed: the menu read Video → Music → Caption → Words → Compositor while
+ * the flow recommended words → video → compositor → caption → music. A menu
+ * listing the steps in a different order from the one the product tells you to
+ * follow is a second, contradictory instruction.
+ */
+describe("the menu and the flow agree", () => {
+  it("lists the flow steps in exactly flow order", () => {
+    const inNav = NAV_ORDER.filter((s) => STUDIO_FLOW.includes(s));
+    expect(inNav).toEqual([...STUDIO_FLOW]);
+  });
+
+  it("shows every flow step in the menu", () => {
+    // A step you can't click is a step you can't do.
+    for (const step of STUDIO_FLOW) {
+      expect(NAV_ORDER, `${step} missing from the rail`).toContain(step);
+    }
+  });
+
+  it("puts the Gallery on top and the optional tools below the sequence", () => {
+    expect(NAV_ORDER[0]).toBe("brief");
+    const lastFlow = NAV_ORDER.lastIndexOf("publish");
+    for (const extra of [
+      "logo",
+      "productshot",
+      "tryon",
+      "talking",
+      "autocaption",
+    ]) {
+      expect(navRank(extra as never)).toBeGreaterThan(lastFlow);
+    }
+  });
+
+  it("sorts an unknown id to the end rather than dropping it", () => {
+    // navRank drives an Array.sort over the real nav items — returning -1 for
+    // something unlisted would silently hoist it to the top of the rail.
+    expect(navRank("nonsense" as never)).toBe(NAV_ORDER.length);
+  });
+
+  it("has no duplicates", () => {
+    expect(new Set(NAV_ORDER).size).toBe(NAV_ORDER.length);
   });
 });

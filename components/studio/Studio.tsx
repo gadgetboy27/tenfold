@@ -45,6 +45,7 @@ import {
   remainingSteps,
   STUDIO_FLOW,
   STEP_ACTION,
+  navRank,
   type DoneMap,
 } from "@/lib/studio/flow";
 import type { LayerAnchor } from "@/lib/composition/layers";
@@ -1332,6 +1333,15 @@ export function Studio({
     },
   ];
 
+  // Ordered by NAV_ORDER, not by however this array happens to be written.
+  // The rail used to read Video → Music → Caption → Words → Compositor while
+  // the flow recommended words → video → compositor → caption → music: a menu
+  // listing the steps in a different order from the one the product tells you
+  // to follow is a second, contradictory instruction. Sorting (rather than
+  // re-typing the array in order) means the two cannot drift apart again, and
+  // no entry can be dropped in the rearranging.
+  tools.sort((a, b) => navRank(a.id) - navRank(b.id));
+
   return (
     <div className="flex h-screen bg-background text-foreground">
       {/* Reference photo can come from a file OR from anything the workspace
@@ -1719,8 +1729,16 @@ function StudioNav({
   return (
     <div className="flex w-[200px] shrink-0 flex-col gap-0.5 overflow-y-auto rounded-2xl border border-border bg-card p-3">
       <nav className="flex flex-col gap-0.5">
-        {tools.map((t) => {
+        {tools.map((t, i) => {
           const Icon = t.icon;
+          // Where the recommended sequence stops and the optional tools begin.
+          // Without a break the rail is one flat list of 13, so Logo & brand
+          // and the Pro add-ons read as steps you've skipped rather than
+          // things you may never need.
+          const startsExtras =
+            !STUDIO_FLOW.includes(t.id) &&
+            i > 0 &&
+            STUDIO_FLOW.includes(tools[i - 1].id);
           const active = t.isActive ? t.isActive() : section === t.id;
           // A nav item pulses once whatever it needs is actually in place —
           // never before, so an option that isn't open yet stays a plain
@@ -1787,7 +1805,7 @@ function StudioNav({
               />
             </>
           );
-          return (
+          const button = (
             <button
               key={t.id}
               type="button"
@@ -1798,6 +1816,18 @@ function StudioNav({
             >
               {inner}
             </button>
+          );
+          if (!startsExtras) return button;
+          return (
+            <div key={t.id} className="contents">
+              <div className="mt-2 mb-1 flex items-center gap-2 px-2.5">
+                <span className="text-[10px] font-semibold tracking-wide text-muted-foreground/50 uppercase">
+                  Other tools
+                </span>
+                <span className="h-px flex-1 bg-border" />
+              </div>
+              {button}
+            </div>
           );
         })}
       </nav>

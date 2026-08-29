@@ -72,6 +72,40 @@ export const STEP_ACTION: Partial<Record<SectionId, string>> = {
   publish: "Publish it",
 };
 
+/**
+ * The left rail's order, top to bottom.
+ *
+ * The nav used to be hand-ordered independently of STUDIO_FLOW, so the two
+ * disagreed: the rail read Video → Music → Caption → Words → Compositor while
+ * the flow said words → video → compositor → caption → music. A menu that
+ * lists the steps in a different order from the one the product recommends is
+ * just a second, contradictory instruction.
+ *
+ * The flow steps here are asserted (in tests) to appear in exactly STUDIO_FLOW
+ * order, so the two cannot drift again. Everything after `publish` is
+ * deliberately NOT part of the sequence:
+ *
+ * - `brief`  — the Gallery shortcut: the way in and out, so it sits on top.
+ * - `logo`   — workspace-level setup, not a step of this ad.
+ * - the four Pro add-ons — optional side quests, grouped at the bottom so the
+ *   spine of the rail is the actual order of work.
+ */
+export const NAV_ORDER: readonly SectionId[] = [
+  "brief",
+  ...STUDIO_FLOW,
+  "logo",
+  "productshot",
+  "tryon",
+  "talking",
+  "autocaption",
+] as const;
+
+/** Rank for sorting nav items; unknown ids sort to the end rather than vanish. */
+export function navRank(id: SectionId): number {
+  const i = NAV_ORDER.indexOf(id);
+  return i === -1 ? NAV_ORDER.length : i;
+}
+
 export type DoneMap = Partial<Record<SectionId, boolean>>;
 
 /**
