@@ -2,15 +2,20 @@
 
 import { useState } from "react";
 import {
+  Check,
   ChevronDown,
   Film,
   Image as ImageIcon,
   Layers,
+  Loader2,
   MessageSquare,
   Music,
   Play,
   Send,
+  Trash2,
 } from "lucide-react";
+import toast from "react-hot-toast";
+import { api } from "@/lib/api";
 import { thumbUrl } from "@/lib/images/thumb";
 
 /**
@@ -55,6 +60,8 @@ export interface ProjectProgress {
     audio: { id: string; url: string; createdAt: string }[];
     caption: string;
     anchorId: string | null;
+    /** The one video this project publishes, or null if nothing is picked. */
+    publishAssetId: string | null;
     compositionCount: number;
   };
 }
@@ -77,13 +84,143 @@ export function ProjectStrip({
   progress,
   projectName,
   focus = null,
+  workspaceSlug,
+  onChanged,
 }: {
   progress: ProjectProgress | null;
   /** Studio's live name field — fresher than the server's copy mid-rename. */
   projectName?: string;
   focus?: StripFocus;
+  /** Needed to address the API; without it the strip stays read-only. */
+  workspaceSlug?: string;
+  /** Re-fetch progress after a delete or a pick. */
+  onChanged?: () => void;
 }) {
   const [open, setOpen] = useState(true);
+  // One id at a time — the tile shows a spinner in place of its own button
+  // rather than the whole strip going busy.
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const editable = !!workspaceSlug && !!progress;
+  const campaignId = progress?.campaignId;
+
+  /**
+   * Delete one generated asset for good.
+   *
+   * Confirmed because it is not recoverable: the row and the Storage object
+   * both go. The server refuses the anchor and anything already published
+   * (see app/api/assets/[id]/route.ts) — those come back as a 409 with a
+   * sentence worth showing verbatim, so the message is surfaced rather than
+   * replaced with a generic failure.
+   */
+  const remove = async (id: string, what: string) => {
+    if (!campaignId || !workspaceSlug || busyId) return;
+    if (!window.confirm(`Delete this ${what}? This can't be undone.`)) return;
+    setBusyId(id);
+    try {
+      const res = await api(`/api/assets/${id}`, {
+        method: "DELETE",
+        workspaceSlug,
+      });
+      const data = (await res.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      if (!res.ok)
+        throw new Error(data?.error ?? `Couldn't delete the ${what}`);
+      toast.success(`${what[0].toUpperCase()}${what.slice(1)} deleted`);
+      onChanged?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : `Couldn't delete it`);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  /**
+   * Delete a whole set of assets behind ONE confirm — "keep this, bin the rest".
+   *
+   * The per-tile bin covers "that render was a dud"; this covers what actually
+   * happens, which is finishing a project and finding nine near-identical
+   * exports and fourteen music takes behind it. Fourteen separate confirm
+   * dialogs is not a cleanup tool, so this asks once and names the number.
+   *
+   * Sequential, not Promise.all: the server refuses a published asset and the
+   * anchor, and firing fourteen deletes at once turns one refusal into a race
+   * for which toast the user sees. Failures are counted and reported together,
+   * and a refusal never stops the rest — the point is to end up tidy.
+   */
+  const removeAllBut = async (
+    all: { id: string }[],
+    keepId: string | null | undefined,
+    noun: string,
+  ) => {
+    if (!campaignId || !workspaceSlug || busyId) return;
+    const doomed = all.filter((a) => a.id !== keepId);
+    if (doomed.length === 0) return;
+    const n = doomed.length;
+    const plural = n === 1 ? noun : `${noun}s`;
+    if (
+      !window.confirm(
+        `Delete the other ${n} ${plural} in this project? Only the one you're keeping stays. This can't be undone.`,
+      )
+    )
+      return;
+    setBusyId("bulk");
+    let gone = 0;
+    let firstError: string | null = null;
+    for (const a of doomed) {
+      try {
+        const res = await api(`/api/assets/${a.id}`, {
+          method: "DELETE",
+          workspaceSlug,
+        });
+        if (res.ok) gone += 1;
+        else {
+          const data = (await res.json().catch(() => null)) as {
+            error?: string;
+          } | null;
+          firstError ??= data?.error ?? "Some couldn't be deleted";
+        }
+      } catch {
+        firstError ??= "Some couldn't be deleted";
+      }
+    }
+    setBusyId(null);
+    onChanged?.();
+    if (gone > 0)
+      toast.success(`Deleted ${gone} ${gone === 1 ? noun : `${noun}s`}`);
+    if (firstError) toast.error(firstError);
+  };
+
+  /** Name the one video that publishes. Clicking the current pick clears it. */
+  const choose = async (id: string | null) => {
+    if (!campaignId || !workspaceSlug || busyId) return;
+    setBusyId(id ?? "clear");
+    try {
+      const res = await api(`/api/campaigns/${campaignId}`, {
+        method: "PATCH",
+        workspaceSlug,
+        body: JSON.stringify({ publish_asset_id: id }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(data?.error ?? "Couldn't set the video");
+      }
+      toast.success(
+        id ? "This is the video that publishes" : "Video un-picked",
+      );
+      onChanged?.();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Couldn't set the video",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   if (!progress) return null;
 
   const { bundle, done } = progress;
@@ -100,6 +237,13 @@ export function ProjectStrip({
   const nothingYet =
     counts.length === 0 && !bundle.caption && !done.publish && !done.logo;
   if (nothingYet) return null;
+
+  // Music's equivalent of the video pick, except it isn't a choice: publish's
+  // late-music remux always takes the newest track, so this is a readout of
+  // what the mix will use, not a preference to be set.
+  const newestTrackId =
+    [...bundle.audio].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+      ?.id ?? null;
 
   return (
     <section
@@ -185,36 +329,131 @@ export function ProjectStrip({
               <span className={`${GROUP_LABEL} [writing-mode:vertical-rl]`}>
                 Video
               </span>
-              <div className="flex gap-1.5">
-                {bundle.videos.map((v) => (
-                  <a
-                    key={v.id}
-                    href={v.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={`${v.branded ? "Branded export" : "Raw clip"} — open to play`}
-                    className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md border border-border bg-black"
-                  >
-                    {/* #t=0.1 seeks to the first frame so the tile shows the
-                        clip rather than a black box; metadata-only preload
-                        keeps a dozen of these off the network budget. */}
-                    <video
-                      src={`${v.url}#t=0.1`}
-                      preload="metadata"
-                      muted
-                      playsInline
-                      className="h-full w-full object-cover"
-                    />
-                    <span className="absolute inset-0 flex items-center justify-center bg-black/25">
-                      <Play className="h-3.5 w-3.5 fill-white text-white" />
-                    </span>
-                    {v.branded && (
-                      <span className="absolute inset-x-0 bottom-0 bg-primary/80 text-center text-[8px] font-semibold uppercase tracking-wide text-primary-foreground">
-                        Brand
-                      </span>
-                    )}
-                  </a>
-                ))}
+              <div className="flex items-center gap-1.5">
+                {bundle.videos.map((v) => {
+                  const picked = v.id === bundle.publishAssetId;
+                  const busy = busyId === v.id;
+                  return (
+                    <div
+                      key={v.id}
+                      className={`group relative h-12 w-12 shrink-0 overflow-hidden rounded-md border bg-black ${
+                        picked
+                          ? "border-primary ring-1 ring-primary/40"
+                          : "border-border"
+                      }`}
+                    >
+                      <a
+                        href={v.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={`${v.branded ? "Branded export" : "Raw clip"} — open to play`}
+                        className="block h-full w-full"
+                      >
+                        {/* #t=0.1 seeks to the first frame so the tile shows the
+                            clip rather than a black box; metadata-only preload
+                            keeps a dozen of these off the network budget. */}
+                        <video
+                          src={`${v.url}#t=0.1`}
+                          preload="metadata"
+                          muted
+                          playsInline
+                          className="h-full w-full object-cover"
+                        />
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/25">
+                          <Play className="h-3.5 w-3.5 fill-white text-white" />
+                        </span>
+                      </a>
+                      {v.branded && !picked && (
+                        <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-primary/80 text-center text-[8px] font-semibold uppercase tracking-wide text-primary-foreground">
+                          Brand
+                        </span>
+                      )}
+                      {picked && (
+                        <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-primary text-center text-[8px] font-semibold uppercase tracking-wide text-primary-foreground">
+                          Publishes
+                        </span>
+                      )}
+                      {editable && (
+                        <>
+                          {/* Visible at rest, not hover-revealed.
+
+                              These started hidden until hover, on the usual
+                              reasoning that a row of tiles should read as the
+                              work rather than as a toolbar. That's the wrong
+                              trade here: the whole reason this row exists is
+                              that ten near-identical clips piled up with no
+                              way to remove one, and a control you have to
+                              discover by hovering solves that for nobody. They
+                              sit at 70% over a dimmed corner and come up to
+                              full on hover. */}
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => choose(picked ? null : v.id)}
+                            title={
+                              picked
+                                ? "This is the video that publishes — click to un-pick"
+                                : "Publish this one"
+                            }
+                            aria-label={
+                              picked
+                                ? "Un-pick this video"
+                                : "Publish this video"
+                            }
+                            className={`absolute left-0.5 top-0.5 rounded-full p-0.5 transition-opacity ${
+                              picked
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-black/70 text-white opacity-70 hover:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
+                            }`}
+                          >
+                            {busy ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Check className="h-3 w-3" />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => remove(v.id, "video")}
+                            title="Delete this video"
+                            aria-label="Delete this video"
+                            className="absolute right-0.5 top-0.5 rounded-full bg-black/70 p-0.5 text-white opacity-70 transition-opacity hover:bg-red-600 hover:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+                {/* Only offered once a keeper is named — "delete the others"
+                    has no meaning until there IS a chosen one, and offering it
+                    beforehand would ask the user to trust a heuristic pick. */}
+                {editable &&
+                  bundle.publishAssetId &&
+                  bundle.videos.length > 1 && (
+                    <button
+                      type="button"
+                      disabled={!!busyId}
+                      onClick={() =>
+                        removeAllBut(
+                          bundle.videos,
+                          bundle.publishAssetId,
+                          "video",
+                        )
+                      }
+                      title={`Delete the other ${bundle.videos.length - 1} videos and keep the one that publishes`}
+                      className="flex h-12 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md border border-dashed border-border px-2 text-[10px] leading-tight text-muted-foreground transition-colors hover:border-red-500/50 hover:text-red-500 disabled:opacity-50"
+                    >
+                      {busyId === "bulk" ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5" />
+                      )}
+                      <span>Tidy {bundle.videos.length - 1}</span>
+                    </button>
+                  )}
               </div>
             </div>
           )}
@@ -224,16 +463,74 @@ export function ProjectStrip({
               className={`${GROUP_SHELL} ${focus === "audio" ? GROUP_FOCUS : GROUP_IDLE}`}
             >
               <span className={GROUP_LABEL}>Music</span>
-              <div className="flex gap-1.5">
+              <div className="flex items-center gap-1.5">
                 {bundle.audio.map((a) => (
-                  <audio
-                    key={a.id}
-                    src={a.url}
-                    controls
-                    preload="none"
-                    className="h-8 w-44"
-                  />
+                  <span key={a.id} className="flex items-center gap-1">
+                    <span className="flex flex-col gap-0.5">
+                      <audio
+                        src={a.url}
+                        controls
+                        preload="none"
+                        className="h-8 w-44"
+                      />
+                      {/* Music has no pick of its own: /api/publish always
+                          mixes the NEWEST track (see its late-music remux), so
+                          saying which one that is beats making the user infer
+                          it from playback order.
+
+                          The tooltip carries the caveat the badge can't: an
+                          export rendered AFTER this track already has its own
+                          bed burnt in and won't be re-muxed, so "in the mix"
+                          is about what publish would add, not a promise about
+                          what every existing cut already sounds like. */}
+                      {a.id === newestTrackId && (
+                        <span
+                          title="The newest track — this is the one publishing mixes onto your video. An export rendered after it already has its own soundtrack baked in."
+                          className="text-center text-[9px] font-semibold uppercase tracking-wide text-primary"
+                        >
+                          In the mix
+                        </span>
+                      )}
+                    </span>
+                    {editable && (
+                      <button
+                        type="button"
+                        disabled={busyId === a.id}
+                        onClick={() => remove(a.id, "track")}
+                        title="Delete this track"
+                        aria-label="Delete this track"
+                        className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50"
+                      >
+                        {busyId === a.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                    )}
+                  </span>
                 ))}
+                {/* No confirmation of a keeper needed here, unlike video: the
+                    newest track is not a guess, it's the one the publish mix
+                    actually uses. */}
+                {editable && bundle.audio.length > 1 && (
+                  <button
+                    type="button"
+                    disabled={!!busyId}
+                    onClick={() =>
+                      removeAllBut(bundle.audio, newestTrackId, "track")
+                    }
+                    title={`Delete the other ${bundle.audio.length - 1} tracks and keep the one in the mix`}
+                    className="flex h-12 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md border border-dashed border-border px-2 text-[10px] leading-tight text-muted-foreground transition-colors hover:border-red-500/50 hover:text-red-500 disabled:opacity-50"
+                  >
+                    {busyId === "bulk" ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-3.5 w-3.5" />
+                    )}
+                    <span>Tidy {bundle.audio.length - 1}</span>
+                  </button>
+                )}
               </div>
             </div>
           )}

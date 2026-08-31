@@ -63,6 +63,7 @@ import { PublishCanvas } from "@/components/studio/PublishCanvas";
 import { ReferencePhotoField } from "@/components/studio/ReferencePhotoField";
 import { GalleryPicker } from "@/components/shared/GalleryPicker";
 import { thumbUrl } from "@/lib/images/thumb";
+import { displayVideo } from "@/lib/campaign/video-pick";
 import { UserMenu } from "@/components/studio/UserMenu";
 import { AutoRunPanel } from "@/components/studio/AutoRunPanel";
 import { BriefAgentPanel } from "@/components/studio/BriefAgentPanel";
@@ -470,33 +471,84 @@ export function Studio({
   // server-derived from the campaign's jobs/assets/compositions, so it
   // survives a reload and reflects work done in any earlier session.
   const [progress, setProgress] = useState<ProjectProgress | null>(null);
-  const refreshProgress = useCallback(() => {
-    if (!campaignId) {
-      setProgress(null);
-      return;
-    }
-    api(`/api/campaigns/${campaignId}/progress`, { workspaceSlug })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d: ProjectProgress | null) => {
-        setProgress(d);
-        // Adopt any image the campaign has gained since this screen loaded —
-        // Product shot and Virtual try-on write real assets, but the picker
-        // only ever showed what generate()/openProject() had fetched, so their
-        // output was invisible and effectively lost.
-        if (d?.bundle.images?.length) {
-          setAssets((prev) => {
-            const known = new Set(prev.map((a) => a.id));
-            const added = d.bundle.images
-              .filter((i) => !known.has(i.id))
-              .map((i) => ({ id: i.id, url: i.url, label: "" }));
-            return added.length ? [...prev, ...added] : prev;
-          });
-        }
-      })
-      .catch(() => {});
-  }, [campaignId, workspaceSlug]);
+  /**
+   * Re-read the campaign's progress.
+   *
+   * `afterDelete` says the caller KNOWS an asset just went away, which is the
+   * only case allowed to blank Studio's canvas. On the ordinary path an empty
+   * bundle means "the server hasn't caught up yet" — this fires the instant a
+   * generation flips done, and the asset row can trail the client by a beat —
+   * so clearing there would wipe a clip that had only just finished.
+   */
+  const refreshProgress = useCallback(
+    (afterDelete = false) => {
+      if (!campaignId) {
+        setProgress(null);
+        return;
+      }
+      api(`/api/campaigns/${campaignId}/progress`, { workspaceSlug })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d: ProjectProgress | null) => {
+          setProgress(d);
+          // Adopt any image the campaign has gained since this screen loaded —
+          // Product shot and Virtual try-on write real assets, but the picker
+          // only ever showed what generate()/openProject() had fetched, so their
+          // output was invisible and effectively lost.
+          if (d?.bundle.images?.length) {
+            setAssets((prev) => {
+              const known = new Set(prev.map((a) => a.id));
+              const added = d.bundle.images
+                .filter((i) => !known.has(i.id))
+                .map((i) => ({ id: i.id, url: i.url, label: "" }));
+              return added.length ? [...prev, ...added] : prev;
+            });
+          }
+          // Keep the canvas honest about what still exists. The strip can now
+          // delete a clip or a track and pick which video publishes, and Studio
+          // holds its own videoUrl/musicUrl — without this the deleted file kept
+          // playing on the stage until a reload, and the picked cut wasn't the
+          // one on screen. Prefer the PICK over "newest", same rule as
+          // /api/publish; fall back to newest only when nothing is picked.
+          // Keep the canvas honest about what still exists. The strip can now
+          // delete a clip or a track and name which video publishes, and Studio
+          // holds its own videoUrl/musicUrl — without this a deleted file kept
+          // playing on the stage until a reload, and the picked cut wasn't the
+          // one on screen. Prefer the PICK over "newest", the same rule
+          // /api/publish now follows.
+          if (d) {
+            const newest = <T extends { createdAt: string }>(xs: T[]) =>
+              [...xs].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+
+            const vids = d.bundle.videos ?? [];
+            const chosen = vids.find((v) => v.id === d.bundle.publishAssetId);
+            if (chosen) setVideoUrl(chosen.url);
+            else if (vids.length > 0)
+              setVideoUrl((cur) =>
+                cur && vids.some((v) => v.url === cur) ? cur : newest(vids).url,
+              );
+            else if (afterDelete) setVideoUrl(null);
+
+            const tracks = d.bundle.audio ?? [];
+            if (tracks.length > 0)
+              setMusicUrl((cur) =>
+                cur && tracks.some((t) => t.url === cur)
+                  ? cur
+                  : newest(tracks).url,
+              );
+            else if (afterDelete) setMusicUrl(null);
+          }
+        })
+        .catch(() => {});
+    },
+    [campaignId, workspaceSlug],
+  );
+  /** Passed to the strip: a delete/pick just landed, so blanking is correct. */
+  const onProjectAssetsChanged = useCallback(
+    () => refreshProgress(true),
+    [refreshProgress],
+  );
   useEffect(() => {
-    queueMicrotask(refreshProgress);
+    queueMicrotask(() => refreshProgress());
   }, [refreshProgress]);
   // Re-derive whenever a generation finishes, so a tick appears without a
   // reload. `generating`/`videoGenerating`/`musicGenerating` cover Studio's own
@@ -505,7 +557,7 @@ export function Studio({
   // navigating away from one is the moment to re-read what it produced.
   useEffect(() => {
     if (!generating && !videoGenerating && !musicGenerating)
-      queueMicrotask(refreshProgress);
+      queueMicrotask(() => refreshProgress());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generating, videoGenerating, musicGenerating, anchorId, section]);
 
@@ -799,6 +851,7 @@ export function Studio({
         name?: string | null;
         prompt?: string | null;
         anchor_asset_id?: string | null;
+        publish_asset_id?: string | null;
         assets?: {
           id: string;
           type: string;
@@ -819,15 +872,24 @@ export function Studio({
           url: a.url,
           label: a.metadata?.model ?? a.metadata?.direction ?? "",
         }));
-      // Prefer the Compositor's branded export (composed_video) over the raw
-      // clip when both exist — same preference order as /api/publish and
-      // lib/campaign/publish-nav.ts, so "Continue to publish" from the
-      // Compositor actually shows the video it just finished, not the plain
-      // Kling output.
+      // The video this project publishes. `displayVideo` is the shared rule
+      // (lib/campaign/video-pick.ts): the PICK wins outright — it's the user's
+      // own answer, and /api/publish resolves the same way, so the clip on the
+      // canvas is the clip that posts — otherwise newest first, preferring the
+      // Compositor's branded export over the raw Kling clip, so "Continue to
+      // publish" shows the video it just finished.
       const vid =
-        list
-          .filter((a) => a.type === "composed_video" || a.type === "video")
-          .sort((a, b) => b.created_at.localeCompare(a.created_at))[0]?.url ??
+        displayVideo(
+          list
+            .filter((a) => a.type === "composed_video" || a.type === "video")
+            .map((a) => ({
+              id: a.id,
+              url: a.url,
+              type: a.type,
+              createdAt: a.created_at,
+            })),
+          camp.publish_asset_id,
+        )?.url ??
         camp.expansion_data?.video?.url ??
         null;
       const music =
@@ -1678,6 +1740,8 @@ export function Studio({
             progress={progress}
             projectName={campaignName}
             focus={stripFocus}
+            workspaceSlug={workspaceSlug}
+            onChanged={onProjectAssetsChanged}
           />
         )}
       </div>

@@ -53,6 +53,69 @@ workflows.
   role-appropriate action (submit / approve / request changes) — see
   `components/studio/CLAUDE.md`.
 
+## One video per publish — `campaigns.publish_asset_id`
+
+Publishing used to resolve "the video" by **newest first**, computed
+independently in `POST /api/publish`, in Studio's rehydrate and on the
+Productions page. That is a guess, and it moves under the user: exporting a
+variant to compare it silently changes what will post. Campaign 62cc89cd
+("Stellar Launch") reached 1 raw clip + 9 branded exports + 14 music takes
+with nothing in the product able to delete one and no screen saying which of
+the ten was going out.
+
+`campaigns.publish_asset_id` (migration `0032_campaign_publish_pick.sql`) is
+the user's own answer. The rule lives once, pure and tested, in
+`lib/campaign/video-pick.ts` — `resolvePublishVideo` for the server,
+`displayVideo` for the two client surfaces — so they cannot drift back apart.
+
+- **A pick means ONE FILE to every platform.** `assetsByAspect` is left empty
+  on that path deliberately, so a picked 16:9 cut reaches Stories letterboxed
+  rather than being quietly substituted for a sibling render the user never
+  chose. The per-aspect fan-out still applies when nothing is picked.
+- **No pick + several videos → 409 `video_pick_required`.** Refusing is the
+  feature. `PublishCanvas` catches the code and aborts the whole publish with
+  one message, rather than letting it land as one error per selected account.
+- **No pick + exactly one video → publishes.** There is nothing to be
+  ambiguous about, so no existing campaign has to go and tick a box first.
+- **A dangling pick is ambiguous again**, not a fall-through to newest — the
+  asset was deleted between choosing and posting, which is exactly when a
+  silent substitution would be worst.
+- **The late-music re-mux moves the pick.** It writes a NEW asset row; leaving
+  `publish_asset_id` on the old silent cut re-muxes it on every publish
+  forever and keeps the strip highlighting a clip that no longer posts.
+- **The per-platform mute still wins.** LinkedIn and Pinterest default to no
+  music bed; a picked branded export has the bed burnt in, so those platforms
+  keep taking the campaign's raw clip. Same footage, split on audio — not on
+  which video publishes.
+
+`PATCH /api/campaigns/[id]` accepts `publish_asset_id` and **verifies the
+asset is a video in that campaign** before storing it. The FK only proves the
+asset exists; without the check, an id from another campaign — or the anchor
+image — is accepted and then posted everywhere as "the video".
+
+## `DELETE /api/assets/[id]` — the only way to throw generated work away
+
+Generation is cheap to repeat and every attempt was kept forever. There was no
+DELETE route anywhere in `app/api` before 2026-08-31, so the pile wasn't just
+clutter — under "newest wins" it decided what published.
+
+Two refusals, both 409 with a sentence meant to be shown verbatim:
+
+- **The anchor image.** Video, compositor and publish all derive from it.
+- **Anything already published.** Reddit posts `kind=link` at the public
+  Storage URL and Pinterest pins the same way (root CLAUDE.md §7d), so
+  deleting a published asset breaks a live post on someone else's site.
+
+Storage removal is best-effort and precedes the row delete: an object that is
+already gone must not leave the row behind, or the asset stays listed and
+permanently undeletable. `publish_asset_id` clears itself via ON DELETE SET
+NULL — deleting the picked clip **un-picks** it; CASCADE there would have
+deleted the whole campaign.
+
+UI: a bin on every video tile and every music player in `ProjectStrip`, a
+"Tidy N" bulk action on each of those two groups, and a bin on each Productions
+card. See `components/studio/CLAUDE.md`.
+
 ## Async Job Pattern
 
 1. Check credits → fail fast with 402 if insufficient

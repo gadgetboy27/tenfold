@@ -49,7 +49,9 @@ export const GET = withWorkspace<{ id: string }>(
   async (_req, { db, admin, session, params }) => {
     const { data: campaign } = await db
       .from("campaigns")
-      .select("id, name, anchor_asset_id, expansion_data, approval_status")
+      .select(
+        "id, name, anchor_asset_id, publish_asset_id, expansion_data, approval_status",
+      )
       .eq("id", params.id)
       .maybeSingle();
     if (!campaign) {
@@ -59,6 +61,7 @@ export const GET = withWorkspace<{ id: string }>(
       id: string;
       name: string | null;
       anchor_asset_id: string | null;
+      publish_asset_id: string | null;
       expansion_data: { script?: { content?: string } } | null;
       approval_status: string | null;
     };
@@ -203,6 +206,11 @@ export const GET = withWorkspace<{ id: string }>(
         })),
         caption,
         anchorId: camp.anchor_asset_id,
+        // The one video this project publishes (migration 0032). The strip
+        // renders it as the chosen tile; null means nothing picked yet, which
+        // publish only tolerates while there's a single video to be ambiguous
+        // about.
+        publishAssetId: camp.publish_asset_id,
         compositionCount: compositionIds.length,
       },
     });

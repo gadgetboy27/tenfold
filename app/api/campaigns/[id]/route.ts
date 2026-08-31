@@ -134,6 +134,7 @@ export async function PATCH(
       current_step?: number;
       expansion_data?: Record<string, unknown>;
       anchor_asset_id?: string | null;
+      publish_asset_id?: string | null;
     };
     // Whitelist updatable fields
     const update: Record<string, unknown> = {};
@@ -147,6 +148,33 @@ export async function PATCH(
     if (raw.anchor_asset_id !== undefined)
       update.anchor_asset_id = raw.anchor_asset_id;
     const admin = createSupabaseAdminClient();
+
+    // The one video this campaign publishes (migration 0032). Verified to be a
+    // VIDEO belonging to THIS campaign before it's stored: the FK only proves
+    // the asset exists, so without this an id from another campaign — or the
+    // anchor image — would be accepted here and then posted to every connected
+    // network as "the video".
+    if (raw.publish_asset_id !== undefined) {
+      if (raw.publish_asset_id === null) {
+        update.publish_asset_id = null;
+      } else {
+        const { data: pick } = await admin
+          .from("assets")
+          .select("id, type")
+          .eq("id", raw.publish_asset_id)
+          .eq("campaign_id", id)
+          .eq("workspace_id", session.workspaceId)
+          .maybeSingle();
+        const p = pick as { type: string } | null;
+        if (!p || (p.type !== "video" && p.type !== "composed_video")) {
+          return NextResponse.json(
+            { error: "That isn't a video in this campaign" },
+            { status: 400 },
+          );
+        }
+        update.publish_asset_id = raw.publish_asset_id;
+      }
+    }
 
     const { data: updated, error } = await admin
       .from("campaigns")

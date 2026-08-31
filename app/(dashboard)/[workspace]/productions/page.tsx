@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAppStore } from "@/store/useAppStore";
 import { api } from "@/lib/api";
-import { Film, Download, ArrowLeft, Loader2, Send } from "lucide-react";
+import { Film, Download, ArrowLeft, Loader2, Send, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 
 interface Production {
@@ -31,6 +31,7 @@ export default function ProductionsPage() {
   const [items, setItems] = useState<Production[]>([]);
   const [loading, setLoading] = useState(true);
   const [publishing, setPublishing] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   useEffect(() => {
     api("/api/productions", { workspaceSlug: slug })
@@ -41,6 +42,44 @@ export default function ProductionsPage() {
       .catch(() => toast.error("Couldn't load your productions"))
       .finally(() => setLoading(false));
   }, [slug]);
+
+  /**
+   * Throw one export away for good.
+   *
+   * Re-rendering to compare a variant left every attempt here — a dozen
+   * near-identical clips with no way to tell which was the keeper, and the
+   * publish flow silently taking whichever was newest. The server refuses the
+   * anchor and anything already published (some networks link straight at the
+   * Storage URL), and returns a sentence explaining which; show it as-is.
+   */
+  const remove = async (p: Production) => {
+    if (deleting) return;
+    if (
+      !window.confirm(
+        `Delete this video from ${p.campaignName}? This can't be undone.`,
+      )
+    )
+      return;
+    setDeleting(p.id);
+    try {
+      const res = await api(`/api/assets/${p.id}`, {
+        method: "DELETE",
+        workspaceSlug: slug,
+      });
+      const data = (await res.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      if (!res.ok) throw new Error(data?.error ?? "Couldn't delete the video");
+      setItems((prev) => prev.filter((i) => i.id !== p.id));
+      toast.success("Video deleted");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Couldn't delete the video",
+      );
+    } finally {
+      setDeleting(null);
+    }
+  };
 
   const download = async (p: Production) => {
     try {
@@ -60,8 +99,25 @@ export default function ProductionsPage() {
   // rehydrates the campaign itself from the URL params (see Studio.tsx's
   // openProject-on-mount effect), same as the Compositor's "Continue to
   // publish".
-  const publish = (p: Production) => {
+  //
+  // Naming the pick FIRST is the point. This page lists every export a
+  // campaign has, so "Publish" on a specific card means this one — but Studio
+  // and /api/publish resolve the campaign's video, not the card's. Without
+  // this the button opened the publish screen showing a different clip, and
+  // now (with the one-video checkpoint) would be refused outright on any
+  // campaign holding more than one. Best-effort: a failed PATCH still opens
+  // the screen, where the strip can set it by hand.
+  const publish = async (p: Production) => {
     setPublishing(p.id);
+    try {
+      await api(`/api/campaigns/${p.campaignId}`, {
+        method: "PATCH",
+        workspaceSlug: slug,
+        body: JSON.stringify({ publish_asset_id: p.id }),
+      });
+    } catch {
+      // fall through — the strip on the publish screen can still pick it
+    }
     router.push(`/${slug}?openProject=${p.campaignId}&section=publish`);
   };
 
@@ -135,6 +191,19 @@ export default function ProductionsPage() {
                     className="inline-flex items-center justify-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs hover:border-primary/50"
                   >
                     <Download className="w-3.5 h-3.5" /> MP4
+                  </button>
+                  <button
+                    onClick={() => remove(p)}
+                    disabled={deleting === p.id}
+                    title="Delete this video"
+                    aria-label="Delete this video"
+                    className="inline-flex items-center justify-center rounded-full border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:border-red-500/50 hover:text-red-500 disabled:opacity-50"
+                  >
+                    {deleting === p.id ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-3.5 h-3.5" />
+                    )}
                   </button>
                 </div>
               </div>

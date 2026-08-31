@@ -22,6 +22,10 @@ import { publishBrokeredWithCredits } from "@/lib/social/broker/charge";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { composeVideo } from "@/lib/composition/video";
 import { needsMusicRemux } from "@/lib/composition/late-music";
+import {
+  resolvePublishVideo,
+  ambiguousVideoMessage,
+} from "@/lib/campaign/video-pick";
 
 /** A stored composed_video row, with the fields the remux + fan-out need. */
 interface ComposedRow {
@@ -171,10 +175,135 @@ export async function POST(req: Request) {
           .limit(1)
           .maybeSingle();
 
-      // Platform-native default (lib/social/platform-defaults.ts): some
-      // platforms (LinkedIn, Pinterest, ...) default to no music bed — post
-      // the raw clip, skip the mix/fan-out lookup entirely.
-      if (body.noMusic) {
+      // ── The one-video checkpoint (migration 0032) ────────────────────────
+      //
+      // Everything below this used to resolve the video by "newest first",
+      // which is a guess that changes under the user. Export a variant to
+      // compare it and you have silently swapped what publishes; a campaign
+      // that got iterated on holds a dozen exports and picks the last one for
+      // reasons nobody chose.
+      //
+      // `campaigns.publish_asset_id` is the user's actual answer. When it's
+      // set, that ONE FILE goes to every platform and the per-aspect fan-out
+      // below is skipped entirely — a deliberate trade: a picked 16:9 cut
+      // reaches Stories letterboxed rather than being quietly substituted for
+      // a sibling render the user never chose. When it's absent we only
+      // auto-resolve if there is nothing to be ambiguous ABOUT (a single
+      // video); with several and no pick, refuse rather than guess.
+      const { data: campRow } = await admin
+        .from("campaigns")
+        .select("publish_asset_id")
+        .eq("id", body.campaignId)
+        .eq("workspace_id", session.workspaceId)
+        .maybeSingle();
+      const pickedId =
+        (campRow as { publish_asset_id: string | null } | null)
+          ?.publish_asset_id ?? null;
+
+      const { data: clipRows } = await admin
+        .from("assets")
+        .select("id, url, type, metadata, created_at")
+        .eq("campaign_id", body.campaignId)
+        .eq("workspace_id", session.workspaceId)
+        .in("type", ["video", "composed_video"])
+        .order("created_at", { ascending: false });
+
+      const resolution = resolvePublishVideo(
+        ((clipRows ?? []) as unknown as ComposedRow[]).map((r) => ({
+          ...r,
+          createdAt: r.created_at,
+        })),
+        pickedId,
+      );
+      if (resolution.status === "ambiguous") {
+        return NextResponse.json(
+          {
+            error: ambiguousVideoMessage(resolution.count),
+            code: "video_pick_required",
+            videoCount: resolution.count,
+          },
+          { status: 409 },
+        );
+      }
+      // Only an EXPLICIT pick takes the single-file path below. A lone video
+      // resolving on its own keeps the existing fan-out/remux route, so
+      // nothing changes for campaigns that never had an ambiguity.
+      const picked =
+        resolution.status === "ok" && resolution.chosen
+          ? resolution.video
+          : null;
+
+      if (picked) {
+        let chosen: Asset = {
+          id: picked.id,
+          url: picked.url,
+          type: picked.type,
+        };
+        // The per-platform mute (the speaker icon in PublishCanvas; LinkedIn
+        // and Pinterest start muted) is a choice the user made deliberately,
+        // and the pick must not override it into posting sound. A picked RAW
+        // clip is already silent and needs nothing; a picked branded export
+        // has the bed burnt in, so those platforms keep taking the campaign's
+        // raw clip as they always have. Same footage either way — this splits
+        // on audio, not on which video publishes.
+        if (body.noMusic && picked.type !== "video") {
+          const { data: rawVideo } = await pick("video");
+          const rv = rawVideo as unknown as Asset | null;
+          if (rv) chosen = rv;
+        }
+        // A pick still gets the late-music re-mux: choosing the clip before
+        // writing the soundtrack must not post silence (the bug the remux
+        // below exists for). The mix produces a NEW row, so move the pick onto
+        // it — otherwise the next publish re-muxes the same stale cut forever.
+        if (!body.noMusic) {
+          const { data: lateMusic } = await admin
+            .from("assets")
+            .select("url, created_at")
+            .eq("campaign_id", body.campaignId)
+            .eq("workspace_id", session.workspaceId)
+            .eq("type", "audio")
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          const lm = lateMusic as unknown as {
+            url: string;
+            created_at: string;
+          } | null;
+          if (lm && needsMusicRemux(picked.created_at, lm.created_at)) {
+            try {
+              const mix = await composeVideo({
+                videoUrl: picked.url,
+                audioUrl: lm.url,
+                captionStyle: "none", // caption rides as the post text
+                workspaceId: session.workspaceId,
+                campaignId: body.campaignId,
+              });
+              const freshId = uuidv4();
+              await admin.from("assets").insert({
+                id: freshId,
+                campaign_id: body.campaignId,
+                workspace_id: session.workspaceId,
+                type: "composed_video",
+                url: mix.url,
+                storage_path: mix.storagePath,
+                metadata: picked.metadata ?? null,
+              });
+              await admin
+                .from("campaigns")
+                .update({ publish_asset_id: freshId })
+                .eq("id", body.campaignId)
+                .eq("workspace_id", session.workspaceId);
+              chosen = { id: freshId, url: mix.url, type: "composed_video" };
+            } catch {
+              // Dead music URL or a failed FFmpeg run must not block the post
+              // — the silent cut still goes out, same as the fan-out path.
+            }
+          }
+        }
+        asset = chosen;
+        // assetsByAspect stays EMPTY on purpose: one picked file, one publish.
+        // pickForPlatform falls back to `asset` for every platform.
+      } else if (body.noMusic) {
         const { data: rawVideo } = await pick("video");
         asset = rawVideo as unknown as Asset | null;
       } else {

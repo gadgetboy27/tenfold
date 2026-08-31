@@ -466,6 +466,47 @@ Refetched on `campaignId` change, when a Studio generation settles, and on
 self-contained and never report back to Studio, so navigating away from one is
 the only moment to re-read what it produced.
 
+## The strip is where you throw work away and name the keeper (2026-08-31)
+
+The strip listed every clip and every music take and offered nothing to do
+about it. "Stellar Launch" (campaign 62cc89cd) rendered as 10 video tiles and
+14 stacked `<audio>` players, and publishing quietly took whichever was
+newest. Each tile now carries a bin, and each video also carries a tick that
+sets `campaigns.publish_asset_id` — the one video that publishes. See
+`app/api/CLAUDE.md` for the server rule; `lib/campaign/video-pick.ts` holds it
+in one place for both sides.
+
+- **The pick beats "newest" everywhere it's read.** `openProject`'s rehydrate
+  and `refreshProgress` both go through `displayVideo`, so the clip on the
+  canvas is the clip that posts. Without that the strip highlights one video
+  while the stage plays another.
+- **`refreshProgress(afterDelete)` — only a known delete may blank the
+  canvas.** It fires the instant a generation flips done, and the asset row
+  can trail the client by a beat; clearing on "the server doesn't list it yet"
+  would wipe a clip that had only just finished rendering. `onChanged` passes
+  `true`; every other caller doesn't.
+- **The controls are visible at rest, not hover-revealed.** They started
+  hidden, on the usual reasoning that a row of tiles should read as the work
+  rather than as a toolbar. Wrong trade here: the row exists *because* ten
+  near-identical clips piled up with no way to remove one, and a control you
+  have to discover by hovering solves that for nobody.
+- **"Tidy N" — one confirm, keep one, bin the rest.** `removeAllBut` serves
+  both groups. On video it appears only once a keeper is named: "delete the
+  others" has no meaning without a chosen one, and offering it beforehand asks
+  the user to trust a heuristic pick. On music it needs no such gate — the
+  newest track isn't a guess, it's the one publish's late-music remux actually
+  mixes, and the strip labels it **"In the mix"** so that's legible rather than
+  inferred from playback order. It deletes sequentially, not `Promise.all` —
+  the server refuses published assets and the anchor, and fourteen parallel
+  deletes turn one refusal into a race for which toast is seen.
+- **Server refusals are shown verbatim.** Both 409s ("that's the anchor",
+  "that's already published") name the actual reason and the fix; replacing
+  them with a generic failure throws away the only useful part.
+- **Productions' "Publish" sets the pick first.** That page lists every export
+  a campaign has, so the button means *this* card — but Studio and
+  `/api/publish` resolve the campaign's video, not the card's. Best-effort: a
+  failed PATCH still opens the screen, where the strip can set it by hand.
+
 ## Stalled phases — every poll needs a bound AND a reason (2026-08-11)
 
 Reported as "Logo & Brand stuck on `Generating… 0 of 6 ready`". The rule that

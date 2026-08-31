@@ -411,7 +411,19 @@ export function PublishCanvas({
           platformResults?: Record<string, string>;
           errors?: Record<string, string>;
           error?: string;
+          code?: string;
         };
+        // The one-video checkpoint. Nothing was sent to any network, so this
+        // is not a per-platform failure — showing it as one error per selected
+        // account would read as five things going wrong instead of one
+        // question to answer. Abort the whole publish with the server's own
+        // sentence, which names the count and the fix.
+        if (data.code === "video_pick_required") {
+          throw new Error(
+            data.error ??
+              "Pick which video publishes — the project strip below has a tick on each clip.",
+          );
+        }
         if (!res.ok && !data.platformResults) {
           const msg = data.error ?? `Publish failed (${res.status})`;
           return list.map((platform) => ({
@@ -686,7 +698,9 @@ export function PublishCanvas({
             </div>
             <div className="flex min-w-0 flex-col justify-center gap-1">
               <p className="text-xs font-medium">
-                {target === "video" ? "Publishing this video" : "Publishing this image"}
+                {target === "video"
+                  ? "Publishing this video"
+                  : "Publishing this image"}
               </p>
               <p className="text-[11px] text-muted-foreground">
                 Goes out to every selected account with the caption below.

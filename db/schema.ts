@@ -179,6 +179,12 @@ export const campaigns = pgTable(
     prompt: text("prompt").notNull(),
     parameters: jsonb("parameters").notNull().default("{}"),
     anchorAssetId: uuid("anchor_asset_id"), // FK added after assets table
+    // The ONE video this campaign publishes (migration 0032). Publishing used
+    // to take whichever video was newest, which quietly changed the moment a
+    // user exported a variant to compare. NULL means nothing is picked yet:
+    // publish auto-uses the only video, and refuses to guess between several.
+    // FK is ON DELETE SET NULL — deleting the picked clip un-picks it.
+    publishAssetId: uuid("publish_asset_id"),
     status: text("status").notNull().default("generating"),
     // Approval state machine (PRODUCT_STRATEGY.md §4) — separate from `status`
     // above, which tracks image-generation progress, not review. Gates
