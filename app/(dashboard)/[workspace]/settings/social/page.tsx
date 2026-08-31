@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { BlueskyConnectDialog } from "@/components/settings/BlueskyConnectDialog";
 import { DestinationPicker } from "@/components/settings/DestinationPicker";
+import type { ConnectionHealth } from "@/lib/social/health";
 
 interface SocialProfile {
   id: string;
@@ -62,8 +63,9 @@ interface PlatformGuide {
 
 /**
  * The networks that ONLY reach their API through Ayrshare. Facebook, Instagram,
- * Bluesky, Reddit and Pinterest each connect directly (CLAUDE.md §7d), so they
- * are unaffected when Ayrshare is off or its account is suspended.
+ * Bluesky, Reddit, LinkedIn and Pinterest each connect directly (CLAUDE.md
+ * §7d), so they are unaffected when Ayrshare is off or its account is
+ * suspended.
  */
 const AYRSHARE_ONLY = new Set([
   "x",
@@ -568,9 +570,12 @@ function PlatformCard({
   workspaceSlug,
   onDestinationSaved,
   unavailable,
+  health,
 }: {
   platform: PlatformGuide;
   profile: SocialProfile | undefined;
+  /** What the provider says about this grant. Absent = not checked. */
+  health?: ConnectionHealth;
   checklist: Record<string, boolean>;
   expanded: boolean;
   onToggle: () => void;
@@ -585,6 +590,13 @@ function PlatformCard({
   onDestinationSaved: () => void;
 }) {
   const connected = !!profile;
+  // "unchecked" is not a fault — only an explicit verdict from the provider
+  // turns the card red, so a network blip never invents an outage.
+  const unhealthy =
+    connected &&
+    !!health &&
+    health.status !== "ok" &&
+    health.status !== "unchecked";
   const requiredItems = platform.checklist.filter((i) => i.required);
   const allRequiredChecked = requiredItems.every((i) => checklist[i.key]);
   const totalChecked = platform.checklist.filter(
@@ -596,7 +608,11 @@ function PlatformCard({
   return (
     <div
       className={`rounded-xl border transition-all duration-200 overflow-hidden ${
-        connected ? "border-success/30 bg-success/5" : "border-border bg-card"
+        unhealthy
+          ? "border-destructive/30 bg-destructive/5"
+          : connected
+            ? "border-success/30 bg-success/5"
+            : "border-border bg-card"
       }`}
     >
       {/* Header row — always visible */}
@@ -745,13 +761,41 @@ function PlatformCard({
                 </div>
               </div>
 
-              {/* Connect / connected state */}
+              {/* Connect / connected state. A connection the provider has
+                  since invalidated is NOT shown as healthy — that green tick
+                  over a dead grant is what hid a seven-week publishing
+                  outage. */}
               {connected ? (
-                <div className="rounded-lg bg-success/5 border border-success/20">
+                <div
+                  className={cn(
+                    "rounded-lg border",
+                    unhealthy
+                      ? "bg-destructive/5 border-destructive/30"
+                      : "bg-success/5 border-success/20",
+                  )}
+                >
+                  {unhealthy && (
+                    <div className="flex items-start gap-2 border-b border-destructive/20 p-3">
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                      <div>
+                        <p className="text-xs font-medium text-destructive">
+                          This connection can&apos;t publish
+                        </p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {health?.message}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between p-3">
                     <div>
-                      <p className="text-sm font-medium text-success">
-                        Connected
+                      <p
+                        className={cn(
+                          "text-sm font-medium",
+                          unhealthy ? "text-destructive" : "text-success",
+                        )}
+                      >
+                        {unhealthy ? "Needs reconnecting" : "Connected"}
                       </p>
                       {(profile?.profile_display_name ?? profile?.handle) ? (
                         <p className="text-xs text-muted-foreground font-mono mt-0.5">
@@ -834,8 +878,8 @@ function PlatformCard({
                   <p className="text-xs text-amber-600 dark:text-amber-400">
                     {platform.label} isn&apos;t available at the moment — it
                     publishes through a provider that&apos;s currently
-                    unavailable. Facebook, Instagram, Bluesky, Reddit and
-                    Pinterest connect directly and are unaffected.
+                    unavailable. Facebook, Instagram, Bluesky, Reddit, LinkedIn
+                    and Pinterest connect directly and are unaffected.
                   </p>
                 </div>
               ) : readyToConnect ? (
@@ -1185,6 +1229,11 @@ export default function SocialSettingsPage() {
   const workspaceSlug = params.workspace as string;
 
   const [profiles, setProfiles] = useState<SocialProfile[]>([]);
+  // A row in social_profiles proves someone once connected, not that the
+  // connection still works — a dead grant showed a healthy green card here for
+  // seven weeks. Fetched separately from the profiles so a slow Meta round-trip
+  // never delays the connections rendering.
+  const [health, setHealth] = useState<Record<string, ConnectionHealth>>({});
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -1248,10 +1297,21 @@ export default function SocialSettingsPage() {
     [workspaceSlug],
   );
 
+  const fetchHealth = useCallback(async () => {
+    try {
+      const res = await api("/api/social/health", { workspaceSlug });
+      if (!res.ok) return; // Health is advisory — never block the page on it.
+      setHealth((await res.json()) as Record<string, ConnectionHealth>);
+    } catch {
+      // Same reasoning: an unreachable check reports nothing, not a fault.
+    }
+  }, [workspaceSlug]);
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial load of connected profiles
     fetchProfiles();
-  }, [fetchProfiles]);
+    void fetchHealth();
+  }, [fetchProfiles, fetchHealth]);
 
   // Re-check connections whenever the user returns to this tab. Ayrshare linking
   // happens in a separate tab, so on refocus we quietly re-fetch to reflect what
@@ -1268,7 +1328,8 @@ export default function SocialSettingsPage() {
     };
   }, [fetchProfiles]);
 
-  // Handle Meta OAuth redirect params (?connected=... or ?error=...)
+  // Handle OAuth redirect params (?connected=... or ?error=...) from every
+  // connect flow, not just Meta's.
   useEffect(() => {
     const connected = searchParams.get("connected");
     const oauthError = searchParams.get("error");
@@ -1281,14 +1342,35 @@ export default function SocialSettingsPage() {
         .join(" & ");
       toast.success(`${label} connected successfully`);
     }
-    if (oauthError === "facebook_denied")
-      toast.error("Facebook connection cancelled");
-    if (oauthError === "facebook_no_pages")
-      toast.error(
-        "No Facebook Pages found — create a Page first, then reconnect",
-      );
-    if (oauthError === "facebook_failed")
-      toast.error("Facebook connection failed — please try again");
+    // Every callback reports back as `<platform>_denied` / `<platform>_failed`,
+    // so match that shape instead of naming each network one by one: Reddit and
+    // LinkedIn bounced back here silently for as long as only Facebook's three
+    // codes were listed, which reads to the user as the button doing nothing.
+    if (oauthError) {
+      // A code with no underscore isn't one of ours; treat the whole string as
+      // the platform so the toast still names something rather than a slice of
+      // the wrong end of it.
+      const separator = oauthError.indexOf("_");
+      const platformId =
+        separator === -1 ? oauthError : oauthError.slice(0, separator);
+      const reason = separator === -1 ? "" : oauthError.slice(separator + 1);
+      const label =
+        PLATFORMS.find((p) => p.id === platformId)?.label ??
+        platformId.charAt(0).toUpperCase() + platformId.slice(1);
+
+      if (reason === "no_pages")
+        toast.error(
+          "No Facebook Pages found — create a Page first, then reconnect",
+        );
+      else if (reason === "page_unverified")
+        toast.error(
+          "Facebook didn't grant access to that Page — reconnect and tick it in the permissions step",
+        );
+      else if (reason === "denied")
+        toast.error(`${label} connection cancelled`);
+      // Anything unrecognised still surfaces — silence is the worse failure.
+      else toast.error(`${label} connection failed — please try again`);
+    }
 
     // Clean the URL without causing a navigation
     router.replace(`/${workspaceSlug}/settings/social`, { scroll: false });
@@ -1791,6 +1873,7 @@ export default function SocialSettingsPage() {
               }
               onConnect={() => handleConnect(platform.id)}
               unavailable={ayrshareDown && AYRSHARE_ONLY.has(platform.id)}
+              health={health[platform.id]}
               connecting={connecting === platform.id}
               onSwitchPage={
                 platform.id === "facebook" ? switchFbPage : undefined

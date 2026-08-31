@@ -7,6 +7,7 @@ import {
   getInstagramAccount,
 } from "@/lib/social/meta";
 import { verifyOAuthState } from "@/lib/social/oauth-state";
+import { verifyPageToken } from "@/lib/social/health";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -85,6 +86,17 @@ export async function GET(req: Request) {
       name: p.name,
       access_token: p.access_token,
     }));
+
+    // 3b. Prove the token before calling this connected. Meta grants
+    //     permissions per Page, so a token can be valid and still not cover
+    //     the Page we're about to store — which stays invisible until someone
+    //     publishes. One read here turns that into an error the user sees
+    //     while they're still in the flow and can re-tick the right Page.
+    if (!(await verifyPageToken(page.id, page.access_token))) {
+      return NextResponse.redirect(
+        `${process.env.APP_URL}/${slug}/settings/social?error=facebook_page_unverified`,
+      );
+    }
 
     // 4. Upsert Facebook profile with permanent page access token
     await admin.from("social_profiles").upsert(

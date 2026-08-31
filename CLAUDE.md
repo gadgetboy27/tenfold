@@ -186,8 +186,8 @@ Which one handles a platform is decided by cost of _access_, not by code taste:
 | Backend                           | Platforms                                                      | Cost               |
 | --------------------------------- | -------------------------------------------------------------- | ------------------ |
 | Meta Graph (`lib/social/meta.ts`) | Facebook, Instagram                                            | free               |
-| Direct (`lib/social/direct/`)     | Bluesky, Reddit, Pinterest                                     | free               |
-| Ayrshare (`lib/ayrshare/`)        | X, LinkedIn, TikTok, YouTube, Threads, Snapchat, GMB, Telegram | $599/mo (Business) |
+| Direct (`lib/social/direct/`)     | Bluesky, Reddit, Pinterest, LinkedIn, TikTok, YouTube          | free               |
+| Ayrshare (`lib/ayrshare/`)        | X, Threads, Snapchat, GMB, Telegram                            | $599/mo (Business) |
 
 **Ayrshare is opt-in as of 2026-08-15** — gated on `AYRSHARE_ENABLED === "true"`
 in the publish route and the profiles route. The code is deliberately kept
@@ -195,12 +195,31 @@ whole, not deleted: it's turned back on with one env var once paying customers
 justify the subscription. Anything that touches publishing must keep working
 with it off.
 
-The direct backend exists because Bluesky, Reddit and Pinterest are the only
-networks in our list whose posting API is reachable without a paid tier or a
-platform app review. **That is the selection rule** — X, LinkedIn, TikTok and
-YouTube are not "not done yet", they are on Ayrshare precisely because their
-access costs money and weeks of review queue. Don't move one down a tier
-without checking that's changed.
+The direct backend started with Bluesky, Reddit and Pinterest because their
+posting API is reachable without a paid tier or a platform app review. **That
+access cost is the selection rule** — X, Threads, Snapchat, GMB and Telegram
+are not "not done yet", they are on Ayrshare precisely because their access
+costs money and weeks of review queue. Don't move one down a tier without
+checking that's changed.
+
+LinkedIn, TikTok and YouTube have since moved down: each has a working adapter
+in `lib/social/direct/`, so the code no longer needs Ayrshare. **An adapter is
+not the same as access**, and this is where that distinction bites — a direct
+adapter still publishes nothing until its developer app exists AND clears the
+platform's own gate. Only Reddit and LinkedIn have credentials configured; the
+gates on the other two are the reason:
+
+- **LinkedIn** — member's own feed only (`w_member_social`). Company Pages need
+  LinkedIn's Community Management review.
+- **TikTok** — unaudited apps can only post `SELF_ONLY`, and `PULL_FROM_URL`
+  needs the **Supabase Storage host** verified in TikTok's portal, not ours.
+- **YouTube** — `youtube.upload` is a Google restricted scope: test users only
+  until OAuth verification, and ~6 uploads/day against the default quota.
+
+Absent credentials, each connect route returns a 503 ("isn't configured on this
+deployment yet") rather than redirecting into a broken OAuth URL. TikTok and
+YouTube therefore stay listed in `lib/social/broker/outstand.ts`'s
+`BROKER_PLATFORMS` until their own gate clears.
 
 Per-network notes worth knowing before touching `lib/social/direct/`:
 

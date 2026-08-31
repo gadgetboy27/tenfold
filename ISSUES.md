@@ -8,6 +8,120 @@ Status: ✅ fixed & deployed · 🟡 fixed, not deployed · 🔴 open · ⚪ won
 
 ---
 
+## 2026-08-30 — the publishing outage, diagnosed properly
+
+### 🔴 31. Facebook OAuth is dead at Meta's end — nothing can connect
+
+Found by walking the connect flow in a real browser. Clicking **Connect** (or
+**Manage**) on Settings → Social redirects correctly; Meta then answers
+**URL Blocked**: _"the redirect URI is not whitelisted in the app's Client OAuth
+Settings"_ — before any permission screen.
+
+Our request is correct. Captured off the wire:
+
+```
+client_id    = 3336757434709475
+redirect_uri = https://prettymuch.nz/api/social/callback/facebook
+scope        = pages_show_list,pages_manage_posts,pages_read_engagement
+auth_type    = rerequest
+```
+
+The pre-rename host (`tenfold-production-78db.up.railway.app`) is blocked too,
+which points at Client/Web OAuth Login being off or the allowlist being empty
+rather than a stale domain left behind by the prettymuch.nz rename.
+
+- **Blast radius:** total. No network can be connected or reconnected, which
+  also blocks the reconnect that #24 requires. There is no working publish path.
+- **Fix is console-only, no code:** Meta app → Facebook Login → Settings →
+  Client OAuth Login ON, Web OAuth Login ON, add the callback to Valid OAuth
+  Redirect URIs, add `prettymuch.nz` to App Domains (Settings → Basic).
+
+### 🔴 24 (corrected). It was never the scopes — the grant is for a different Page
+
+The entry below diagnosed this as a connection predating the current scope
+list. **That is wrong**, and the wrong diagnosis pointed at a fix that wouldn't
+have worked. Asking Meta directly (`debug_token` against the stored token,
+run through `railway run` so no secret left the environment):
+
+```
+type=PAGE   is_valid=false   expires=never
+granular_scopes:
+  pages_show_list       -> 1233068756548099
+  pages_read_engagement -> 1233068756548099
+  pages_manage_posts    -> 1233068756548099
+```
+
+The grant carries **exactly** the scopes we request today. Two other things are
+true instead:
+
+1. **The token is `is_valid=false`** — invalidated, not expired.
+2. **The grant covers Page `1233068756548099`. We store and publish to
+   `1182524661618666` (LetsRoam)** — the only entry in `metadata.facebook_pages`,
+   and a Page the grant does not mention. Meta's permissions are per-Page, so a
+   valid token proves nothing about the Page we post to. Hence the error text
+   naming six permissions we appear to hold: we hold them, for another Page.
+
+**Consequence for the fix:** after #31 is cleared, a reconnect will find Page
+`1233068756548099` and — because the callback falls back to `pages[0]` when the
+prior Page isn't in the grant — silently make *that* the publish target. Tick
+the intended Page in Facebook's dialog.
+
+### ✅ 32. A dead connection displayed as healthy for seven weeks
+
+The direct cause of how long the above went unnoticed. `social_profiles` having
+a row meant "Connected", in green, with a tick. Nothing ever asked the provider
+whether the grant still worked, so the one screen that exists to tell you the
+state of your connections was the screen that couldn't.
+
+**Fixed** — `lib/social/health.ts`:
+
+- `checkMetaConnection()` asks `debug_token` for validity **and** whether the
+  granular scopes actually cover the stored Page; `GET /api/social/health`
+  exposes it per platform, fetched separately from `/api/social/profiles` so a
+  slow Meta round-trip never delays the page rendering.
+- The card turns red with what to do about it — "Needs reconnecting" — instead
+  of green.
+- `verifyPageToken()` runs in the OAuth callback against the freshly minted
+  Page token, so a grant that doesn't cover the chosen Page fails **during the
+  connect flow**, where the user can re-tick, rather than weeks later at
+  publish.
+- An unreachable Graph reports `unchecked`, never a fault. Crying wolf on a
+  network blip is how a warning gets ignored.
+- `tests/unit/connection-health.test.ts` pins the scope logic against the real
+  production payload above, including the trap: a scope with **no**
+  `target_ids` is unrestricted, so reading absence as "denied" would paint
+  every healthy connection red.
+
+### ✅ 33. Reddit and LinkedIn OAuth failures produced no message at all
+
+The settings page handled `facebook_denied` / `facebook_no_pages` /
+`facebook_failed` by name. Every other callback reports the same
+`<platform>_<reason>` shape — `reddit_denied`, `linkedin_failed` — and none of
+them matched, so a failed connect showed **nothing**: the user clicks Connect,
+gets redirected back, and the button appears dead.
+
+**Fixed** by matching the shape rather than listing networks, so backends added
+later report automatically. Unrecognised codes still surface a generic failure —
+silence is the worse outcome.
+
+### 🔴 34. Analytics cannot see a single post the product can publish
+
+`POST /api/analytics/refresh` pulls engagement only through Ayrshare, and only
+for records carrying `ayrshare_post_ids`. That field is written **exclusively**
+in the two Ayrshare branches of the publish route; Meta and direct publishes
+record `platform_results` and nothing else.
+
+- **Evidence:** all 9 `publish_records` in production, 0 with
+  `ayrshare_post_ids`.
+- **Blast radius:** with Ayrshare gated off (2026-08-15), Phase 7 in full — the
+  Gallery's Performance tab and `style_performance()` — can never update from a
+  real post. It also blocks the pre-publish performance score in
+  `ROADMAP.md` §3.5, which depends on this data existing.
+- **Fix (not attempted here):** record the native post id per backend and fetch
+  engagement per platform, or state plainly in the UI that the tab is dark.
+
+---
+
 ## 2026-08-24 — logo stall investigation + production walkthrough
 
 ### ✅ 1. fal webhooks binned finished work on a null field
@@ -400,6 +514,11 @@ the "Redo this op" affordance a layer kept. Two stacked copies is the worse
 outcome and the op panel is right there.
 
 ### 🔴 24. Publishing to Facebook fails on a pre-scope connection
+<!-- SUPERSEDED — see "24 (corrected)" in the 2026-08-30 section. The scope
+     theory below is wrong: the grant has the current scopes but points at a
+     different Page, and the token is invalidated. Kept for the error text and
+     the actionableError() work, which stand. -->
+
 
 "Bright Pulse" couldn't publish. Meta returned:
 
