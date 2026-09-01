@@ -19,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/brand/Spinner";
 import { api } from "@/lib/api";
+import { readProfilesResponse } from "@/lib/social/profiles-response";
 import {
   effectiveLayer,
   type CompositionAspect,
@@ -151,8 +152,10 @@ export function Compositor({
       try {
         const res = await api("/api/social/profiles", { workspaceSlug: slug });
         if (!res.ok) return;
-        const data = (await res.json()) as { platform: string }[];
-        if (!cancelled) setConnectedPlatforms(data.map((p) => p.platform));
+        const { profiles } = readProfilesResponse<{ platform: string }>(
+          await res.json(),
+        );
+        if (!cancelled) setConnectedPlatforms(profiles.map((p) => p.platform));
       } catch {
         // Lab mode / offline: FormatRail falls back to the generic aspect trio.
       }

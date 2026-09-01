@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { readProfilesResponse } from "@/lib/social/profiles-response";
 import type { LucideIcon } from "lucide-react";
 import toast from "react-hot-toast";
 import {
@@ -206,7 +207,9 @@ export function PublishCanvas({
     try {
       const res = await api("/api/social/profiles", { workspaceSlug });
       if (res.ok) {
-        const data = (await res.json()) as SocialProfile[];
+        const { profiles: data } = readProfilesResponse<SocialProfile>(
+          await res.json(),
+        );
         setProfiles(data);
         const fb = data.find((p) => p.platform === "facebook");
         if (fb?.activePageId) setFacebookPageId(fb.activePageId);
@@ -407,6 +410,11 @@ export function PublishCanvas({
 
   const isConnected = (p: string) => profiles.some((pr) => pr.platform === p);
   const connectedPlatforms = ALL_PLATFORMS.filter((p) => isConnected(p.id));
+  /** The account name behind a connected platform, when we know it. */
+  const accountFor = (platformId: string): string | null => {
+    const pr = profiles.find((x) => x.platform === platformId);
+    return pr?.profile_display_name ?? pr?.handle ?? null;
+  };
   const fb = profiles.find((p) => p.platform === "facebook");
   const fbPages = fb?.availablePages ?? [];
 
@@ -683,7 +691,19 @@ export function PublishCanvas({
                     <span
                       className={`h-1.5 w-1.5 shrink-0 rounded-full ${on ? "bg-primary" : "bg-border"}`}
                     />
-                    {p.label}
+                    <span className="min-w-0 flex-1 truncate">
+                      {p.label}
+                      {/* Which ACCOUNT, not just which network. "Facebook" on
+                          its own doesn't say whose Page this posts to, and a
+                          workspace that has reconnected to a different Page
+                          looks identical to one that hasn't — you find out
+                          after it has gone out. */}
+                      {accountFor(p.id) && (
+                        <span className="ml-1.5 font-normal text-muted-foreground">
+                          {accountFor(p.id)}
+                        </span>
+                      )}
+                    </span>
                   </button>
                   {on && target === "video" && (
                     <button
@@ -711,7 +731,14 @@ export function PublishCanvas({
 
         <div className="border-t border-border" />
 
-        {isPro === false ? (
+        {/* ONE way through to connections.
+            There were two buttons here — "Connect more platforms" and "Connect
+            Facebook / Instagram (free)" — which since b6bfd06 both did the
+            identical thing: navigate to Settings. Two controls with one
+            behaviour is a choice the user has to make and cannot get right.
+            The split also described the old world, where "more platforms"
+            meant Ayrshare's paid hosted flow; that is switched off. */}
+        {isPro === false && (
           <Link
             href={`/${workspaceSlug}/settings/billing`}
             className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-2.5 py-2 text-xs text-primary hover:bg-primary/10"
@@ -719,23 +746,16 @@ export function PublishCanvas({
             <Sparkles className="h-3.5 w-3.5" /> Upgrade for X, LinkedIn, TikTok
             &amp; more
           </Link>
-        ) : (
-          <button
-            type="button"
-            onClick={goToConnections}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary"
-          >
-            <Settings2 className="h-3.5 w-3.5" />
-            Connect more platforms
-          </button>
         )}
         <button
           type="button"
           onClick={goToConnections}
           className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary"
         >
-          <Settings2 className="h-3.5 w-3.5" /> Connect Facebook / Instagram
-          (free)
+          <Settings2 className="h-3.5 w-3.5" />
+          {connectedPlatforms.length === 0
+            ? "Connect an account"
+            : "Manage connections"}
         </button>
 
         {fbPages.length > 1 && platforms.includes("facebook") && (

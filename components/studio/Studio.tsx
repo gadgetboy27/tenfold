@@ -1484,26 +1484,37 @@ export function Studio({
             {/* Studio never inherited TopBar, so the main site had no sign-out
                 and no indication of which account you were using. */}
             <UserMenu />
-            <button
-              type="button"
-              disabled={!publishReady}
-              onClick={() => setSection("publish")}
-              className={`flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-semibold transition-all ${
-                publishReady
-                  ? "animate-pulse bg-emerald-500 text-emerald-950 hover:bg-emerald-400"
-                  : "cursor-not-allowed border border-border bg-card text-muted-foreground"
-              }`}
-              title={
-                publishReady
-                  ? "You've got enough to publish"
-                  : "Publish unlocks once your ad takes shape"
-              }
-            >
-              <span
-                className={`h-2 w-2 rounded-full ${publishReady ? "bg-emerald-950" : "bg-muted-foreground/50"}`}
-              />
-              {publishReady ? "Ready — publish" : "Publish when ready"}
-            </button>
+            {/* Jumps to the Publish step. It always did — but it pulsed
+                forever and sat in a corner, so it read as decoration rather
+                than a control, and on the Publish screen itself it was a
+                button that genuinely did nothing.
+                
+                Now: hidden once you're already there (nothing left to do), and
+                the pulse is gone. A permanent animation is not emphasis — it
+                is the thing your eye learns to skip, and it was competing with
+                the actual work for attention on every screen. */}
+            {section !== "publish" && (
+              <button
+                type="button"
+                disabled={!publishReady}
+                onClick={() => setSection("publish")}
+                className={`flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-semibold transition-all ${
+                  publishReady
+                    ? "bg-emerald-500 text-emerald-950 hover:bg-emerald-400"
+                    : "cursor-not-allowed border border-border bg-card text-muted-foreground"
+                }`}
+                title={
+                  publishReady
+                    ? "Go to the Publish step"
+                    : "Publish unlocks once your ad takes shape"
+                }
+              >
+                <span
+                  className={`h-2 w-2 rounded-full ${publishReady ? "bg-emerald-950" : "bg-muted-foreground/50"}`}
+                />
+                {publishReady ? "Ready — publish" : "Publish when ready"}
+              </button>
+            )}
           </div>
         </header>
 

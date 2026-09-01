@@ -5,6 +5,7 @@ import {
   CONNECTION_MANAGER_ROLES,
 } from "@/lib/social/authz";
 import { revokeAtProvider, manualRevokeUrl } from "@/lib/social/revoke";
+import { readProfilesResponse } from "@/lib/social/profiles-response";
 import type { Session } from "@/lib/auth/session";
 
 const session = (role: string): Session => ({
@@ -217,5 +218,50 @@ describe("the connect flow navigates, and does not race itself", () => {
       src.indexOf("const handleConnect"),
     );
     expect(fn).toContain("sessionStorage.setItem");
+  });
+});
+
+/**
+ * The profiles endpoint grew an envelope — `{ profiles, ayrshareEnabled }`
+ * instead of a bare array — because the client cannot read AYRSHARE_ENABLED
+ * and kept offering a hosted-linking button that could only ever error.
+ *
+ * Three callers parsed that array by hand. A shape change breaks all three
+ * SILENTLY: .map on an object throws, .find returns undefined, a connections
+ * list renders empty. Same class of quiet breakage as an embed that stops
+ * resolving, so the reader is shared and both shapes are accepted.
+ */
+describe("readProfilesResponse", () => {
+  it("reads the current envelope", () => {
+    const r = readProfilesResponse<{ platform: string }>({
+      profiles: [{ platform: "facebook" }],
+      ayrshareEnabled: true,
+    });
+    expect(r.profiles).toHaveLength(1);
+    expect(r.ayrshareEnabled).toBe(true);
+  });
+
+  it("still reads the legacy bare array", () => {
+    // A deployed client is older than the route it talks to for as long as a
+    // tab stays open. Nobody should watch their connections vanish because the
+    // server rolled forward underneath them.
+    const r = readProfilesResponse<{ platform: string }>([
+      { platform: "reddit" },
+    ]);
+    expect(r.profiles).toHaveLength(1);
+  });
+
+  it("assumes Ayrshare is OFF when the flag is absent", () => {
+    // Claiming a disabled integration works is the exact failure being fixed,
+    // so the unknown case defaults to not offering it.
+    expect(readProfilesResponse([]).ayrshareEnabled).toBe(false);
+    expect(readProfilesResponse({}).ayrshareEnabled).toBe(false);
+  });
+
+  it("never throws on junk, and never returns a non-array", () => {
+    // This feeds .map in three components; a null here is a white screen.
+    for (const junk of [null, undefined, 0, "x", { profiles: "nope" }]) {
+      expect(Array.isArray(readProfilesResponse(junk).profiles)).toBe(true);
+    }
   });
 });

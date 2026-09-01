@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { BlueskyConnectDialog } from "@/components/settings/BlueskyConnectDialog";
 import { DestinationPicker } from "@/components/settings/DestinationPicker";
 import { isUnhealthy, type ConnectionHealth } from "@/lib/social/health";
+import { readProfilesResponse } from "@/lib/social/profiles-response";
 
 interface SocialProfile {
   id: string;
@@ -1441,6 +1442,9 @@ export default function SocialSettingsPage() {
   // True once we know Ayrshare can't be reached — drives the "unavailable"
   // treatment on the eight networks that only publish through it.
   const [ayrshareDown, setAyrshareDown] = useState(false);
+  // Whether the hosted-linking flow exists on this deployment at all. Off by
+  // default so a slow or failed profiles fetch never advertises it.
+  const [ayrshareEnabled, setAyrshareEnabled] = useState(false);
   const [wizardMode, setWizardMode] = useState<"picker" | "platform" | null>(
     null,
   );
@@ -1478,7 +1482,9 @@ export default function SocialSettingsPage() {
           };
           throw new Error(body.error ?? `Failed to load (${res.status})`);
         }
-        setProfiles((await res.json()) as SocialProfile[]);
+        const parsed = readProfilesResponse<SocialProfile>(await res.json());
+        setProfiles(parsed.profiles);
+        setAyrshareEnabled(parsed.ayrshareEnabled);
       } catch (err) {
         setError((err as Error).message);
       } finally {
@@ -2002,31 +2008,40 @@ export default function SocialSettingsPage() {
         )}
       </div>
 
-      {/* Connect the remaining networks (everything beyond Facebook & Instagram) */}
-      <div className="mb-6 p-4 rounded-xl border border-primary/30 bg-primary/5 flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-foreground mb-0.5">
-            More networks — X, LinkedIn, TikTok, YouTube, Pinterest & more
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Facebook &amp; Instagram connect above (free). Connect everything
-            else through PrettyMuch in one place — a Pro feature.
-          </p>
+      {/* Connect the remaining networks (everything beyond Facebook & Instagram).
+          Hidden while Ayrshare is switched off: this is the ONLY thing on the
+          page that drives the hosted-linking flow, and with AYRSHARE_ENABLED
+          unset that flow refuses at the boundary — the button's single possible
+          outcome was an error toast. Offering an action that cannot work is
+          worse than not offering it.
+          Gated, not deleted: CLAUDE.md §7d is explicit that the Ayrshare path
+          stays whole and comes back with one env var. */}
+      {ayrshareEnabled && (
+        <div className="mb-6 p-4 rounded-xl border border-primary/30 bg-primary/5 flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-foreground mb-0.5">
+              More networks — X, LinkedIn, TikTok, YouTube, Pinterest & more
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Facebook &amp; Instagram connect above (free). Connect everything
+              else through PrettyMuch in one place — a Pro feature.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            onClick={handleAyrshareConnect}
+            disabled={ayrshareLoading}
+            className="gap-1.5 shrink-0 bg-primary hover:bg-primary/90 text-white"
+          >
+            {ayrshareLoading ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <ExternalLink className="w-3.5 h-3.5" />
+            )}
+            Connect your socials
+          </Button>
         </div>
-        <Button
-          size="sm"
-          onClick={handleAyrshareConnect}
-          disabled={ayrshareLoading}
-          className="gap-1.5 shrink-0 bg-primary hover:bg-primary/90 text-white"
-        >
-          {ayrshareLoading ? (
-            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <ExternalLink className="w-3.5 h-3.5" />
-          )}
-          Connect your socials
-        </Button>
-      </div>
+      )}
 
       {/* A connect that came back with an error. Above everything, and it
           stays until dismissed — the whole failure of the old toast was that

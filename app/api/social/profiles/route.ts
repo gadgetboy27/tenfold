@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getConnectedPlatforms } from "@/lib/ayrshare/profiles";
 import { isDirectPlatform } from "@/lib/social/direct";
+import { isAyrshareEnabled } from "@/lib/ayrshare/enabled";
 
 interface OutProfile {
   id: string;
@@ -127,7 +128,17 @@ export async function GET(req: Request) {
       }
     }
 
-    return NextResponse.json(out);
+    // The client cannot read AYRSHARE_ENABLED (server-only), so it had no way
+    // to know the hosted linking flow is switched off — and kept offering a
+    // "Connect your socials" button whose only possible outcome was an error
+    // toast. Ship the flag with the profiles so the UI can simply not offer it.
+    //
+    // Sent as a field rather than deleting the UI, because §7d is explicit that
+    // the Ayrshare path stays whole and comes back with one env var.
+    return NextResponse.json({
+      profiles: out,
+      ayrshareEnabled: isAyrshareEnabled(),
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     const status = msg === "Unauthorized" ? 401 : 500;
