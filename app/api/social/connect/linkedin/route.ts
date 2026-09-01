@@ -24,7 +24,7 @@ export async function GET(req: Request) {
     // through the round-trip so a forged callback can't attach an account to
     // someone else's workspace.
     return NextResponse.redirect(
-      getLinkedInOAuthUrl(signOAuthState(session.workspaceId)),
+      getLinkedInOAuthUrl(signOAuthState(session.workspaceId, session.userId)),
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unauthorized";

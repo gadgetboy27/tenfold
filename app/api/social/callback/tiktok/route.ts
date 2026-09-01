@@ -11,7 +11,11 @@ import { verifyOAuthState } from "@/lib/social/oauth-state";
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
-  const workspaceId = verifyOAuthState(url.searchParams.get("state"));
+  // The signed state carries WHO started this, not just which workspace —
+  // the callback has no session, so this is the only trustworthy actor.
+  const oauthClaims = verifyOAuthState(url.searchParams.get("state"));
+  const workspaceId = oauthClaims?.workspaceId ?? null;
+  const actorUserId = oauthClaims?.userId ?? null;
   const oauthError = url.searchParams.get("error");
 
   const admin = createSupabaseAdminClient();
@@ -58,7 +62,12 @@ export async function GET(req: Request) {
 
     // this business's name. See lib/social/audit.ts.
 
-    await recordSocialEvent(admin, { workspaceId }, "tiktok", "connected");
+    await recordSocialEvent(
+      admin,
+      { workspaceId, userId: actorUserId },
+      "tiktok",
+      "connected",
+    );
 
     return NextResponse.redirect(`${base}/settings/social?connected=tiktok`);
   } catch (err) {

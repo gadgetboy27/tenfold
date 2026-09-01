@@ -22,7 +22,7 @@ export async function GET(req: Request) {
     // round-trip so the callback can't be forged to attach an account to
     // someone else's workspace.
     return NextResponse.redirect(
-      getRedditOAuthUrl(signOAuthState(session.workspaceId)),
+      getRedditOAuthUrl(signOAuthState(session.workspaceId, session.userId)),
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unauthorized";

@@ -51,11 +51,13 @@ export async function POST(req: Request) {
     // Decrypted: revoking at the provider means presenting the real
     // credential. Ciphertext here would make every revocation "fail" and send
     // users to do it by hand for no reason.
-    for (const row of ((existing ?? []) as {
-      platform: string;
-      access_token: string | null;
-      refresh_token: string | null;
-    }[]).map((r) => decryptProfileTokens(r))) {
+    for (const row of (
+      (existing ?? []) as {
+        platform: string;
+        access_token: string | null;
+        refresh_token: string | null;
+      }[]
+    ).map((r) => decryptProfileTokens(r))) {
       // Instagram publishes on the Facebook Page's token — revoking it twice
       // would be the same call, and a "failed" second attempt would misreport
       // a revocation that actually succeeded.

@@ -21,7 +21,7 @@ export async function GET(req: Request) {
     // Signed state carries the workspaceId through the round-trip, so a forged
     // callback can't attach an account to someone else's workspace.
     return NextResponse.redirect(
-      getTikTokOAuthUrl(signOAuthState(session.workspaceId)),
+      getTikTokOAuthUrl(signOAuthState(session.workspaceId, session.userId)),
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unauthorized";

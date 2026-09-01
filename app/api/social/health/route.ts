@@ -27,11 +27,13 @@ export async function GET(req: Request) {
     // Decrypt before asking Meta anything: sending ciphertext to debug_token
     // reports every connection as invalid, which is a far more convincing lie
     // than the one this check exists to stop.
-    const rows = ((profiles ?? []) as {
-      platform: string;
-      platform_page_id: string | null;
-      access_token: string | null;
-    }[]).map((r) => decryptProfileTokens(r));
+    const rows = (
+      (profiles ?? []) as {
+        platform: string;
+        platform_page_id: string | null;
+        access_token: string | null;
+      }[]
+    ).map((r) => decryptProfileTokens(r));
 
     const health: Record<string, ConnectionHealth> = {};
     await Promise.all(

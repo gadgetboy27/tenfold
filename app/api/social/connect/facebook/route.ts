@@ -14,7 +14,9 @@ export async function GET(req: Request) {
     }
     // Signed OAuth state carries the workspaceId through the round-trip so the
     // callback can trust which workspace to attach pages to (CSRF protection).
-    const url = getMetaOAuthUrl(signOAuthState(session.workspaceId));
+    const url = getMetaOAuthUrl(
+      signOAuthState(session.workspaceId, session.userId),
+    );
     return NextResponse.redirect(url);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unauthorized";

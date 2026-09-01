@@ -16,7 +16,11 @@ export async function GET(req: Request) {
   const code = url.searchParams.get("code");
   // Verify the signed state and recover the workspaceId — a forged/expired state
   // resolves to null and is treated as a denied connection (CSRF protection).
-  const workspaceId = verifyOAuthState(url.searchParams.get("state"));
+  // The signed state carries WHO started this, not just which workspace —
+  // the callback has no session, so this is the only trustworthy actor.
+  const oauthClaims = verifyOAuthState(url.searchParams.get("state"));
+  const workspaceId = oauthClaims?.workspaceId ?? null;
+  const actorUserId = oauthClaims?.userId ?? null;
   const metaError = url.searchParams.get("error");
 
   // Resolve workspace slug for redirect URL — needed before we can redirect anywhere
@@ -139,13 +143,19 @@ export async function GET(req: Request) {
     // business's name. Instagram is logged separately because it is a distinct
     // publishing destination even though it rides the Page's token.
     // See lib/social/audit.ts.
-    await recordSocialEvent(admin, { workspaceId }, "facebook", "connected", {
-      target: page.id,
-    });
+    await recordSocialEvent(
+      admin,
+      { workspaceId, userId: actorUserId },
+      "facebook",
+      "connected",
+      {
+        target: page.id,
+      },
+    );
     if (igAccount) {
       await recordSocialEvent(
         admin,
-        { workspaceId },
+        { workspaceId, userId: actorUserId },
         "instagram",
         "connected",
         {

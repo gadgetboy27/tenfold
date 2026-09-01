@@ -22,7 +22,7 @@ export async function GET(req: Request) {
       );
     }
     return NextResponse.redirect(
-      getPinterestOAuthUrl(signOAuthState(session.workspaceId)),
+      getPinterestOAuthUrl(signOAuthState(session.workspaceId, session.userId)),
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unauthorized";
