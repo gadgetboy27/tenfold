@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { pageIsGranted, grantedPageIds } from "@/lib/social/health";
+import {
+  pageIsGranted,
+  grantedPageIds,
+  isUnhealthy,
+} from "@/lib/social/health";
 
 /**
  * Pinned against a real production failure, 2026-08-30.
@@ -96,5 +100,43 @@ describe("grantedPageIds", () => {
 
   it("returns empty rather than throwing when nothing is reported", () => {
     expect(grantedPageIds(undefined)).toEqual([]);
+  });
+});
+
+/**
+ * `isUnhealthy` gates four surfaces — the summary block, the collapsed card
+ * header, the expanded card and the setup wizard. Every one of them used to
+ * ask only "does a row exist?", which is how a dead grant kept a green tick
+ * and a "You're ready to publish" line directly above a card that said "Needs
+ * reconnecting".
+ *
+ * The asymmetry is the point: a real verdict must show, and everything else
+ * must render exactly as it did before this check existed.
+ */
+describe("isUnhealthy", () => {
+  it("flags the verdicts that actually stop a publish", () => {
+    expect(isUnhealthy({ status: "token_invalid", message: "x" })).toBe(true);
+    expect(isUnhealthy({ status: "page_not_granted", message: "x" })).toBe(
+      true,
+    );
+  });
+
+  it("never flags a connection the provider called fine", () => {
+    expect(isUnhealthy({ status: "ok", message: null })).toBe(false);
+  });
+
+  it("treats a brand-new user's unknown state as fine, not broken", () => {
+    // No connections yet, health payload empty, request still in flight — all
+    // land here as `undefined`. Painting these red would greet every new
+    // signup with an outage they don't have.
+    expect(isUnhealthy(undefined)).toBe(false);
+  });
+
+  it("does not turn a missing app secret or a Graph blip into an outage", () => {
+    // checkMetaConnection returns "unchecked" when META_APP_ID/SECRET are
+    // absent or Graph is unreachable. Reporting that as broken is the failure
+    // mode that teaches people to ignore the warning — worth more than the
+    // warning itself.
+    expect(isUnhealthy({ status: "unchecked", message: null })).toBe(false);
   });
 });

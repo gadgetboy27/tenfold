@@ -63,6 +63,26 @@ export function pageIsGranted(
   );
 }
 
+/**
+ * Must this connection be kept off every "you're good to go" surface?
+ *
+ * Four places decide how a connection looks — the summary block, the collapsed
+ * card header, the expanded card, and the setup wizard — and they were only
+ * ever asking "does a row exist?". That is how a dead grant kept a green tick
+ * and a "You're ready to publish" line above the very card that said "Needs
+ * reconnecting". One predicate so they cannot drift apart again.
+ *
+ * "unchecked" is deliberately NOT a fault, and neither is a missing verdict: a
+ * connection we could not ask about (no app secret, Graph unreachable, health
+ * still in flight) must render exactly as it did before this check existed.
+ * Painting those red is the failure mode that teaches people to ignore the
+ * warning, which costs more than the warning is worth.
+ */
+export function isUnhealthy(health: ConnectionHealth | undefined): boolean {
+  if (!health) return false;
+  return health.status !== "ok" && health.status !== "unchecked";
+}
+
 /** Every Page id named by the publish-critical scopes, de-duplicated. */
 export function grantedPageIds(
   granular: GranularScope[] | undefined,

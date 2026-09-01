@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { BlueskyConnectDialog } from "@/components/settings/BlueskyConnectDialog";
 import { DestinationPicker } from "@/components/settings/DestinationPicker";
-import type { ConnectionHealth } from "@/lib/social/health";
+import { isUnhealthy, type ConnectionHealth } from "@/lib/social/health";
 
 interface SocialProfile {
   id: string;
@@ -592,11 +592,7 @@ function PlatformCard({
   const connected = !!profile;
   // "unchecked" is not a fault — only an explicit verdict from the provider
   // turns the card red, so a network blip never invents an outage.
-  const unhealthy =
-    connected &&
-    !!health &&
-    health.status !== "ok" &&
-    health.status !== "unchecked";
+  const unhealthy = connected && isUnhealthy(health);
   const requiredItems = platform.checklist.filter((i) => i.required);
   const allRequiredChecked = requiredItems.every((i) => checklist[i.key]);
   const totalChecked = platform.checklist.filter(
@@ -634,7 +630,13 @@ function PlatformCard({
             <span className="text-sm font-semibold text-foreground">
               {platform.label}
             </span>
-            {connected ? (
+            {/* The card collapses by default, so this tick is the ONLY thing
+                most people ever read about this connection. A green one over a
+                dead grant outranks every warning inside the card — which is
+                exactly what it did for seven weeks. */}
+            {unhealthy ? (
+              <AlertCircle className="w-4 h-4 text-destructive shrink-0" />
+            ) : connected ? (
               <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
             ) : allRequiredChecked ? (
               <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
@@ -642,12 +644,19 @@ function PlatformCard({
               <Circle className="w-4 h-4 text-muted-foreground/30 shrink-0" />
             )}
           </div>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {connected
-              ? (profile?.profile_display_name ??
-                profile?.handle ??
-                "Connected")
-              : platform.description}
+          <p
+            className={cn(
+              "text-xs mt-0.5",
+              unhealthy ? "text-destructive" : "text-muted-foreground",
+            )}
+          >
+            {unhealthy
+              ? `${profile?.profile_display_name ?? profile?.handle ?? platform.label} — needs reconnecting`
+              : connected
+                ? (profile?.profile_display_name ??
+                  profile?.handle ??
+                  "Connected")
+                : platform.description}
           </p>
         </div>
 
@@ -999,6 +1008,7 @@ function WizardPlatformStep({
   platformIdx,
   totalPlatforms,
   isConnected,
+  health,
   isConnecting,
   onCheckItem,
   onConnect,
@@ -1011,6 +1021,8 @@ function WizardPlatformStep({
   platformIdx: number;
   totalPlatforms: number;
   isConnected: boolean;
+  /** The provider's verdict on an existing grant. Absent = never asked. */
+  health?: ConnectionHealth;
   isConnecting: boolean;
   onCheckItem: (key: string, value: boolean) => void;
   onConnect: () => void;
@@ -1022,6 +1034,9 @@ function WizardPlatformStep({
   const requiredItems = platform.checklist.filter((i) => i.required);
   const allRequiredChecked = requiredItems.every((i) => checklist[i.key]);
   const isLast = platformIdx === totalPlatforms - 1;
+  // Re-running the wizard over a broken connection must not tick it off as
+  // done — that's how someone "completes" setup and still can't publish.
+  const brokenHere = isConnected && isUnhealthy(health);
 
   return (
     <div className="space-y-6">
@@ -1062,9 +1077,11 @@ function WizardPlatformStep({
             {platform.description}
           </p>
         </div>
-        {isConnected && (
+        {brokenHere ? (
+          <AlertCircle className="w-5 h-5 text-destructive ml-auto shrink-0" />
+        ) : isConnected ? (
           <CheckCircle2 className="w-5 h-5 text-success ml-auto shrink-0" />
-        )}
+        ) : null}
       </div>
 
       {/* Account type requirement */}
@@ -1140,7 +1157,36 @@ function WizardPlatformStep({
       </div>
 
       {/* Ayrshare handoff — this is where PrettyMuch hands control to Ayrshare */}
-      {isConnected ? (
+      {brokenHere ? (
+        // Promising a publish target we already know is refused is the whole
+        // bug, and it is worst here — this is the screen a new user trusts to
+        // tell them setup worked.
+        <div className="p-4 rounded-xl bg-destructive/5 border border-destructive/20">
+          <div className="flex items-center gap-2 mb-1">
+            <AlertCircle className="w-4 h-4 text-destructive" />
+            <p className="text-sm font-semibold text-destructive">
+              {platform.label} needs reconnecting
+            </p>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {health?.message ??
+              "This connection can't publish right now. Reconnect it to continue."}
+          </p>
+          <Button
+            size="sm"
+            onClick={onConnect}
+            disabled={isConnecting || unavailable}
+            className="mt-3 gap-1.5"
+          >
+            {isConnecting ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <ExternalLink className="w-3.5 h-3.5" />
+            )}
+            Reconnect {platform.label}
+          </Button>
+        </div>
+      ) : isConnected ? (
         <div className="p-4 rounded-xl bg-success/5 border border-success/20">
           <div className="flex items-center gap-2 mb-1">
             <CheckCircle2 className="w-4 h-4 text-success" />
@@ -1554,6 +1600,14 @@ export default function SocialSettingsPage() {
 
   const connectedIds = new Set(profiles.map((p) => p.platform));
   const connectedCount = PLATFORMS.filter((p) => connectedIds.has(p.id)).length;
+  // Connected but refused by the provider. `connectedCount` counts ROWS, which
+  // is the wrong thing to celebrate — the summary below used it to promise
+  // "you're ready to publish" over grants Meta had already invalidated.
+  const brokenPlatforms = PLATFORMS.filter(
+    (p) => connectedIds.has(p.id) && isUnhealthy(health[p.id]),
+  );
+  const publishableCount = connectedCount - brokenPlatforms.length;
+  const brokenNames = brokenPlatforms.map((p) => p.label).join(", ");
   const progressPct = Math.round((connectedCount / PLATFORMS.length) * 100);
   const fbProfile = profiles.find((p) => p.platform === "facebook");
 
@@ -1606,6 +1660,7 @@ export default function SocialSettingsPage() {
                   platformIdx={wizardIdx}
                   totalPlatforms={wizardPlatforms.length}
                   isConnected={connectedIds.has(wizardCurrentPlatformId)}
+                  health={health[wizardCurrentPlatformId]}
                   isConnecting={connecting === wizardCurrentPlatformId}
                   onCheckItem={(key, value) =>
                     handleCheckItem(wizardCurrentPlatformId, key, value)
@@ -1705,17 +1760,37 @@ export default function SocialSettingsPage() {
 
       {/* Connected platforms summary */}
       {!loading && connectedCount > 0 && (
-        <div className="mb-6 p-4 rounded-xl border border-success/30 bg-success/5">
-          <p className="text-xs font-medium text-success uppercase tracking-wider font-mono mb-3">
-            Connected
+        <div
+          className={cn(
+            "mb-6 p-4 rounded-xl border",
+            publishableCount === 0
+              ? "border-destructive/30 bg-destructive/5"
+              : "border-success/30 bg-success/5",
+          )}
+        >
+          {/* This block sits above every card and is the first thing read, so
+              it must never be greener than the truth underneath it. When
+              nothing can publish it stops calling itself "Connected" at all —
+              a row in social_profiles is not a working connection. */}
+          <p
+            className={cn(
+              "text-xs font-medium uppercase tracking-wider font-mono mb-3",
+              publishableCount === 0 ? "text-destructive" : "text-success",
+            )}
+          >
+            {publishableCount === 0 ? "Needs reconnecting" : "Connected"}
           </p>
           <div className="flex flex-wrap gap-2">
             {PLATFORMS.filter((p) => connectedIds.has(p.id)).map((p) => {
               const profile = profiles.find((pr) => pr.platform === p.id);
+              const broken = isUnhealthy(health[p.id]);
               return (
                 <div
                   key={p.id}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-card border border-success/20"
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-1.5 rounded-full bg-card border",
+                    broken ? "border-destructive/40" : "border-success/20",
+                  )}
                 >
                   <div
                     className={`w-4 h-4 rounded-full ${p.bg} flex items-center justify-center`}
@@ -1735,7 +1810,11 @@ export default function SocialSettingsPage() {
                       {profile?.profile_display_name ?? profile?.handle}
                     </span>
                   )}
-                  <CheckCircle2 className="w-3 h-3 text-success" />
+                  {broken ? (
+                    <AlertCircle className="w-3 h-3 text-destructive" />
+                  ) : (
+                    <CheckCircle2 className="w-3 h-3 text-success" />
+                  )}
                 </div>
               );
             })}
@@ -1764,14 +1843,44 @@ export default function SocialSettingsPage() {
               )}
             </div>
           )}
-          <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-success/20 pt-3">
-            <p className="text-xs text-muted-foreground">
-              ✓ You&apos;re ready to publish to your connected{" "}
-              {connectedCount === 1 ? "account" : "accounts"}. Create a campaign
-              and it&apos;ll be a publish target.
-            </p>
+          <div
+            className={cn(
+              "mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t pt-3",
+              publishableCount === 0
+                ? "border-destructive/20"
+                : "border-success/20",
+            )}
+          >
+            {/* Three states, because "some of your accounts are broken" is a
+                different message from "all of them are", and both are
+                different from the happy path. The old copy only knew the
+                happy one and said it unconditionally. */}
+            {publishableCount === 0 ? (
+              <p className="text-xs text-destructive">
+                {brokenNames} can&apos;t publish —{" "}
+                {brokenPlatforms.length === 1
+                  ? "the account below needs"
+                  : "the accounts below need"}{" "}
+                reconnecting before a campaign can go anywhere.
+              </p>
+            ) : brokenPlatforms.length > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                ✓ Ready to publish to {publishableCount}{" "}
+                {publishableCount === 1 ? "account" : "accounts"} —{" "}
+                <span className="text-destructive">
+                  {brokenNames} can&apos;t publish until reconnected.
+                </span>
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                ✓ You&apos;re ready to publish to your connected{" "}
+                {connectedCount === 1 ? "account" : "accounts"}. Create a
+                campaign and it&apos;ll be a publish target.
+              </p>
+            )}
             <Button
               size="sm"
+              variant={publishableCount === 0 ? "outline" : "default"}
               onClick={() => router.push(`/${workspaceSlug}`)}
               className="shrink-0"
             >
