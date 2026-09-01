@@ -882,6 +882,20 @@ export function PublishCanvas({
             <ShieldCheck className="h-3.5 w-3.5" /> Approved for publishing
           </div>
         )}
+      </Section>
+
+      {/* 3 — what it says, and when */}
+      <Section
+        title="Caption & timing"
+        icon={Clock}
+        open={openSections.words}
+        onToggle={() => toggleSection("words")}
+        summary={
+          `${caption.trim() ? `${charCount} chars` : "No caption"}` +
+          `${hashtags.length ? ` · ${hashtags.length} tag${hashtags.length === 1 ? "" : "s"}` : ""}` +
+          ` · ${scheduleMode === "now" ? "Post now" : "Scheduled"}`
+        }
+      >
         <div>
           <div className="mb-1.5 flex items-center justify-between">
             <label className="text-xs font-medium text-muted-foreground">
