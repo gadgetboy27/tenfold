@@ -571,11 +571,14 @@ function PlatformCard({
   onDestinationSaved,
   unavailable,
   health,
+  healthChecked = true,
 }: {
   platform: PlatformGuide;
   profile: SocialProfile | undefined;
   /** What the provider says about this grant. Absent = not checked. */
   health?: ConnectionHealth;
+  /** False until the health round-trip settles — see `checking` below. */
+  healthChecked?: boolean;
   checklist: Record<string, boolean>;
   expanded: boolean;
   onToggle: () => void;
@@ -593,6 +596,10 @@ function PlatformCard({
   // "unchecked" is not a fault — only an explicit verdict from the provider
   // turns the card red, so a network blip never invents an outage.
   const unhealthy = connected && isUnhealthy(health);
+  // Verdict pending. Neutral on purpose — NOT a warning. We don't yet know
+  // anything is wrong, and crying wolf for a second on every page load is its
+  // own way of teaching people to ignore this. It only withholds the green.
+  const checking = connected && !healthChecked && !unhealthy;
   const requiredItems = platform.checklist.filter((i) => i.required);
   const allRequiredChecked = requiredItems.every((i) => checklist[i.key]);
   const totalChecked = platform.checklist.filter(
@@ -636,6 +643,8 @@ function PlatformCard({
                 exactly what it did for seven weeks. */}
             {unhealthy ? (
               <AlertCircle className="w-4 h-4 text-destructive shrink-0" />
+            ) : checking ? (
+              <RefreshCw className="w-3.5 h-3.5 text-muted-foreground shrink-0 animate-spin" />
             ) : connected ? (
               <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
             ) : allRequiredChecked ? (
@@ -652,11 +661,13 @@ function PlatformCard({
           >
             {unhealthy
               ? `${profile?.profile_display_name ?? profile?.handle ?? platform.label} — needs reconnecting`
-              : connected
-                ? (profile?.profile_display_name ??
-                  profile?.handle ??
-                  "Connected")
-                : platform.description}
+              : checking
+                ? `${profile?.profile_display_name ?? profile?.handle ?? platform.label} — checking…`
+                : connected
+                  ? (profile?.profile_display_name ??
+                    profile?.handle ??
+                    "Connected")
+                  : platform.description}
           </p>
         </div>
 
@@ -1009,6 +1020,7 @@ function WizardPlatformStep({
   totalPlatforms,
   isConnected,
   health,
+  healthChecked = true,
   isConnecting,
   onCheckItem,
   onConnect,
@@ -1023,6 +1035,8 @@ function WizardPlatformStep({
   isConnected: boolean;
   /** The provider's verdict on an existing grant. Absent = never asked. */
   health?: ConnectionHealth;
+  /** False until the health round-trip settles. */
+  healthChecked?: boolean;
   isConnecting: boolean;
   onCheckItem: (key: string, value: boolean) => void;
   onConnect: () => void;
@@ -1037,6 +1051,10 @@ function WizardPlatformStep({
   // Re-running the wizard over a broken connection must not tick it off as
   // done — that's how someone "completes" setup and still can't publish.
   const brokenHere = isConnected && isUnhealthy(health);
+  // Same rule as the cards: an unverified connection is not yet a success
+  // story. This screen IS the verdict on whether setup worked, so it must not
+  // hand out a tick it might have to take back.
+  const checkingHere = isConnected && !healthChecked && !brokenHere;
 
   return (
     <div className="space-y-6">
@@ -1079,6 +1097,8 @@ function WizardPlatformStep({
         </div>
         {brokenHere ? (
           <AlertCircle className="w-5 h-5 text-destructive ml-auto shrink-0" />
+        ) : checkingHere ? (
+          <RefreshCw className="w-4 h-4 text-muted-foreground ml-auto shrink-0 animate-spin" />
         ) : isConnected ? (
           <CheckCircle2 className="w-5 h-5 text-success ml-auto shrink-0" />
         ) : null}
@@ -1186,6 +1206,19 @@ function WizardPlatformStep({
             Reconnect {platform.label}
           </Button>
         </div>
+      ) : checkingHere ? (
+        <div className="p-4 rounded-xl bg-card border border-border">
+          <div className="flex items-center gap-2 mb-1">
+            <RefreshCw className="w-4 h-4 text-muted-foreground animate-spin" />
+            <p className="text-sm font-semibold text-foreground">
+              Checking {platform.label}…
+            </p>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Confirming with {platform.label} that this connection can still
+            publish.
+          </p>
+        </div>
       ) : isConnected ? (
         <div className="p-4 rounded-xl bg-success/5 border border-success/20">
           <div className="flex items-center gap-2 mb-1">
@@ -1280,6 +1313,12 @@ export default function SocialSettingsPage() {
   // seven weeks. Fetched separately from the profiles so a slow Meta round-trip
   // never delays the connections rendering.
   const [health, setHealth] = useState<Record<string, ConnectionHealth>>({});
+  // Has the health round-trip SETTLED? An empty `health` map can't answer that
+  // — it reads the same before the request lands as it does when every grant
+  // came back fine. Without this the page painted its confident green state
+  // for the second or two before Meta replied, which is the same lie this
+  // whole check exists to stop, just briefer.
+  const [healthChecked, setHealthChecked] = useState(false);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -1350,6 +1389,11 @@ export default function SocialSettingsPage() {
       setHealth((await res.json()) as Record<string, ConnectionHealth>);
     } catch {
       // Same reasoning: an unreachable check reports nothing, not a fault.
+    } finally {
+      // Settles on failure too, deliberately. A check we couldn't run is
+      // "unchecked", which renders as it always did — leaving the page stuck
+      // on "Checking…" forever would be a worse lie than the one we fixed.
+      setHealthChecked(true);
     }
   }, [workspaceSlug]);
 
@@ -1608,6 +1652,10 @@ export default function SocialSettingsPage() {
   );
   const publishableCount = connectedCount - brokenPlatforms.length;
   const brokenNames = brokenPlatforms.map((p) => p.label).join(", ");
+  // Connections exist but the provider hasn't answered yet. Withhold the
+  // confident green rather than assert it and correct a second later — the
+  // whole point is that this page never claims more than it knows.
+  const checkingConnections = connectedCount > 0 && !healthChecked;
   const progressPct = Math.round((connectedCount / PLATFORMS.length) * 100);
   const fbProfile = profiles.find((p) => p.platform === "facebook");
 
@@ -1661,6 +1709,7 @@ export default function SocialSettingsPage() {
                   totalPlatforms={wizardPlatforms.length}
                   isConnected={connectedIds.has(wizardCurrentPlatformId)}
                   health={health[wizardCurrentPlatformId]}
+                  healthChecked={healthChecked}
                   isConnecting={connecting === wizardCurrentPlatformId}
                   onCheckItem={(key, value) =>
                     handleCheckItem(wizardCurrentPlatformId, key, value)
@@ -1763,9 +1812,11 @@ export default function SocialSettingsPage() {
         <div
           className={cn(
             "mb-6 p-4 rounded-xl border",
-            publishableCount === 0
-              ? "border-destructive/30 bg-destructive/5"
-              : "border-success/30 bg-success/5",
+            checkingConnections
+              ? "border-border bg-card"
+              : publishableCount === 0
+                ? "border-destructive/30 bg-destructive/5"
+                : "border-success/30 bg-success/5",
           )}
         >
           {/* This block sits above every card and is the first thing read, so
@@ -1775,10 +1826,18 @@ export default function SocialSettingsPage() {
           <p
             className={cn(
               "text-xs font-medium uppercase tracking-wider font-mono mb-3",
-              publishableCount === 0 ? "text-destructive" : "text-success",
+              checkingConnections
+                ? "text-muted-foreground"
+                : publishableCount === 0
+                  ? "text-destructive"
+                  : "text-success",
             )}
           >
-            {publishableCount === 0 ? "Needs reconnecting" : "Connected"}
+            {checkingConnections
+              ? "Checking connections…"
+              : publishableCount === 0
+                ? "Needs reconnecting"
+                : "Connected"}
           </p>
           <div className="flex flex-wrap gap-2">
             {PLATFORMS.filter((p) => connectedIds.has(p.id)).map((p) => {
@@ -1789,7 +1848,11 @@ export default function SocialSettingsPage() {
                   key={p.id}
                   className={cn(
                     "flex items-center gap-2 px-3 py-1.5 rounded-full bg-card border",
-                    broken ? "border-destructive/40" : "border-success/20",
+                    broken
+                      ? "border-destructive/40"
+                      : checkingConnections
+                        ? "border-border"
+                        : "border-success/20",
                   )}
                 >
                   <div
@@ -1812,6 +1875,8 @@ export default function SocialSettingsPage() {
                   )}
                   {broken ? (
                     <AlertCircle className="w-3 h-3 text-destructive" />
+                  ) : checkingConnections ? (
+                    <RefreshCw className="w-3 h-3 text-muted-foreground animate-spin" />
                   ) : (
                     <CheckCircle2 className="w-3 h-3 text-success" />
                   )}
@@ -1846,16 +1911,24 @@ export default function SocialSettingsPage() {
           <div
             className={cn(
               "mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t pt-3",
-              publishableCount === 0
-                ? "border-destructive/20"
-                : "border-success/20",
+              checkingConnections
+                ? "border-border"
+                : publishableCount === 0
+                  ? "border-destructive/20"
+                  : "border-success/20",
             )}
           >
             {/* Three states, because "some of your accounts are broken" is a
                 different message from "all of them are", and both are
                 different from the happy path. The old copy only knew the
                 happy one and said it unconditionally. */}
-            {publishableCount === 0 ? (
+            {checkingConnections ? (
+              <p className="text-xs text-muted-foreground">
+                Checking with each provider that your connected{" "}
+                {connectedCount === 1 ? "account" : "accounts"} can still
+                publish…
+              </p>
+            ) : publishableCount === 0 ? (
               <p className="text-xs text-destructive">
                 {brokenNames} can&apos;t publish —{" "}
                 {brokenPlatforms.length === 1
@@ -1880,7 +1953,11 @@ export default function SocialSettingsPage() {
             )}
             <Button
               size="sm"
-              variant={publishableCount === 0 ? "outline" : "default"}
+              variant={
+                publishableCount === 0 && !checkingConnections
+                  ? "outline"
+                  : "default"
+              }
               onClick={() => router.push(`/${workspaceSlug}`)}
               className="shrink-0"
             >
@@ -1983,6 +2060,7 @@ export default function SocialSettingsPage() {
               onConnect={() => handleConnect(platform.id)}
               unavailable={ayrshareDown && AYRSHARE_ONLY.has(platform.id)}
               health={health[platform.id]}
+              healthChecked={healthChecked}
               connecting={connecting === platform.id}
               onSwitchPage={
                 platform.id === "facebook" ? switchFbPage : undefined
