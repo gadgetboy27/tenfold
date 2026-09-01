@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   resolvePublishVideo,
   displayVideo,
@@ -112,5 +113,36 @@ describe("displayVideo", () => {
 
   it("returns null only when there is genuinely nothing", () => {
     expect(displayVideo([], "exp-1")).toBeNull();
+  });
+});
+
+/**
+ * Regression, 2026-09-01. Migration 0032 added a SECOND foreign key between
+ * assets and campaigns (campaigns.publish_asset_id → assets.id). PostgREST
+ * then could not resolve the bare `campaigns(name)` embed in /api/productions,
+ * the query errored, the route discarded the error, and a workspace holding
+ * nine finished videos was told it had none.
+ *
+ * Read from source: the failure was a query string, so that is what to pin.
+ */
+describe("productions embed survives the second FK", () => {
+  const src = readFileSync("app/api/productions/route.ts", "utf8");
+
+  it("names the FK explicitly rather than letting PostgREST guess", () => {
+    // Scoped to the .select() call, not the whole file — the comment above it
+    // quotes the broken form on purpose, and a file-wide match would fail on
+    // the explanation of the bug rather than the bug.
+    const select = src.slice(src.indexOf(".select("), src.indexOf(".in("));
+    expect(select).toContain("campaigns!assets_campaign_id_fkey(name)");
+    // The bare form is what broke. If it comes back, so does the bug.
+    expect(select).not.toMatch(/[^!]campaigns\(name\)/);
+  });
+
+  it("surfaces a query error instead of returning an empty list", () => {
+    // An empty productions list reads as "you have made nothing", which the
+    // user cannot distinguish from a broken query — that is precisely why this
+    // went unnoticed until someone opened the page.
+    expect(src).toMatch(/const \{ data, error \}/);
+    expect(src).toMatch(/status: 500/);
   });
 });
