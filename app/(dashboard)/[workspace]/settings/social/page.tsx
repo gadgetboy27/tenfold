@@ -2,11 +2,13 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import toast from "react-hot-toast";
 import { api } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   RefreshCw,
+  ArrowLeft,
   CheckCircle2,
   ShieldCheck,
   Circle,
@@ -1395,6 +1397,16 @@ export default function SocialSettingsPage() {
   // banner, not just a toast: the user has an action left to take, and a toast
   // that vanishes after eight seconds is the wrong home for the only
   // instruction that actually cuts off access.
+  // A connect attempt that came back with an error. Persistent, because the
+  // fix is an instruction the user has to act on — see the note at the setter.
+  const [connectError, setConnectError] = useState<{
+    platform: string;
+    title: string;
+    body: string;
+    fix: string;
+  } | null>(null);
+  // Set when the Publish rail sent us here, so we can offer a route home.
+  const returnCampaignId = searchParams.get("from");
   const [pendingRevoke, setPendingRevoke] = useState<{
     label: string;
     message: string;
@@ -1502,6 +1514,10 @@ export default function SocialSettingsPage() {
   // Handle OAuth redirect params (?connected=... or ?error=...) from every
   // connect flow, not just Meta's.
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- reading the OAuth
+       result out of the URL is inherently a mount-time side effect: the params
+       only exist because a provider just redirected here, and the banner they
+       produce has to survive the router.replace that cleans them off. */
     const connected = searchParams.get("connected");
     const oauthError = searchParams.get("error");
     if (!connected && !oauthError) return;
@@ -1529,22 +1545,51 @@ export default function SocialSettingsPage() {
         PLATFORMS.find((p) => p.id === platformId)?.label ??
         platformId.charAt(0).toUpperCase() + platformId.slice(1);
 
+      // A failed connect gets a PERSISTENT banner, not just a toast.
+      //
+      // The toast fired, `router.replace` stripped the error param, and four
+      // seconds later there was no trace — so a connect that failed looked
+      // exactly like a connect that never ran ("it spins back like nothing
+      // happened"). The instruction that would actually fix it cannot live in
+      // something that disappears while the user is still reading the page.
       if (reason === "no_pages")
-        toast.error(
-          "No Facebook Pages found — create a Page first, then reconnect",
-        );
+        setConnectError({
+          platform: label,
+          // The old copy said "create a Page first", which is wrong and
+          // misleading for the common case: the user HAS a Page, Facebook
+          // just didn't include it in the grant.
+          title: `Facebook didn't share any Pages`,
+          body: "Facebook completed the login but returned no Pages, so there was nothing to connect. This usually means the permission screen reused your previous choices instead of asking again.",
+          fix: 'Reconnect, and on Facebook\'s screen choose "Edit settings" (not "Continue") — then tick the Page you publish from.',
+        });
       else if (reason === "page_unverified")
-        toast.error(
-          "Facebook didn't grant access to that Page — reconnect and tick it in the permissions step",
-        );
+        setConnectError({
+          platform: label,
+          title: "Facebook didn't grant access to that Page",
+          body: "The login worked, but the permissions don't cover the Page we'd publish to.",
+          fix: 'Reconnect and choose "Edit settings", then tick that Page in the permissions step.',
+        });
       else if (reason === "denied")
         toast.error(`${label} connection cancelled`);
       // Anything unrecognised still surfaces — silence is the worse failure.
-      else toast.error(`${label} connection failed — please try again`);
+      else
+        setConnectError({
+          platform: label,
+          title: `${label} connection failed`,
+          body: "Something went wrong partway through the connection.",
+          fix: "Try connecting again. If it keeps failing, check the platform's own app settings.",
+        });
     }
 
     // Clean the URL without causing a navigation
-    router.replace(`/${workspaceSlug}/settings/social`, { scroll: false });
+    // Preserve `from` — stripping it would delete the only route back to the
+    // project the moment an OAuth error param was cleaned up.
+    const keep = searchParams.get("from");
+    router.replace(
+      `/${workspaceSlug}/settings/social${keep ? `?from=${encodeURIComponent(keep)}` : ""}`,
+      { scroll: false },
+    );
+    /* eslint-enable react-hooks/set-state-in-effect */
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1903,6 +1948,21 @@ export default function SocialSettingsPage() {
             what it needs and whether it still works — we check with the
             provider, not just whether it&apos;s listed here.
           </p>
+          {/* The way back. Studio keeps the open project in memory, so anyone
+              sent here from the Publish rail had no route home except the
+              generic "Back to workspace", which starts a fresh brief — their
+              campaign appeared to have been thrown away. `from` carries the id
+              and ?openProject rehydrates it, the same path the Gallery and
+              Productions pages use. */}
+          {returnCampaignId && (
+            <Link
+              href={`/${workspaceSlug}?openProject=${returnCampaignId}&section=publish`}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Back to your project
+            </Link>
+          )}
         </div>
         {!wizardMode && (
           <Button
@@ -1945,6 +2005,35 @@ export default function SocialSettingsPage() {
           Connect your socials
         </Button>
       </div>
+
+      {/* A connect that came back with an error. Above everything, and it
+          stays until dismissed — the whole failure of the old toast was that
+          it took the fix with it. */}
+      {connectError && (
+        <div className="mb-6 rounded-xl border border-destructive/40 bg-destructive/10 p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-foreground">
+                {connectError.title}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {connectError.body}
+              </p>
+              <p className="mt-2 text-xs font-medium text-foreground">
+                {connectError.fix}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setConnectError(null)}
+              className="shrink-0 text-xs text-muted-foreground hover:text-foreground"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Unfinished revocation. Sits above everything, because the user asked
           to cut off access and it is not cut off yet. */}

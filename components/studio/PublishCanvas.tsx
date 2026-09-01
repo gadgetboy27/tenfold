@@ -359,7 +359,15 @@ export function PublishCanvas({
    * a second, worse connect flow.
    */
   const goToConnections = () => {
-    router.push(`/${workspaceSlug}/settings/social`);
+    // Carry the campaign through so Settings can offer a way BACK.
+    //
+    // Studio holds the open project in memory, so navigating away drops it —
+    // someone sent here from the Publish rail lost their campaign and returned
+    // to a blank brief, which reads as "the app threw my work away". The id
+    // round-trips and Settings links home via ?openProject, the same rehydrate
+    // the Gallery and Productions pages use.
+    const back = campaignId ? `?from=${encodeURIComponent(campaignId)}` : "";
+    router.push(`/${workspaceSlug}/settings/social${back}`);
   };
 
   const runApprovalAction = async (
