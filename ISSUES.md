@@ -71,7 +71,7 @@ fail the action they describe — a disconnect that 500s because its audit row
 wouldn't insert leaves someone unable to cut off an account, which would make
 the logging itself the vulnerability.
 
-### 🔴 38. OAuth tokens are stored in plaintext
+### ✅ 38. OAuth tokens are stored in plaintext
 
 The remaining gap, and the largest. `social_profiles.access_token` and
 `refresh_token` are `text`, unencrypted, and `metadata.facebook_pages[]` holds
@@ -83,8 +83,22 @@ Supabase dashboard session, or a `pg_dump` in a CI log. **Meta Page tokens
 never expire**, so what sits in that column is permanent control of a
 customer's Facebook Page.
 
-- **Not fixed**, deliberately deferred: it needs a key-management decision that
-  is the owner's to make, not a code change to slip in.
+- **Fixed 2026-09-02** — `lib/social/token-crypto.ts`, AES-256-GCM, key in
+  `SOCIAL_TOKEN_KEY` (set on Railway service `tenfold`). Verified on the live
+  row rather than only in tests: fingerprinted the plaintext through the real
+  decrypt path, ran the backfill, and confirmed the decrypted fingerprint was
+  byte-identical afterwards (`e81fbbb0…` before and after, for both the column
+  and the nested Page token), that both now carry the `v1:` prefix in the
+  database, and that `/api/social/health` still returns `ok` via `debug_token`
+  — i.e. the decrypted credential is still accepted by Meta.
+- **Ordering mattered and is worth repeating for any future rotation:** deploy
+  the code FIRST, backfill second. `decryptToken` passes plaintext straight
+  through, so a half-migrated table works and there is no window where
+  publishing breaks. The reverse leaves encrypted rows in front of code that
+  cannot read them.
+- Row-level, not field-level: nine write sites and five read sites, and
+  `metadata.facebook_pages[]` holds a live token per Page — the easiest field
+  to miss and the largest blast radius.
 - **Design, ready to implement:** AES-256-GCM at the application layer, key in
   `SOCIAL_TOKEN_KEY` (32 bytes, Railway env var, service `tenfold`). Encrypt on
   write in the callbacks; decrypt only where a token is actually used — the
@@ -92,9 +106,10 @@ customer's Facebook Page.
   (`v1:`) on the ciphertext so a future rotation can read both. Backfill
   migration for existing rows, and the same treatment for the Page tokens
   nested in `metadata`.
-- **The trade to accept before starting:** lose the key and every customer
-  reconnects from scratch. That is the real cost, and it is why this is a
-  decision rather than a task.
+- **The trade, now live:** lose `SOCIAL_TOKEN_KEY` and every stored credential
+  becomes undecryptable and every customer reconnects. It belongs in the
+  platform secret store and nowhere else. Rotation is why the ciphertext
+  carries a `v1:` prefix — a second key can be read alongside the first.
 - Application-layer, not pgcrypto: the goal is that a database compromise
   alone is not enough, and a key stored *in* the database defeats that.
 
