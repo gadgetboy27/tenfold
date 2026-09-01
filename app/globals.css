@@ -84,3 +84,24 @@
     @apply font-sans antialiased bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  /* Scroll without the chrome.
+     
+     The Studio rails scroll, and on Windows and Linux that paints a permanent
+     grey gutter down the side of a dark panel — the content is fine, the
+     browser's default scrollbar is what looks dated. Hiding it keeps the
+     scrolling (wheel, trackpad, keyboard, touch) and drops the track.
+     
+     Use ONLY where the content is obviously scrollable by other means — a
+     rail whose content visibly continues past the fold. On a container that
+     gives no other hint there's more below, this hides the only affordance
+     the user had. */
+  .no-scrollbar {
+    -ms-overflow-style: none; /* old Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none; /* WebKit */
+  }
+}

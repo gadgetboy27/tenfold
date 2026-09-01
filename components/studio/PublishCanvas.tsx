@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import type { LucideIcon } from "lucide-react";
 import toast from "react-hot-toast";
 import {
   Send,
@@ -14,6 +15,7 @@ import {
   Loader2,
   Sparkles,
   Settings2,
+  ChevronDown,
   Music2,
   VolumeX,
   Play,
@@ -72,6 +74,60 @@ const ALL_PLATFORMS = Object.values(PLATFORM_FORMATS) as Array<{
   label: string;
 }>;
 
+/**
+ * One collapsible section of the Publish rail.
+ *
+ * The rail stacks four questions — where it goes, what goes out, what it says,
+ * and when — and showed all of them expanded at once, so the primary action
+ * sat below more content than the pane could hold. Collapsing lets someone
+ * settle a question and get it out of the way.
+ *
+ * `summary` is what makes that safe. A collapsed section that just says
+ * "Caption" has hidden its own state, and publishing is the wrong place to
+ * make someone re-open three panels to check what they're about to send — so
+ * each one reports its answer in the header while shut.
+ */
+function Section({
+  title,
+  icon: Icon,
+  summary,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string;
+  icon: LucideIcon;
+  summary: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-border bg-card">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 px-3 py-2.5 text-left sm:px-4"
+      >
+        <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <span className="text-xs font-medium text-foreground">{title}</span>
+        <span className="ml-auto truncate pl-2 text-[11px] text-muted-foreground">
+          {summary}
+        </span>
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "" : "-rotate-90"}`}
+        />
+      </button>
+      {open && (
+        <div className="flex flex-col gap-3 border-t border-border px-3 pb-3 pt-3 sm:px-4 sm:pb-4">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PublishCanvas({
   workspaceSlug,
   campaignId,
@@ -102,6 +158,17 @@ export function PublishCanvas({
   const [isPro, setIsPro] = useState<boolean | null>(null);
 
   const router = useRouter();
+
+  // Which of the three questions is expanded. All three open by default —
+  // collapsing is an escape hatch for a full rail, not a wall someone has to
+  // click through on a first visit.
+  const [openSections, setOpenSections] = useState({
+    where: true,
+    what: true,
+    words: true,
+  });
+  const toggleSection = (k: "where" | "what" | "words") =>
+    setOpenSections((prev) => ({ ...prev, [k]: !prev[k] }));
 
   const [platforms, setPlatforms] = useState<string[]>([]);
   const [noMusicPlatforms, setNoMusicPlatforms] = useState<Set<string>>(
@@ -543,11 +610,21 @@ export function PublishCanvas({
     // the Compositor got in 05fbabb: let the shell scroll, and let the panels
     // be their natural height.
     <div className="flex flex-col gap-4">
-      {/* Connected platforms */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-3">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <Send className="h-3.5 w-3.5" /> Publish to{" "}
+      {/* 1 — where it goes */}
+      <Section
+        title="Publish to"
+        icon={Send}
+        open={openSections.where}
+        onToggle={() => toggleSection("where")}
+        summary={
+          platforms.length === 0
+            ? "No accounts picked"
+            : `${platforms.length} account${platforms.length === 1 ? "" : "s"}`
+        }
+      >
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <InfoHint text="Pick every account this should go out to — one publish covers all of them. On video, the speaker icon beside a selected platform mutes the music bed just for that one (LinkedIn and Pinterest start muted, where silent autoplay is the norm)." />
+          <span>One publish covers every account you pick.</span>
         </div>
         {(hasVideo || hasImage) && hasVideo && hasImage && (
           <div className="flex overflow-hidden rounded-md border border-border">
@@ -671,10 +748,24 @@ export function PublishCanvas({
             </select>
           </div>
         )}
-      </div>
+      </Section>
 
-      {/* RIGHT: what's going out, caption, hashtags, schedule, publish */}
-      <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-4">
+      {/* 2 — what actually goes out */}
+      <Section
+        title="What's going out"
+        icon={Play}
+        open={openSections.what}
+        onToggle={() => toggleSection("what")}
+        summary={
+          approvalStatus && approvalStatus !== "approved"
+            ? approvalStatus === "pending_review"
+              ? "Awaiting review"
+              : "Draft — needs approval"
+            : target === "video"
+              ? "Video"
+              : "Image"
+        }
+      >
         {/* This screen had NO preview at all: you were one click from posting
             to real accounts and the thing being posted appeared nowhere on it.
             Shows whichever asset `target` will actually publish, so the picker
@@ -903,34 +994,36 @@ export function PublishCanvas({
             />
           )}
         </div>
+      </Section>
 
-        <button
-          type="button"
-          onClick={handlePublish}
-          disabled={publishing || platforms.length === 0 || !canPublish}
-          title={
-            canPublish
-              ? undefined
-              : "Needs owner/admin approval — submit it for review above"
-          }
-          className="mt-auto flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity disabled:opacity-40"
-        >
-          {publishing ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : scheduleMode === "later" ? (
-            <Clock className="h-4 w-4" />
-          ) : (
-            <Send className="h-4 w-4" />
-          )}
-          {publishing
-            ? "Publishing…"
-            : !canPublish
-              ? "Awaiting approval"
-              : scheduleMode === "later"
-                ? `Schedule · ${platforms.length} platform${platforms.length === 1 ? "" : "s"}`
-                : `Publish · ${platforms.length} platform${platforms.length === 1 ? "" : "s"}`}
-        </button>
-      </div>
+      {/* The action stays OUTSIDE the sections. Collapsing one must never hide
+          the button the whole screen exists for. */}
+      <button
+        type="button"
+        onClick={handlePublish}
+        disabled={publishing || platforms.length === 0 || !canPublish}
+        title={
+          canPublish
+            ? undefined
+            : "Needs owner/admin approval — submit it for review above"
+        }
+        className="mt-auto flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity disabled:opacity-40"
+      >
+        {publishing ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : scheduleMode === "later" ? (
+          <Clock className="h-4 w-4" />
+        ) : (
+          <Send className="h-4 w-4" />
+        )}
+        {publishing
+          ? "Publishing…"
+          : !canPublish
+            ? "Awaiting approval"
+            : scheduleMode === "later"
+              ? `Schedule · ${platforms.length} platform${platforms.length === 1 ? "" : "s"}`
+              : `Publish · ${platforms.length} platform${platforms.length === 1 ? "" : "s"}`}
+      </button>
     </div>
   );
 }

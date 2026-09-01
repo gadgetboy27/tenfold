@@ -1507,8 +1507,12 @@ export function Studio({
           </div>
         </header>
 
-        <main className="min-h-0 flex-1 overflow-hidden p-4 sm:p-5">
-          <div className="flex h-full min-h-0 gap-4">
+        {/* Stacks below lg. The three panes were a hard row — a 200px nav, the
+            stage, and a rail at min(46vw,620px) — which on a phone adds up to
+            more than the viewport and pushed the whole app sideways. Below lg
+            they stack and the page scrolls; from lg up nothing changes. */}
+        <main className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5 lg:overflow-hidden">
+          <div className="flex min-h-0 flex-col gap-4 lg:h-full lg:flex-row">
             <StudioNav
               tools={tools}
               section={section}
@@ -1533,7 +1537,10 @@ export function Studio({
                 lost by standing down while they're open. ── */}
             {railModeFor(section, !!campaignId && !!workingImage) !==
               "full" && (
-              <div className="min-h-0 min-w-0 flex-1">
+              // Needs an explicit height when stacked: as a flex COLUMN child
+              // `flex-1` gives it nothing to divide, so the stage collapsed to
+              // zero and the ad vanished on mobile.
+              <div className="min-h-[45vh] min-w-0 lg:min-h-0 lg:flex-1">
                 {/* Keyed on the campaign so switching projects starts the stage
                     clean. It deliberately does NOT key on `section` — staying
                     mounted across tool changes is the point. */}
@@ -1550,13 +1557,13 @@ export function Studio({
                 Studio, Publish, Compositor) need real room, so the rail widens
                 for them rather than squeezing them into a column. ── */}
             <aside
-              className={`min-h-0 overflow-y-auto overflow-x-auto rounded-2xl border border-border bg-card/40 p-3 transition-[width] duration-200 ${
+              className={`no-scrollbar min-h-0 overflow-y-auto overflow-x-auto rounded-2xl border border-border bg-card/40 p-3 transition-[width] duration-200 ${
                 railModeFor(section, !!campaignId && !!workingImage) === "full"
-                  ? "min-w-0 flex-1"
+                  ? "w-full min-w-0 lg:flex-1"
                   : railModeFor(section, !!campaignId && !!workingImage) ===
                       "wide"
-                    ? "w-[min(46vw,620px)] shrink-0"
-                    : "w-[min(32vw,400px)] shrink-0"
+                    ? "w-full shrink-0 lg:w-[min(46vw,620px)]"
+                    : "w-full shrink-0 lg:w-[min(32vw,400px)]"
               }`}
             >
               {section === "projects" ? (
@@ -1791,7 +1798,10 @@ function StudioNav({
   publishReady: boolean;
 }) {
   return (
-    <div className="flex w-[200px] shrink-0 flex-col gap-0.5 overflow-y-auto rounded-2xl border border-border bg-card p-3">
+    // On mobile this is a horizontal strip of the same items — a 13-item
+    // vertical list at the top of a phone screen would push the actual work
+    // off the bottom before anything had been done.
+    <div className="no-scrollbar flex shrink-0 flex-row gap-1.5 overflow-x-auto rounded-2xl border border-border bg-card p-2 lg:w-[200px] lg:flex-col lg:gap-0.5 lg:overflow-x-visible lg:overflow-y-auto lg:p-3">
       <nav className="flex flex-col gap-0.5">
         {tools.map((t, i) => {
           const Icon = t.icon;
