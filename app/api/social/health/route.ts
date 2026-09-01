@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { decryptProfileTokens } from "@/lib/social/token-crypto";
 import {
   checkMetaConnection,
   type ConnectionHealth,
@@ -23,11 +24,14 @@ export async function GET(req: Request) {
       .eq("workspace_id", session.workspaceId)
       .in("platform", ["facebook", "instagram"]);
 
-    const rows = (profiles ?? []) as {
+    // Decrypt before asking Meta anything: sending ciphertext to debug_token
+    // reports every connection as invalid, which is a far more convincing lie
+    // than the one this check exists to stop.
+    const rows = ((profiles ?? []) as {
       platform: string;
       platform_page_id: string | null;
       access_token: string | null;
-    }[];
+    }[]).map((r) => decryptProfileTokens(r));
 
     const health: Record<string, ConnectionHealth> = {};
     await Promise.all(

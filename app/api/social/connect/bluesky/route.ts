@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getSession } from "@/lib/auth/session";
 import { canManageConnections, CONNECTION_FORBIDDEN } from "@/lib/social/authz";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { encryptProfileTokens } from "@/lib/social/token-crypto";
 import { verifyBlueskyCredentials } from "@/lib/social/direct/bluesky";
 import { errorMessage } from "@/lib/api/error-message";
 
@@ -44,7 +45,7 @@ export async function POST(req: Request) {
 
     const admin = createSupabaseAdminClient();
     const { error } = await admin.from("social_profiles").upsert(
-      {
+      encryptProfileTokens({
         workspace_id: session.workspaceId,
         platform: "bluesky",
         handle,
@@ -56,7 +57,7 @@ export async function POST(req: Request) {
         // is what tells lib/social/direct's refresh path to skip Bluesky.
         token_expires_at: null,
         connected_at: new Date().toISOString(),
-      },
+      }),
       { onConflict: "workspace_id,platform" },
     );
     if (error) throw new Error(error.message);

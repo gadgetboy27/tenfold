@@ -155,10 +155,16 @@ describe("isUnhealthy", () => {
  * never collapse into each other.
  */
 describe("checkMetaConnection fallback", () => {
-  const OLD = { ...process.env };
+  // Only our own keys, never a wholesale process.env reassignment — see the
+  // note in token-crypto.test.ts. Vitest shares a process across suites.
+  const PRIOR_ID = process.env.META_APP_ID;
+  const PRIOR_SECRET = process.env.META_APP_SECRET;
   afterEach(() => {
     vi.unstubAllGlobals();
-    process.env = { ...OLD };
+    if (PRIOR_ID === undefined) delete process.env.META_APP_ID;
+    else process.env.META_APP_ID = PRIOR_ID;
+    if (PRIOR_SECRET === undefined) delete process.env.META_APP_SECRET;
+    else process.env.META_APP_SECRET = PRIOR_SECRET;
   });
 
   it("falls back to a Page read when there is no app secret", async () => {

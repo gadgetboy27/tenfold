@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { encryptProfileTokens } from "@/lib/social/token-crypto";
 import { recordSocialEvent } from "@/lib/social/audit";
 import {
   exchangePinterestCode,
@@ -58,7 +59,7 @@ export async function GET(req: Request) {
     const defaultBoardId = stillExists ? priorBoardId : boards[0]?.id;
 
     const { error } = await admin.from("social_profiles").upsert(
-      {
+      encryptProfileTokens({
         workspace_id: workspaceId,
         platform: "pinterest",
         handle: account.username,
@@ -71,7 +72,7 @@ export async function GET(req: Request) {
           ...(defaultBoardId ? { default_board_id: defaultBoardId } : {}),
         },
         connected_at: new Date().toISOString(),
-      },
+      }),
       { onConflict: "workspace_id,platform" },
     );
     if (error) throw new Error(error.message);

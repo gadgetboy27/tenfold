@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { encryptProfileTokens } from "@/lib/social/token-crypto";
 import { recordSocialEvent } from "@/lib/social/audit";
 import {
   exchangeTikTokCode,
@@ -37,7 +38,7 @@ export async function GET(req: Request) {
     const displayName = await getTikTokDisplayName(tokens.accessToken);
 
     const { error } = await admin.from("social_profiles").upsert(
-      {
+      encryptProfileTokens({
         workspace_id: workspaceId,
         platform: "tiktok",
         handle: displayName,
@@ -48,7 +49,7 @@ export async function GET(req: Request) {
         refresh_token: tokens.refreshToken,
         token_expires_at: tokens.expiresAt.toISOString(),
         connected_at: new Date().toISOString(),
-      },
+      }),
       { onConflict: "workspace_id,platform" },
     );
     if (error) throw new Error(error.message);

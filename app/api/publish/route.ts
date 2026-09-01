@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { decryptProfileTokens } from "@/lib/social/token-crypto";
 import { publishSchema } from "@/lib/validation/schemas";
 import {
   publishPhotoToFacebook,
@@ -526,11 +527,13 @@ export async function POST(req: Request) {
     //    per-profile subscription is the reason the two above exist. Kept
     //    intact but gated on AYRSHARE_ENABLED so the spend can be switched off
     //    without deleting the integration.
+    // Decrypted at the boundary, once, so every backend below receives a real
+    // credential without needing to know storage is encrypted. Missing this
+    // would post ciphertext as a bearer token to five different networks.
     const profileByPlatform = new Map<string, SocialProfile>(
-      (profiles ?? []).map((p) => [
-        (p as SocialProfile).platform,
-        p as SocialProfile,
-      ]),
+      (profiles ?? [])
+        .map((p) => decryptProfileTokens(p as SocialProfile))
+        .map((p) => [p.platform, p]),
     );
     const ayrshareEnabled = process.env.AYRSHARE_ENABLED === "true";
 

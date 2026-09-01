@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { decryptProfileTokens } from "@/lib/social/token-crypto";
 import { unlinkAyrshareSocial } from "@/lib/ayrshare/profiles";
 import { revokeAtProvider, type RevokeOutcome } from "@/lib/social/revoke";
 import { recordSocialEvent } from "@/lib/social/audit";
@@ -47,11 +48,14 @@ export async function POST(req: Request) {
       .in("platform", targets);
 
     const revocations: Record<string, RevokeOutcome> = {};
-    for (const row of (existing ?? []) as {
+    // Decrypted: revoking at the provider means presenting the real
+    // credential. Ciphertext here would make every revocation "fail" and send
+    // users to do it by hand for no reason.
+    for (const row of ((existing ?? []) as {
       platform: string;
       access_token: string | null;
       refresh_token: string | null;
-    }[]) {
+    }[]).map((r) => decryptProfileTokens(r))) {
       // Instagram publishes on the Facebook Page's token — revoking it twice
       // would be the same call, and a "failed" second attempt would misreport
       // a revocation that actually succeeded.

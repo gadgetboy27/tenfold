@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import {
+  encryptProfileTokens,
+  decryptProfileTokens,
+} from "@/lib/social/token-crypto";
 import { getInstagramAccount } from "@/lib/social/meta";
 import { errorMessage } from "@/lib/api/error-message";
 
@@ -29,9 +33,14 @@ export async function POST(req: Request) {
       .eq("platform", "facebook")
       .single();
 
+    // The stored Page tokens are used to call Graph below and are re-saved as
+    // the active credential, so they have to come back out in the clear.
+    const decrypted = row
+      ? decryptProfileTokens(row as { metadata?: unknown })
+      : null;
     const pages =
-      (row as { metadata?: { facebook_pages?: StoredPage[] } } | null)?.metadata
-        ?.facebook_pages ?? [];
+      (decrypted as { metadata?: { facebook_pages?: StoredPage[] } } | null)
+        ?.metadata?.facebook_pages ?? [];
     const page = pages.find((p) => p.id === pageId);
     if (!page) {
       return NextResponse.json(
@@ -42,12 +51,14 @@ export async function POST(req: Request) {
 
     await admin
       .from("social_profiles")
-      .update({
-        handle: page.id,
-        profile_display_name: page.name,
-        platform_page_id: page.id,
-        access_token: page.access_token,
-      })
+      .update(
+        encryptProfileTokens({
+          handle: page.id,
+          profile_display_name: page.name,
+          platform_page_id: page.id,
+          access_token: page.access_token,
+        }),
+      )
       .eq("workspace_id", session.workspaceId)
       .eq("platform", "facebook");
 
@@ -55,7 +66,7 @@ export async function POST(req: Request) {
     const ig = await getInstagramAccount(page.id, page.access_token);
     if (ig) {
       await admin.from("social_profiles").upsert(
-        {
+        encryptProfileTokens({
           workspace_id: session.workspaceId,
           platform: "instagram",
           handle: ig.username,
@@ -64,7 +75,7 @@ export async function POST(req: Request) {
           platform_account_id: ig.id,
           access_token: page.access_token,
           connected_at: new Date().toISOString(),
-        },
+        }),
         { onConflict: "workspace_id,platform" },
       );
     } else {

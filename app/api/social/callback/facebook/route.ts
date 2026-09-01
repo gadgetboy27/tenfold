@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { encryptProfileTokens } from "@/lib/social/token-crypto";
 import { recordSocialEvent } from "@/lib/social/audit";
 import {
   exchangeCodeForToken,
@@ -101,7 +102,7 @@ export async function GET(req: Request) {
 
     // 4. Upsert Facebook profile with permanent page access token
     await admin.from("social_profiles").upsert(
-      {
+      encryptProfileTokens({
         workspace_id: workspaceId,
         platform: "facebook",
         handle: page.id,
@@ -110,7 +111,7 @@ export async function GET(req: Request) {
         access_token: page.access_token,
         metadata: { facebook_pages },
         connected_at: new Date().toISOString(),
-      },
+      }),
       { onConflict: "workspace_id,platform" },
     );
 
@@ -119,7 +120,7 @@ export async function GET(req: Request) {
     if (igAccount) {
       // Instagram uses the Facebook page's access token for all publishing calls
       await admin.from("social_profiles").upsert(
-        {
+        encryptProfileTokens({
           workspace_id: workspaceId,
           platform: "instagram",
           handle: igAccount.username,
@@ -128,7 +129,7 @@ export async function GET(req: Request) {
           platform_account_id: igAccount.id, // IG Business Account ID
           access_token: page.access_token,
           connected_at: new Date().toISOString(),
-        },
+        }),
         { onConflict: "workspace_id,platform" },
       );
     }

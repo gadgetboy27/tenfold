@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { encryptProfileTokens } from "@/lib/social/token-crypto";
 import { publishToBluesky } from "./bluesky";
 import { publishToReddit, refreshRedditToken } from "./reddit";
 import { publishToPinterest, refreshPinterestToken } from "./pinterest";
@@ -160,11 +161,13 @@ async function freshAccessToken(
   const admin = createSupabaseAdminClient();
   await admin
     .from("social_profiles")
-    .update({
-      access_token: tokens.accessToken,
-      refresh_token: tokens.refreshToken,
-      token_expires_at: tokens.expiresAt.toISOString(),
-    })
+    .update(
+      encryptProfileTokens({
+        access_token: tokens.accessToken,
+        refresh_token: tokens.refreshToken,
+        token_expires_at: tokens.expiresAt.toISOString(),
+      }),
+    )
     .eq("workspace_id", workspaceId)
     .eq("platform", platform);
 

@@ -15,6 +15,19 @@ const envSchema = z.object({
   STRIPE_PRICE_CREATOR_MONTHLY: z.string().min(1),
   STRIPE_PRICE_BUSINESS_MONTHLY: z.string().min(1),
   STRIPE_PRICE_AGENCY_MONTHLY: z.string().min(1),
+  // Encryption at rest for stored OAuth credentials (ISSUES.md #38).
+  //
+  // OPTIONAL, and that is a deliberate choice rather than laziness. Making it
+  // required would mean a deployment that hasn't set it refuses to boot — so a
+  // missing key takes the whole product down instead of degrading one feature.
+  // Absent, lib/social/token-crypto.ts stores tokens exactly as it did before
+  // encryption existed and reads keep working; present, it encrypts on write
+  // and decrypts on read, and existing plaintext rows keep working throughout.
+  //
+  // 32 bytes, base64 (`openssl rand -base64 32`). Lose it and every stored
+  // credential becomes undecryptable and every customer must reconnect — which
+  // is why it belongs in the platform secret store and nowhere else.
+  SOCIAL_TOKEN_KEY: z.string().min(32).optional(),
   // Ayrshare is now opt-in: the integration is kept intact but stays dark
   // unless AYRSHARE_ENABLED === "true", so a deployment that isn't paying for
   // the subscription must be able to boot without the key. Publishing falls
