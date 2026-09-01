@@ -206,11 +206,30 @@ LinkedIn, TikTok and YouTube have since moved down: each has a working adapter
 in `lib/social/direct/`, so the code no longer needs Ayrshare. **An adapter is
 not the same as access**, and this is where that distinction bites — a direct
 adapter still publishes nothing until its developer app exists AND clears the
-platform's own gate. Only Reddit and LinkedIn have credentials configured; the
-gates on the other two are the reason:
+platform's own gate.
+
+**As of 2026-09-02, NO direct backend has credentials on production.** Verified
+by hitting every connect route: `linkedin`, `reddit`, `pinterest`, `tiktok` and
+`youtube` all answer 503 "isn't configured on this deployment yet". This line
+previously claimed Reddit and LinkedIn were configured; they are not, and that
+claim cost real debugging time. Meta (Facebook/Instagram) is the only backend
+with working credentials.
+
+**Bluesky is the exception that needs nothing.** No developer app, no review,
+no environment variable — the user pastes a handle and an app password and it
+works, and its adapter handles image AND video. It is therefore the cheapest
+second network by a wide margin, and the only one that can be switched on
+without waiting on a platform.
+
+The per-platform gates, for when credentials do get added:
 
 - **LinkedIn** — member's own feed only (`w_member_social`). Company Pages need
-  LinkedIn's Community Management review.
+  LinkedIn's Community Management review. **Video is refused outright** by the
+  adapter (it needs LinkedIn's separate video upload flow), so LinkedIn is an
+  image-and-text network here. Its adapter is also the one file in
+  `lib/social/direct/` never run against the live API — treat the first real
+  connection as the test, and a 400 from `/rest/posts` or `/rest/images` as
+  "read linkedin.ts first".
 - **TikTok** — unaudited apps can only post `SELF_ONLY`, and `PULL_FROM_URL`
   needs the **Supabase Storage host** verified in TikTok's portal, not ours.
 - **YouTube** — `youtube.upload` is a Google restricted scope: test users only
