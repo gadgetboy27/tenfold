@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   RefreshCw,
   CheckCircle2,
+  ShieldCheck,
   Circle,
   AlertCircle,
   ArrowUpRight,
@@ -840,6 +841,36 @@ function PlatformCard({
                           Linked and ready to publish
                         </p>
                       ) : null}
+                      {/* Positive confirmation, not just the absence of red.
+                          "Connected" on its own is the same claim the dead
+                          grant made for seven weeks; this says who confirmed
+                          it, how, and when — and names the weaker fallback as
+                          weaker rather than letting it pass for the full
+                          check. */}
+                      {!unhealthy && health?.confirmation && (
+                        <p className="mt-1 flex items-start gap-1 text-[11px] text-success">
+                          <ShieldCheck className="mt-px h-3 w-3 shrink-0" />
+                          <span>
+                            {health.confirmation}
+                            {health.checkedVia === "page_read" && (
+                              <span className="text-muted-foreground">
+                                {" "}
+                                Couldn&apos;t run the full permission check, so
+                                this confirms the credential works — not that
+                                the Page grant covers posting.
+                              </span>
+                            )}
+                          </span>
+                        </p>
+                      )}
+                      {!unhealthy &&
+                        healthChecked &&
+                        health?.status === "unchecked" && (
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            Couldn&apos;t reach {platform.label} to verify this
+                            connection just now — it may still work.
+                          </p>
+                        )}
                     </div>
                     <div className="flex items-center gap-2">
                       <Button

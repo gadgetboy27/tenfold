@@ -24,6 +24,24 @@ export interface ConnectionHealth {
   message: string | null;
   /** Page ids the grant actually covers, when the provider reports them. */
   grantedPageIds?: string[];
+  /**
+   * WHICH check produced this verdict.
+   *
+   * A green tick that only means "a row exists" is what caused the seven-week
+   * outage. A green tick that means "we asked Meta and it said yes" is worth
+   * something — but only if the user can tell the two apart, and only if we
+   * are honest that the fallback proves less than the primary check.
+   *
+   *  - `debug_token` — authoritative. Token validity AND the per-Page grant.
+   *  - `page_read`   — fallback. We reached the Page with the stored token, so
+   *                    it works; this does NOT prove the publish scopes cover
+   *                    it, which is the exact fault debug_token exists to find.
+   */
+  checkedVia?: "debug_token" | "page_read" | null;
+  /** When the check ran, so a stale confirmation can't masquerade as fresh. */
+  checkedAt?: string;
+  /** Positive confirmation for a healthy connection, naming what we reached. */
+  confirmation?: string;
 }
 
 /**
@@ -115,8 +133,15 @@ export async function checkMetaConnection(
   accessToken: string,
   pageId: string | null,
 ): Promise<ConnectionHealth> {
+  const checkedAt = new Date().toISOString();
+
+  // No app secret means debug_token is impossible — but the stored token is
+  // still testable on its own, so fall through rather than giving up. This is
+  // the case a self-hosted or partially-configured deployment lands in, and
+  // "we can't tell you anything" is a poor answer when we can still try the
+  // door handle.
   if (!process.env.META_APP_ID || !process.env.META_APP_SECRET) {
-    return { status: "unchecked", message: null };
+    return pageReadFallback(accessToken, pageId, checkedAt);
   }
 
   let body: DebugTokenResponse;
@@ -128,11 +153,11 @@ export async function checkMetaConnection(
     );
     body = (await res.json()) as DebugTokenResponse;
   } catch {
-    return { status: "unchecked", message: null };
+    return pageReadFallback(accessToken, pageId, checkedAt);
   }
 
   if (body.error || !body.data) {
-    return { status: "unchecked", message: null };
+    return pageReadFallback(accessToken, pageId, checkedAt);
   }
 
   const granted = grantedPageIds(body.data.granular_scopes);
@@ -143,6 +168,8 @@ export async function checkMetaConnection(
       message:
         "Facebook has invalidated this connection. Reconnect it to publish again.",
       grantedPageIds: granted,
+      checkedVia: "debug_token",
+      checkedAt,
     };
   }
 
@@ -152,10 +179,73 @@ export async function checkMetaConnection(
       message:
         "Facebook hasn't granted access to the Page you're publishing to. Reconnect and tick that Page in the permissions step.",
       grantedPageIds: granted,
+      checkedVia: "debug_token",
+      checkedAt,
     };
   }
 
-  return { status: "ok", message: null, grantedPageIds: granted };
+  return {
+    status: "ok",
+    message: null,
+    grantedPageIds: granted,
+    checkedVia: "debug_token",
+    checkedAt,
+    confirmation: "Facebook confirmed this token and the Page it publishes to.",
+  };
+}
+
+/**
+ * The fallback confirmation: try the door handle.
+ *
+ * debug_token is the authoritative check but it needs the app secret and a
+ * reachable Graph. When either is missing the old code returned "unchecked",
+ * which the UI renders exactly like healthy — so a deployment with no app
+ * secret showed a confident green tick backed by nothing at all.
+ *
+ * One cheap authenticated read of the Page the connection publishes to is a
+ * weaker signal, and it is a real one: if Graph answers with the Page, the
+ * stored token works right now. It CANNOT see the per-Page scope grant, which
+ * is the exact fault that caused the original outage — so a pass here is
+ * reported as `page_read`, never dressed up as the full check.
+ *
+ * The three outcomes are kept apart deliberately:
+ *  - Graph returns the Page  → ok, with what we reached.
+ *  - Graph returns an error  → the token really is refused. Say so.
+ *  - The request throws      → unchecked. A network blip is not a verdict.
+ */
+async function pageReadFallback(
+  accessToken: string,
+  pageId: string | null,
+  checkedAt: string,
+): Promise<ConnectionHealth> {
+  if (!pageId) return { status: "unchecked", message: null, checkedAt };
+  try {
+    const res = await fetch(
+      `${META_API}/${pageId}?fields=name&access_token=${encodeURIComponent(accessToken)}`,
+      { signal: AbortSignal.timeout(8000) },
+    );
+    const body = (await res.json()) as { name?: string; error?: unknown };
+    if (res.ok && !body.error) {
+      return {
+        status: "ok",
+        message: null,
+        checkedVia: "page_read",
+        checkedAt,
+        confirmation: body.name
+          ? `Reached ${body.name} with the stored credential.`
+          : "Reached this account with the stored credential.",
+      };
+    }
+    return {
+      status: "token_invalid",
+      message:
+        "Facebook refused this connection. Reconnect it to publish again.",
+      checkedVia: "page_read",
+      checkedAt,
+    };
+  } catch {
+    return { status: "unchecked", message: null, checkedAt };
+  }
 }
 
 /**

@@ -1,8 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   pageIsGranted,
   grantedPageIds,
   isUnhealthy,
+  checkMetaConnection,
 } from "@/lib/social/health";
 
 /**
@@ -138,5 +139,114 @@ describe("isUnhealthy", () => {
     // mode that teaches people to ignore the warning — worth more than the
     // warning itself.
     expect(isUnhealthy({ status: "unchecked", message: null })).toBe(false);
+  });
+});
+
+/**
+ * The fallback confirmation.
+ *
+ * debug_token is authoritative but needs META_APP_SECRET and a reachable
+ * Graph. Without either, the old code returned "unchecked" — which the UI
+ * renders exactly like healthy, so a deployment with no app secret showed a
+ * confident green tick backed by nothing.
+ *
+ * The fallback reads the Page with the stored token: weaker, but real. What
+ * these pin is that it stays labelled as weaker, and that its three outcomes
+ * never collapse into each other.
+ */
+describe("checkMetaConnection fallback", () => {
+  const OLD = { ...process.env };
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    process.env = { ...OLD };
+  });
+
+  it("falls back to a Page read when there is no app secret", async () => {
+    delete process.env.META_APP_ID;
+    delete process.env.META_APP_SECRET;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ name: "LetsRoam" }),
+      }),
+    );
+    const h = await checkMetaConnection("tok", "123");
+    expect(h.status).toBe("ok");
+    // Labelled as the weaker check, so the UI can qualify it. Reporting this
+    // as debug_token would re-create the false confidence being fixed.
+    expect(h.checkedVia).toBe("page_read");
+    expect(h.confirmation).toContain("LetsRoam");
+  });
+
+  it("treats a Graph error on the fallback as a real refusal", async () => {
+    delete process.env.META_APP_SECRET;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        json: async () => ({ error: { message: "Invalid OAuth token" } }),
+      }),
+    );
+    const h = await checkMetaConnection("tok", "123");
+    expect(h.status).toBe("token_invalid");
+    expect(h.checkedVia).toBe("page_read");
+  });
+
+  it("treats a network failure as unchecked, never as a refusal", async () => {
+    delete process.env.META_APP_SECRET;
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ETIMEDOUT")));
+    const h = await checkMetaConnection("tok", "123");
+    expect(h.status).toBe("unchecked");
+    // Crying wolf on a blip is how a warning gets ignored.
+    expect(isUnhealthy(h)).toBe(false);
+  });
+
+  it("cannot fall back with no Page id, and says unchecked rather than ok", async () => {
+    delete process.env.META_APP_SECRET;
+    const h = await checkMetaConnection("tok", null);
+    expect(h.status).toBe("unchecked");
+    expect(h.confirmation).toBeUndefined();
+  });
+
+  it("uses debug_token when it can, and says so", async () => {
+    process.env.META_APP_ID = "id";
+    process.env.META_APP_SECRET = "secret";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { is_valid: true, granular_scopes: [] } }),
+      }),
+    );
+    const h = await checkMetaConnection("tok", "123");
+    expect(h.status).toBe("ok");
+    expect(h.checkedVia).toBe("debug_token");
+    expect(h.confirmation).toBeTruthy();
+  });
+
+  it("falls back when debug_token itself is unreachable", async () => {
+    process.env.META_APP_ID = "id";
+    process.env.META_APP_SECRET = "secret";
+    let call = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(async () => {
+        call += 1;
+        if (call === 1) throw new Error("ECONNRESET"); // debug_token
+        return { ok: true, json: async () => ({ name: "LetsRoam" }) }; // page read
+      }),
+    );
+    const h = await checkMetaConnection("tok", "123");
+    expect(h.status).toBe("ok");
+    expect(h.checkedVia).toBe("page_read");
+  });
+
+  it("stamps every verdict with when it ran", async () => {
+    // A confirmation with no time on it can't be told from a stale one.
+    delete process.env.META_APP_SECRET;
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("x")));
+    const h = await checkMetaConnection("tok", "123");
+    expect(Number.isFinite(Date.parse(h.checkedAt ?? ""))).toBe(true);
   });
 });
