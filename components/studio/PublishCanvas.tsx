@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import {
   Send,
@@ -9,10 +10,10 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
-  ExternalLink,
   X,
   Loader2,
   Sparkles,
+  Settings2,
   Music2,
   VolumeX,
   Play,
@@ -99,7 +100,8 @@ export function PublishCanvas({
   const [profiles, setProfiles] = useState<SocialProfile[]>([]);
   const [loadingProfiles, setLoadingProfiles] = useState(true);
   const [isPro, setIsPro] = useState<boolean | null>(null);
-  const [connectingMore, setConnectingMore] = useState(false);
+
+  const router = useRouter();
 
   const [platforms, setPlatforms] = useState<string[]>([]);
   const [noMusicPlatforms, setNoMusicPlatforms] = useState<Set<string>>(
@@ -268,29 +270,29 @@ export function PublishCanvas({
     return () => clearTimeout(t);
   }, [caption, platforms, adaptCaptionsNow]);
 
-  const connectMeta = () => {
-    window.location.href = `/api/social/connect/facebook?workspace=${workspaceSlug}`;
-  };
-
-  const connectMoreNetworks = async () => {
-    setConnectingMore(true);
-    const tab = window.open("about:blank", "_blank");
-    try {
-      const res = await api("/api/social/connect", { workspaceSlug });
-      const data = (await res.json().catch(() => ({}))) as {
-        connectUrl?: string;
-        error?: string;
-      };
-      if (!res.ok || !data.connectUrl)
-        throw new Error(data.error ?? "Could not start the connection");
-      if (tab) tab.location.href = data.connectUrl;
-      else window.location.href = data.connectUrl;
-    } catch (err) {
-      tab?.close();
-      toast.error((err as Error).message ?? "Could not connect — try again");
-    } finally {
-      setConnectingMore(false);
-    }
+  /**
+   * Both connect affordances go to Settings → Social, not straight at an OAuth
+   * redirect.
+   *
+   * They used to launch the flow from here: Facebook by navigating the whole
+   * page to /api/social/connect/facebook, and "more platforms" by opening a
+   * blank tab and pointing it at Ayrshare. Two problems with doing it from the
+   * Publish rail.
+   *
+   * It strands people on failure. A misconfigured redirect URI lands them on
+   * Meta's bare "URL Blocked" page with their campaign gone from the screen
+   * and no way back — which is exactly what happens on this deployment today.
+   * The settings page can explain, show what the provider actually said, and
+   * offer the next step; a Facebook error page can't.
+   *
+   * And it skips everything Settings knows: per-platform requirements, the
+   * health check on existing grants, the Page picker, and the other eight
+   * networks. Sending someone there is not a detour, it's the screen built for
+   * this — the Publish rail's job is to say a connection is missing, not to be
+   * a second, worse connect flow.
+   */
+  const goToConnections = () => {
+    router.push(`/${workspaceSlug}/settings/social`);
   };
 
   const runApprovalAction = async (
@@ -533,9 +535,16 @@ export function PublishCanvas({
   return (
     // Single column: this renders in the generation rail (the ad itself owns
     // the centre), so the old sidebar+body split has nowhere to split into.
-    <div className="flex h-full flex-col gap-4">
-      {/* LEFT: connected platforms */}
-      <div className="flex min-h-0 flex-col gap-3 overflow-y-auto rounded-2xl border border-border bg-card p-3">
+    // ONE place to scroll. The <aside> this renders into already scrolls
+    // (Studio.tsx), and both panels below used to add `overflow-y-auto` of
+    // their own — three nested scrollers, so the rail drew two extra
+    // scrollbar tracks down the middle of its own content and each section
+    // scrolled independently inside a box too short to hold it. Same fix as
+    // the Compositor got in 05fbabb: let the shell scroll, and let the panels
+    // be their natural height.
+    <div className="flex flex-col gap-4">
+      {/* Connected platforms */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-3">
         <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
           <Send className="h-3.5 w-3.5" /> Publish to{" "}
           <InfoHint text="Pick every account this should go out to — one publish covers all of them. On video, the speaker icon beside a selected platform mutes the music bed just for that one (LinkedIn and Pinterest start muted, where silent autoplay is the norm)." />
@@ -628,24 +637,19 @@ export function PublishCanvas({
         ) : (
           <button
             type="button"
-            onClick={connectMoreNetworks}
-            disabled={connectingMore}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary disabled:opacity-60"
+            onClick={goToConnections}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary"
           >
-            {connectingMore ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <ExternalLink className="h-3.5 w-3.5" />
-            )}
+            <Settings2 className="h-3.5 w-3.5" />
             Connect more platforms
           </button>
         )}
         <button
           type="button"
-          onClick={connectMeta}
+          onClick={goToConnections}
           className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary"
         >
-          <ExternalLink className="h-3.5 w-3.5" /> Connect Facebook / Instagram
+          <Settings2 className="h-3.5 w-3.5" /> Connect Facebook / Instagram
           (free)
         </button>
 
@@ -670,7 +674,7 @@ export function PublishCanvas({
       </div>
 
       {/* RIGHT: what's going out, caption, hashtags, schedule, publish */}
-      <div className="flex min-h-0 flex-col gap-4 overflow-y-auto rounded-2xl border border-border bg-card p-4">
+      <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-4">
         {/* This screen had NO preview at all: you were one click from posting
             to real accounts and the thing being posted appeared nowhere on it.
             Shows whichever asset `target` will actually publish, so the picker

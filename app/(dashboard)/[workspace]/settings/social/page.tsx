@@ -926,6 +926,49 @@ function PlatformCard({
                   {connecting ? "Opening…" : `Connect ${platform.label}`}
                 </Button>
               ) : null}
+
+              {/* The refusal that happens BEFORE any permission screen.
+                  Meta rejects a redirect URI that isn't on the app's allowlist
+                  with a bare "URL Blocked" page and no route back — and
+                  nothing in the product explained it, so it read as "the
+                  button is broken". This is the one failure a user cannot
+                  diagnose from the outside, so the diagnosis lives here. */}
+              {!connected &&
+                (platform.id === "facebook" || platform.id === "instagram") && (
+                  <details className="rounded-lg border border-border bg-secondary/40 p-3">
+                    <summary className="cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground">
+                      Facebook says &ldquo;URL Blocked&rdquo;?
+                    </summary>
+                    <div className="mt-2 space-y-2 text-xs text-muted-foreground">
+                      <p>
+                        That&apos;s the Meta app rejecting this site&apos;s
+                        callback address before it shows you anything — nothing
+                        to do with your account. A workspace admin fixes it once
+                        in Meta&apos;s console.
+                      </p>
+                      <p>
+                        Add this exact address to{" "}
+                        <strong className="text-foreground">
+                          Valid OAuth Redirect URIs
+                        </strong>
+                        :
+                      </p>
+                      <code className="block break-all rounded bg-background px-2 py-1.5 font-mono text-[11px] text-foreground">
+                        {typeof window !== "undefined"
+                          ? `${window.location.origin}/api/social/callback/facebook`
+                          : "/api/social/callback/facebook"}
+                      </code>
+                      <p>
+                        It lives under{" "}
+                        <strong className="text-foreground">
+                          Facebook Login for Business → Settings
+                        </strong>
+                        , not the classic Facebook Login page. The same screen
+                        has a Redirect URI Validator to confirm it.
+                      </p>
+                    </div>
+                  </details>
+                )}
             </div>
           </motion.div>
         )}
@@ -1474,13 +1517,38 @@ export default function SocialSettingsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /**
+   * Start an OAuth flow in a NEW TAB, not by navigating this page away.
+   *
+   * A provider can refuse before it ever shows a permission screen — Meta
+   * answers a redirect URI that isn't on the app's allowlist with a bare "URL
+   * Blocked" page. Navigating the whole window there means the user ends up on
+   * facebook.com with an error they can't act on, this page gone, and no route
+   * back except the browser's Back button.
+   *
+   * In a new tab the settings page survives underneath, still showing what the
+   * platform needs and what to do about a refusal. The window.open call sits
+   * directly in the click handler so it counts as a user gesture and isn't
+   * caught by a popup blocker; if the browser blocks it anyway we fall back to
+   * navigating, which is no worse than the old behaviour.
+   */
+  const openConnectFlow = (path: string) => {
+    const tab = window.open(path, "_blank", "noopener");
+    if (!tab) window.location.href = path;
+    // The flow finishes in the other tab and redirects back there. Refocusing
+    // this one re-fetches (see the focus listener), so clear the spinner
+    // rather than leaving it turning forever against a tab that already left.
+    setTimeout(() => setConnecting(null), 1500);
+  };
+
   const handleConnect = (platformId: string) => {
     setConnecting(platformId);
-    // Facebook and Instagram use direct Meta OAuth — navigate to the connect route.
-    // The route redirects to Meta, which redirects back to /api/social/callback/facebook.
+    // Facebook and Instagram use direct Meta OAuth — the connect route
+    // redirects to Meta, which redirects back to /api/social/callback/facebook.
     if (platformId === "facebook" || platformId === "instagram") {
-      // eslint-disable-next-line react-hooks/immutability -- intentional full-page navigation to start Meta OAuth
-      window.location.href = `/api/social/connect/facebook?workspace=${workspaceSlug}`;
+      openConnectFlow(
+        `/api/social/connect/facebook?workspace=${workspaceSlug}`,
+      );
       return;
     }
 
@@ -1502,8 +1570,9 @@ export default function SocialSettingsPage() {
       platformId === "tiktok" ||
       platformId === "youtube"
     ) {
-      // eslint-disable-next-line react-hooks/immutability -- intentional full-page navigation to start OAuth
-      window.location.href = `/api/social/connect/${platformId}?workspace=${workspaceSlug}`;
+      openConnectFlow(
+        `/api/social/connect/${platformId}?workspace=${workspaceSlug}`,
+      );
       return;
     }
 
@@ -1799,9 +1868,9 @@ export default function SocialSettingsPage() {
             Social Connections
           </h1>
           <p className="text-muted-foreground text-sm">
-            Follow each platform&apos;s setup checklist, then connect.
-            PrettyMuch publishes to all connected accounts when you publish a
-            campaign.
+            Connect an account and PrettyMuch can publish to it. Each one shows
+            what it needs and whether it still works — we check with the
+            provider, not just whether it&apos;s listed here.
           </p>
         </div>
         {!wizardMode && (
@@ -2158,8 +2227,8 @@ export default function SocialSettingsPage() {
         </h2>
         <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
           <li>
-            Complete the setup checklist for a platform — the connect button
-            then appears
+            Open a platform to see what it needs — the checklist is guidance,
+            not a gate, so you can connect whenever you&apos;re ready
           </li>
           <li>
             Click{" "}
