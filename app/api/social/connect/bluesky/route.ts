@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth/session";
+import { canManageConnections, CONNECTION_FORBIDDEN } from "@/lib/social/authz";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { verifyBlueskyCredentials } from "@/lib/social/direct/bluesky";
 import { errorMessage } from "@/lib/api/error-message";
@@ -18,6 +19,11 @@ const bodySchema = z.object({
 export async function POST(req: Request) {
   try {
     const session = await getSession(req);
+    // Connecting sets where the whole workspace publishes — owner/admin only.
+    // See lib/social/authz.ts for why this matches the publish approval roles.
+    if (!canManageConnections(session)) {
+      return NextResponse.json(CONNECTION_FORBIDDEN, { status: 403 });
+    }
     const parsed = bodySchema.safeParse(await req.json());
     if (!parsed.success) {
       return NextResponse.json(

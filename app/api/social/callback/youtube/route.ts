@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { recordSocialEvent } from "@/lib/social/audit";
 import {
   exchangeYouTubeCode,
   getYouTubeChannel,
@@ -28,7 +29,9 @@ export async function GET(req: Request) {
   const base = slug ? `${process.env.APP_URL}/${slug}` : process.env.APP_URL!;
 
   if (oauthError || !code || !workspaceId) {
-    return NextResponse.redirect(`${base}/settings/social?error=youtube_denied`);
+    return NextResponse.redirect(
+      `${base}/settings/social?error=youtube_denied`,
+    );
   }
 
   try {
@@ -62,12 +65,20 @@ export async function GET(req: Request) {
     );
     if (error) throw new Error(error.message);
 
+    // Security log: a connected account is standing permission to post in
+
+    // this business's name. See lib/social/audit.ts.
+
+    await recordSocialEvent(admin, { workspaceId }, "youtube", "connected");
+
     return NextResponse.redirect(`${base}/settings/social?connected=youtube`);
   } catch (err) {
     console.error(
       "[YouTube OAuth] connect failed:",
       err instanceof Error ? err.message : err,
     );
-    return NextResponse.redirect(`${base}/settings/social?error=youtube_failed`);
+    return NextResponse.redirect(
+      `${base}/settings/social?error=youtube_failed`,
+    );
   }
 }

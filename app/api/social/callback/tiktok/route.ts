@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { recordSocialEvent } from "@/lib/social/audit";
 import {
   exchangeTikTokCode,
   getTikTokDisplayName,
@@ -51,6 +52,12 @@ export async function GET(req: Request) {
       { onConflict: "workspace_id,platform" },
     );
     if (error) throw new Error(error.message);
+
+    // Security log: a connected account is standing permission to post in
+
+    // this business's name. See lib/social/audit.ts.
+
+    await recordSocialEvent(admin, { workspaceId }, "tiktok", "connected");
 
     return NextResponse.redirect(`${base}/settings/social?connected=tiktok`);
   } catch (err) {

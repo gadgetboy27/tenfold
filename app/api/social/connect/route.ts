@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
+import { canManageConnections, CONNECTION_FORBIDDEN } from "@/lib/social/authz";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import {
@@ -11,6 +12,11 @@ import { AyrshareDisabledError } from "@/lib/ayrshare/enabled";
 export async function GET(req: Request) {
   try {
     const session = await getSession(req);
+    // Connecting sets where the whole workspace publishes — owner/admin only.
+    // See lib/social/authz.ts for why this matches the publish approval roles.
+    if (!canManageConnections(session)) {
+      return NextResponse.json(CONNECTION_FORBIDDEN, { status: 403 });
+    }
 
     // Ayrshare (every network beyond Facebook/Instagram) is Pro-only. Gate the
     // connect here so free users get a clear upgrade prompt instead of linking

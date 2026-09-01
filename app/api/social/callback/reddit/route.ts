@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { recordSocialEvent } from "@/lib/social/audit";
 import {
   exchangeRedditCode,
   getRedditUsername,
@@ -54,6 +55,9 @@ export async function GET(req: Request) {
     // No subreddit is chosen yet, and a submission can't go anywhere without
     // one — send the user straight to the picker rather than letting them
     // discover the gap at publish time.
+    // Security log: a connected account is standing permission to post in
+    // this business's name. See lib/social/audit.ts.
+    await recordSocialEvent(admin, { workspaceId }, "reddit", "connected");
     return NextResponse.redirect(
       `${base}/settings/social?connected=reddit&needs=subreddit`,
     );

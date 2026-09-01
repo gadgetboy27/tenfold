@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { recordSocialEvent } from "@/lib/social/audit";
 import {
   exchangeLinkedInCode,
   getLinkedInIdentity,
@@ -56,9 +57,13 @@ export async function GET(req: Request) {
     );
     if (error) throw new Error(error.message);
 
-    return NextResponse.redirect(
-      `${base}/settings/social?connected=linkedin`,
-    );
+    // Security log: a connected account is standing permission to post in
+
+    // this business's name. See lib/social/audit.ts.
+
+    await recordSocialEvent(admin, { workspaceId }, "linkedin", "connected");
+
+    return NextResponse.redirect(`${base}/settings/social?connected=linkedin`);
   } catch (err) {
     console.error(
       "[LinkedIn OAuth] connect failed:",

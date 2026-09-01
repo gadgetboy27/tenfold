@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { recordSocialEvent } from "@/lib/social/audit";
 import {
   exchangeCodeForToken,
   getLongLivedUserToken,
@@ -133,6 +134,24 @@ export async function GET(req: Request) {
     }
 
     const connected = igAccount ? "facebook,instagram" : "facebook";
+    // Security log: a connected account is standing permission to post in this
+    // business's name. Instagram is logged separately because it is a distinct
+    // publishing destination even though it rides the Page's token.
+    // See lib/social/audit.ts.
+    await recordSocialEvent(admin, { workspaceId }, "facebook", "connected", {
+      target: page.id,
+    });
+    if (igAccount) {
+      await recordSocialEvent(
+        admin,
+        { workspaceId },
+        "instagram",
+        "connected",
+        {
+          target: page.id,
+        },
+      );
+    }
     return NextResponse.redirect(
       `${process.env.APP_URL}/${slug}/settings/social?connected=${connected}`,
     );

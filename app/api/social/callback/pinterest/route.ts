@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { recordSocialEvent } from "@/lib/social/audit";
 import {
   exchangePinterestCode,
   getPinterestAccount,
@@ -78,6 +79,9 @@ export async function GET(req: Request) {
     // Connected but board-less is a dead end — Pinterest requires the user to
     // create a board in their own account, which we can't do for them.
     if (boards.length === 0) {
+      // Security log: a connected account is standing permission to post in
+      // this business's name. See lib/social/audit.ts.
+      await recordSocialEvent(admin, { workspaceId }, "pinterest", "connected");
       return NextResponse.redirect(
         `${base}/settings/social?connected=pinterest&error=pinterest_no_boards`,
       );

@@ -78,6 +78,37 @@ export const socialProfiles = pgTable(
   (t) => [unique().on(t.workspaceId, t.platform)],
 );
 
+// ─── SOCIAL CONNECTION EVENTS (audit) ────────────────────────────────────────
+// Migration 0033. Who granted or withdrew this workspace's permission to post
+// in a business's name. Append-only: a disconnect ADDS a row, it never removes
+// the connect. Deliberately separate from decision_events, which has no actor
+// column by design (see 0028) — this is a security log, where the actor is the
+// entire point.
+export const socialConnectionEvents = pgTable(
+  "social_connection_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    // Not a FK: auth.users rows can be deleted, and a departed employee's
+    // actions must survive their account being removed — which is exactly when
+    // this log matters most.
+    actorUserId: uuid("actor_user_id"),
+    // Denormalised so the log stays readable once the account is gone.
+    actorEmail: text("actor_email"),
+    platform: text("platform").notNull(),
+    /** 'connected' | 'reconnected' | 'disconnected' | 'page_switched' */
+    action: text("action").notNull(),
+    // Revocation outcome, Page id, failure reason. NEVER a token.
+    detail: jsonb("detail").notNull().default("{}"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("idx_social_events_workspace").on(t.workspaceId, t.createdAt)],
+);
+
 // ─── SUBSCRIPTIONS ───────────────────────────────────────────────────────────
 export const subscriptions = pgTable("subscriptions", {
   id: uuid("id").primaryKey().defaultRandom(),

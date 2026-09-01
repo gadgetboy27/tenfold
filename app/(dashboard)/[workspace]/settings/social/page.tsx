@@ -606,7 +606,21 @@ function PlatformCard({
     (i) => checklist[i.key],
   ).length;
   const totalItems = platform.checklist.length;
-  const readyToConnect = allRequiredChecked && !connected;
+  // Connect is offered whenever the platform is connectable — the checklist no
+  // longer gates it.
+  //
+  // It used to: the button did not render until the user ticked boxes like
+  // "You are an Admin of the Page". Nothing verified any of those, so the ticks
+  // proved nothing and the gate only delayed the one action that WOULD find
+  // out. It also lived in localStorage, so a new browser silently took the
+  // button away again.
+  //
+  // The checklist made sense when a bad grant surfaced weeks later at publish
+  // time. It doesn't now: verifyPageToken() rejects a grant that can't publish
+  // during the connect flow, and the health check catches one that dies later.
+  // Real verification replaced the honour system; the honour system stayed
+  // parked in front of the door. It remains above as guidance.
+  const readyToConnect = !connected;
 
   return (
     <div
@@ -911,16 +925,7 @@ function PlatformCard({
                   <ExternalLink className="w-4 h-4" />
                   {connecting ? "Opening…" : `Connect ${platform.label}`}
                 </Button>
-              ) : (
-                <div className="flex items-center gap-2 p-3 rounded-lg bg-secondary border border-border">
-                  <Circle className="w-4 h-4 text-muted-foreground/40 shrink-0" />
-                  <p className="text-xs text-muted-foreground">
-                    Complete all{" "}
-                    <strong className="text-foreground">required</strong>{" "}
-                    checklist items above to unlock the connect button
-                  </p>
-                </div>
-              )}
+              ) : null}
             </div>
           </motion.div>
         )}
@@ -1045,8 +1050,6 @@ function WizardPlatformStep({
   /** Ayrshare unreachable — offer Skip rather than a button that can't work. */
   unavailable?: boolean;
 }) {
-  const requiredItems = platform.checklist.filter((i) => i.required);
-  const allRequiredChecked = requiredItems.every((i) => checklist[i.key]);
   const isLast = platformIdx === totalPlatforms - 1;
   // Re-running the wizard over a broken connection must not tick it off as
   // done — that's how someone "completes" setup and still can't publish.
@@ -1232,7 +1235,9 @@ function WizardPlatformStep({
             campaign.
           </p>
         </div>
-      ) : allRequiredChecked ? (
+      ) : (
+        // Always offered — the checklist above is guidance, not a gate. See the
+        // note on `readyToConnect` in PlatformCard for why it stopped being one.
         <div className="space-y-3">
           <div className="p-4 rounded-xl bg-primary/5 border border-primary/20">
             <p className="text-sm font-medium text-foreground mb-1">
@@ -1267,14 +1272,6 @@ function WizardPlatformStep({
             </Button>
           )}
         </div>
-      ) : (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-secondary border border-border">
-          <Circle className="w-4 h-4 text-muted-foreground/40 shrink-0" />
-          <p className="text-xs text-muted-foreground">
-            Tick all <strong className="text-foreground">required</strong> items
-            above, then the connect button appears.
-          </p>
-        </div>
       )}
 
       {/* Navigation */}
@@ -1286,16 +1283,17 @@ function WizardPlatformStep({
         >
           {isConnected ? "" : "Skip for now"}
         </button>
-        {(isConnected || !allRequiredChecked) && (
-          <Button
-            onClick={onNext}
-            variant={isConnected ? "default" : "outline"}
-            className="gap-2"
-          >
-            {isLast ? "Finish setup" : "Next platform"}
-            <ArrowRight className="w-4 h-4" />
-          </Button>
-        )}
+        {/* Always available. It used to hide once the checklist was complete,
+            on the assumption the user would connect instead — which stranded
+            anyone who ticked the boxes and then decided to skip. */}
+        <Button
+          onClick={onNext}
+          variant={isConnected ? "default" : "outline"}
+          className="gap-2"
+        >
+          {isLast ? "Finish setup" : "Next platform"}
+          <ArrowRight className="w-4 h-4" />
+        </Button>
       </div>
     </div>
   );
@@ -1319,6 +1317,15 @@ export default function SocialSettingsPage() {
   // for the second or two before Meta replied, which is the same lie this
   // whole check exists to stop, just briefer.
   const [healthChecked, setHealthChecked] = useState(false);
+  // A disconnect we could not revoke at the provider. Held in a dismissible
+  // banner, not just a toast: the user has an action left to take, and a toast
+  // that vanishes after eight seconds is the wrong home for the only
+  // instruction that actually cuts off access.
+  const [pendingRevoke, setPendingRevoke] = useState<{
+    label: string;
+    message: string;
+    manualUrl?: string;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -1573,8 +1580,40 @@ export default function SocialSettingsPage() {
         body: JSON.stringify({ platform: platformId }),
         workspaceSlug,
       });
-      if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
-      toast.success(`${label} disconnected`);
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        revocations?: Record<
+          string,
+          { status: string; message: string; manualUrl?: string }
+        >;
+      };
+      if (!res.ok) throw new Error(data.error ?? "Failed");
+
+      // Say what actually happened at the PROVIDER, not just here.
+      //
+      // "Disconnected" alone is the reassurance someone acts on when they
+      // think a token has leaked — and for most networks it only means we
+      // deleted our copy while the grant stayed live. If we couldn't revoke
+      // it, the follow-up step is the whole point of the message, so it gets
+      // a long toast and the link rather than a cheerful one-liner.
+      const outcome = data.revocations?.[platformId];
+      if (outcome && outcome.status !== "revoked") {
+        setPendingRevoke({
+          label,
+          message: outcome.message,
+          manualUrl: outcome.manualUrl,
+        });
+        toast(`${label} removed — one more step to fully revoke access`, {
+          icon: "⚠️",
+          duration: 8000,
+        });
+      } else {
+        toast.success(
+          outcome?.status === "revoked"
+            ? `${label} disconnected and access revoked`
+            : `${label} disconnected`,
+        );
+      }
       fetchProfiles(true);
     } catch (err) {
       toast.error((err as Error).message ?? "Could not disconnect");
@@ -1806,6 +1845,43 @@ export default function SocialSettingsPage() {
           Connect your socials
         </Button>
       </div>
+
+      {/* Unfinished revocation. Sits above everything, because the user asked
+          to cut off access and it is not cut off yet. */}
+      {pendingRevoke && (
+        <div className="mb-6 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-foreground">
+                {pendingRevoke.label} is removed here — but still authorised on
+                your account
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {pendingRevoke.message}
+              </p>
+              {pendingRevoke.manualUrl && (
+                <a
+                  href={pendingRevoke.manualUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                >
+                  Remove PrettyMuch on {pendingRevoke.label}
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setPendingRevoke(null)}
+              className="shrink-0 text-xs text-muted-foreground hover:text-foreground"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Connected platforms summary */}
       {!loading && connectedCount > 0 && (

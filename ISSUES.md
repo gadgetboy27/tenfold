@@ -8,6 +8,96 @@ Status: ✅ fixed & deployed · 🟡 fixed, not deployed · 🔴 open · ⚪ won
 
 ---
 
+## 2026-09-01 — securing the connections screen
+
+### ✅ 35. Anyone in the workspace could rewire where it publishes
+
+`POST /api/social/disconnect` and all eight connect routes called
+`getSession(req)` and never looked at `session.role` — which exists, and which
+`POST /api/publish` already uses to hold members behind campaign approval.
+
+So a member could not publish a post without a sign-off, but could repoint the
+workspace's Facebook at a Page they owned, or disconnect the org's accounts
+outright. **The gate was on the act and not on the destination**, which is the
+wrong half: approval controls what goes out, and this controls where "out" is.
+
+**Fixed** — `lib/social/authz.ts`, owner/admin only, matching the roles that
+already bypass the approval gate. A structural test asserts the check is
+present in every connect route, because there are eight, they all predate the
+gate, and one that forgets it is a complete bypass — an attacker just picks
+that network.
+
+`POST /api/social/destination` is deliberately NOT gated: a subreddit or board
+is content routing, not a credential, it is overridable per publish, and
+gating it would block routine member work for no security gain.
+
+### ✅ 36. "Disconnect" destroyed the evidence, not the access
+
+The route deleted the `social_profiles` row and unlinked Ayrshare. It never
+told the provider anything. The grant stayed live at Facebook — so the one
+action a user takes when they think a credential has leaked was the action that
+did the least about it, while reporting success.
+
+**Fixed** — `lib/social/revoke.ts` revokes at the provider first (reading the
+credentials *before* the delete, which the old order made impossible), and
+reports one of three honest outcomes: `revoked`, `manual`, `failed`. The UI
+shows a persistent banner with a deep link when the job isn't finished, rather
+than a toast that vanishes in eight seconds carrying the only instruction that
+actually cuts off access.
+
+Never `revoked` on a guess. A false "access removed" is worse than an honest
+"here's where to remove it", because it ends the user's investigation at the
+moment it shouldn't.
+
+**Meta is `manual` on purpose.** Revoking is `DELETE /{user-id}/permissions`,
+which needs the long-lived USER token; the connect callback uses that token to
+list Pages and then discards it, storing only per-Page tokens. Keeping it so we
+could revoke would mean holding a second permanent credential, in plaintext, to
+tidy a rare action — enlarging the blast radius of a database leak every day to
+improve one click. Google and Reddit genuinely revoke.
+
+### ✅ 37. Nothing recorded who connected or disconnected anything
+
+`social_profiles.connected_at` is overwritten on every upsert, so a reconnect
+erased the only timestamp that existed, and no column ever held an actor. For a
+product where a connected account is standing permission to post in a
+business's name, "who attached our Facebook to this?" had no answer.
+
+**Fixed** — `social_connection_events` (migration 0033), append-only, written
+on connect and disconnect. Deliberately not `decision_events`, which has no
+actor column *by design* (see 0028): that one learns workings, this one is a
+security log where the actor is the point. Writes are best-effort and never
+fail the action they describe — a disconnect that 500s because its audit row
+wouldn't insert leaves someone unable to cut off an account, which would make
+the logging itself the vulnerability.
+
+### 🔴 38. OAuth tokens are stored in plaintext
+
+The remaining gap, and the largest. `social_profiles.access_token` and
+`refresh_token` are `text`, unencrypted, and `metadata.facebook_pages[]` holds
+a live token for **every** Page the user manages.
+
+Migration 0030 stopped the *browser* reading them (column grants). It did
+nothing about anyone holding the service-role key, a database backup, a
+Supabase dashboard session, or a `pg_dump` in a CI log. **Meta Page tokens
+never expire**, so what sits in that column is permanent control of a
+customer's Facebook Page.
+
+- **Not fixed**, deliberately deferred: it needs a key-management decision that
+  is the owner's to make, not a code change to slip in.
+- **Design, ready to implement:** AES-256-GCM at the application layer, key in
+  `SOCIAL_TOKEN_KEY` (32 bytes, Railway env var, service `tenfold`). Encrypt on
+  write in the callbacks; decrypt only where a token is actually used — the
+  publish route, the health check, the refresh paths. A versioned prefix
+  (`v1:`) on the ciphertext so a future rotation can read both. Backfill
+  migration for existing rows, and the same treatment for the Page tokens
+  nested in `metadata`.
+- **The trade to accept before starting:** lose the key and every customer
+  reconnects from scratch. That is the real cost, and it is why this is a
+  decision rather than a task.
+- Application-layer, not pgcrypto: the goal is that a database compromise
+  alone is not enough, and a key stored *in* the database defeats that.
+
 ## 2026-08-31 — the OAuth block, opened up and read
 
 ### 🔴 31 (corrected). One stale redirect URI left over from the rename
