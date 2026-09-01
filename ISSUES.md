@@ -8,9 +8,78 @@ Status: ✅ fixed & deployed · 🟡 fixed, not deployed · 🔴 open · ⚪ won
 
 ---
 
-## 2026-08-30 — the publishing outage, diagnosed properly
+## 2026-08-31 — the OAuth block, opened up and read
 
-### 🔴 31. Facebook OAuth is dead at Meta's end — nothing can connect
+### 🔴 31 (corrected). One stale redirect URI left over from the rename
+
+The entry below guessed at this from the outside and **guessed wrong**, in the
+most expensive way available: it considered the real cause and explicitly ruled
+it out. Original text kept at the bottom, because the shape of the mistake is
+worth more than the conclusion was.
+
+Opened the console and read the settings. `Facebook Login for Bus… → Settings`:
+
+```
+Client OAuth login              Yes     <- already on
+Web OAuth login                 Yes     <- already on
+Enforce HTTPS                   Yes
+Use Strict Mode for redirect URIs   Yes
+
+Valid OAuth Redirect URIs:
+  https://gbccfqpmoteicpumhkuj.supabase.co/auth/v1/callback
+  https://tenfold.nz/api/social/callback/facebook        <- pre-rename domain
+```
+
+We send `https://prettymuch.nz/api/social/callback/facebook` (APP_URL on
+Railway, built in `lib/social/meta.ts:8`). Strict Mode requires an **exact**
+match, and `tenfold.nz` is not `prettymuch.nz`. That is the entire outage.
+
+**The URL, because it is not where you would look.** This app uses **Facebook
+Login for Business** on Meta's use-case console, so the classic
+`/apps/<id>/fb-login/settings/` path silently redirects to the dashboard — no
+error, just the wrong page, which is most of why this stayed unread for weeks:
+
+```
+https://developers.facebook.com/apps/3336757434709475/business-login/settings/
+```
+
+- **Blast radius:** total. No network can be connected or reconnected, which
+  also blocks the reconnect #24 requires. There is no working publish path.
+- **Fix is console-only, no code — one line:** add
+  `https://prettymuch.nz/api/social/callback/facebook` to Valid OAuth Redirect
+  URIs and save. The `tenfold.nz` entry can stay or go. The same page carries a
+  **Redirect URI Validator** at the top that confirms it without a round trip
+  through the connect flow.
+- **App Domains was never the problem** and neither were the OAuth toggles —
+  don't touch them looking for this.
+- **Fixing this does not restore publishing on its own.** It unblocks the
+  reconnect; the Page mismatch in #24 is still behind it, so tick the Page we
+  actually publish to (`1182524661618666`) during the permission step.
+
+**Also true, and a bigger blocker for anyone who isn't us:** the app is
+**Unpublished**. Only people holding a role on it (admin/developer/tester) can
+complete a connect at all. We can, so this outage reads as ours alone — but no
+customer can connect Facebook until the app is published, whatever the redirect
+URI says.
+
+#### What the original entry got wrong, and why
+
+It reasoned from a single extra data point — the pre-rename Railway host being
+blocked too — and concluded the allowlist must be empty or the toggles off,
+"**rather than** a stale domain left behind by the prettymuch.nz rename". That
+inference only holds if the allowlist would have contained the Railway host,
+and there was never a reason to think it did: the entry it *did* contain was
+the pre-rename **custom domain**, `tenfold.nz`. One observation, two hypotheses,
+and the one that got dismissed by name was the right one.
+
+The lesson is not "guess better". It is that this was **readable the whole
+time** — the settings page states its own contents, and the page has a
+validator built for exactly this question. Reading beat inferring, and the cost
+of inferring was that the written-down fix ("turn Client OAuth Login ON") would
+have changed nothing while looking like it should have worked.
+
+<details>
+<summary>Original entry, 2026-08-30 — superseded</summary>
 
 Found by walking the connect flow in a real browser. Clicking **Connect** (or
 **Manage**) on Settings → Social redirects correctly; Meta then answers
@@ -35,6 +104,8 @@ rather than a stale domain left behind by the prettymuch.nz rename.
 - **Fix is console-only, no code:** Meta app → Facebook Login → Settings →
   Client OAuth Login ON, Web OAuth Login ON, add the callback to Valid OAuth
   Redirect URIs, add `prettymuch.nz` to App Domains (Settings → Basic).
+
+</details>
 
 ### 🔴 24 (corrected). It was never the scopes — the grant is for a different Page
 
@@ -81,6 +152,22 @@ state of your connections was the screen that couldn't.
   slow Meta round-trip never delays the page rendering.
 - The card turns red with what to do about it — "Needs reconnecting" — instead
   of green.
+- **Second pass, 2026-08-31.** The first pass fixed the card and nothing else,
+  which produced its own version of the bug: the summary block above it still
+  read "CONNECTED · You're ready to publish" and the collapsed card header
+  still showed a green tick, over the very connection the expanded card called
+  dead. Four surfaces decide how a connection looks — summary, collapsed
+  header, expanded card, setup wizard — and each was asking only "does a row
+  exist?". `isUnhealthy()` is now the single predicate all four share, and the
+  summary counts what can **publish** rather than counting rows.
+- **`healthChecked`, same pass.** Because health is fetched separately, there
+  was a second or two on every load where the page asserted the green state
+  before Meta had answered. An empty `health` map can't distinguish "not asked
+  yet" from "asked, all fine", so the round-trip is tracked explicitly and the
+  connected surfaces withhold the green until it settles — neutral and a
+  spinner, deliberately **not** a warning, since nothing is known to be wrong
+  yet. It settles in `finally`, so a failed check renders as "unchecked" rather
+  than sticking on "Checking…" forever.
 - `verifyPageToken()` runs in the OAuth callback against the freshly minted
   Page token, so a grant that doesn't cover the chosen Page fails **during the
   connect flow**, where the user can re-tick, rather than weeks later at
