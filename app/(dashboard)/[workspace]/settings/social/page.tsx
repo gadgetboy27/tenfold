@@ -418,7 +418,11 @@ const PLATFORMS: PlatformGuide[] = [
     label: "Bluesky",
     color: "#0085FF",
     bg: "bg-[#0085FF]/10",
-    description: "Posts & images",
+    // Video, and it matters: Bluesky is the only network here with no
+    // developer app and no review queue, so for a video-first product it is
+    // the one that can actually carry a campaign today. "Posts & images"
+    // undersold exactly the capability that makes it worth connecting.
+    description: "Posts, images & video",
     accountType: "Any Bluesky account — no business account needed",
     steps: [
       {
