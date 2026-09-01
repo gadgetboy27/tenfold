@@ -168,3 +168,54 @@ describe("every connect route is gated", () => {
     );
   });
 });
+
+/**
+ * Regression, 2026-09-02. Connecting bounced and did nothing.
+ *
+ * The connect handler had been changed to open OAuth in a new tab so that a
+ * provider refusing before its permission screen wouldn't replace the page:
+ *
+ *   const tab = window.open(path, "_blank", "noopener");
+ *   if (!tab) window.location.href = path;   // "fallback"
+ *
+ * `window.open` with `noopener` returns **null by specification** — severing
+ * the handle is what noopener MEANS. So the fallback was not a fallback: it
+ * ran on every click, and each press started two navigations to the same OAuth
+ * URL which raced each other. Nothing typechecked wrong and nothing threw.
+ */
+describe("the connect flow navigates, and does not race itself", () => {
+  const src = readFileSync(
+    "app/(dashboard)/[workspace]/settings/social/page.tsx",
+    "utf8",
+  );
+
+  it("never pairs a noopener window.open with a truthiness fallback", () => {
+    // Comments are stripped first: the doc block above openConnectFlow quotes
+    // the broken call deliberately, and a raw file match would fail on the
+    // explanation of the bug rather than the bug.
+    const code = src
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    // The pair is the bug. Either alone is fine; together they always double-fire.
+    expect(code).not.toMatch(/window\.open\([^)]*noopener[^)]*\)/);
+  });
+
+  it("starts the OAuth flow with a plain navigation", () => {
+    const fn = src.slice(
+      src.indexOf("const openConnectFlow"),
+      src.indexOf("const handleConnect"),
+    );
+    expect(fn).toContain("window.location.href = path");
+    expect(fn).not.toContain("window.open");
+  });
+
+  it("stashes the return campaign before leaving the page", () => {
+    // In-memory state does not survive a round trip through Facebook, so the
+    // project someone came from has to be written down before we navigate.
+    const fn = src.slice(
+      src.indexOf("const openConnectFlow"),
+      src.indexOf("const handleConnect"),
+    );
+    expect(fn).toContain("sessionStorage.setItem");
+  });
+});

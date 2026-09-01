@@ -1406,7 +1406,21 @@ export default function SocialSettingsPage() {
     fix: string;
   } | null>(null);
   // Set when the Publish rail sent us here, so we can offer a route home.
-  const returnCampaignId = searchParams.get("from");
+  // Falls back to sessionStorage because an OAuth round trip replaces the URL
+  // entirely — the provider redirects to ?connected=… and the query param we
+  // arrived with is gone, taking the only route back to the project with it.
+  const [returnCampaignId, setReturnCampaignId] = useState<string | null>(null);
+  useEffect(() => {
+    const fromUrl = searchParams.get("from");
+    let stored: string | null = null;
+    try {
+      stored = sessionStorage.getItem("tf_connect_return");
+    } catch {
+      // Private mode or blocked storage — the link just won't appear.
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reads the URL/storage on mount
+    setReturnCampaignId(fromUrl ?? stored);
+  }, [searchParams]);
   const [pendingRevoke, setPendingRevoke] = useState<{
     label: string;
     message: string;
@@ -1594,27 +1608,35 @@ export default function SocialSettingsPage() {
   }, []);
 
   /**
-   * Start an OAuth flow in a NEW TAB, not by navigating this page away.
+   * Start an OAuth flow by navigating this tab.
    *
-   * A provider can refuse before it ever shows a permission screen — Meta
-   * answers a redirect URI that isn't on the app's allowlist with a bare "URL
-   * Blocked" page. Navigating the whole window there means the user ends up on
-   * facebook.com with an error they can't act on, this page gone, and no route
-   * back except the browser's Back button.
+   * This briefly opened a new tab instead, so that a provider refusing before
+   * its permission screen (Meta's "URL Blocked") left the settings page alive
+   * underneath. That was wrong twice over.
    *
-   * In a new tab the settings page survives underneath, still showing what the
-   * platform needs and what to do about a refusal. The window.open call sits
-   * directly in the click handler so it counts as a user gesture and isn't
-   * caught by a popup blocker; if the browser blocks it anyway we fall back to
-   * navigating, which is no worse than the old behaviour.
+   * The mechanism was broken: `window.open(url, "_blank", "noopener")` returns
+   * null BY SPEC — noopener severs the handle — so the `if (!tab)` fallback
+   * fired on every click and the page navigated as well. Two navigations to
+   * the same OAuth URL raced each other, and the visible result was a click
+   * that bounced and connected nothing.
+   *
+   * And the reason had expired: the redirect URI is allowlisted now, so the
+   * dead end it defended against no longer happens. A plain navigation is what
+   * every other OAuth flow in this app does, and it is the one thing a popup
+   * blocker cannot silently eat.
+   *
+   * `from` is stashed first so the trip through Facebook doesn't lose the
+   * project someone came here from — sessionStorage survives the round trip
+   * that in-memory state cannot.
    */
   const openConnectFlow = (path: string) => {
-    const tab = window.open(path, "_blank", "noopener");
-    if (!tab) window.location.href = path;
-    // The flow finishes in the other tab and redirects back there. Refocusing
-    // this one re-fetches (see the focus listener), so clear the spinner
-    // rather than leaving it turning forever against a tab that already left.
-    setTimeout(() => setConnecting(null), 1500);
+    try {
+      const from = searchParams.get("from");
+      if (from) sessionStorage.setItem("tf_connect_return", from);
+    } catch {
+      // A blocked sessionStorage costs the return link, not the connect.
+    }
+    window.location.href = path;
   };
 
   const handleConnect = (platformId: string) => {
