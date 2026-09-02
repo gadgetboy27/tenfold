@@ -33,6 +33,7 @@ import { api } from "@/lib/api";
 import { PLATFORM_FORMATS, type PlatformId } from "@/lib/composition/formats";
 import { PLATFORM_GUIDE } from "@/lib/social/caption-guide";
 import { thumbUrl } from "@/lib/images/thumb";
+import { CREDIT_COSTS } from "@/lib/credits/costs";
 import { useCompositorStore } from "@/store/useCompositorStore";
 import { InfoHint } from "@/components/ui/info-hint";
 import { platformDefaults } from "@/lib/social/platform-defaults";
@@ -1026,7 +1027,10 @@ export function PublishCanvas({
                     <Loader2 className="h-3 w-3 animate-spin" /> Watching…
                   </>
                 ) : (
-                  <>{review ? "Review again" : "Review this ad"} · 6 cr</>
+                  <>
+                    {review ? "Review again" : "Review this ad"} ·{" "}
+                    {CREDIT_COSTS.ad_watch} cr
+                  </>
                 )}
               </button>
             </div>

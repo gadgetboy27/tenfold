@@ -48,6 +48,19 @@ export const PROVIDER_COST_USD: Record<string, number> = {
   // ~1.5k tokens). Estimate, not yet measured against real usage — see
   // lib/credits/CLAUDE.md before repricing off this alone.
   brand_import: 0.015,
+  // Anthropic — claude-opus-5 VISION, and the most expensive Claude call we
+  // make by an order of magnitude. Six 768px frames ≈ 440 tokens each (~2.6k),
+  // plus system, brief and tool schema (~1.1k) ≈ 3.7k in; adaptive thinking
+  // plus a six-note tool call ≈ 2k out.
+  //
+  // ESTIMATE, AND THE ONE MOST WORTH CHECKING: at Opus list pricing this lands
+  // near USD 0.21 against 6 credits (~USD 0.28) of revenue — roughly 1.3x,
+  // where every other Claude action here runs 20-25x. Opus is chosen
+  // deliberately (see lib/claude/ad-watcher.ts: this call decides what goes on
+  // a business's advert), so the answer is probably to price the ACTION
+  // higher, not to weaken the model. Verify against real billing before
+  // repricing — see lib/credits/CLAUDE.md.
+  ad_watch: 0.21,
 } as const;
 
 // Credit value in USD (used for margin calculations in lib/costs/tracker.ts /
