@@ -4,6 +4,8 @@ import {
   adWatchResultSchema,
   overlayProposalSchema,
   applicableNotes,
+  resolveOverlayText,
+  withUserWording,
 } from "@/lib/composition/ad-notes";
 import { wordTreatmentSchema } from "@/lib/composition/words";
 import { sampleTimestamps } from "@/lib/composition/frames";
@@ -36,9 +38,10 @@ describe("the Words guarantee is untouched", () => {
       text: "SNEAKY COPY",
     });
     // Parsed, but the letters must be stripped — never carried through.
-    expect(
-      (withText.success ? withText.data : ({} as Record<string, unknown>)).text,
-    ).toBeUndefined();
+    const parsed = withText.success
+      ? (withText.data as Record<string, unknown>)
+      : {};
+    expect(parsed.text).toBeUndefined();
   });
 
   it("keeps the watcher's proposal schema separate from it", () => {
@@ -179,5 +182,56 @@ describe("frame sampling", () => {
     // Paying to show the model the same instant twice teaches it nothing.
     const t = sampleTimestamps(1, 6);
     expect(new Set(t).size).toBe(t.length);
+  });
+});
+
+/**
+ * A proposal is a starting point, not a verdict. Two directions:
+ * BEFORE — steer the watcher with wording you already have.
+ * AFTER  — accept a note but rewrite the copy, keeping its layout judgement.
+ */
+describe("editing the wording", () => {
+  const proposal = {
+    text: "Roasted in Northland",
+    zone: "top" as const,
+    font: "Inter" as const,
+    color: "#ffffff",
+    widthFrac: 0.6,
+    scrim: true,
+  };
+
+  it("uses the model's copy when nothing was edited", () => {
+    expect(resolveOverlayText(proposal)).toBe("Roasted in Northland");
+    expect(resolveOverlayText(proposal, "")).toBe("Roasted in Northland");
+    expect(resolveOverlayText(proposal, "   ")).toBe("Roasted in Northland");
+  });
+
+  it("uses your wording when you supply it", () => {
+    expect(resolveOverlayText(proposal, "Small-batch, Bay of Islands")).toBe(
+      "Small-batch, Bay of Islands",
+    );
+  });
+
+  it("keeps the styling when only the words change", () => {
+    // The placement, font, colour and scrim are the part worth keeping — an
+    // edit to the copy must not quietly discard the layout judgement.
+    const edited = withUserWording(proposal, "Small-batch, Bay of Islands");
+    expect(edited.zone).toBe("top");
+    expect(edited.font).toBe("Inter");
+    expect(edited.color).toBe("#ffffff");
+    expect(edited.scrim).toBe(true);
+    expect(edited.widthFrac).toBe(0.6);
+  });
+
+  it("returns the same object when accepted as-is", () => {
+    // Reference equality distinguishes "accepted" from "rewritten", which is
+    // worth knowing: copy that is always rewritten is copy that needs work.
+    expect(withUserWording(proposal)).toBe(proposal);
+    expect(withUserWording(proposal, "Roasted in Northland")).toBe(proposal);
+  });
+
+  it("tells the model to place supplied wording verbatim", () => {
+    const src = readFileSync("lib/claude/ad-watcher.ts", "utf8");
+    expect(src).toContain("do not rewrite it");
   });
 });

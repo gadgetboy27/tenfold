@@ -5,7 +5,7 @@ import { withWorkspace } from "@/lib/api/with-workspace";
 import { debitCredits } from "@/lib/credits/debit";
 import { refundCredits } from "@/lib/credits/refund";
 import { CREDIT_COSTS } from "@/lib/credits/costs";
-import { sampleVideoFrames, probeDurationSec } from "@/lib/composition/frames";
+import { sampleVideoFrames } from "@/lib/composition/frames";
 import { watchAd } from "@/lib/claude/ad-watcher";
 
 /**
@@ -29,6 +29,8 @@ const bodySchema = z.object({
   caption: z.string().max(4000).nullish(),
   /** Text already on the ad, so the watcher doesn't propose it again. */
   existingText: z.array(z.string().max(200)).max(20).default([]),
+  /** Wording to place verbatim, when you already know the claim. */
+  steer: z.string().max(120).nullish(),
 });
 
 export const POST = withWorkspace(async (req, { db, admin, session }) => {
@@ -39,7 +41,8 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
       { status: 400 },
     );
   }
-  const { campaignId, assetId, platforms, caption, existingText } = parsed.data;
+  const { campaignId, assetId, platforms, caption, existingText, steer } =
+    parsed.data;
 
   const { data: campaign } = await db
     .from("campaigns")
@@ -97,10 +100,10 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
   }
 
   try {
-    const [frames, duration] = await Promise.all([
-      sampleVideoFrames(video.url, 6),
-      probeDurationSec(video.url),
-    ]);
+    // One download, one probe, six local seeks — the sampler owns all of it
+    // now, so duration comes back from the same temp file rather than costing
+    // a second fetch of the whole clip.
+    const { frames, durationSec } = await sampleVideoFrames(video.url, 6);
     // No frames means we never reached the model — refund rather than charge
     // for an analysis that could not happen.
     if (frames.length === 0) {
@@ -112,8 +115,9 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
       brief: (campaign as { prompt?: string }).prompt ?? "",
       caption: caption ?? null,
       platforms,
-      durationSec: duration ?? 10,
+      durationSec: durationSec ?? 10,
       existingText,
+      steer,
     });
 
     // completed_at, not an output column: creative_jobs has no output_data
@@ -135,6 +139,9 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
       .from("creative_jobs")
       .update({ status: "failed", error_message: message })
       .eq("id", jobId);
-    return NextResponse.json({ error: message }, { status: 502 });
+    // 422, not 502: Cloudflare intercepts 5xx from the origin and serves its
+    // own branded error page, so a 502 threw away the actual reason and showed
+    // the user "Bad gateway" instead. Verified against production.
+    return NextResponse.json({ error: message }, { status: 422 });
   }
 });

@@ -1,4 +1,7 @@
 import { spawn } from "node:child_process";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 /**
  * Sample still frames from a finished video so a model can look at the ad.
@@ -7,10 +10,15 @@ import { spawn } from "node:child_process";
  * arrives through this file, which makes the sampling strategy a real design
  * decision rather than plumbing.
  *
- * FFmpeg reads the Storage URL directly — no download to disk first. These
- * clips are 10-30s and the frames come out of the first seconds of the stream,
- * so pulling the whole file to a temp path would cost latency and disk for
- * nothing.
+ * The clip is DOWNLOADED to a temp file before FFmpeg touches it, matching
+ * lib/composition/video.ts. Two reasons, and the first one is fatal:
+ *
+ *  1. The Alpine ffmpeg build in the container has no HTTPS input support, so
+ *     handing it a `https://` URL yields nothing at all. This is why
+ *     composeVideo has always downloaded first — the existing code knew.
+ *  2. Six frames means six seeks. Against a remote URL that is six range
+ *     requests over the network; against a local file it is six cheap seeks
+ *     into a file already in page cache.
  */
 
 /** One sampled frame, ready to hand to the vision API. */
@@ -38,7 +46,7 @@ function run(cmd: string, args: string[]): Promise<Buffer> {
 }
 
 /** Clip length in seconds, or null when ffprobe can't tell us. */
-export async function probeDurationSec(url: string): Promise<number | null> {
+export async function probeDurationSec(path: string): Promise<number | null> {
   try {
     const out = await run("ffprobe", [
       "-v",
@@ -47,7 +55,7 @@ export async function probeDurationSec(url: string): Promise<number | null> {
       "format=duration",
       "-of",
       "default=noprint_wrappers=1:nokey=1",
-      url,
+      path,
     ]);
     const n = Number(out.toString().trim());
     return Number.isFinite(n) && n > 0 ? n : null;
@@ -92,13 +100,13 @@ export function sampleTimestamps(durationSec: number, count: number): number[] {
  * platform's UI, is there dead air — are all readable at that size. Sending
  * full-resolution frames would multiply the bill for detail nobody uses.
  */
-async function grabFrame(url: string, atSec: number): Promise<VideoFrame> {
+async function grabFrame(path: string, atSec: number): Promise<VideoFrame> {
   const bytes = await run("ffmpeg", [
     // -ss BEFORE -i seeks by keyframe without decoding everything up to it.
     "-ss",
     String(atSec),
     "-i",
-    url,
+    path,
     "-frames:v",
     "1",
     "-vf",
@@ -129,16 +137,30 @@ async function grabFrame(url: string, atSec: number): Promise<VideoFrame> {
 export async function sampleVideoFrames(
   videoUrl: string,
   count = 6,
-): Promise<VideoFrame[]> {
-  const duration = (await probeDurationSec(videoUrl)) ?? 10;
-  const stamps = sampleTimestamps(duration, count);
-  const results = await Promise.allSettled(
-    stamps.map((t) => grabFrame(videoUrl, t)),
-  );
-  return results
-    .filter(
-      (r): r is PromiseFulfilledResult<VideoFrame> => r.status === "fulfilled",
-    )
-    .map((r) => r.value)
-    .sort((a, b) => a.atSec - b.atSec);
+): Promise<{ frames: VideoFrame[]; durationSec: number | null }> {
+  const dir = await mkdtemp(join(tmpdir(), "tf-frames-"));
+  const path = join(dir, "clip.mp4");
+  try {
+    const res = await fetch(videoUrl);
+    if (!res.ok) throw new Error(`Could not fetch the video (${res.status})`);
+    await writeFile(path, Buffer.from(await res.arrayBuffer()));
+
+    const durationSec = await probeDurationSec(path);
+    const stamps = sampleTimestamps(durationSec ?? 10, count);
+    const results = await Promise.allSettled(
+      stamps.map((t) => grabFrame(path, t)),
+    );
+    const frames = results
+      .filter(
+        (r): r is PromiseFulfilledResult<VideoFrame> =>
+          r.status === "fulfilled",
+      )
+      .map((r) => r.value)
+      .sort((a, b) => a.atSec - b.atSec);
+    return { frames, durationSec };
+  } finally {
+    // Always, even on a thrown fetch: a failed review must not leave the
+    // container's temp space filling up with half-written clips.
+    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+  }
 }

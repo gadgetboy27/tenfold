@@ -20,6 +20,14 @@ export interface AdWatchInput {
   durationSec: number;
   /** Overlays already on the ad — so it doesn't propose what's there. */
   existingText: string[];
+  /**
+   * Wording you want used, if you already know the claim.
+   *
+   * The watcher is told to place and style THIS rather than invent copy — the
+   * "add before" direction. Left out, it writes its own, which you can still
+   * edit at apply time.
+   */
+  steer?: string | null;
 }
 
 /**
@@ -165,6 +173,11 @@ export async function watchAd(input: AdWatchInput): Promise<AdWatchResult> {
       input.existingText.length
         ? `Text ALREADY on the ad — do not propose these again: ${input.existingText.join(" | ")}`
         : "There is no text on the ad yet.",
+      input.steer
+        ? `THE USER HAS SUPPLIED THE WORDING THEY WANT: "${input.steer}"\n` +
+          `Use it verbatim as the text of any overlay you propose — place and ` +
+          `style it, do not rewrite it, and do not invent alternative copy.`
+        : "",
     ]
       .filter(Boolean)
       .join("\n"),

@@ -96,6 +96,46 @@ export const adWatchResultSchema = z.object({
 export type AdWatchResult = z.infer<typeof adWatchResultSchema>;
 
 /**
+ * The wording actually placed on the ad — yours if you gave one, the
+ * watcher's otherwise.
+ *
+ * Two directions, because a proposal is a starting point and not a verdict:
+ *
+ *   BEFORE — pass `steer` into the review and the watcher is told to work
+ *            your line in rather than invent its own. Useful when you already
+ *            know the claim and want help placing and styling it.
+ *   AFTER  — accept a note but override `text` at apply time. The placement,
+ *            font, colour and scrim the model chose are usually the valuable
+ *            part; the copy is the part a human most often wants to adjust.
+ *
+ * Style is kept separate from wording on purpose: editing the words must never
+ * silently discard the layout judgement that came with them.
+ */
+export function resolveOverlayText(
+  proposal: OverlayProposal,
+  userText?: string | null,
+): string {
+  const edited = (userText ?? "").trim();
+  return edited.length > 0 ? edited : proposal.text;
+}
+
+/**
+ * Apply an edit to a proposal without losing its styling.
+ *
+ * Returns the same object when nothing was edited, so a caller can compare by
+ * reference to tell "the user accepted this as-is" from "the user rewrote it"
+ * — which is worth logging: a watcher whose copy is always rewritten is a
+ * watcher whose copy needs work.
+ */
+export function withUserWording(
+  proposal: OverlayProposal,
+  userText?: string | null,
+): OverlayProposal {
+  const text = resolveOverlayText(proposal, userText);
+  return text === proposal.text ? proposal : { ...proposal, text };
+}
+
+/**
  * Only high-confidence notes carrying an overlay may be auto-applied.
  *
  * A medium-confidence guess stamped onto someone's ad is worse than no
