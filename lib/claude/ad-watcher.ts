@@ -47,13 +47,12 @@ const WATCH_TOOL: Anthropic.Tool = {
     properties: {
       working: {
         type: "string",
-        description:
-          "One line (max 240 chars) on what this ad already does well.",
+        maxLength: 240,
+        description: "One line on what this ad already does well.",
       },
       notes: {
         type: "array",
-        description:
-          "At most 6 notes, ordered by how much each costs the ad. Fewer is better; an empty array is a valid answer for a good ad.",
+        maxItems: 6,
         items: {
           type: "object",
           additionalProperties: false,
@@ -70,28 +69,16 @@ const WATCH_TOOL: Anthropic.Tool = {
                 "pacing",
               ],
             },
-            atSec: {
-              type: "number",
-              description: "Seconds into the clip where this was observed.",
-            },
-            observation: {
-              type: "string",
-              description: "What is wrong, in one sentence (max 240 chars).",
-            },
-            why: {
-              type: "string",
-              description: "What it costs the ad (max 240 chars).",
-            },
+            atSec: { type: "number", minimum: 0 },
+            observation: { type: "string", maxLength: 240 },
+            why: { type: "string", maxLength: 240 },
             confidence: { type: "string", enum: ["high", "medium", "low"] },
             overlay: {
               type: "object",
               additionalProperties: false,
               required: ["text", "zone", "font", "color", "widthFrac", "scrim"],
               properties: {
-                text: {
-                  type: "string",
-                  description: "The exact words to render (max 120 chars).",
-                },
+                text: { type: "string", maxLength: 120 },
                 zone: {
                   type: "string",
                   enum: [
@@ -107,15 +94,8 @@ const WATCH_TOOL: Anthropic.Tool = {
                   ],
                 },
                 font: { type: "string", enum: [...BRAND_FONTS] },
-                color: {
-                  type: "string",
-                  description: "Hex colour as #rrggbb.",
-                },
-                widthFrac: {
-                  type: "number",
-                  description:
-                    "Fraction of frame width the block spans, 0.2 to 0.9.",
-                },
+                color: { type: "string", pattern: "^#[0-9a-fA-F]{6}$" },
+                widthFrac: { type: "number", minimum: 0.2, maximum: 0.9 },
                 scrim: { type: "boolean" },
               },
             },
@@ -218,19 +198,8 @@ export async function watchAd(input: AdWatchInput): Promise<AdWatchResult> {
   );
   if (!call) throw new Error("The watcher returned no notes.");
 
-  // Zod is where the LIMITS live, not the tool schema: strict tool schemas
-  // reject JSON-Schema constraint keywords (maxItems, maxLength, pattern,
-  // minimum), so those moved into the field descriptions and the real
-  // enforcement happens here — which is the better split anyway, since Zod
-  // guards against a future API change too, not only against the model.
-  //
-  // Count is trimmed rather than rejected. The model is told "at most 6"; if
-  // it returns seven, failing the whole review and refunding would punish the
-  // user for a limit they never saw. Shape violations still throw — a bad hex
-  // colour reaches an FFmpeg filtergraph and must not pass.
-  const raw = call.input as { working?: unknown; notes?: unknown };
-  return adWatchResultSchema.parse({
-    working: raw.working,
-    notes: Array.isArray(raw.notes) ? raw.notes.slice(0, 6) : [],
-  });
+  // Zod over the tool input even though the schema is strict: `strict` binds
+  // the model, not a future API change, and this result becomes layers on
+  // someone's advert.
+  return adWatchResultSchema.parse(call.input);
 }

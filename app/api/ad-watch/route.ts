@@ -7,15 +7,6 @@ import { refundCredits } from "@/lib/credits/refund";
 import { CREDIT_COSTS } from "@/lib/credits/costs";
 import { sampleVideoFrames } from "@/lib/composition/frames";
 import { watchAd } from "@/lib/claude/ad-watcher";
-import { displayVideo } from "@/lib/campaign/video-pick";
-
-/** A clip row as selected below, before the createdAt alias is added. */
-interface ClipRow {
-  id: string;
-  url: string;
-  type: string;
-  created_at: string;
-}
 
 /**
  * POST /api/ad-watch — an outside-eye review of a finished video.
@@ -32,11 +23,8 @@ interface ClipRow {
  */
 const bodySchema = z.object({
   campaignId: z.string().uuid(),
-  /**
-   * Which video to watch. Optional — omitted, the route reviews the video
-   * that would actually PUBLISH, which is nearly always what you want.
-   */
-  assetId: z.string().uuid().nullish(),
+  /** Which video to watch. Must belong to this campaign — checked below. */
+  assetId: z.string().uuid(),
   platforms: z.array(z.string().min(1).max(40)).max(12).default([]),
   caption: z.string().max(4000).nullish(),
   /** Text already on the ad, so the watcher doesn't propose it again. */
@@ -65,43 +53,19 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
     return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
   }
 
-  // Always resolved from the DB, never from a client-supplied URL: that would
-  // let a caller point our FFmpeg and our vision budget at an arbitrary host.
-  const { data: clipRows } = await db
+  // The asset is re-read from the DB rather than trusting a URL from the
+  // client: a caller-supplied URL would let anyone point our FFmpeg and our
+  // vision budget at an arbitrary host.
+  const { data: asset } = await db
     .from("assets")
-    .select("id, url, type, created_at")
+    .select("id, url, type")
+    .eq("id", assetId)
     .eq("campaign_id", campaignId)
-    .in("type", ["video", "composed_video"])
-    .order("created_at", { ascending: false });
-
-  const clips = ((clipRows ?? []) as ClipRow[]).map((r) => ({
-    ...r,
-    createdAt: r.created_at,
-  }));
-
-  // With no assetId, review THE VIDEO THAT WOULD PUBLISH — the same rule
-  // /api/publish follows (lib/campaign/video-pick.ts). Reviewing a different
-  // cut from the one going out would be worse than not reviewing at all.
-  const { data: campRow } = await db
-    .from("campaigns")
-    .select("publish_asset_id")
-    .eq("id", campaignId)
     .maybeSingle();
-  const pickedId =
-    (campRow as { publish_asset_id: string | null } | null)?.publish_asset_id ??
-    null;
-
-  const video = assetId
-    ? (clips.find((c) => c.id === assetId) ?? null)
-    : displayVideo(clips, pickedId);
-
-  if (!video) {
+  const video = asset as { url: string; type: string } | null;
+  if (!video || !["video", "composed_video"].includes(video.type)) {
     return NextResponse.json(
-      {
-        error: assetId
-          ? "That isn't a video in this campaign"
-          : "This project has no video to review yet.",
-      },
+      { error: "That isn't a video in this campaign" },
       { status: 404 },
     );
   }
@@ -113,7 +77,7 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
     workspace_id: session.workspaceId,
     type: "ad_watch",
     status: "processing",
-    input_params: { assetId: video.id, platforms },
+    input_params: { assetId, platforms },
     credits_charged: CREDIT_COSTS.ad_watch,
   });
   if (jobErr) {
