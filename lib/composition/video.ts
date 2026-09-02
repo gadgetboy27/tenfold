@@ -249,9 +249,16 @@ export async function composeVideo(
     const buffer = await readFile(outPath);
     const admin = createSupabaseAdminClient();
     const storagePath = `${input.workspaceId}/${input.campaignId}/composed-${Date.now()}.mp4`;
-    await admin.storage
+    // Supabase's .upload() RETURNS an error, it does not throw. Unchecked,
+    // getPublicUrl below happily builds a valid-looking URL for an object that
+    // was never written — and this function feeds the publish path, so the
+    // failure mode was posting a link to nothing and recording it as success.
+    // Verified: 3 asset rows in production point at objects that do not exist.
+    // export.ts and compositing/storage.ts already got this right.
+    const { error: upErr } = await admin.storage
       .from("assets")
       .upload(storagePath, buffer, { contentType: "video/mp4" });
+    if (upErr) throw new Error(`Storage upload failed: ${upErr.message}`);
     const { data } = admin.storage.from("assets").getPublicUrl(storagePath);
     return { url: data.publicUrl, storagePath };
   } finally {

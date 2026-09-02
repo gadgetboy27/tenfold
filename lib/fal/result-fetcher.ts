@@ -141,11 +141,15 @@ export async function fetchAndProcessFalJob(job: StuckJob): Promise<boolean> {
       const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.jpg`;
       const imgRes = await fetch(img.url);
       const buffer = await imgRes.arrayBuffer();
-      await admin.storage
+      // Checked, like the video and audio paths below: .upload() returns its
+      // error rather than throwing, and getPublicUrl will build a URL for an
+      // object that was never written — an asset row pointing at a 404.
+      const { error: imgUpErr } = await admin.storage
         .from("assets")
         .upload(storagePath, buffer, {
           contentType: img.content_type ?? "image/jpeg",
         });
+      if (imgUpErr) throw new Error(imgUpErr.message);
       const { data: urlData } = admin.storage
         .from("assets")
         .getPublicUrl(storagePath);
@@ -313,11 +317,14 @@ async function fetchMultiImage(
         const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.jpg`;
         const imgRes = await fetch(img.url);
         const buffer = await imgRes.arrayBuffer();
-        await admin.storage
+        // See the note on the first image upload: unchecked, this records an
+        // asset row whose URL 404s.
+        const { error: imgUpErr } = await admin.storage
           .from("assets")
           .upload(storagePath, buffer, {
             contentType: img.content_type ?? "image/jpeg",
           });
+        if (imgUpErr) throw new Error(imgUpErr.message);
         const { data: urlData } = admin.storage
           .from("assets")
           .getPublicUrl(storagePath);

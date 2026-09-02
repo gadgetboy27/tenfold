@@ -55,7 +55,10 @@ export async function applyLogoToBrandKit(
 
   const lightPath = `brand-kits/${workspaceId}/logo.png`;
   const darkPath = `brand-kits/${workspaceId}/logo-dark.png`;
-  await Promise.all([
+  // Both errors checked: .upload() returns rather than throws, so an
+  // unchecked pair here writes a brand kit whose logo URLs 404 — and a brand
+  // kit is stamped onto every future ad, so one silent failure spreads.
+  const [light, dark] = await Promise.all([
     admin.storage
       .from("assets")
       .upload(lightPath, whitePng, { contentType: "image/png", upsert: true }),
@@ -63,6 +66,11 @@ export async function applyLogoToBrandKit(
       .from("assets")
       .upload(darkPath, blackPng, { contentType: "image/png", upsert: true }),
   ]);
+  if (light.error || dark.error) {
+    throw new Error(
+      `Brand logo upload failed: ${(light.error ?? dark.error)?.message}`,
+    );
+  }
 
   const logo_url = admin.storage.from("assets").getPublicUrl(lightPath)
     .data.publicUrl;

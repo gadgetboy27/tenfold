@@ -99,10 +99,20 @@ export async function POST(req: Request) {
     const name = variant === "dark" ? "logo-dark" : "logo";
     const storagePath = `brand-kits/${session.workspaceId}/${name}.${ext}`;
 
-    await admin.storage.from("assets").upload(storagePath, buffer, {
-      contentType,
-      upsert: true,
-    });
+    // Checked: an unchecked upload here saves a brand-kit logo URL for an
+    // object that was never written, and the 404 only shows up later on an ad.
+    const { error: upErr } = await admin.storage
+      .from("assets")
+      .upload(storagePath, buffer, {
+        contentType,
+        upsert: true,
+      });
+    if (upErr) {
+      return NextResponse.json(
+        { error: `Could not save the logo: ${upErr.message}` },
+        { status: 500 },
+      );
+    }
 
     const { data: urlData } = admin.storage
       .from("assets")
