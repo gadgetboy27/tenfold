@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import {
   adWatchResultSchema,
+  normalizeWatchResult,
   type AdWatchResult,
 } from "@/lib/composition/ad-notes";
 import { BRAND_FONTS } from "@/lib/composition/layers";
@@ -47,12 +48,13 @@ const WATCH_TOOL: Anthropic.Tool = {
     properties: {
       working: {
         type: "string",
-        maxLength: 240,
-        description: "One line on what this ad already does well.",
+        description:
+          "One line on what this ad already does well. Max 240 characters.",
       },
       notes: {
         type: "array",
-        maxItems: 6,
+        description:
+          "At most 6 notes, ordered by how much each costs the ad. Fewer is better.",
         items: {
           type: "object",
           additionalProperties: false,
@@ -69,16 +71,29 @@ const WATCH_TOOL: Anthropic.Tool = {
                 "pacing",
               ],
             },
-            atSec: { type: "number", minimum: 0 },
-            observation: { type: "string", maxLength: 240 },
-            why: { type: "string", maxLength: 240 },
+            atSec: {
+              type: "number",
+              description: "Seconds into the clip, never negative.",
+            },
+            observation: {
+              type: "string",
+              description:
+                "What is wrong, in one sentence. Max 240 characters.",
+            },
+            why: {
+              type: "string",
+              description: "Why it costs the ad something. Max 240 characters.",
+            },
             confidence: { type: "string", enum: ["high", "medium", "low"] },
             overlay: {
               type: "object",
               additionalProperties: false,
               required: ["text", "zone", "font", "color", "widthFrac", "scrim"],
               properties: {
-                text: { type: "string", maxLength: 120 },
+                text: {
+                  type: "string",
+                  description: "The exact words to render. Max 120 characters.",
+                },
                 zone: {
                   type: "string",
                   enum: [
@@ -94,8 +109,16 @@ const WATCH_TOOL: Anthropic.Tool = {
                   ],
                 },
                 font: { type: "string", enum: [...BRAND_FONTS] },
-                color: { type: "string", pattern: "^#[0-9a-fA-F]{6}$" },
-                widthFrac: { type: "number", minimum: 0.2, maximum: 0.9 },
+                color: {
+                  type: "string",
+                  description:
+                    "A six-digit hex triplet with a leading #, e.g. #ffffff. This reaches an FFmpeg filtergraph, so a colour NAME renders nothing.",
+                },
+                widthFrac: {
+                  type: "number",
+                  description:
+                    "Fraction of frame width the text block spans, between 0.2 and 0.9.",
+                },
                 scrim: { type: "boolean" },
               },
             },
@@ -199,7 +222,9 @@ export async function watchAd(input: AdWatchInput): Promise<AdWatchResult> {
   if (!call) throw new Error("The watcher returned no notes.");
 
   // Zod over the tool input even though the schema is strict: `strict` binds
-  // the model, not a future API change, and this result becomes layers on
-  // someone's advert.
-  return adWatchResultSchema.parse(call.input);
+  // the model to the SHAPE, but the length limits are only asked for in the
+  // field descriptions (a strict schema rejects maxItems/maxLength outright),
+  // so trim those before parsing. Everything that reaches a renderer still has
+  // to survive the schema unmodified.
+  return adWatchResultSchema.parse(normalizeWatchResult(call.input));
 }

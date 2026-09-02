@@ -6,6 +6,7 @@ import {
   applicableNotes,
   resolveOverlayText,
   withUserWording,
+  normalizeWatchResult,
 } from "@/lib/composition/ad-notes";
 import { wordTreatmentSchema } from "@/lib/composition/words";
 import { sampleTimestamps } from "@/lib/composition/frames";
@@ -233,5 +234,134 @@ describe("editing the wording", () => {
   it("tells the model to place supplied wording verbatim", () => {
     const src = readFileSync("lib/claude/ad-watcher.ts", "utf8");
     expect(src).toContain("do not rewrite it");
+  });
+});
+
+/**
+ * The 400 these pin cost a live review: `strict: true` rejects the JSON Schema
+ * constraint keywords, so a schema carrying `maxItems` fails the request before
+ * the model runs. It had been fixed once and came back — reverting the feature
+ * merge during an unrelated outage took the fix with it, and re-merging did not
+ * bring it back because git considered that commit already merged.
+ *
+ * A unit test on the schema object is what makes that survivable, so the next
+ * revert fails a test instead of a paid API call.
+ */
+describe("the tool schema stays callable", () => {
+  const schemaSource = (() => {
+    const src = readFileSync("lib/claude/ad-watcher.ts", "utf8");
+    const start = src.indexOf("const WATCH_TOOL");
+    const end = src.indexOf("const SYSTEM");
+    // Strip comments first: the comments around this code NAME the forbidden
+    // keywords in order to explain them, and would fail the assertion below.
+    return src
+      .slice(start, end)
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
+  })();
+
+  for (const kw of ["maxItems", "maxLength", "minItems", "minLength"]) {
+    it(`carries no ${kw}, which a strict schema rejects with a 400`, () => {
+      expect(schemaSource).not.toContain(kw);
+    });
+  }
+
+  it("carries no pattern or numeric bounds either", () => {
+    expect(schemaSource).not.toMatch(/\bpattern\s*:/);
+    expect(schemaSource).not.toMatch(/\bminimum\s*:/);
+    expect(schemaSource).not.toMatch(/\bmaximum\s*:/);
+  });
+
+  it("still tells the model the limits, in prose", () => {
+    // Dropping the keywords is only safe because the model is still ASKED.
+    expect(schemaSource).toContain("At most 6 notes");
+    expect(schemaSource).toMatch(/Max 240 characters/);
+    expect(schemaSource).toMatch(/hex triplet/);
+  });
+});
+
+describe("normalising what the model actually returns", () => {
+  it("trims a seventh note rather than losing the whole review", () => {
+    const parsed = adWatchResultSchema.safeParse(
+      normalizeWatchResult({
+        working: "ok",
+        notes: Array.from({ length: 9 }, () => note()),
+      }),
+    );
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.notes).toHaveLength(6);
+  });
+
+  it("truncates an over-long sentence rather than throwing", () => {
+    const parsed = adWatchResultSchema.safeParse(
+      normalizeWatchResult({
+        working: "x".repeat(400),
+        notes: [note({ observation: "y".repeat(400), why: "z".repeat(300) })],
+      }),
+    );
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.working).toHaveLength(240);
+      expect(parsed.data.notes[0].observation).toHaveLength(240);
+    }
+  });
+
+  it("truncates overlay copy but keeps its styling", () => {
+    const parsed = adWatchResultSchema.safeParse(
+      normalizeWatchResult({
+        working: "ok",
+        notes: [
+          note({
+            overlay: {
+              text: "w".repeat(200),
+              zone: "bottom",
+              font: "Inter",
+              color: "#ffffff",
+              widthFrac: 0.6,
+              scrim: true,
+            },
+          }),
+        ],
+      }),
+    );
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      const o = parsed.data.notes[0].overlay!;
+      expect(o.text).toHaveLength(120);
+      expect(o.zone).toBe("bottom");
+      expect(o.widthFrac).toBe(0.6);
+    }
+  });
+
+  it("still refuses a bad colour — normalising is not laundering", () => {
+    // Length is a preference. A colour NAME reaches an FFmpeg filtergraph and
+    // renders nothing, so it must keep failing loudly.
+    expect(
+      adWatchResultSchema.safeParse(
+        normalizeWatchResult({
+          working: "ok",
+          notes: [
+            note({
+              overlay: {
+                text: "hi",
+                zone: "bottom",
+                font: "Inter",
+                color: "white",
+                widthFrac: 0.6,
+                scrim: true,
+              },
+            }),
+          ],
+        }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it("passes a note with no overlay through untouched", () => {
+    const parsed = adWatchResultSchema.safeParse(
+      normalizeWatchResult({ working: "ok", notes: [note()] }),
+    );
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.notes[0].overlay).toBeUndefined();
   });
 });

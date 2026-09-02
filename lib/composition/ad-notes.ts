@@ -171,3 +171,58 @@ export function overlayAsTreatment(p: OverlayProposal): {
 export function applicableNotes(result: AdWatchResult): AdNote[] {
   return result.notes.filter((n) => n.overlay && n.confidence === "high");
 }
+
+/**
+ * Trim a raw watcher result to the shape the schema will accept.
+ *
+ * The limits above used to live in the tool's JSON Schema as `maxItems` and
+ * `maxLength`. They cannot: a `strict: true` tool schema REJECTS those
+ * keywords outright with a 400, so the whole call fails before the model ever
+ * runs. The limits now live in the tool's field descriptions, which means the
+ * model is asked rather than bound — and an asked model occasionally writes a
+ * seventh note or a 250-character sentence.
+ *
+ * Parsing that straight would throw away a review that cost a video download,
+ * six frame seeks and a vision call, over a preference. So length is TRIMMED
+ * here, before parse.
+ *
+ * What is deliberately NOT trimmed: colour, zone, font, widthFrac and the
+ * enums. Those are not preferences — they reach an FFmpeg filtergraph and a
+ * renderer, where a wrong value draws nothing or draws it off-screen. Those
+ * still fail loudly in the schema, which is why this returns `unknown` for the
+ * schema to check rather than pretending to be a parse.
+ */
+export function normalizeWatchResult(raw: unknown): unknown {
+  if (typeof raw !== "object" || raw === null) return raw;
+  const r = raw as Record<string, unknown>;
+  const clip = (v: unknown, n: number) =>
+    typeof v === "string" && v.length > n ? v.slice(0, n) : v;
+
+  const notes = Array.isArray(r.notes) ? r.notes.slice(0, 6) : r.notes;
+  return {
+    ...r,
+    working: clip(r.working, 240),
+    notes: Array.isArray(notes)
+      ? notes.map((n) => {
+          if (typeof n !== "object" || n === null) return n;
+          const note = n as Record<string, unknown>;
+          const overlay =
+            typeof note.overlay === "object" && note.overlay !== null
+              ? {
+                  ...(note.overlay as Record<string, unknown>),
+                  text: clip(
+                    (note.overlay as Record<string, unknown>).text,
+                    120,
+                  ),
+                }
+              : note.overlay;
+          return {
+            ...note,
+            observation: clip(note.observation, 240),
+            why: clip(note.why, 240),
+            ...(note.overlay === undefined ? {} : { overlay }),
+          };
+        })
+      : notes,
+  };
+}
