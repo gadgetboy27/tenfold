@@ -136,6 +136,32 @@ export function withUserWording(
 }
 
 /**
+ * An overlay proposal is shaped exactly like a WordTreatment minus the text,
+ * so the existing, tested layer builder can place it.
+ *
+ * Deliberately a conversion rather than making the schemas share a type: the
+ * Words schema must keep having NO text field (that is the guarantee), so the
+ * two stay separate and this function is the one seam between them.
+ */
+export function overlayAsTreatment(p: OverlayProposal): {
+  name: string;
+  zone: OverlayProposal["zone"];
+  font: OverlayProposal["font"];
+  color: string;
+  widthFrac: number;
+  scrim: boolean;
+} {
+  return {
+    name: "Review suggestion",
+    zone: p.zone,
+    font: p.font,
+    color: p.color,
+    widthFrac: p.widthFrac,
+    scrim: p.scrim,
+  };
+}
+
+/**
  * Only high-confidence notes carrying an overlay may be auto-applied.
  *
  * A medium-confidence guess stamped onto someone's ad is worse than no

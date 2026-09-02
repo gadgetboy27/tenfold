@@ -154,12 +154,18 @@ export function PublishCanvas({
   // The Ad stage is mounted alongside this panel and owns the composition, so
   // its store is the truthful source for "what has the user actually built".
   const overlayCount = useCompositorStore((st) => st.doc?.layers.length ?? 0);
-  /** The wording already on the ad, so the reviewer can't propose it again. */
-  const overlayTexts = useCompositorStore((st) =>
-    (st.doc?.layers ?? [])
-      .map((l) => (l.kind === "text" ? l.text : null))
-      .filter((t): t is string => !!t && t.trim().length > 0),
-  );
+  /**
+   * The layers on the ad. The SELECTOR returns the store's own array — a
+   * stable reference — and nothing derives from it during render.
+   *
+   * Mapping inside the selector was the bug that took Studio down: zustand
+   * compares results by reference, so a fresh array every call meant "changed"
+   * every render, and React error #185 (max update depth) followed. A useMemo
+   * fixed the loop but made the React Compiler bail on this component, so the
+   * derivation moved to where it is actually needed — inside the request
+   * handler, which runs on a click, not on every render.
+   */
+  const layers = useCompositorStore((st) => st.doc?.layers);
   const [target, setTarget] = useState<"video" | "image">(
     hasVideo ? "video" : "image",
   );
@@ -176,6 +182,10 @@ export function PublishCanvas({
   const [reviewing, setReviewing] = useState(false);
   /** Per-note wording overrides — the "edit after" direction. */
   const [noteEdits, setNoteEdits] = useState<Record<number, string>>({});
+  const [applying, setApplying] = useState<number | null>(null);
+  /** The re-exported cut, once an overlay has been burnt in. */
+  const [appliedUrl, setAppliedUrl] = useState<string | null>(null);
+  /** The re-exported cut, once an overlay has been burnt in. */
 
   const runReview = async () => {
     if (!campaignId || reviewing) return;
@@ -189,7 +199,10 @@ export function PublishCanvas({
           platforms,
           caption: caption.trim() || null,
           // Overlays already on the ad, so it doesn't propose what's there.
-          existingText: overlayTexts,
+          // Derived here rather than memoized: this runs on a click.
+          existingText: (layers ?? [])
+            .map((l) => (l.kind === "text" ? l.text : null))
+            .filter((t): t is string => !!t && t.trim().length > 0),
         }),
       });
       const data = (await res.json().catch(() => null)) as
@@ -245,6 +258,45 @@ export function PublishCanvas({
 
   const [role, setRole] = useState<string | null>(null);
   const [approvalStatus, setApprovalStatus] = useState<string | null>(null);
+
+  /**
+   * Burn one accepted overlay into the video.
+   *
+   * Free — the judgement was paid for when the notes were produced, and
+   * charging again to act on them would tax the half that actually changes
+   * anything. Sends the campaign to pending_review rather than publishing:
+   * an automated edit to an advert is exactly what that gate is for.
+   */
+  const applyNote = async (index: number) => {
+    const note = review?.notes[index];
+    if (!campaignId || !note?.overlay || applying !== null) return;
+    setApplying(index);
+    try {
+      const res = await api("/api/ad-watch/apply", {
+        method: "POST",
+        workspaceSlug,
+        body: JSON.stringify({
+          campaignId,
+          overlays: [
+            { proposal: note.overlay, text: noteEdits[index] ?? null },
+          ],
+        }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        url?: string;
+        error?: string;
+      } | null;
+      if (!res.ok) throw new Error(data?.error ?? "Couldn't apply it");
+      toast.success("Applied — the new cut is waiting for your approval");
+      // Show the new cut immediately; it is now the campaign's publish target.
+      if (data?.url) setAppliedUrl(data.url);
+      setApprovalStatus("pending_review");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't apply it");
+    } finally {
+      setApplying(null);
+    }
+  };
   const [approvalActionLoading, setApprovalActionLoading] = useState(false);
 
   const fetchProfiles = useCallback(async () => {
@@ -843,12 +895,16 @@ export function PublishCanvas({
             to real accounts and the thing being posted appeared nowhere on it.
             Shows whichever asset `target` will actually publish, so the picker
             above and this stay in step. */}
-        {(target === "video" ? videoUrl : workingImage) && (
+        {/* Prefer the freshly re-exported cut, so applying an overlay shows
+            its result here immediately instead of leaving the old video on
+            screen while the campaign already points at the new one. */}
+        {(target === "video" ? (appliedUrl ?? videoUrl) : workingImage) && (
           <div className="flex gap-3 rounded-xl border border-border bg-background p-3">
             <div className="h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-card">
-              {target === "video" && videoUrl ? (
+              {target === "video" && (appliedUrl ?? videoUrl) ? (
                 <video
-                  src={videoUrl}
+                  key={appliedUrl ?? videoUrl ?? ""}
+                  src={appliedUrl ?? videoUrl ?? undefined}
                   className="h-full w-full object-cover"
                   muted
                   loop
@@ -1041,18 +1097,38 @@ export function PublishCanvas({
                           }
                           className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-[11px] outline-none focus:border-primary/50"
                         />
-                        <p className="mt-1 text-[10px] text-muted-foreground">
-                          {withUserWording(n.overlay, noteEdits[i]).text.length}{" "}
-                          chars · {n.overlay.zone} · {n.overlay.font}
-                          {n.overlay.scrim ? " · with scrim" : ""}
-                        </p>
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <p className="text-[10px] text-muted-foreground">
+                            {
+                              withUserWording(n.overlay, noteEdits[i]).text
+                                .length
+                            }{" "}
+                            chars · {n.overlay.zone} · {n.overlay.font}
+                            {n.overlay.scrim ? " · with scrim" : ""}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => applyNote(i)}
+                            disabled={applying !== null}
+                            className="ml-auto flex items-center gap-1.5 rounded-full bg-primary px-2.5 py-1 text-[11px] font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+                          >
+                            {applying === i ? (
+                              <>
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                Rendering…
+                              </>
+                            ) : (
+                              "Add to the video"
+                            )}
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
                 ))}
                 <p className="text-[10px] text-muted-foreground">
-                  Applying these to the ad isn&apos;t wired up yet — for now
-                  they&apos;re notes to act on in the Compositor.
+                  Adding one re-renders the video with that wording burnt in and
+                  sends the new cut for your approval — the original is kept.
                 </p>
               </div>
             )}
