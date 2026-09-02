@@ -304,6 +304,8 @@ export async function POST(req: Request) {
         asset = chosen;
         // assetsByAspect stays EMPTY on purpose: one picked file, one publish.
         // pickForPlatform falls back to `asset` for every platform.
+        //
+        // TikTok is the one exception, resolved below into `tiktokVertical`.
       } else if (body.noMusic) {
         const { data: rawVideo } = await pick("video");
         asset = rawVideo as unknown as Asset | null;
@@ -504,10 +506,61 @@ export async function POST(req: Request) {
       }
     }
 
+    /**
+     * TikTok always gets the vertical cut.
+     *
+     * Everywhere else, a picked file means ONE FILE to every platform — a
+     * deliberate refusal to substitute a sibling render the user never chose
+     * (see app/api/CLAUDE.md). TikTok is carved out of that rule because it is
+     * the one destination where the rule costs more than it protects: a 16:9
+     * cut posts as a letterboxed strip in a full-screen vertical feed, which
+     * is not "the file you picked, delivered faithfully" so much as the ad
+     * wasted.
+     *
+     * Narrow on purpose. Instagram, Snapchat and Pinterest are also 9:16 and
+     * are deliberately NOT included: substituting for them was not asked for,
+     * and each extra platform widens a hole in a rule that exists for a good
+     * reason. Only ever an addition — if no 9:16 render exists, TikTok falls
+     * back to the picked file rather than refusing to post.
+     *
+     * Skipped entirely when TikTok isn't in this publish, so the extra query
+     * only costs the publishes that can actually use it.
+     *
+     * ALSO skipped when `noMusic` is set, and that one is not an optimisation.
+     * The 9:16 renders are branded exports with the music bed BURNT IN, so
+     * substituting one into a muted publish would hand TikTok the exact audio
+     * the user just asked it not to have. The per-platform mute still wins —
+     * same rule the picked-file path already follows — and TikTok takes the
+     * raw clip in that case, vertical or not.
+     */
+    const tiktokVertical =
+      !body.platforms.includes("tiktok") || body.noMusic
+        ? null
+        : (assetsByAspect.get("9:16") ??
+          (await (async (): Promise<Asset | null> => {
+            const { data } = await admin
+              .from("assets")
+              .select("id, url, type, metadata")
+              .eq("campaign_id", body.campaignId)
+              .eq("workspace_id", session.workspaceId)
+              .in("type", ["video", "composed_video"])
+              .order("created_at", { ascending: false });
+            const rows = (data ?? []) as {
+              id: string;
+              url: string;
+              type: string;
+              metadata?: { aspect?: string } | null;
+            }[];
+            const v = rows.find((r) => r.metadata?.aspect === "9:16");
+            return v ? { id: v.id, url: v.url, type: v.type } : null;
+          })()));
+
     // The MP4 to post to a given platform: its format's fan-out render when one
     // exists, otherwise the single resolved asset (backward compatible).
     const assetForPlatform = (platform: string): Asset =>
-      pickForPlatform(platform, assetsByAspect, resolvedAsset);
+      platform === "tiktok" && tiktokVertical
+        ? tiktokVertical
+        : pickForPlatform(platform, assetsByAspect, resolvedAsset);
 
     // Load connected profiles for requested platforms
     const { data: profiles } = await admin

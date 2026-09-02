@@ -1,3 +1,5 @@
+import { canonicalMediaUrl } from "@/lib/social/media-url";
+
 const TIKTOK_AUTH = "https://www.tiktok.com/v2/auth/authorize/";
 const TIKTOK_API = "https://open.tiktokapis.com/v2";
 
@@ -86,9 +88,7 @@ async function tokenRequest(body: URLSearchParams): Promise<TikTokTokens> {
   };
 }
 
-export async function exchangeTikTokCode(
-  code: string,
-): Promise<TikTokTokens> {
+export async function exchangeTikTokCode(code: string): Promise<TikTokTokens> {
   return tokenRequest(
     new URLSearchParams({
       client_key: process.env.TIKTOK_CLIENT_KEY!,
@@ -132,6 +132,83 @@ export async function getTikTokDisplayName(
 }
 
 /**
+ * What this account is actually allowed to post right now.
+ *
+ * TikTok expects `creator_info` to be queried before a post, and it is the
+ * only way to know two things we otherwise guess at:
+ *
+ *  - `privacy_level_options` — which privacy levels this creator may use. An
+ *    unaudited app gets SELF_ONLY only, but a private account restricts them
+ *    too, so the allowed set is a property of the ACCOUNT, not just our audit
+ *    state. Sending a level that isn't in this list is rejected.
+ *  - `max_video_post_duration_sec` — a real per-account ceiling. Posting a
+ *    clip longer than it fails during TikTok's processing, i.e. AFTER we have
+ *    already told the user it published.
+ *
+ * Returns null when the query fails. A creator_info outage must not be the
+ * thing that stops someone posting — the publish below then proceeds on the
+ * SELF_ONLY default, which is the safe end of the range.
+ */
+export interface TikTokCreatorInfo {
+  nickname: string | null;
+  privacyOptions: TikTokPrivacy[];
+  maxDurationSec: number | null;
+}
+
+export async function getTikTokCreatorInfo(
+  accessToken: string,
+): Promise<TikTokCreatorInfo | null> {
+  try {
+    const res = await fetch(`${TIKTOK_API}/post/publish/creator_info/query/`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json; charset=UTF-8",
+      },
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      data?: {
+        creator_nickname?: string;
+        privacy_level_options?: string[];
+        max_video_post_duration_sec?: number;
+      };
+      error?: { code?: string; message?: string };
+    };
+    const code = data.error?.code;
+    if (!res.ok || (code && code !== "ok")) return null;
+    return {
+      nickname: data.data?.creator_nickname ?? null,
+      privacyOptions: (data.data?.privacy_level_options ??
+        []) as TikTokPrivacy[],
+      maxDurationSec: data.data?.max_video_post_duration_sec ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The privacy level to actually send.
+ *
+ * Prefers what the caller asked for, falls back to SELF_ONLY, and will only
+ * send a level TikTok has said this creator may use. Asking for PUBLIC on an
+ * unaudited app is the single most likely mistake here, and this turns it into
+ * a private post rather than a rejected one.
+ */
+export function resolvePrivacy(
+  requested: TikTokPrivacy | undefined,
+  info: TikTokCreatorInfo | null,
+): TikTokPrivacy {
+  const want = requested ?? DEFAULT_PRIVACY;
+  // No creator_info (query failed) — send the conservative default, which is
+  // the one level every app may use.
+  if (!info || info.privacyOptions.length === 0) return want;
+  if (info.privacyOptions.includes(want)) return want;
+  if (info.privacyOptions.includes(DEFAULT_PRIVACY)) return DEFAULT_PRIVACY;
+  return info.privacyOptions[0];
+}
+
+/**
  * Publish a video by having TikTok pull it from our public Storage URL.
  *
  * PULL_FROM_URL rather than a chunked upload: our assets are already on a
@@ -147,7 +224,7 @@ export async function publishToTikTok(params: {
   isVideo: boolean;
   caption: string;
   privacy?: TikTokPrivacy;
-}): Promise<{ publishId: string }> {
+}): Promise<{ publishId: string; privacy: TikTokPrivacy }> {
   if (!params.isVideo) {
     // TikTok photo posts go through /post/publish/content/init/ with its own
     // payload shape, which isn't built. Refusing beats silently posting
@@ -156,6 +233,14 @@ export async function publishToTikTok(params: {
       "TikTok needs a video — make one from this image first, then publish.",
     );
   }
+
+  // Ask what this account may do before telling it what to do.
+  const info = await getTikTokCreatorInfo(params.accessToken);
+  const privacy = resolvePrivacy(params.privacy, info);
+
+  // PULL_FROM_URL only accepts a domain verified in TikTok's portal, and 302
+  // of this project's assets predate the custom domain — see media-url.ts.
+  const videoUrl = canonicalMediaUrl(params.mediaUrl);
 
   const res = await fetch(`${TIKTOK_API}/post/publish/video/init/`, {
     method: "POST",
@@ -166,14 +251,14 @@ export async function publishToTikTok(params: {
     body: JSON.stringify({
       post_info: {
         title: params.caption.slice(0, MAX_TITLE),
-        privacy_level: params.privacy ?? DEFAULT_PRIVACY,
+        privacy_level: privacy,
         disable_duet: false,
         disable_comment: false,
         disable_stitch: false,
       },
       source_info: {
         source: "PULL_FROM_URL",
-        video_url: params.mediaUrl,
+        video_url: videoUrl,
       },
     }),
   });
@@ -191,7 +276,7 @@ export async function publishToTikTok(params: {
       data.error?.message ?? `TikTok rejected the post (${res.status})`,
     );
   }
-  return { publishId: data.data.publish_id };
+  return { publishId: data.data.publish_id, privacy };
 }
 
 /** Ask TikTok what became of a publish_id. Not polled automatically — exposed
@@ -212,4 +297,49 @@ export async function checkTikTokStatus(
     data?: { status?: string };
   };
   return data.data?.status ?? null;
+}
+
+/**
+ * Give TikTok a moment to reject the video before we call it published.
+ *
+ * `publish_id` means "accepted for processing". TikTok then fetches the file,
+ * transcodes it, and can fail afterwards — an unverified domain, a clip past
+ * the account's duration ceiling, an unsupported codec. None of that is known
+ * at init time, so returning the id alone reports success for posts that never
+ * appear, and the user finds out by looking at TikTok.
+ *
+ * A SHORT poll, not a full wait: a real publish can take minutes, and holding
+ * an HTTP request open for that would time out the whole multi-platform
+ * publish. A few seconds is enough to catch the deterministic failures — the
+ * fetch and validation happen first — while a genuinely slow transcode still
+ * returns "queued", which is honest.
+ *
+ * Returns the terminal status when it reached one, or null when it is still
+ * processing. THROWS on an explicit failure, so the caller records an error
+ * instead of a post id.
+ */
+export async function awaitTikTokAcceptance(
+  accessToken: string,
+  publishId: string,
+  opts: { attempts?: number; delayMs?: number } = {},
+): Promise<string | null> {
+  const attempts = opts.attempts ?? 3;
+  const delayMs = opts.delayMs ?? 1500;
+  for (let i = 0; i < attempts; i += 1) {
+    await new Promise((r) => setTimeout(r, delayMs));
+    const status = await checkTikTokStatus(accessToken, publishId).catch(
+      () => null,
+    );
+    if (!status) continue;
+    // TikTok spells failure several ways across its statuses and error codes;
+    // matching on FAIL catches them without pinning an exact enum we would
+    // then have to chase.
+    if (/FAIL/i.test(status)) {
+      throw new Error(
+        `TikTok rejected the video while processing (${status}). If this is a new app, check the media domain is verified in the TikTok portal.`,
+      );
+    }
+    if (/COMPLETE|PUBLISH_OK/i.test(status)) return status;
+  }
+  return null;
 }

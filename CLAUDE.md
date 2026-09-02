@@ -232,6 +232,14 @@ The per-platform gates, for when credentials do get added:
   "read linkedin.ts first".
 - **TikTok** — unaudited apps can only post `SELF_ONLY`, and `PULL_FROM_URL`
   needs the **Supabase Storage host** verified in TikTok's portal, not ours.
+  That host is `NEXT_PUBLIC_SUPABASE_URL`, which on production is the custom
+  domain `auth.prettymuch.nz` — a domain we own and therefore CAN verify, where
+  `<ref>.supabase.co` could never be. 302 assets written before that domain
+  was configured still carry the raw supabase.co origin, so `lib/social/media-url.ts`
+  re-points the origin at publish time; both hosts serve the same objects at
+  the same paths. The adapter also queries `creator_info` for the account's
+  real privacy options, and briefly polls the publish status, because TikTok
+  accepts a video for processing and can reject it afterwards.
 - **YouTube** — `youtube.upload` is a Google restricted scope: test users only
   until OAuth verification, and ~6 uploads/day against the default quota.
 

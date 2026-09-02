@@ -4,7 +4,11 @@ import { publishToBluesky } from "./bluesky";
 import { publishToReddit, refreshRedditToken } from "./reddit";
 import { publishToPinterest, refreshPinterestToken } from "./pinterest";
 import { publishToLinkedIn, refreshLinkedInToken } from "./linkedin";
-import { publishToTikTok, refreshTikTokToken } from "./tiktok";
+import {
+  publishToTikTok,
+  refreshTikTokToken,
+  awaitTikTokAcceptance,
+} from "./tiktok";
 import { publishToYouTube, refreshYouTubeToken } from "./youtube";
 
 /**
@@ -247,7 +251,11 @@ export async function publishDirect(
       caption,
     });
     // TikTok accepts for processing rather than publishing synchronously, so
-    // this id means "queued", not "live" — see checkTikTokStatus.
+    // the id alone means "queued", not "live". Give it a few seconds to reject
+    // the video before we record a post that may never exist — the failures
+    // that matter here (unverified media domain, over-length clip) are
+    // deterministic and surface immediately. Throws if TikTok says FAIL.
+    await awaitTikTokAcceptance(accessToken, publishId);
     return publishId;
   }
 

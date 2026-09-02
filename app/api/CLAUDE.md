@@ -68,10 +68,24 @@ the user's own answer. The rule lives once, pure and tested, in
 `lib/campaign/video-pick.ts` — `resolvePublishVideo` for the server,
 `displayVideo` for the two client surfaces — so they cannot drift back apart.
 
-- **A pick means ONE FILE to every platform.** `assetsByAspect` is left empty
-  on that path deliberately, so a picked 16:9 cut reaches Stories letterboxed
-  rather than being quietly substituted for a sibling render the user never
-  chose. The per-aspect fan-out still applies when nothing is picked.
+- **A pick means ONE FILE to every platform — except TikTok.**
+  `assetsByAspect` is left empty on that path deliberately, so a picked 16:9
+  cut reaches Stories letterboxed rather than being quietly substituted for a
+  sibling render the user never chose. The per-aspect fan-out still applies
+  when nothing is picked.
+
+  **TikTok is carved out of this** (2026-09-03) and always takes the campaign's
+  9:16 render when one exists, picked or not — `tiktokVertical` in the publish
+  route. It is the one destination where the rule costs more than it protects:
+  a 16:9 cut posts as a letterboxed strip in a full-screen vertical feed, which
+  is not "the file you chose, delivered faithfully" so much as the ad wasted.
+  The carve-out is **only ever an addition** — with no 9:16 render TikTok falls
+  back to the picked file rather than refusing to post.
+
+  Instagram, Snapchat and Pinterest map to 9:16 too and are deliberately NOT
+  included. Every platform added here widens a hole in a rule that exists for a
+  good reason, so this list grows only when someone asks for a specific
+  platform. `tests/unit/tiktok-publish.test.ts` pins that they stay out.
 - **No pick + several videos → 409 `video_pick_required`.** Refusing is the
   feature. `PublishCanvas` catches the code and aborts the whole publish with
   one message, rather than letting it land as one error per selected account.
