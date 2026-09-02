@@ -4,6 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { readProfilesResponse } from "@/lib/social/profiles-response";
+import {
+  withUserWording,
+  type AdWatchResult,
+} from "@/lib/composition/ad-notes";
 import type { LucideIcon } from "lucide-react";
 import toast from "react-hot-toast";
 import {
@@ -150,6 +154,12 @@ export function PublishCanvas({
   // The Ad stage is mounted alongside this panel and owns the composition, so
   // its store is the truthful source for "what has the user actually built".
   const overlayCount = useCompositorStore((st) => st.doc?.layers.length ?? 0);
+  /** The wording already on the ad, so the reviewer can't propose it again. */
+  const overlayTexts = useCompositorStore((st) =>
+    (st.doc?.layers ?? [])
+      .map((l) => (l.kind === "text" ? l.text : null))
+      .filter((t): t is string => !!t && t.trim().length > 0),
+  );
   const [target, setTarget] = useState<"video" | "image">(
     hasVideo ? "video" : "image",
   );
@@ -159,6 +169,41 @@ export function PublishCanvas({
   const [isPro, setIsPro] = useState<boolean | null>(null);
 
   const router = useRouter();
+
+  // The outside-eye review (lib/claude/ad-watcher.ts). Held here rather than
+  // fetched on mount: it costs credits, so it only runs when asked for.
+  const [review, setReview] = useState<AdWatchResult | null>(null);
+  const [reviewing, setReviewing] = useState(false);
+  /** Per-note wording overrides — the "edit after" direction. */
+  const [noteEdits, setNoteEdits] = useState<Record<number, string>>({});
+
+  const runReview = async () => {
+    if (!campaignId || reviewing) return;
+    setReviewing(true);
+    try {
+      const res = await api("/api/ad-watch", {
+        method: "POST",
+        workspaceSlug,
+        body: JSON.stringify({
+          campaignId,
+          platforms,
+          caption: caption.trim() || null,
+          // Overlays already on the ad, so it doesn't propose what's there.
+          existingText: overlayTexts,
+        }),
+      });
+      const data = (await res.json().catch(() => null)) as
+        | (AdWatchResult & { error?: string })
+        | null;
+      if (!res.ok) throw new Error(data?.error ?? "The review failed");
+      setReview(data as AdWatchResult);
+      setNoteEdits({});
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "The review failed");
+    } finally {
+      setReviewing(false);
+    }
+  };
 
   // Which of the three questions is expanded. All three open by default —
   // collapsing is an escape hatch for a full rail, not a wall someone has to
@@ -905,6 +950,115 @@ export function PublishCanvas({
             </span>
           </div>
         )}
+        {/* ── The outside-eye review ───────────────────────────────────────
+            Lives here, beside what is actually going out, rather than in a
+            tool of its own: the moment to hear "this ends with no CTA" is the
+            moment before you send it, not three screens earlier. */}
+        {target === "video" && videoUrl && (
+          <div className="rounded-xl border border-border bg-background p-3">
+            <div className="flex items-center gap-2">
+              <Eye className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <p className="text-xs font-medium">Outside-eye review</p>
+              <button
+                type="button"
+                onClick={runReview}
+                disabled={reviewing}
+                className="ml-auto flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-[11px] font-medium hover:border-primary/50 disabled:opacity-60"
+              >
+                {reviewing ? (
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin" /> Watching…
+                  </>
+                ) : (
+                  <>{review ? "Review again" : "Review this ad"} · 6 cr</>
+                )}
+              </button>
+            </div>
+
+            {!review && !reviewing && (
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                Shows the finished video to a reviewer who hasn&apos;t seen your
+                brief, and reports what a stranger scrolling past would notice.
+              </p>
+            )}
+
+            {review && (
+              <div className="mt-2.5 flex flex-col gap-2">
+                <p className="text-[11px] text-emerald-600 dark:text-emerald-400">
+                  {review.working}
+                </p>
+                {review.notes.length === 0 && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Nothing worth changing — it read well throughout.
+                  </p>
+                )}
+                {review.notes.map((n, i) => (
+                  <div
+                    key={i}
+                    className="rounded-lg border border-border bg-card p-2.5"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className="rounded bg-secondary px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        {n.kind.replace("_", " ")}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">
+                        at {n.atSec.toFixed(1)}s
+                      </span>
+                      {/* Confidence is shown, not hidden: only a HIGH note with
+                          an overlay is safe to apply, and the user deserves to
+                          know which of these the model is sure about. */}
+                      <span
+                        className={`ml-auto text-[10px] ${
+                          n.confidence === "high"
+                            ? "text-foreground"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        {n.confidence} confidence
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11px] text-foreground">
+                      {n.observation}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      {n.why}
+                    </p>
+                    {n.overlay && (
+                      <div className="mt-2 border-t border-border pt-2">
+                        <label className="mb-1 block text-[10px] text-muted-foreground">
+                          Suggested wording — edit before you use it
+                        </label>
+                        {/* Editable, because the placement and styling are
+                            usually the valuable part and the copy is what a
+                            human most often wants to change. */}
+                        <input
+                          value={noteEdits[i] ?? n.overlay.text}
+                          onChange={(e) =>
+                            setNoteEdits((prev) => ({
+                              ...prev,
+                              [i]: e.target.value,
+                            }))
+                          }
+                          className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-[11px] outline-none focus:border-primary/50"
+                        />
+                        <p className="mt-1 text-[10px] text-muted-foreground">
+                          {withUserWording(n.overlay, noteEdits[i]).text.length}{" "}
+                          chars · {n.overlay.zone} · {n.overlay.font}
+                          {n.overlay.scrim ? " · with scrim" : ""}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <p className="text-[10px] text-muted-foreground">
+                  Applying these to the ad isn&apos;t wired up yet — for now
+                  they&apos;re notes to act on in the Compositor.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
         {approvalStatus === "approved" && (
           <div className="flex items-center gap-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-600 dark:text-emerald-400">
             <ShieldCheck className="h-3.5 w-3.5" /> Approved for publishing
