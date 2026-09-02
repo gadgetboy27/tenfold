@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth/session";
+import { canManageConnections, CONNECTION_FORBIDDEN } from "@/lib/social/authz";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { errorMessage } from "@/lib/api/error-message";
+import { recordSocialEvent } from "@/lib/social/audit";
 
 // Two of the direct-backend networks need a destination the caption can't
 // carry: Reddit needs a subreddit, Pinterest needs a board. Both are stored on
@@ -28,6 +30,12 @@ const bodySchema = z.discriminatedUnion("platform", [
 export async function POST(req: Request) {
   try {
     const session = await getSession(req);
+    // Same gate, same reason: a subreddit or a board is WHERE the workspace's
+    // posts land. Gating who may connect an account while leaving the
+    // destination inside it open re-opens the hole one level down.
+    if (!canManageConnections(session)) {
+      return NextResponse.json(CONNECTION_FORBIDDEN, { status: 403 });
+    }
     const parsed = bodySchema.safeParse(await req.json());
     if (!parsed.success) {
       return NextResponse.json(
@@ -65,6 +73,21 @@ export async function POST(req: Request) {
       .eq("workspace_id", session.workspaceId)
       .eq("platform", parsed.data.platform);
     if (error) throw new Error(error.message);
+
+    // A destination is where a post actually lands. Logging the connect but
+    // not the subreddit it was re-pointed at records the door and not the room.
+    await recordSocialEvent(
+      admin,
+      { workspaceId: session.workspaceId, userId: session.userId },
+      parsed.data.platform,
+      "destination_set",
+      {
+        target:
+          parsed.data.platform === "reddit"
+            ? parsed.data.subreddit
+            : parsed.data.boardId,
+      },
+    );
 
     return NextResponse.json({ ok: true, ...patch });
   } catch (err) {

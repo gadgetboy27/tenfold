@@ -3,10 +3,7 @@ import { encryptProfileTokens } from "@/lib/social/token-crypto";
 import { publishToBluesky } from "./bluesky";
 import { publishToReddit, refreshRedditToken } from "./reddit";
 import { publishToPinterest, refreshPinterestToken } from "./pinterest";
-import {
-  publishToLinkedIn,
-  refreshLinkedInToken,
-} from "./linkedin";
+import { publishToLinkedIn, refreshLinkedInToken } from "./linkedin";
 import { publishToTikTok, refreshTikTokToken } from "./tiktok";
 import { publishToYouTube, refreshYouTubeToken } from "./youtube";
 

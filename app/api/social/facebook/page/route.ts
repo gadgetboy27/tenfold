@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth/session";
+import { canManageConnections, CONNECTION_FORBIDDEN } from "@/lib/social/authz";
+import { recordSocialEvent } from "@/lib/social/audit";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   encryptProfileTokens,
@@ -23,6 +25,14 @@ interface StoredPage {
 export async function POST(req: Request) {
   try {
     const session = await getSession(req);
+    // Switching the Page IS the attack lib/social/authz.ts was written to
+    // stop — "repoint the workspace's Facebook at a Page they own" — and this
+    // route was the one that shipped without the gate. It needs no re-auth and
+    // silently re-points every future post, so it is at least as powerful as
+    // connecting, and it can drop the Instagram connection outright below.
+    if (!canManageConnections(session)) {
+      return NextResponse.json(CONNECTION_FORBIDDEN, { status: 403 });
+    }
     const { pageId } = schema.parse(await req.json());
     const admin = createSupabaseAdminClient();
 
@@ -85,6 +95,18 @@ export async function POST(req: Request) {
         .eq("workspace_id", session.workspaceId)
         .eq("platform", "instagram");
     }
+
+    // `page_switched` has existed in the SocialAction union since the audit
+    // log was written and was never emitted by anything — this is the route it
+    // was named for. Where a business's posts land changing is exactly the
+    // event someone reads this log to find.
+    await recordSocialEvent(
+      admin,
+      { workspaceId: session.workspaceId, userId: session.userId },
+      "facebook",
+      "page_switched",
+      { target: page.id },
+    );
 
     return NextResponse.json({
       ok: true,

@@ -6,6 +6,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { encryptProfileTokens } from "@/lib/social/token-crypto";
 import { verifyBlueskyCredentials } from "@/lib/social/direct/bluesky";
 import { errorMessage } from "@/lib/api/error-message";
+import { recordSocialEvent } from "@/lib/social/audit";
 
 // Bluesky has no OAuth app to register, so unlike every other network this
 // connect is a plain form POST rather than a redirect + callback pair.
@@ -61,6 +62,24 @@ export async function POST(req: Request) {
       { onConflict: "workspace_id,platform" },
     );
     if (error) throw new Error(error.message);
+
+    // Connecting is standing permission to post in the business's name, so it
+    // belongs in the security log exactly as much as a disconnect does.
+    //
+    // Bluesky is the ONE connect path with a real session — every other
+    // network is born in an OAuth callback that has only the signed state to
+    // go on — so this is the one place a full actor is always available, and
+    // it was the one place recording nothing at all.
+    //
+    // The handle, never the app password: this table is read by humans, and a
+    // credential in a log is a credential in a screenshot.
+    await recordSocialEvent(
+      admin,
+      { workspaceId: session.workspaceId, userId: session.userId },
+      "bluesky",
+      "connected",
+      { target: handle },
+    );
 
     return NextResponse.json({ ok: true, handle });
   } catch (err) {

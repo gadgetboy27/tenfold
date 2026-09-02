@@ -2386,6 +2386,16 @@ export default function SocialSettingsPage() {
         <h2 className="text-sm font-semibold text-foreground mb-3">
           How connecting works
         </h2>
+        {/* These steps describe a POPUP until 2026-09-03: "a secure window
+            opens", "close it", "PrettyMuch detects the closure". None of that
+            is true any more. openConnectFlow() navigates THIS tab — the popup
+            was removed because window.open(url,"_blank","noopener") returns
+            null by spec, so its fallback fired every time and two navigations
+            raced. The only surviving popup is the Ayrshare path, which is off.
+
+            Telling someone to wait for a window that never opens is the same
+            failure as a green tick over a dead connection: the screen
+            describing something the code stopped doing. */}
         <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
           <li>
             Open a platform to see what it needs — the checklist is guidance,
@@ -2393,18 +2403,22 @@ export default function SocialSettingsPage() {
           </li>
           <li>
             Click{" "}
-            <strong className="text-foreground">Connect [Platform]</strong> — a
-            secure window opens
+            <strong className="text-foreground">Connect [Platform]</strong> —
+            this page hands you to the platform to log in
           </li>
-          <li>Log in to the platform inside that window, then close it</li>
           <li>
-            PrettyMuch detects the closure and refreshes your connection status
-            automatically
+            Approve the permissions there, and it sends you straight back here
+          </li>
+          <li>
+            Bluesky is the exception: it needs no redirect — paste your handle
+            and an app password and it connects on the spot
           </li>
         </ol>
         <p className="text-xs text-muted-foreground/60 mt-3">
-          Connections are managed securely by PrettyMuch. We never store your
-          social passwords.
+          We never see or store your account password — the platforms handle
+          your login. Bluesky app passwords, which you paste here because
+          Bluesky has no other way in, are encrypted before they are stored and
+          can be revoked from Bluesky at any time.
         </p>
       </div>
 

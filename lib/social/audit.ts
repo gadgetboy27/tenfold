@@ -19,7 +19,9 @@ export type SocialAction =
   | "connected"
   | "reconnected"
   | "disconnected"
-  | "page_switched";
+  | "page_switched"
+  /** Subreddit or Pinterest board changed — where a post lands, one level in. */
+  | "destination_set";
 
 export interface SocialAuditDetail {
   /** What the provider said when we tried to revoke. */
