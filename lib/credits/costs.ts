@@ -33,6 +33,20 @@ export const CREDIT_COSTS = {
   script_generation: 1,
   layout_autofix: 3,
   /**
+   * One outside-eye review of a finished video (lib/claude/ad-watcher.ts).
+   *
+   * Costlier than layout_autofix (3) because it is six vision frames plus
+   * adaptive thinking on Opus 5, not one still on a cheaper model — roughly
+   * $0.05-0.10 of raw inference. Priced at 6 to land in the same ~3x band as
+   * the other Claude actions rather than the ~20x the near-free text ones
+   * carry; see PRODUCT_STRATEGY.md §4.4 on why the markup is banded, not flat.
+   *
+   * Charged, unlike suggestWordTreatments which is deliberately free: that one
+   * is cheap exploration we want to encourage, this one runs a frontier model
+   * over images and produces a change that gets applied to the ad.
+   */
+  ad_watch: 6,
+  /**
    * One post to ONE network through the paid broker (lib/social/broker).
    *
    * Publishing to a network we reach ourselves is FREE and must stay free —
