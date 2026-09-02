@@ -580,6 +580,7 @@ function PlatformCard({
   unavailable,
   health,
   healthChecked = true,
+  configured,
 }: {
   platform: PlatformGuide;
   profile: SocialProfile | undefined;
@@ -587,6 +588,12 @@ function PlatformCard({
   health?: ConnectionHealth;
   /** False until the health round-trip settles — see `checking` below. */
   healthChecked?: boolean;
+  /**
+   * Does this DEPLOYMENT hold the credentials to start this connection?
+   * Server-decided (lib/social/configured.ts) because the client cannot read
+   * env — the same reason `ayrshareEnabled` is sent rather than inferred.
+   */
+  configured?: boolean;
   checklist: Record<string, boolean>;
   expanded: boolean;
   onToggle: () => void;
@@ -610,10 +617,6 @@ function PlatformCard({
   const checking = connected && !healthChecked && !unhealthy;
   const requiredItems = platform.checklist.filter((i) => i.required);
   const allRequiredChecked = requiredItems.every((i) => checklist[i.key]);
-  const totalChecked = platform.checklist.filter(
-    (i) => checklist[i.key],
-  ).length;
-  const totalItems = platform.checklist.length;
   // Connect is offered whenever the platform is connectable — the checklist no
   // longer gates it.
   //
@@ -693,16 +696,22 @@ function PlatformCard({
           </p>
         </div>
 
-        {/* Progress pill */}
+        {/* State pill.
+            This read "{n}/{n} ready" from the user's OWN localStorage ticks,
+            so TikTok advertised "3/3 ready" while its connect route answered
+            503 "isn't configured on this deployment yet" — a platform with no
+            credentials looked readier than one with them. Nothing verified
+            those boxes; they are guidance, kept below.
+            What the badge says now comes from the server. */}
         {!connected && (
           <span
             className={`text-[10px] font-medium px-2 py-0.5 rounded-full border shrink-0 ${
-              allRequiredChecked
+              configured
                 ? "text-primary border-primary/30 bg-primary/10"
                 : "text-muted-foreground border-border bg-secondary"
             }`}
           >
-            {totalChecked}/{totalItems} ready
+            {configured ? "Ready to connect" : "Not set up yet"}
           </span>
         )}
 
@@ -1449,6 +1458,8 @@ export default function SocialSettingsPage() {
   // Whether the hosted-linking flow exists on this deployment at all. Off by
   // default so a slow or failed profiles fetch never advertises it.
   const [ayrshareEnabled, setAyrshareEnabled] = useState(false);
+  /** Platforms this deployment holds credentials for — server-decided. */
+  const [configured, setConfigured] = useState<string[]>([]);
   const [wizardMode, setWizardMode] = useState<"picker" | "platform" | null>(
     null,
   );
@@ -1489,6 +1500,7 @@ export default function SocialSettingsPage() {
         const parsed = readProfilesResponse<SocialProfile>(await res.json());
         setProfiles(parsed.profiles);
         setAyrshareEnabled(parsed.ayrshareEnabled);
+        setConfigured(parsed.configuredPlatforms);
       } catch (err) {
         setError((err as Error).message);
       } finally {
@@ -2367,6 +2379,7 @@ export default function SocialSettingsPage() {
               unavailable={ayrshareDown && AYRSHARE_ONLY.has(platform.id)}
               health={health[platform.id]}
               healthChecked={healthChecked}
+              configured={configured.includes(platform.id)}
               connecting={connecting === platform.id}
               onSwitchPage={
                 platform.id === "facebook" ? switchFbPage : undefined

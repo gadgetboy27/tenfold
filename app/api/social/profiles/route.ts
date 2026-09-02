@@ -4,6 +4,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getConnectedPlatforms } from "@/lib/ayrshare/profiles";
 import { isDirectPlatform } from "@/lib/social/direct";
 import { isAyrshareEnabled } from "@/lib/ayrshare/enabled";
+import { configuredPlatforms } from "@/lib/social/configured";
 
 interface OutProfile {
   id: string;
@@ -138,6 +139,9 @@ export async function GET(req: Request) {
     return NextResponse.json({
       profiles: out,
       ayrshareEnabled: isAyrshareEnabled(),
+      // Same reasoning as the flag above: the client cannot read env, so it
+      // was guessing at readiness from a checklist the user ticked themselves.
+      configuredPlatforms: configuredPlatforms(),
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";

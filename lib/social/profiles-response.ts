@@ -24,15 +24,32 @@
 export function readProfilesResponse<T>(data: unknown): {
   profiles: T[];
   ayrshareEnabled: boolean;
+  configuredPlatforms: string[];
 } {
   if (Array.isArray(data)) {
     // Legacy shape: no flag to read, so assume OFF. Claiming a disabled
     // integration works is precisely the failure this exists to stop.
-    return { profiles: data as T[], ayrshareEnabled: false };
+    return {
+      profiles: data as T[],
+      ayrshareEnabled: false,
+      configuredPlatforms: [],
+    };
   }
-  const obj = (data ?? {}) as { profiles?: T[]; ayrshareEnabled?: boolean };
+  const obj = (data ?? {}) as {
+    profiles?: T[];
+    ayrshareEnabled?: boolean;
+    configuredPlatforms?: unknown;
+  };
   return {
     profiles: Array.isArray(obj.profiles) ? obj.profiles : [],
     ayrshareEnabled: obj.ayrshareEnabled === true,
+    // An OLDER route talking to a NEWER client sends no list. Empty means
+    // "nothing advertised as ready", which understates rather than overstates
+    // — the safe direction, and the same choice ayrshareEnabled makes above.
+    configuredPlatforms: Array.isArray(obj.configuredPlatforms)
+      ? (obj.configuredPlatforms as unknown[]).filter(
+          (p): p is string => typeof p === "string",
+        )
+      : [],
   };
 }

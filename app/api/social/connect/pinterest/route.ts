@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { canManageConnections, CONNECTION_FORBIDDEN } from "@/lib/social/authz";
+import { isPlatformConfigured } from "@/lib/social/configured";
 import { getPinterestOAuthUrl } from "@/lib/social/direct/pinterest";
 import { signOAuthState } from "@/lib/social/oauth-state";
 
@@ -12,7 +13,7 @@ export async function GET(req: Request) {
     if (!canManageConnections(session)) {
       return NextResponse.json(CONNECTION_FORBIDDEN, { status: 403 });
     }
-    if (!process.env.PINTEREST_APP_ID) {
+    if (!isPlatformConfigured("pinterest")) {
       return NextResponse.json(
         {
           error:
