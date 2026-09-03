@@ -233,4 +233,22 @@ describe("the media is checked before a platform is asked to fetch it", () => {
     expect(tt).toContain("content-sharing-guidelines");
     expect(tt).toMatch(/unaudited|SELF_ONLY/);
   });
+
+  it("maps the error CODE, not the message", () => {
+    // Every compliance rejection carries the same guidance link as its
+    // message. Only `code` says what actually happened, and reading the
+    // message instead is what turned a one-line fix into an afternoon.
+    const tt = readFileSync("lib/social/direct/tiktok.ts", "utf8");
+    expect(tt).toContain("data.error?.code");
+    // The one that reads like a bug in our code and is not.
+    expect(tt).toContain("unaudited_client_can_only_post_to_private_accounts");
+    // It is about the ACCOUNT, so the guidance must say so — a message that
+    // said "set the post to private" would send someone in a circle, since
+    // we already send SELF_ONLY.
+    const idx = tt.indexOf("unaudited_client_can_only_post_to_private");
+    expect(tt.slice(idx, idx + 400)).toMatch(/PRIVATE account/);
+    for (const code of ["url_ownership_unverified", "video_pull_failed"]) {
+      expect(tt).toContain(code);
+    }
+  });
 });

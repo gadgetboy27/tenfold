@@ -331,15 +331,28 @@ const PLATFORMS: PlatformGuide[] = [
     color: "#69C9D0",
     bg: "bg-[#69C9D0]/10",
     description: "Short-form video",
+    // "Business or Creator" was Ayrshare-era guidance and is NOT a documented
+    // requirement of TikTok's own Content Posting API. Worse, it is actively
+    // harmful right now: while our TikTok app is unaudited the API refuses any
+    // PUBLIC account (error unaudited_client_can_only_post_to_private_accounts,
+    // which is about the ACCOUNT, not the post's privacy_level — we sent
+    // SELF_ONLY and were still refused), and a Business account cannot be set
+    // to private. So the old copy told people to do the one thing that blocks
+    // them. Verified against the live API on 2026-09-03.
     accountType:
-      "TikTok Business or Creator account, account must be 30+ days old",
+      "Any account type. While our TikTok app is awaiting audit, the account must be set to PRIVATE",
     steps: [
       {
-        instruction: "Switch to a Business or Creator account",
+        instruction:
+          "Set the account to Private — TikTok refuses public accounts until our app passes its audit",
         link: {
-          text: "Switch account type",
-          url: "https://www.tiktok.com/business/en-US/blog/how-to-switch-to-business-account",
+          text: "TikTok settings",
+          url: "https://www.tiktok.com/setting",
         },
+      },
+      {
+        instruction:
+          "Business accounts cannot be private — switch to Personal first (Settings and privacy > Manage account)",
       },
       {
         instruction: "Verify your phone number on the account",
@@ -352,12 +365,11 @@ const PLATFORMS: PlatformGuide[] = [
         instruction:
           "Ensure the account is at least 30 days old (TikTok API requirement)",
       },
-      { instruction: "Complete your profile with a bio and profile photo" },
     ],
     checklist: [
       {
-        key: "account_type",
-        label: "Account set to Business or Creator",
+        key: "account_private",
+        label: "Account set to Private (required until the app is audited)",
         required: true,
       },
       { key: "phone_verified", label: "Phone number verified", required: true },

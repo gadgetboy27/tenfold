@@ -334,16 +334,33 @@ export async function publishToTikTok(params: {
   const code = data.error?.code;
   if (!res.ok || (code && code !== "ok") || !data.data?.publish_id) {
     const raw = data.error?.message ?? "";
-    // TikTok answers a compliance rejection with nothing but a link to its
-    // guidelines. That names no cause, so translate it into the things it
-    // actually is for us, in the order they are worth checking.
-    const vague = /content-sharing-guidelines|integration guidelines/i.test(
-      raw,
-    );
+    // TikTok's MESSAGE for a compliance rejection is always the same link to
+    // its guidelines — it names no cause and sends you hunting. The `code` is
+    // precise, so map that instead. Each entry below cost real debugging.
+    const byCode: Record<string, string> = {
+      // The one that looks like a bug in our code and isn't: it is about the
+      // ACCOUNT, not the post. An unaudited app may only publish to a TikTok
+      // account set to private, and privacy_level SELF_ONLY does NOT satisfy
+      // it — we sent SELF_ONLY and were still refused.
+      unaudited_client_can_only_post_to_private_accounts:
+        "TikTok only lets an unaudited app post to a PRIVATE account. In TikTok: Settings and privacy > Account > Privacy > switch the account to private, then publish again. The restriction lifts once the app passes TikTok's audit.",
+      url_ownership_unverified:
+        "TikTok won't fetch the video because the media domain isn't verified. Verify it in the portal's URL properties — the apex domain covers its subdomains.",
+      privacy_level_option_mismatch:
+        "TikTok rejected the privacy level for this account. Reconnect the account so we re-read its permitted options.",
+      spam_risk_too_many_posts:
+        "TikTok is rate-limiting this account today. Try again tomorrow.",
+      file_format_check_failed:
+        "TikTok couldn't read the video file. Re-export it and try again.",
+      video_pull_failed:
+        "TikTok couldn't download the video from our storage. Check the file exists and that its URL doesn't redirect.",
+    };
+    const errCode = data.error?.code ?? "";
     throw new Error(
-      vague
-        ? "TikTok refused the post under its sharing guidelines. The usual causes, in order: the app is unaudited so the post must be SELF_ONLY; the media domain isn't verified in the TikTok portal; or the post tried to re-enable comments/duet/stitch the creator has switched off."
-        : raw || `TikTok rejected the post (${res.status})`,
+      byCode[errCode] ??
+        (/content-sharing-guidelines|integration guidelines/i.test(raw)
+          ? `TikTok refused the post under its sharing guidelines (${errCode || "no code given"}). Check the account is private while the app is unaudited, and that the media domain is verified.`
+          : raw || `TikTok rejected the post (${res.status})`),
     );
   }
   return { publishId: data.data.publish_id, privacy };
