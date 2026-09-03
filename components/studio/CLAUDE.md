@@ -507,6 +507,55 @@ in one place for both sides.
   `/api/publish` resolve the campaign's video, not the card's. Best-effort: a
   failed PATCH still opens the screen, where the strip can set it by hand.
 
+## The tick puts the clip on the stage (2026-09-04)
+
+Reported as "you click the tick and nothing happens". It wasn't broken — it
+wrote `campaigns.publish_asset_id` and nothing else. On screen that moved a
+96px muted tile inside `PublishCanvas`'s "What's going out", and when the pick
+already matched what `displayVideo` was showing, it moved nothing at all. **A
+control whose only effect is a column write reads as dead**, and the fix is to
+make the tick mean on screen what it already meant in the database.
+
+- **`onStageVideo` — the tick sets the composition's background.**
+  `ProjectStrip` hands the clip up; `Studio.stageVideo` calls `addVideoToAd`.
+  That is what puts the clip where the aspect picker, the Brand stamp and the
+  Words layer can all reach it, instead of in a thumbnail. Un-picking does NOT
+  strip the stage: removing someone's backdrop takes every layer positioned
+  against it with it, which is a far bigger act than un-naming a file.
+- **`AdStage` has a transport now.** It rendered `playing={false}` with no way
+  to change it, so a video ad was one frozen frame — you could shape, brand and
+  letter something you had never watched. The canvas always supported playback
+  (it drives the Compositor's scrubber); only the controls were missing. Video
+  backdrops only — scrubbing a still is a control that does nothing.
+- **The clip change is adjusted during render, not in an effect.** It arrives
+  from zustand, outside React's tree; an effect paints one frame of the new
+  clip against the old clock, and `react-hooks/set-state-in-effect` rejects it
+  anyway. No `seek(0)` goes with it — the `<video>` element's src swaps and the
+  browser reloads at 0.
+
+### "Render this cut" — without it the whole screen is theatre
+
+The stage invites you to re-shape the clip, stamp the brand kit and lay type
+over it. **None of that reaches a network on its own**: `/api/publish` posts
+`campaigns.publish_asset_id`, which is the raw file the strip named, while the
+adjustments sit in `compositions`. `PublishCanvas`'s Final adjustments block is
+the one step that turns the doc into a file — `POST /api/compositions/export`
+(free, the same FFmpeg render the Compositor uses), then a PATCH moving the
+pick onto the new asset.
+
+- **`audioUrl` is not optional.** The export bakes audio in at render time, and
+  publish's late-music remux only fires when the track is NEWER than the export
+  (`lib/composition/late-music.ts`). A cut rendered now is newer than every
+  existing track, so omitting the music posts permanent silence with nothing
+  saying why. Studio passes `musicUrl` through for exactly this.
+- **One aspect, not a fan-out.** A pick makes `/api/publish` skip the
+  per-aspect fan-out entirely (its one-video checkpoint), so rendering three
+  aspects and then naming one is wasted work. The shape buttons are labelled
+  with the platforms that want them (`formatsForPlatforms`, the same registry
+  the server's `pickForPlatform` reads), and two platforms disagreeing is
+  stated as the real trade it is — letterboxed, or two passes — not papered
+  over.
+
 ## Stalled phases — every poll needs a bound AND a reason (2026-08-11)
 
 Reported as "Logo & Brand stuck on `Generating… 0 of 6 ready`". The rule that

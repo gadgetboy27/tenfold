@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Layers,
   Trash2,
@@ -8,11 +8,16 @@ import {
   ChevronDown,
   Lock,
   Unlock,
+  Pause,
+  Play,
   Stamp,
   WrapText,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { CompositorCanvas as LayeredCanvas } from "@/components/compositor/CompositorCanvas";
+import {
+  CompositorCanvas as LayeredCanvas,
+  type CompositorCanvasHandle,
+} from "@/components/compositor/CompositorCanvas";
 import { useCompositorStore } from "@/store/useCompositorStore";
 import {
   setAdAspect,
@@ -147,6 +152,52 @@ export function AdStage({
 
   const [branding, setBranding] = useState(false);
 
+  /* ── Transport ────────────────────────────────────────────────────────────
+     The stage rendered `playing={false}` and offered no way to change it, so a
+     video ad was a single frozen frame — you could shape it, brand it and
+     letter it without ever watching the thing you were about to publish. The
+     canvas has always supported playback (it drives the Compositor's own
+     scrubber); it just had no controls here.
+
+     Shown only for a video backdrop. An image composition has a virtual clock
+     too, but scrubbing a still is a control that does nothing visible, and the
+     one thing worth animating on it — layer appear/disappear — belongs to the
+     Compositor's timeline, not to a stage this size. */
+  const isVideoAd = doc?.background.kind === "video";
+  const canvasRef = useRef<CompositorCanvasHandle>(null);
+  const [playing, setPlaying] = useState(false);
+  const [time, setTime] = useState(0);
+  // The doc's own hint until the video element reports the file's real length.
+  const [duration, setDuration] = useState(doc?.background.durationSec ?? 10);
+
+  const onTick = useCallback((t: number, d: number) => {
+    setTime(t);
+    if (d > 0 && Number.isFinite(d)) setDuration(d);
+  }, []);
+  const onEnded = useCallback(() => setPlaying(false), []);
+
+  // A new backdrop is a different clip: leave the transport as it was and the
+  // scrubber reads against the PREVIOUS file's length until the next tick
+  // corrects it, which looks like the control is stuck. Ticking a clip in the
+  // project strip lands here, so this covers exactly the flow this stage
+  // exists for.
+  //
+  // Adjusted during render, not in an effect: the change arrives from the
+  // zustand store (adBridge, outside React's tree), and resetting in an effect
+  // would paint one frame of the new clip against the old clock first. This is
+  // React's documented shape for "a prop changed, so derived state must
+  // change" — https://react.dev/learn/you-might-not-need-an-effect. No seek()
+  // is needed to go with it: the canvas swaps the <video> element's src, and
+  // the browser reloads it at currentTime 0 on its own.
+  const bgSrc = doc?.background.src ?? null;
+  const [lastBgSrc, setLastBgSrc] = useState(bgSrc);
+  if (bgSrc !== lastBgSrc) {
+    setLastBgSrc(bgSrc);
+    setPlaying(false);
+    setTime(0);
+    setDuration(doc?.background.durationSec ?? 10);
+  }
+
   // Recomputed from the doc on every render, so the action appears the moment
   // an overflowing layer exists and disappears once it's been fixed. Cheap —
   // it's a character count over at most twenty layers.
@@ -165,7 +216,10 @@ export function AdStage({
         tagline?: string | null;
         font_family?: string | null;
       };
-      const outcome = await applyBrandKitToAd(kit);
+      // The real clip length, not the 10s default: brandKitLayers times its
+      // end card off this, so a 30s ad would otherwise flash the logo a third
+      // of the way in and hold nothing at the end.
+      const outcome = await applyBrandKitToAd(kit, duration);
       if (!outcome.ok) {
         toast.error(
           outcome.reason === "no-ad"
@@ -192,12 +246,60 @@ export function AdStage({
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border border-border bg-card p-4">
         {doc ? (
           <div className="relative h-full w-full">
-            <LayeredCanvas playing={false} onTick={() => {}} onEnded={() => {}} />
+            <LayeredCanvas
+              ref={canvasRef}
+              playing={playing}
+              onTick={onTick}
+              onEnded={onEnded}
+            />
           </div>
         ) : (
           <EmptyArtboard aspect={aspect} loading={loading} />
         )}
       </div>
+
+      {isVideoAd && (
+        <div className="flex shrink-0 items-center gap-3 rounded-2xl border border-border bg-card px-3 py-2">
+          <button
+            type="button"
+            onClick={() => {
+              // Replay from the top rather than sitting on the last frame —
+              // pressing play at the end of a clip must play something.
+              if (!playing && time >= duration - 0.05)
+                canvasRef.current?.seek(0);
+              setPlaying((p) => !p);
+            }}
+            title={playing ? "Pause" : "Play the ad through"}
+            aria-label={playing ? "Pause" : "Play"}
+            className="shrink-0 rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            {playing ? (
+              <Pause className="h-3.5 w-3.5" />
+            ) : (
+              <Play className="h-3.5 w-3.5" />
+            )}
+          </button>
+          <span className="w-9 shrink-0 text-xs tabular-nums text-muted-foreground">
+            {fmtTime(time)}
+          </span>
+          <input
+            type="range"
+            min={0}
+            max={duration}
+            step={0.05}
+            value={Math.min(time, duration)}
+            onChange={(e) => {
+              canvasRef.current?.seek(+e.target.value);
+              setTime(+e.target.value);
+            }}
+            aria-label="Scrub the ad"
+            className="min-w-0 flex-1 accent-primary"
+          />
+          <span className="w-9 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+            {fmtTime(duration)}
+          </span>
+        </div>
+      )}
 
       {/* ── Aspect picker + layer stack ── */}
       <div className="flex shrink-0 flex-wrap items-center gap-3 rounded-2xl border border-border bg-card px-3 py-2">
@@ -216,7 +318,9 @@ export function AdStage({
             >
               <span
                 className={`${a.box} rounded-[2px] border ${
-                  aspect === a.id ? "border-primary" : "border-muted-foreground/50"
+                  aspect === a.id
+                    ? "border-primary"
+                    : "border-muted-foreground/50"
                 }`}
               />
               {a.label}
@@ -330,6 +434,12 @@ export function AdStage({
       </div>
     </div>
   );
+}
+
+/** m:ss — the clip lengths here are 10-30s, so no hours case exists. */
+function fmtTime(sec: number): string {
+  const s = Math.max(0, Math.floor(sec));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
 function IconBtn({

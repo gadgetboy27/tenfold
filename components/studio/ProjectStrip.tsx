@@ -86,6 +86,7 @@ export function ProjectStrip({
   focus = null,
   workspaceSlug,
   onChanged,
+  onStageVideo,
 }: {
   progress: ProjectProgress | null;
   /** Studio's live name field — fresher than the server's copy mid-rename. */
@@ -95,6 +96,20 @@ export function ProjectStrip({
   workspaceSlug?: string;
   /** Re-fetch progress after a delete or a pick. */
   onChanged?: () => void;
+  /**
+   * Put the chosen clip on the Ad stage.
+   *
+   * The tick used to do one invisible thing — write
+   * `campaigns.publish_asset_id` — and if the clip you ticked was already the
+   * one the canvas happened to be showing, the screen did not change at all.
+   * Read as a dead button, and reported as one.
+   *
+   * A tick means "this is the ad", so it now says so on the stage too: the
+   * clip becomes the composition's background, which is what makes the rest
+   * of the publish step possible (re-shape it for the platform, stamp the
+   * brand, lay type over it) instead of a 96px thumbnail in the rail.
+   */
+  onStageVideo?: (video: { id: string; url: string }) => void;
 }) {
   const [open, setOpen] = useState(true);
   // One id at a time — the tile shows a spinner in place of its own button
@@ -192,9 +207,17 @@ export function ProjectStrip({
     if (firstError) toast.error(firstError);
   };
 
-  /** Name the one video that publishes. Clicking the current pick clears it. */
+  /**
+   * Name the one video that publishes, and put it on the stage. Clicking the
+   * current pick clears the name; it does NOT strip the stage, because taking
+   * someone's backdrop away (along with every layer positioned against it) is
+   * a much bigger act than un-naming a file.
+   */
   const choose = async (id: string | null) => {
     if (!campaignId || !workspaceSlug || busyId) return;
+    const video = id
+      ? (progress?.bundle.videos.find((v) => v.id === id) ?? null)
+      : null;
     setBusyId(id ?? "clear");
     try {
       const res = await api(`/api/campaigns/${campaignId}`, {
@@ -208,8 +231,11 @@ export function ProjectStrip({
         } | null;
         throw new Error(data?.error ?? "Couldn't set the video");
       }
+      if (video) onStageVideo?.({ id: video.id, url: video.url });
       toast.success(
-        id ? "This is the video that publishes" : "Video un-picked",
+        video
+          ? "On the stage — this is the video that publishes"
+          : "Video un-picked",
       );
       onChanged?.();
     } catch (err) {
@@ -393,7 +419,7 @@ export function ProjectStrip({
                             title={
                               picked
                                 ? "This is the video that publishes — click to un-pick"
-                                : "Publish this one"
+                                : "Put this clip on the stage and publish it"
                             }
                             aria-label={
                               picked

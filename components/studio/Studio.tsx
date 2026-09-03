@@ -547,6 +547,28 @@ export function Studio({
     () => refreshProgress(true),
     [refreshProgress],
   );
+  /**
+   * The strip's tick names the video that publishes — and now puts it on the
+   * stage, which is what the tick always meant and never showed.
+   *
+   * Picking wrote a column and nothing else. On the Publish screen the clip
+   * appeared as a 96px muted tile in the rail, and if the pick matched what
+   * the canvas was already showing, the tick changed literally nothing
+   * on-screen. As the ad's BACKGROUND it lands where the aspect picker, the
+   * Brand stamp and the layer stack can all reach it — the "final
+   * adjustments" pass that publishing needs.
+   *
+   * `videoDuration` is Studio's requested length, used only as the virtual
+   * clock's opening guess; the canvas replaces it with the file's real
+   * duration once the video element has metadata.
+   */
+  const stageVideo = useCallback(
+    ({ url }: { id: string; url: string }) => {
+      setVideoUrl(url);
+      addVideoToAd(url, videoDuration);
+    },
+    [videoDuration],
+  );
   useEffect(() => {
     queueMicrotask(() => refreshProgress());
   }, [refreshProgress]);
@@ -1676,7 +1698,9 @@ export function Studio({
                   anchorId={anchorId}
                   workingImage={workingImage}
                   videoUrl={videoUrl}
+                  musicUrl={musicUrl}
                   initialCaption={caption}
+                  onFinalCut={onProjectAssetsChanged}
                 />
               ) : (
                 <CockpitCreate
@@ -1760,6 +1784,7 @@ export function Studio({
             focus={stripFocus}
             workspaceSlug={workspaceSlug}
             onChanged={onProjectAssetsChanged}
+            onStageVideo={stageVideo}
           />
         )}
       </div>

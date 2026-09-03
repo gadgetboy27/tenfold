@@ -28,9 +28,17 @@ import {
   ShieldCheck,
   Eye,
   Undo2,
+  Clapperboard,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import { PLATFORM_FORMATS, type PlatformId } from "@/lib/composition/formats";
+import {
+  PLATFORM_FORMATS,
+  formatsForPlatforms,
+  isPlatformId,
+  type PlatformId,
+} from "@/lib/composition/formats";
+import { setAdAspect } from "@/components/studio/adBridge";
+import type { CompositionAspect } from "@/lib/composition/layers";
 import { PLATFORM_GUIDE } from "@/lib/social/caption-guide";
 import { thumbUrl } from "@/lib/images/thumb";
 import { CREDIT_COSTS } from "@/lib/credits/costs";
@@ -140,15 +148,21 @@ export function PublishCanvas({
   anchorId,
   workingImage,
   videoUrl,
+  musicUrl = null,
   initialCaption = "",
+  onFinalCut,
 }: {
   workspaceSlug: string;
   campaignId: string | null;
   anchorId: string | null;
   workingImage: string | null;
   videoUrl: string | null;
+  /** The campaign's music, baked into a final cut — see renderFinalCut. */
+  musicUrl?: string | null;
   /** Caption generated in the Caption section, if the user made one. */
   initialCaption?: string;
+  /** A new cut was rendered and is now the pick — re-read the project. */
+  onFinalCut?: () => void;
 }) {
   const hasVideo = !!videoUrl;
   const hasImage = !!workingImage;
@@ -167,6 +181,16 @@ export function PublishCanvas({
    * handler, which runs on a click, not on every render.
    */
   const layers = useCompositorStore((st) => st.doc?.layers);
+  /**
+   * The stage's shape, and whether it's a clip. PRIMITIVES, for the same
+   * reason `layers` selects the raw array: zustand compares by reference, so
+   * anything derived inside a selector must already be a stable value.
+   */
+  const adAspect = useCompositorStore((st) => st.doc?.aspect ?? null);
+  const adIsVideo = useCompositorStore(
+    (st) => st.doc?.background.kind === "video",
+  );
+  const [rendering, setRendering] = useState(false);
   const [target, setTarget] = useState<"video" | "image">(
     hasVideo ? "video" : "image",
   );
@@ -496,6 +520,78 @@ export function PublishCanvas({
     }
   };
 
+  /**
+   * Render the ad exactly as it stands on the stage, and make THAT the video
+   * that publishes.
+   *
+   * Without this, everything the publish step invites you to do is theatre.
+   * The stage re-shapes the clip for the platform, stamps the brand kit on it
+   * and lays type over it — but /api/publish posts
+   * `campaigns.publish_asset_id`, which is the RAW pick from the strip. So the
+   * adjustments lived in `compositions` and never reached a network. This is
+   * the one step that turns the doc into a file: the same free FFmpeg export
+   * the Compositor uses, then a PATCH moving the pick onto the new cut.
+   *
+   * The music is passed through deliberately, and it is not optional. The
+   * export bakes audio in at render time, and publish's late-music remux only
+   * fires when the track is NEWER than the export
+   * (lib/composition/late-music.ts) — a cut rendered now is newer than every
+   * existing track, so omitting this would post permanent silence with
+   * nothing anywhere saying why.
+   *
+   * Sends the campaign nowhere near `approved`: re-rendering the advert is a
+   * change to what goes out, and the approval gate already covers that.
+   */
+  const renderFinalCut = async () => {
+    const doc = useCompositorStore.getState().doc;
+    if (!doc || !campaignId || rendering) return;
+    setRendering(true);
+    try {
+      const res = await api("/api/compositions/export", {
+        method: "POST",
+        workspaceSlug,
+        body: JSON.stringify({
+          doc,
+          campaignId,
+          compositionId: doc.id,
+          audioUrl: musicUrl,
+        }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        url?: string;
+        assetId?: string;
+        error?: string;
+      } | null;
+      if (!res.ok) throw new Error(data?.error ?? "Couldn't render the cut");
+      // A render with no assetId means the campaign check passed but the row
+      // didn't land. The file exists, so say what happened rather than
+      // claiming success — the strip can still name it once it appears.
+      if (!data?.assetId)
+        throw new Error(
+          "Rendered, but it wasn't saved to this project — try again.",
+        );
+
+      const patch = await api(`/api/campaigns/${campaignId}`, {
+        method: "PATCH",
+        workspaceSlug,
+        body: JSON.stringify({ publish_asset_id: data.assetId }),
+      });
+      if (!patch.ok)
+        throw new Error(
+          "Rendered, but couldn't make it the one that publishes — tick it in the strip below.",
+        );
+
+      toast.success("Rendered — this cut is what publishes");
+      onFinalCut?.();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Couldn't render the cut",
+      );
+    } finally {
+      setRendering(false);
+    }
+  };
+
   const isReviewer = role === "owner" || role === "admin";
   const canPublish = isReviewer || approvalStatus === "approved";
 
@@ -529,6 +625,23 @@ export function PublishCanvas({
   const charCount = fullText.length;
   const overLimit =
     charCount > minLimit && Object.keys(platformCaptions).length === 0;
+
+  /**
+   * Which artboard shape each selected platform wants, from the format
+   * registry — the same table the server's fan-out reads, so the hint here and
+   * the export can't disagree about what "9:16" means for TikTok.
+   *
+   * Grouped by aspect rather than listed per platform: the question on this
+   * screen is "what shape do I render", and four platforms wanting 9:16 is one
+   * answer, not four.
+   */
+  const aspectWants = useMemo(() => {
+    const byAspect = new Map<CompositionAspect, string[]>();
+    for (const f of formatsForPlatforms(platforms.filter(isPlatformId))) {
+      byAspect.set(f.aspect, [...(byAspect.get(f.aspect) ?? []), f.label]);
+    }
+    return byAspect;
+  }, [platforms]);
 
   const musicSplit = useMemo(() => {
     const on = platforms.filter((p) => !noMusicPlatforms.has(p));
@@ -954,6 +1067,104 @@ export function PublishCanvas({
                 View full size
               </a>
             </div>
+          </div>
+        )}
+
+        {/* ── Final adjustments ──────────────────────────────────────────────
+            The last gap in the flow. Ticking a clip in the strip puts it on
+            the stage, where the aspect picker re-shapes it, Brand stamps the
+            logo on it and the Words tool letters it — and none of that reached
+            a network, because publish posts the picked FILE and those edits
+            live in `compositions`. This is where the doc becomes a file.
+
+            Only for a video ad: an image post sends the anchor, and the export
+            pipeline renders layered docs to MP4 with no still-image equivalent
+            (the amber note above says so). */}
+        {target === "video" && adIsVideo && adAspect && (
+          <div className="flex flex-col gap-2 rounded-xl border border-border bg-background p-3">
+            <p className="flex items-center gap-1.5 text-xs font-medium">
+              <Clapperboard className="h-3.5 w-3.5 text-muted-foreground" />
+              Final adjustments
+            </p>
+            <p className="text-[11px] leading-snug text-muted-foreground">
+              The clip is on the stage — shape it for the platform, stamp your
+              brand on it, lay type over it. None of that goes out until you
+              render it here.
+            </p>
+
+            <div className="flex flex-wrap items-center gap-1">
+              {(["9:16", "1:1", "16:9"] as const).map((a) => {
+                const wanted = aspectWants.get(a);
+                return (
+                  <button
+                    key={a}
+                    type="button"
+                    onClick={() => setAdAspect(a)}
+                    title={
+                      wanted
+                        ? `${wanted.join(", ")} want ${a}`
+                        : `Re-shape the ad to ${a}`
+                    }
+                    className={`rounded-md border px-2 py-1 text-[11px] transition-colors ${
+                      adAspect === a
+                        ? "border-primary bg-primary/15 text-primary"
+                        : "border-border text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {a}
+                    {wanted && (
+                      <span className="ml-1 text-[10px] opacity-70">
+                        {wanted.length === 1
+                          ? wanted[0]
+                          : `${wanted.length} platforms`}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* A pick publishes ONE file to every platform — the fan-out is
+                skipped on purpose (see /api/publish's one-video checkpoint),
+                so two platforms wanting different shapes is a real trade the
+                user has to make, not something to paper over. */}
+            {aspectWants.size > 1 && (
+              <p className="text-[11px] leading-snug text-amber-600 dark:text-amber-400">
+                Your accounts want different shapes. One cut can&apos;t be both
+                — the ones that don&apos;t match get it letterboxed, or publish
+                them in two passes.
+              </p>
+            )}
+            {aspectWants.size > 0 && !aspectWants.has(adAspect) && (
+              <p className="text-[11px] leading-snug text-amber-600 dark:text-amber-400">
+                Nothing you&apos;ve selected posts in {adAspect}.
+              </p>
+            )}
+
+            <button
+              type="button"
+              onClick={renderFinalCut}
+              disabled={rendering || !campaignId}
+              className="flex items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-medium text-primary transition-colors hover:bg-primary/15 disabled:opacity-50"
+            >
+              {rendering ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Rendering…
+                </>
+              ) : (
+                <>
+                  <Clapperboard className="h-3.5 w-3.5" />
+                  Render this cut
+                  {overlayCount > 0
+                    ? ` (${overlayCount} overlay${overlayCount === 1 ? "" : "s"})`
+                    : ""}
+                </>
+              )}
+            </button>
+            <p className="text-[10px] leading-snug text-muted-foreground">
+              Free — it composes files you already own. The new cut becomes the
+              one that publishes.
+            </p>
           </div>
         )}
 
