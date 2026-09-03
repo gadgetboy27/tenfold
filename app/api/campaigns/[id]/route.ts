@@ -135,9 +135,20 @@ export async function PATCH(
       expansion_data?: Record<string, unknown>;
       anchor_asset_id?: string | null;
       publish_asset_id?: string | null;
+      /** No field change — just mark the campaign as worked on just now. */
+      touch?: boolean;
     };
-    // Whitelist updatable fields
-    const update: Record<string, unknown> = {};
+    // Whitelist updatable fields.
+    //
+    // `updated_at` is stamped on EVERY patch, and is the Gallery's sort key
+    // (GET /api/campaigns). There is no trigger maintaining it, so without this
+    // the column held the row's creation time forever and "most recently worked
+    // on" was indistinguishable from "newest". It also guarantees the update
+    // object is never empty, so a bare { touch: true } is a valid write rather
+    // than a no-op that reports success.
+    const update: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
     if (raw.status !== undefined) update.status = raw.status;
     if (raw.prompt !== undefined) update.prompt = raw.prompt;
     if (raw.name !== undefined) update.name = String(raw.name).slice(0, 200);

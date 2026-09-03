@@ -212,6 +212,17 @@ export function ProjectStrip({
    * current pick clears the name; it does NOT strip the stage, because taking
    * someone's backdrop away (along with every layer positioned against it) is
    * a much bigger act than un-naming a file.
+   *
+   * **Only a RAW clip reaches the stage.** A `composed_video` is the OUTPUT of
+   * the stage — it already has the caption, brand mark and type burnt into its
+   * pixels. Making it the backdrop leaves the doc's layers in place to be drawn
+   * over the top of themselves, which renders as visibly doubled, ghosted text;
+   * "Render this cut" from there bakes that doubling in for good. Same
+   * input-vs-output distinction late-music.ts draws when it re-muxes onto the
+   * export rather than rebuilding from the raw clip.
+   *
+   * So an export still becomes the pick — that is the whole point of ticking
+   * one — and the stage keeps holding the editable ad it was built from.
    */
   const choose = async (id: string | null) => {
     if (!campaignId || !workspaceSlug || busyId) return;
@@ -231,11 +242,14 @@ export function ProjectStrip({
         } | null;
         throw new Error(data?.error ?? "Couldn't set the video");
       }
-      if (video) onStageVideo?.({ id: video.id, url: video.url });
+      if (video && !video.branded)
+        onStageVideo?.({ id: video.id, url: video.url });
       toast.success(
-        video
-          ? "On the stage — this is the video that publishes"
-          : "Video un-picked",
+        !video
+          ? "Video un-picked"
+          : video.branded
+            ? "This export publishes — the stage keeps the ad you built it from"
+            : "On the stage — this is the video that publishes",
       );
       onChanged?.();
     } catch (err) {
@@ -419,7 +433,9 @@ export function ProjectStrip({
                             title={
                               picked
                                 ? "This is the video that publishes — click to un-pick"
-                                : "Put this clip on the stage and publish it"
+                                : v.branded
+                                  ? "Publish this export — your editable ad stays on the stage"
+                                  : "Put this clip on the stage and publish it"
                             }
                             aria-label={
                               picked

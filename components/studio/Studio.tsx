@@ -847,6 +847,14 @@ export function Studio({
   // Gallery's Publish quick-action.
   const openProject = async (id: string, goto?: SectionId) => {
     try {
+      // Mark it worked-on so the Gallery floats it to the top next visit.
+      // Fire-and-forget: this is an ordering nicety, and failing it must never
+      // stop a project from opening.
+      void api(`/api/campaigns/${id}`, {
+        method: "PATCH",
+        workspaceSlug,
+        body: JSON.stringify({ touch: true }),
+      }).catch(() => {});
       // Progress alongside the campaign, not after it: resuming needs to know
       // what's finished, and the effect that normally fetches this only runs
       // once campaignId has already changed — too late to choose a section.

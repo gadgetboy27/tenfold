@@ -52,7 +52,13 @@ export async function GET(req: Request) {
       .from("campaigns")
       .select("*")
       .eq("workspace_id", session.workspaceId)
-      .order("created_at", { ascending: false })
+      // Most recently WORKED ON first, not most recently created. The Gallery
+      // is where you go to pick a project back up, so a campaign you opened an
+      // hour ago belongs above one you started last month and abandoned —
+      // under created_at it sank out of sight the moment anything newer
+      // existed. `openProject` touches updated_at (PATCH { touch: true }), so
+      // opening a project is itself enough to float it.
+      .order("updated_at", { ascending: false })
       .limit(50);
     if (error) throw new Error(error.message);
     if (!campaigns?.length) return NextResponse.json([]);
@@ -278,7 +284,9 @@ export async function POST(req: Request) {
     // that zone quiet, so the overlay lands on clean space rather than being
     // stamped over a focal point. Only the ZONE is passed — the words stay out
     // of the image model entirely (lib/fal/reserve-space.ts).
-    const reserveZone = body.words?.trim() ? (body.wordsZone ?? "bottom") : null;
+    const reserveZone = body.words?.trim()
+      ? (body.wordsZone ?? "bottom")
+      : null;
 
     const validation = await validatePrompt(
       body.prompt,

@@ -375,6 +375,17 @@ deletion despite living in the same directory — separate, live, shared
 components (used by the still-real `compositor`/`logo` "Open in classic"
 routes below, and by Studio itself).
 
+### The Gallery lists most recently WORKED ON, not most recently created
+
+`GET /api/campaigns` orders by `updated_at`, and `PATCH /api/campaigns/[id]`
+stamps `updated_at` on every write — there is no DB trigger doing it, so before
+this the column held the row's creation time forever and the sort was
+indistinguishable from `created_at`. `openProject` fires a bare
+`PATCH { touch: true }` (fire-and-forget; an ordering nicety must never stop a
+project opening), which is why opening a project floats it to the top. The
+`update` object is seeded with `updated_at`, so `{ touch: true }` is a real
+write rather than an empty one that reports success.
+
 ## Auth — one shared membership check for every `/[workspace]/*` route
 
 `app/(dashboard)/[workspace]/layout.tsx` checks login AND workspace
@@ -522,6 +533,15 @@ make the tick mean on screen what it already meant in the database.
   Words layer can all reach it, instead of in a thumbnail. Un-picking does NOT
   strip the stage: removing someone's backdrop takes every layer positioned
   against it with it, which is a far bigger act than un-naming a file.
+- **Only a RAW clip reaches the stage — never a `composed_video`.** Found by
+  testing this on "Bright Pulse": ticking a branded export made it the backdrop
+  while the doc still held the layers it was rendered WITH, so the caption drew
+  over its own burnt-in pixels and the stage showed doubled, ghosted text — and
+  "Render this cut" from there would have baked that in permanently. An export
+  is the OUTPUT of the stage, not an input to it; the same input-vs-output
+  distinction `late-music.ts` draws when it re-muxes onto the export rather than
+  rebuilding from the raw clip. Ticking an export still names it the pick (that
+  is what the tick is for) and the stage keeps the editable ad.
 - **`AdStage` has a transport now.** It rendered `playing={false}` with no way
   to change it, so a video ad was one frozen frame — you could shape, brand and
   letter something you had never watched. The canvas always supported playback
