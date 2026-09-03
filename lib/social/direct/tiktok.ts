@@ -153,6 +153,18 @@ export interface TikTokCreatorInfo {
   nickname: string | null;
   privacyOptions: TikTokPrivacy[];
   maxDurationSec: number | null;
+  /**
+   * The creator's own interaction settings.
+   *
+   * TikTok's content-sharing guidelines require these to be RESPECTED, not
+   * overridden: re-enabling comments on an account that has switched them off
+   * is a violation, and the API rejects the post for it. The rejection cites
+   * the guidelines URL and names nothing specific, which is why this cost an
+   * afternoon.
+   */
+  commentDisabled: boolean;
+  duetDisabled: boolean;
+  stitchDisabled: boolean;
 }
 
 export async function getTikTokCreatorInfo(
@@ -171,6 +183,9 @@ export async function getTikTokCreatorInfo(
         creator_nickname?: string;
         privacy_level_options?: string[];
         max_video_post_duration_sec?: number;
+        comment_disabled?: boolean;
+        duet_disabled?: boolean;
+        stitch_disabled?: boolean;
       };
       error?: { code?: string; message?: string };
     };
@@ -181,6 +196,11 @@ export async function getTikTokCreatorInfo(
       privacyOptions: (data.data?.privacy_level_options ??
         []) as TikTokPrivacy[],
       maxDurationSec: data.data?.max_video_post_duration_sec ?? null,
+      // Absent means "not disabled" — but see interactionFlags below, which
+      // never widens what the creator allows.
+      commentDisabled: data.data?.comment_disabled === true,
+      duetDisabled: data.data?.duet_disabled === true,
+      stitchDisabled: data.data?.stitch_disabled === true,
     };
   } catch {
     return null;
@@ -206,6 +226,49 @@ export function resolvePrivacy(
   if (info.privacyOptions.includes(want)) return want;
   if (info.privacyOptions.includes(DEFAULT_PRIVACY)) return DEFAULT_PRIVACY;
   return info.privacyOptions[0];
+}
+
+/**
+ * What to send for disable_comment / disable_duet / disable_stitch.
+ *
+ * Two rules, and we had neither — the adapter hardcoded all three to `false`,
+ * which is the one combination guaranteed to be wrong somewhere:
+ *
+ *  1. NEVER RE-ENABLE WHAT THE CREATOR TURNED OFF. Sending
+ *     `disable_comment: false` to an account that disabled comments asks
+ *     TikTok to override the account owner. It refuses, citing the
+ *     content-sharing guidelines and naming nothing specific.
+ *
+ *  2. A PRIVATE VIDEO CANNOT BE DUETTED OR STITCHED. Those need a video other
+ *     people can see, so `SELF_ONLY` plus `disable_duet: false` is a
+ *     contradiction — and an unaudited app posts SELF_ONLY every time, which
+ *     is why this failed on the very first publish rather than eventually.
+ *
+ * With no creator_info (the query failed), everything is disabled: the
+ * restrictive choice is the safe one, because it can only ever ask for LESS
+ * than the creator permits.
+ */
+export function interactionFlags(
+  info: TikTokCreatorInfo | null,
+  privacy: TikTokPrivacy,
+): {
+  disable_comment: boolean;
+  disable_duet: boolean;
+  disable_stitch: boolean;
+} {
+  const isPrivate = privacy === "SELF_ONLY";
+  if (!info) {
+    return {
+      disable_comment: true,
+      disable_duet: true,
+      disable_stitch: true,
+    };
+  }
+  return {
+    disable_comment: info.commentDisabled,
+    disable_duet: info.duetDisabled || isPrivate,
+    disable_stitch: info.stitchDisabled || isPrivate,
+  };
 }
 
 /**
@@ -252,9 +315,7 @@ export async function publishToTikTok(params: {
       post_info: {
         title: params.caption.slice(0, MAX_TITLE),
         privacy_level: privacy,
-        disable_duet: false,
-        disable_comment: false,
-        disable_stitch: false,
+        ...interactionFlags(info, privacy),
       },
       source_info: {
         source: "PULL_FROM_URL",
@@ -272,8 +333,17 @@ export async function publishToTikTok(params: {
   // trap Reddit sets (see reddit.ts). `res.ok` alone is not success.
   const code = data.error?.code;
   if (!res.ok || (code && code !== "ok") || !data.data?.publish_id) {
+    const raw = data.error?.message ?? "";
+    // TikTok answers a compliance rejection with nothing but a link to its
+    // guidelines. That names no cause, so translate it into the things it
+    // actually is for us, in the order they are worth checking.
+    const vague = /content-sharing-guidelines|integration guidelines/i.test(
+      raw,
+    );
     throw new Error(
-      data.error?.message ?? `TikTok rejected the post (${res.status})`,
+      vague
+        ? "TikTok refused the post under its sharing guidelines. The usual causes, in order: the app is unaudited so the post must be SELF_ONLY; the media domain isn't verified in the TikTok portal; or the post tried to re-enable comments/duet/stitch the creator has switched off."
+        : raw || `TikTok rejected the post (${res.status})`,
     );
   }
   return { publishId: data.data.publish_id, privacy };

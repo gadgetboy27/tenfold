@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { encryptProfileTokens } from "@/lib/social/token-crypto";
+import { canonicalMediaUrl, checkMediaReachable } from "@/lib/social/media-url";
 import { publishToBluesky } from "./bluesky";
 import { publishToReddit, refreshRedditToken } from "./reddit";
 import { publishToPinterest, refreshPinterestToken } from "./pinterest";
@@ -241,6 +242,14 @@ export async function publishDirect(
       caption,
     });
     return id;
+  }
+
+  // Prove the media exists before any platform is asked to fetch it. Every
+  // direct backend hands over a URL rather than bytes, so a missing file comes
+  // back as the platform's own vague refusal instead of "the file is gone".
+  const reach = await checkMediaReachable(canonicalMediaUrl(mediaUrl));
+  if (!reach.ok) {
+    throw new Error(`Can't publish to ${platform}: ${reach.reason}.`);
   }
 
   if (platform === "tiktok") {

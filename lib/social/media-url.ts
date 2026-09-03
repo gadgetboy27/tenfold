@@ -52,3 +52,70 @@ export function canonicalMediaUrl(url: string): string {
     return url;
   }
 }
+
+/**
+ * Prove the media is really there before handing a platform its URL.
+ *
+ * Every direct backend passes a URL and lets the PLATFORM fetch it. So when a
+ * Storage object is missing, the failure surfaces as the platform's own
+ * generic complaint — TikTok answers "review our integration guidelines",
+ * which names nothing and sends you looking for a policy problem that doesn't
+ * exist. Three of this project's assets are already missing from Storage
+ * (rows that outlived their files), so this is not hypothetical.
+ *
+ * A HEAD is cheap and catches the two cases that matter: the object is gone,
+ * and the object is there but empty. Anything else — a redirect, a 405 on
+ * HEAD, a transient blip — is deliberately NOT treated as fatal: this exists
+ * to turn a confusing failure into a clear one, never to invent a new way for
+ * a good publish to be refused.
+ *
+ * Note the 3xx check earns its place beyond emptiness: TikTok's PULL_FROM_URL
+ * rejects any redirect outright, so a URL that merely *works* in a browser can
+ * still be unusable there.
+ */
+export async function checkMediaReachable(
+  url: string,
+  timeoutMs = 8000,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      method: "HEAD",
+      redirect: "manual",
+      signal: ctl.signal,
+    });
+    if (res.status >= 300 && res.status < 400) {
+      return {
+        ok: false,
+        reason:
+          "the file's URL redirects, and TikTok refuses redirected media — check for a Cloudflare rule in front of the storage host",
+      };
+    }
+    if (res.status === 404 || res.status === 410) {
+      return {
+        ok: false,
+        reason:
+          "the video file is missing from storage (the asset row outlived its file) — re-export it and try again",
+      };
+    }
+    // Some hosts refuse HEAD; that is not evidence of a missing file.
+    if (res.status === 405 || res.status === 501) return { ok: true };
+    if (!res.ok) return { ok: true };
+
+    const len = Number(res.headers.get("content-length") ?? "-1");
+    if (len === 0) {
+      return {
+        ok: false,
+        reason:
+          "the video file is empty (0 bytes) — re-export it and try again",
+      };
+    }
+    return { ok: true };
+  } catch {
+    // Network blip or timeout: say nothing rather than block a real publish.
+    return { ok: true };
+  } finally {
+    clearTimeout(timer);
+  }
+}

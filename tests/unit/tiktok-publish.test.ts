@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { canonicalMediaUrl } from "@/lib/social/media-url";
-import { resolvePrivacy } from "@/lib/social/direct/tiktok";
+import { resolvePrivacy, interactionFlags } from "@/lib/social/direct/tiktok";
 
 /**
  * TikTok's three failure modes that don't look like failures, plus the one
@@ -71,6 +71,9 @@ describe("privacy never exceeds what the account allows", () => {
     nickname: null,
     privacyOptions: opts as never,
     maxDurationSec: null,
+    commentDisabled: false,
+    duetDisabled: false,
+    stitchDisabled: false,
   });
 
   it("downgrades PUBLIC to SELF_ONLY on an unaudited app", () => {
@@ -149,5 +152,85 @@ describe("the adapter guards TikTok's quiet failures", () => {
   it("waits for a rejection before reporting success", () => {
     const idx = readFileSync("lib/social/direct/index.ts", "utf8");
     expect(idx).toContain("awaitTikTokAcceptance");
+  });
+});
+
+/**
+ * The rejection that cost an afternoon: TikTok answered a publish with nothing
+ * but a link to its content-sharing guidelines. The adapter was hardcoding
+ * disable_comment/duet/stitch to false, which asks TikTok to override the
+ * creator — and, on a SELF_ONLY post, to allow duets on a video nobody can see.
+ */
+describe("interaction flags respect the creator, not our defaults", () => {
+  const info = (over = {}) => ({
+    nickname: null,
+    privacyOptions: [] as never,
+    maxDurationSec: null,
+    commentDisabled: false,
+    duetDisabled: false,
+    stitchDisabled: false,
+    ...over,
+  });
+
+  it("disables duet and stitch on a private post", () => {
+    // A SELF_ONLY video cannot be duetted — nobody else can see it. Asking for
+    // both is the contradiction TikTok refuses.
+    const f = interactionFlags(info(), "SELF_ONLY");
+    expect(f.disable_duet).toBe(true);
+    expect(f.disable_stitch).toBe(true);
+  });
+
+  it("leaves duet and stitch alone on a public post", () => {
+    const f = interactionFlags(info(), "PUBLIC_TO_EVERYONE");
+    expect(f.disable_duet).toBe(false);
+    expect(f.disable_stitch).toBe(false);
+  });
+
+  it("never re-enables what the creator switched off", () => {
+    const f = interactionFlags(
+      info({ commentDisabled: true, duetDisabled: true, stitchDisabled: true }),
+      "PUBLIC_TO_EVERYONE",
+    );
+    expect(f).toEqual({
+      disable_comment: true,
+      disable_duet: true,
+      disable_stitch: true,
+    });
+  });
+
+  it("disables everything when creator_info is unavailable", () => {
+    // Restrictive is the safe direction: it can only ask for LESS than allowed.
+    expect(interactionFlags(null, "PUBLIC_TO_EVERYONE")).toEqual({
+      disable_comment: true,
+      disable_duet: true,
+      disable_stitch: true,
+    });
+  });
+
+  it("does not disable comments merely because the post is private", () => {
+    // Private posts can still be commented on by the owner; only duet/stitch
+    // are structurally impossible. Over-disabling would be its own bug.
+    expect(interactionFlags(info(), "SELF_ONLY").disable_comment).toBe(false);
+  });
+});
+
+describe("the media is checked before a platform is asked to fetch it", () => {
+  const src = readFileSync("lib/social/direct/index.ts", "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/.*$/gm, "");
+
+  it("pre-flights every direct publish, not just TikTok", () => {
+    expect(src).toContain("checkMediaReachable");
+    // Must sit before the platform branches, or it only guards whichever
+    // network happens to be checked first.
+    expect(src.indexOf("checkMediaReachable")).toBeLessThan(
+      src.indexOf('platform === "tiktok"'),
+    );
+  });
+
+  it("translates TikTok's contentless rejection into causes", () => {
+    const tt = readFileSync("lib/social/direct/tiktok.ts", "utf8");
+    expect(tt).toContain("content-sharing-guidelines");
+    expect(tt).toMatch(/unaudited|SELF_ONLY/);
   });
 });
