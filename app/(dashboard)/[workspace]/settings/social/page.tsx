@@ -362,8 +362,15 @@ const PLATFORMS: PlatformGuide[] = [
         },
       },
       {
+        // "30 days old (TikTok API requirement)" was asserted here for a long
+        // time and is NOT in TikTok's Content Posting API documentation, which
+        // states no minimum account age, follower count or account type. It
+        // came from the same Ayrshare-era block that wrongly demanded a
+        // Business account. Kept as an observation, not a rule, because a very
+        // new account may still be caught by TikTok's own spam heuristics —
+        // but nobody should be told to wait a month on our say-so.
         instruction:
-          "Ensure the account is at least 30 days old (TikTok API requirement)",
+          "A well-established account is less likely to trip TikTok's spam checks — not a documented requirement",
       },
     ],
     checklist: [
@@ -375,8 +382,8 @@ const PLATFORMS: PlatformGuide[] = [
       { key: "phone_verified", label: "Phone number verified", required: true },
       {
         key: "account_age",
-        label: "Account is at least 30 days old",
-        required: true,
+        label: "Account is established (not brand new)",
+        required: false,
       },
     ],
   },
