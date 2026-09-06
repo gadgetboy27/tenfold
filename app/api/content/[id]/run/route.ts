@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { runContentPipeline } from "@/lib/content-agent";
+import { isInternalRequest } from "@/lib/api/ops-auth";
 
 interface PipelineRequest {
   workspaceId: string;
@@ -16,8 +17,7 @@ export async function POST(
   try {
     const { id } = await params;
     // Verify internal secret (prevents unauthorized pipeline triggers)
-    const secret = req.headers.get("x-internal-secret");
-    if (secret !== (process.env.CRON_SECRET || "dev-secret")) {
+    if (!isInternalRequest(req)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

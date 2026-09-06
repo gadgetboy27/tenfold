@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { isOpsRequest } from "@/lib/api/ops-auth";
 import {
   buildModelReviewReport,
   sendModelReviewEmail,
@@ -9,9 +10,7 @@ import {
 // registries + variety-pack pick counts and emails the operator so a human can
 // decide what to swap. Auth mirrors the analytics cron (Bearer CRON_SECRET).
 export async function GET(req: Request) {
-  const authHeader = req.headers.get("Authorization");
-  const expectedToken = `Bearer ${process.env.CRON_SECRET || "dev-secret"}`;
-  if (authHeader !== expectedToken) {
+  if (!isOpsRequest(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

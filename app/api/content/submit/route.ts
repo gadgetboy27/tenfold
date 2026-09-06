@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { internalSecretHeader } from "@/lib/api/ops-auth";
 import { submitContentSchema } from "@/lib/validation/content-schemas";
 import { runContentPipeline } from "@/lib/content-agent";
 import { v4 as uuidv4 } from "uuid";
@@ -94,10 +95,19 @@ export async function POST(req: Request) {
     } else {
       // Non-Vercel platforms: trigger via dedicated endpoint (non-blocking fetch)
       const pipelineUrl = `${process.env.APP_URL}/api/content/${submissionId}/run`;
+      // Null when CRON_SECRET is unset — the receiver now fails closed, so
+      // firing the request anyway would only ever earn a 401. Say why instead.
+      const internal = internalSecretHeader();
+      if (!internal) {
+        console.error(
+          "Pipeline trigger skipped: CRON_SECRET is not set on this deployment",
+        );
+        return NextResponse.json({ submissionId }, { status: 201 });
+      }
       fetch(pipelineUrl, {
         method: "POST",
         headers: {
-          "x-internal-secret": process.env.CRON_SECRET || "dev-secret",
+          ...internal,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({

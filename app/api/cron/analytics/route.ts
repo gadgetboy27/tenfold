@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { isOpsRequest } from "@/lib/api/ops-auth";
 import {
   generateAnalyticsReport,
   sendAnalyticsEmail,
@@ -7,10 +8,7 @@ import {
 
 export async function GET(req: Request) {
   try {
-    const authHeader = req.headers.get("Authorization");
-    const expectedToken = `Bearer ${process.env.CRON_SECRET || "dev-secret"}`;
-
-    if (authHeader !== expectedToken) {
+    if (!isOpsRequest(req)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { timingSafeEqual } from "crypto";
 import { db } from "@/db";
 import { workspaces } from "@/db/schema";
 import { createClient } from "@supabase/supabase-js";
 import { serverPublicEnv } from "@/lib/env/public-server";
+import { isOpsRequest } from "@/lib/api/ops-auth";
 
 /**
  * GET /api/health — liveness probe (public) + deployment diagnostics (ops-only).
@@ -16,32 +16,14 @@ import { serverPublicEnv } from "@/lib/env/public-server";
  *
  * The diagnostics are kept, not deleted: they're the fastest way to answer that
  * question again, and losing them would just mean re-adding a worse version
- * under pressure. They now sit behind `?verbose=1` + the ops secret.
+ * under pressure. They now sit behind `?verbose=1` + the ops secret
+ * (`lib/api/ops-auth.ts`, which fails closed when CRON_SECRET is unset).
  *
  * The DEFAULT response stays public and unauthenticated on purpose — uptime
  * monitors need an endpoint that answers without a credential — but it says
  * only whether the database answered. Nothing in it identifies the deployment,
  * its infrastructure, or anyone using it.
  */
-
-/**
- * Ops auth for the verbose payload. Mirrors the cron routes' Bearer convention
- * but **fails closed**: an unset CRON_SECRET denies, where the crons fall back
- * to a literal "dev-secret". A fallback constant that lives in the repo is not
- * a secret, and this endpoint is exactly where that stops being theoretical.
- */
-function isOpsRequest(req: Request): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false;
-  const provided = req.headers.get("Authorization") ?? "";
-  const expected = `Bearer ${secret}`;
-  const a = Buffer.from(provided);
-  const b = Buffer.from(expected);
-  // timingSafeEqual throws on a length mismatch, which is itself a signal —
-  // compare lengths first so both paths cost the same.
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
-}
 
 export async function GET(req: Request) {
   const verbose = new URL(req.url).searchParams.get("verbose") === "1";

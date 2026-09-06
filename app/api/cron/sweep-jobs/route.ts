@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { sweepStalledJobs, STALL_MINUTES } from "@/lib/jobs/sweep";
+import { isOpsRequest } from "@/lib/api/ops-auth";
 
 // GET /api/cron/sweep-jobs — settle fal jobs whose webhook never arrived.
 //
@@ -13,9 +14,7 @@ import { sweepStalledJobs, STALL_MINUTES } from "@/lib/jobs/sweep";
 // ?minutes=N overrides the staleness threshold (floored at 15 to make it hard
 // to fat-finger a sweep of live jobs).
 export async function GET(req: Request) {
-  const authHeader = req.headers.get("Authorization");
-  const expectedToken = `Bearer ${process.env.CRON_SECRET || "dev-secret"}`;
-  if (authHeader !== expectedToken) {
+  if (!isOpsRequest(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

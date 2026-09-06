@@ -235,11 +235,13 @@ rows above all have working adapters and no credentials. Absent credentials a
 connect route returns 503 ("isn't configured on this deployment yet") rather
 than redirecting into a broken OAuth URL.
 
-> ⚠️ **Meta is the exception, and it's a bug.** `connect/facebook` does not
-> call `isPlatformConfigured` — `getMetaOAuthUrl` reads `process.env.META_APP_ID!`
-> with a non-null assertion, so a deployment without it redirects to Facebook
-> with `client_id=undefined` instead of answering 503. Harmless on production
-> today (the var is set), wrong on any deployment that lacks it.
+**Every connect route reads `isPlatformConfigured`, Meta included** (fixed
+2026-09-06). `connect/facebook` used to skip it, and because `getMetaOAuthUrl`
+reads `process.env.META_APP_ID!` behind a non-null assertion, a deployment
+without that var redirected to Facebook with `client_id=undefined` and let Meta
+show the error — while every other platform answered a clean 503. If you add a
+platform, wire it into `configured.ts` and read it from the connect route; a
+second copy of the condition is a copy that drifts.
 
 **Bluesky is the exception that needs nothing.** No developer app, no review,
 no environment variable — the user pastes a handle and an app password and it
