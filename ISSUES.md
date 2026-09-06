@@ -607,7 +607,7 @@ timeout or fake timers. **Fixed:** both cases now carry an explicit 20s
 timeout. It had already masked real signal twice — the worst kind of flake,
 because it trains you to ignore red.
 
-### 🟡 20. All six marketing networks now publish direct — awaiting credentials
+### 🟡 20. All six marketing networks now publish direct — TikTok cleared, two to go
 
 Of the six networks that actually matter for marketing, four were already
 direct: **Facebook, Instagram** (Meta Graph) and **Reddit, Pinterest** (own
@@ -644,6 +644,23 @@ Nothing but approvals now stands between these and working:
 **Only X, Threads, Snapchat, GMB and Telegram remain Ayrshare-only** — the
 "fluff" tier. With Ayrshare gated off they show the honest unavailable state
 (#​: see the Ayrshare gate commit) rather than a dead Connect button.
+
+**Update 2026-09-06 — TikTok has cleared; the direction is now standalone.**
+`TIKTOK_CLIENT_KEY` is set on the `tenfold` Railway service and a TikTok
+account is connected and publishing, so the row above is satisfied for TikTok
+and it is no longer "awaiting credentials". Verified against Railway, not
+inferred from the connect route.
+
+Production now runs entirely on connections we own: `AYRSHARE_ENABLED` is
+unset **and** `OUTSTAND_API_KEY` (the per-post broker) is unset, so both paid
+intermediaries are dark and every post goes out over a workspace's own
+credential. Live today: **Bluesky, Facebook, Instagram, TikTok**. Still
+needing an app: **LinkedIn, Reddit, Pinterest, YouTube** — note Reddit and
+Pinterest are described above as "already direct", which was true of the *code*
+and never of the credentials; neither has ever had an app on production.
+
+See root `CLAUDE.md` §7d for the current per-platform table and how to
+re-verify it.
 
 ### ✅ 21. "Video isn't working" — it was, the UI gave up first *(fixed)*
 

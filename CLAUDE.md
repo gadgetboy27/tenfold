@@ -178,48 +178,79 @@ Agency/Business add-on gating. See the `image-compositing` skill
 
 ---
 
-## 7d. Publishing Backends — three, not one
+## 7d. Publishing Backends — our own connections first
 
 `POST /api/publish` fans each requested platform out to one of three backends.
 Which one handles a platform is decided by cost of _access_, not by code taste:
 
-| Backend                           | Platforms                                                      | Cost               |
-| --------------------------------- | -------------------------------------------------------------- | ------------------ |
-| Meta Graph (`lib/social/meta.ts`) | Facebook, Instagram                                            | free               |
-| Direct (`lib/social/direct/`)     | Bluesky, Reddit, Pinterest, LinkedIn, TikTok, YouTube          | free               |
-| Ayrshare (`lib/ayrshare/`)        | X, Threads, Snapchat, GMB, Telegram                            | $599/mo (Business) |
+| Backend                           | Platforms                                             | Cost               |
+| --------------------------------- | ----------------------------------------------------- | ------------------ |
+| Meta Graph (`lib/social/meta.ts`) | Facebook, Instagram                                   | free               |
+| Direct (`lib/social/direct/`)     | Bluesky, TikTok, LinkedIn, Reddit, Pinterest, YouTube | free               |
+| Ayrshare (`lib/ayrshare/`)        | X, Threads, Snapchat, GMB, Telegram                   | $599/mo (Business) |
 
-**Ayrshare is opt-in as of 2026-08-15** — gated on `AYRSHARE_ENABLED === "true"`
-in the publish route and the profiles route. The code is deliberately kept
-whole, not deleted: it's turned back on with one env var once paying customers
-justify the subscription. Anything that touches publishing must keep working
-with it off.
+**The direction is standalone connections, and as of 2026-09-06 production
+runs entirely on them.** Both paid intermediaries are dark: `AYRSHARE_ENABLED`
+is unset (the gate wants the literal `"true"`), and `OUTSTAND_API_KEY` — the
+per-post broker in `lib/social/broker/` — is unset too, so `isBrokerEnabled()`
+is false. Every post that leaves this product today goes out over a credential
+the workspace owns, through Meta Graph or an adapter in `lib/social/direct/`.
 
-The direct backend started with Bluesky, Reddit and Pinterest because their
-posting API is reachable without a paid tier or a platform app review. **That
-access cost is the selection rule** — X, Threads, Snapchat, GMB and Telegram
-are not "not done yet", they are on Ayrshare precisely because their access
-costs money and weeks of review queue. Don't move one down a tier without
-checking that's changed.
+Neither integration is deleted, and that is deliberate: each is one env var
+away from coming back if a network's direct route closes. **Anything that
+touches publishing must keep working with both off** — that is the normal
+case now, not the fallback.
 
-LinkedIn, TikTok and YouTube have since moved down: each has a working adapter
-in `lib/social/direct/`, so the code no longer needs Ayrshare. **An adapter is
-not the same as access**, and this is where that distinction bites — a direct
-adapter still publishes nothing until its developer app exists AND clears the
-platform's own gate.
+### What is actually live — verify, don't inherit
 
-**As of 2026-09-02, NO direct backend has credentials on production.** Verified
-by hitting every connect route: `linkedin`, `reddit`, `pinterest`, `tiktok` and
-`youtube` all answer 503 "isn't configured on this deployment yet". This line
-previously claimed Reddit and LinkedIn were configured; they are not, and that
-claim cost real debugging time. Meta (Facebook/Instagram) is the only backend
-with working credentials.
+`lib/social/configured.ts` is the single source of truth: `isPlatformConfigured`
+maps each platform to the one env var its connect route needs, and the settings
+badge and the 503 both read it, so a platform cannot advertise itself as ready
+and then refuse the click.
+
+Verified 2026-09-06 against the `tenfold` Railway service (see
+`railway-service-topology` — a bare `railway` command hits `sweep-cron`):
+
+| Platform            | Gate env var         | Prod  |
+| ------------------- | -------------------- | ----- |
+| Bluesky             | _none — always on_   | ✅    |
+| Facebook, Instagram | `META_APP_ID`        | ✅    |
+| TikTok              | `TIKTOK_CLIENT_KEY`  | ✅    |
+| LinkedIn            | `LINKEDIN_CLIENT_ID` | ❌    |
+| Reddit              | `REDDIT_CLIENT_ID`   | ❌    |
+| Pinterest           | `PINTEREST_APP_ID`   | ❌    |
+| YouTube             | `YOUTUBE_CLIENT_ID`  | ❌    |
+
+**Re-verify this table rather than trusting it.** It has been wrong in both
+directions: it once claimed Reddit and LinkedIn were configured when they were
+not, and the correction that fixed that then went stale the other way, claiming
+"NO direct backend has credentials" while Bluesky and TikTok were live and
+posting. The cheapest check is `?verbose=1` on `GET /api/health` with the ops
+Bearer token, which reports the gate vars directly; `railway variables --service
+tenfold` is the fuller answer.
+
+**An adapter is not the same as access.** A direct adapter publishes nothing
+until its developer app exists AND clears the platform's own gate — the four ❌
+rows above all have working adapters and no credentials. Absent credentials a
+connect route returns 503 ("isn't configured on this deployment yet") rather
+than redirecting into a broken OAuth URL.
+
+> ⚠️ **Meta is the exception, and it's a bug.** `connect/facebook` does not
+> call `isPlatformConfigured` — `getMetaOAuthUrl` reads `process.env.META_APP_ID!`
+> with a non-null assertion, so a deployment without it redirects to Facebook
+> with `client_id=undefined` instead of answering 503. Harmless on production
+> today (the var is set), wrong on any deployment that lacks it.
 
 **Bluesky is the exception that needs nothing.** No developer app, no review,
 no environment variable — the user pastes a handle and an app password and it
 works, and its adapter handles image AND video. It is therefore the cheapest
 second network by a wide margin, and the only one that can be switched on
 without waiting on a platform.
+
+The remaining Ayrshare-only names — X, Threads, Snapchat, GMB, Telegram — are
+not "not done yet". They are there because their access costs money and weeks
+of review queue, and with Ayrshare off they currently have no route at all.
+Don't move one down a tier without checking that's changed.
 
 The per-platform gates, for when credentials do get added:
 
@@ -240,13 +271,17 @@ The per-platform gates, for when credentials do get added:
   the same paths. The adapter also queries `creator_info` for the account's
   real privacy options, and briefly polls the publish status, because TikTok
   accepts a video for processing and can reject it afterwards.
+  Its access token lives ~24h, so the refresh path in `lib/social/direct/index.ts`
+  (`getUsableToken` → `refreshTikTokToken`) is load-bearing for every publish,
+  not an edge case — an expired token with a refresh token is the normal state.
 - **YouTube** — `youtube.upload` is a Google restricted scope: test users only
   until OAuth verification, and ~6 uploads/day against the default quota.
 
-Absent credentials, each connect route returns a 503 ("isn't configured on this
-deployment yet") rather than redirecting into a broken OAuth URL. TikTok and
-YouTube therefore stay listed in `lib/social/broker/outstand.ts`'s
-`BROKER_PLATFORMS` until their own gate clears.
+`BROKER_PLATFORMS` in `lib/social/broker/outstand.ts` still lists TikTok and
+YouTube alongside the five Ayrshare names, which is correct and costs nothing:
+`shouldBroker` returns false whenever a direct connection exists, and false
+outright while `OUTSTAND_API_KEY` is unset. The list is the set of platforms a
+broker _could_ serve, not a claim about how they publish today.
 
 Per-network notes worth knowing before touching `lib/social/direct/`:
 
@@ -267,6 +302,12 @@ Reddit and Pinterest need a destination the caption can't carry; it's stored on
 `social_profiles.metadata` (`default_subreddit` / `default_board_id`) via
 `POST /api/social/destination` and overridable per publish.
 
+**Stored credentials are encrypted at rest** (`lib/social/token-crypto.ts`,
+`SOCIAL_TOKEN_KEY` — set on production). A deployment WITHOUT the key reads
+every encrypted row back as `null`, so all connections present as dead and
+nothing publishes. That is the expected symptom when running locally against
+the production database with the key absent from `.env`; it is a missing key,
+not a broken connection.
 ---
 
 ## 8. Forbidden Patterns
