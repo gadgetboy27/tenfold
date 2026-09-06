@@ -148,10 +148,22 @@ Every terminal outcome for a fal job runs through the webhook, **including
 wrong, the service redeploys mid-fire) leaves the job in `processing` forever
 and the user's credits gone with no recovery path anywhere else in the app.
 
-`lib/jobs/sweep.ts` + `GET /api/cron/sweep-jobs` is that path. Auth mirrors the
-other crons (Bearer `CRON_SECRET`). **Not scheduled automatically** — Railway
-crons are configured per-service in the dashboard (Settings → Cron Schedule),
-so this needs registering by hand; hourly (`0 * * * *`) is the intent.
+`lib/jobs/sweep.ts` + `GET /api/cron/sweep-jobs` is that path. Auth is
+`isOpsRequest` (`lib/api/ops-auth.ts`) — Bearer `CRON_SECRET`, **failing
+closed**: an unset secret denies rather than falling back to a constant, so a
+deployment that loses the var loses the sweep instead of opening it to
+everyone.
+
+**It IS registered** (verified 2026-09-06), as its own Railway service
+`sweep-cron` — an alpine image carrying `APP_URL` + `CRON_SECRET` that curls
+the endpoint, separate from the `tenfold` app service. Railway crons are
+configured per-service in the dashboard (Settings → Cron Schedule), which is
+why it's a second service rather than a line in this repo, and why nothing here
+would tell you it exists. `railway service list` and `railway variables
+--service sweep-cron` are how to check; hourly (`0 * * * *`) is the intent.
+This section previously said it was NOT scheduled and had to be registered by
+hand — it had been, and acting on that line means running a sweep that is
+already running.
 
 Three rules it must keep:
 
