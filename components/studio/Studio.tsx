@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
+import { confirmToast } from "@/components/shared/confirmToast";
 import {
   PenLine,
   Images as ImagesIcon,
@@ -18,6 +19,7 @@ import {
   Sparkles,
   Check,
   Loader2,
+  Trash2,
   ArrowRight,
   ArrowLeft,
   Share2,
@@ -1413,9 +1415,14 @@ export function Studio({
       icon: Shapes,
       // Workspace-level, not per-project — see the progress route's note.
       done: !!progress?.done.logo,
-      // Renders the full Logo & Brand studio inline when enabled; only falls
-      // back to the classic page if the builder flag is off.
-      ...(logoEnabled ? {} : { classicHref: `/${workspaceSlug}/logo` }),
+      disabled: !logoEnabled,
+      disabledTitle: "The logo builder isn't switched on for this deployment",
+      // No classicHref, ever. /[workspace]/logo is gated on the SAME
+      // FEATURE_LOGO_BUILDER flag as this panel and calls notFound() when it's
+      // off — so the "Open in classic" fallback could only ever appear when its
+      // target was guaranteed to 404. There is no non-flagged logo page to fall
+      // back TO; when the flag is off the feature is simply absent — which is
+      // what the `disabled` above now says, instead of a link into a 404.
     },
     {
       id: "publish",
@@ -3278,6 +3285,47 @@ function ProjectsCanvas({
   const [images, setImages] = useState<GalleryImage[]>([]);
   const [imagesLoading, setImagesLoading] = useState(true);
   const [reusing, setReusing] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  /**
+   * Throw a whole project away — the only way to clear one that broke.
+   *
+   * DELETE /api/campaigns/[id] already removed the storage objects and
+   * cascaded assets/creative_jobs/compositions; it simply had no caller in the
+   * UI, so a half-generated project stayed in the list forever with its data
+   * behind it. Confirmed through a toast card rather than window.confirm — see
+   * components/shared/confirmToast.tsx for why that distinction matters here.
+   *
+   * The row is dropped from local state rather than re-fetching: the list is
+   * already correct minus one, and a refetch would make a deliberate action
+   * look like a page flicker.
+   */
+  const deleteProject = async (p: ProjectSummary) => {
+    const ok = await confirmToast({
+      title: `Delete "${p.name || "Untitled"}"?`,
+      body: "Its images, videos, music and exports are deleted too. This can't be undone, and anything already published stays up on the platform it went to.",
+      confirmLabel: "Delete project",
+    });
+    if (!ok) return;
+    setDeleting(p.id);
+    try {
+      const res = await api(`/api/campaigns/${p.id}`, {
+        method: "DELETE",
+        workspaceSlug,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok)
+        throw new Error(data?.error ?? "Couldn't delete that project");
+      setList((l) => l.filter((x) => x.id !== p.id));
+      toast.success("Project deleted");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Couldn't delete that project",
+      );
+    } finally {
+      setDeleting(null);
+    }
+  };
 
   useEffect(() => {
     const saved = localStorage.getItem("tf-studio-projects-view");
@@ -3521,19 +3569,43 @@ function ProjectsCanvas({
                     <ImagesIcon className="h-6 w-6 text-muted-foreground/40" />
                   )}
                 </button>
-                {p.anchor_asset_id && (
+                {/* Publish + delete share the corner. Delete is always
+                    offered — a project with no anchor is exactly the broken
+                    one most worth throwing away, so gating it behind
+                    anchor_asset_id like publish would hide it precisely when
+                    it's needed. */}
+                <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                  {p.anchor_asset_id && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpen(p.id, "publish");
+                      }}
+                      title="Publish this project"
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-primary"
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                   <button
                     type="button"
+                    disabled={deleting === p.id}
                     onClick={(e) => {
                       e.stopPropagation();
-                      onOpen(p.id, "publish");
+                      void deleteProject(p);
                     }}
-                    title="Publish this project"
-                    className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity hover:bg-primary group-hover:opacity-100"
+                    title="Delete this project and everything in it"
+                    aria-label={`Delete ${p.name || "Untitled"}`}
+                    className="flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-red-600 disabled:opacity-50"
                   >
-                    <Send className="h-3.5 w-3.5" />
+                    {deleting === p.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-3.5 w-3.5" />
+                    )}
                   </button>
-                )}
+                </div>
                 <button
                   type="button"
                   onClick={() => onOpen(p.id)}
@@ -3593,19 +3665,38 @@ function ProjectsCanvas({
                 <span className="w-16 shrink-0 text-right text-xs text-muted-foreground">
                   {timeAgo(p.created_at)}
                 </span>
-                {p.anchor_asset_id && (
+                <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                  {p.anchor_asset_id && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpen(p.id, "publish");
+                      }}
+                      title="Publish this project"
+                      className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-primary"
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                   <button
                     type="button"
+                    disabled={deleting === p.id}
                     onClick={(e) => {
                       e.stopPropagation();
-                      onOpen(p.id, "publish");
+                      void deleteProject(p);
                     }}
-                    title="Publish this project"
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground opacity-0 transition-opacity hover:text-primary group-hover:opacity-100"
+                    title="Delete this project and everything in it"
+                    aria-label={`Delete ${p.name || "Untitled"}`}
+                    className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-red-500 disabled:opacity-50"
                   >
-                    <Send className="h-3.5 w-3.5" />
+                    {deleting === p.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-3.5 w-3.5" />
+                    )}
                   </button>
-                )}
+                </div>
               </div>
             ))}
           </div>

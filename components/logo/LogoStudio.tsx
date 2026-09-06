@@ -8,6 +8,11 @@ import { LogoStallNotice, type LogoStall } from "./LogoStallNotice";
 import { LogoRefine } from "./LogoRefine";
 import { LogoEditor } from "./LogoEditor";
 import { LogoUpload } from "./LogoUpload";
+import {
+  rememberOpenLogo,
+  recallOpenLogo,
+  forgetOpenLogo,
+} from "@/lib/logo/open-project";
 import { BrandColors } from "./BrandColors";
 import { LogoLibrary, type LogoProjectSummary } from "./LogoLibrary";
 import type { LogoBrief as LogoBriefType } from "@/lib/logo/brief";
@@ -157,6 +162,7 @@ export function LogoStudio() {
     setError(null);
     setStallDismissed(false);
     setProjectId(id);
+    rememberOpenLogo(workspaceSlug, id);
   }
 
   function backToLibrary() {
@@ -166,7 +172,35 @@ export function LogoStudio() {
     }
     setProjectId(null);
     setState(null);
+    // Deliberately going back to the list IS the new position — otherwise the
+    // next visit drags you into the project you just chose to leave.
+    forgetOpenLogo(workspaceSlug);
   }
+
+  /**
+   * Come back to where you were.
+   *
+   * `projectId` lived only in component state, so any navigation away from
+   * Logo & brand — into the Compositor, out to Billing, a refresh — dropped
+   * you on the project LIST, with no indication that the thing you had open
+   * still existed. The work wasn't lost, but finding it again was a manual
+   * step every single time, and mid-edit that reads as "it forgot".
+   *
+   * localStorage, per workspace, same reasoning as Studio's `tf_last_section_`:
+   * a cursor position is personal to this browser, not workspace state worth a
+   * column and a migration. Restored once on mount; a project deleted or
+   * belonging to someone else simply fails its fetch and clears the pointer,
+   * so a stale id can't strand you on a permanent spinner.
+   */
+  useEffect(() => {
+    if (!workspaceSlug) return;
+    const saved = recallOpenLogo(workspaceSlug);
+    if (!saved) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time mount restore
+    setProjectId(saved);
+    // The poll effect below rehydrates everything else from server state, and
+    // clears this pointer itself if the project is gone (see its 404 branch).
+  }, [workspaceSlug]);
 
   // The workspace brand palette powers "apply brand palette" in the editor.
   // Fetched once from the existing brand-kit endpoint; absent kit → no button.
@@ -188,11 +222,25 @@ export function LogoStudio() {
       .catch(() => {});
   }, []);
 
-  const refresh = useCallback(async (id: string) => {
-    const res = await fetch(`/api/logo/${id}`);
-    if (!res.ok) return;
-    setState((await res.json()) as ProjectState);
-  }, []);
+  const refresh = useCallback(
+    async (id: string) => {
+      const res = await fetch(`/api/logo/${id}`);
+      if (!res.ok) {
+        // A restored pointer can outlive its project — deleted here, deleted in
+        // another tab, or belonging to a workspace this user has since left.
+        // Drop it and fall back to the library rather than polling forever at a
+        // 404, which is the "Generating… 0 of 6" stall in a different costume.
+        if (res.status === 404 || res.status === 403) {
+          forgetOpenLogo(workspaceSlug);
+          setProjectId(null);
+          setState(null);
+        }
+        return;
+      }
+      setState((await res.json()) as ProjectState);
+    },
+    [workspaceSlug],
+  );
 
   // Poll while a project exists and isn't finalized. Cleared on unmount and
   // when the project reaches a terminal state so we don't hammer the endpoint.
