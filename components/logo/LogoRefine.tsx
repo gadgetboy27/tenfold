@@ -21,6 +21,8 @@ interface LogoRefineProps {
   onFinalize: () => void;
   onReanchor: (assetId: string) => void;
   onEdit: () => void;
+  /** Layout & type — arrange the mark with a wordmark. Free, like onEdit. */
+  onLayout?: () => void;
   onPackage: () => void;
   packaging: boolean;
   bundle: { downloadUrl: string; fileCount: number } | null;
@@ -43,6 +45,7 @@ export function LogoRefine({
   onFinalize,
   onReanchor,
   onEdit,
+  onLayout,
   onPackage,
   packaging,
   bundle,
@@ -69,10 +72,15 @@ export function LogoRefine({
             className="h-full w-full object-contain p-6"
           />
         </div>
-        <div className="flex justify-center gap-3">
+        <div className="flex flex-wrap justify-center gap-3">
           <Button variant="outline" onClick={onEdit}>
-            Customise (free)
+            Colours (free)
           </Button>
+          {onLayout && (
+            <Button variant="outline" onClick={onLayout}>
+              Layout &amp; type (free)
+            </Button>
+          )}
           <Button asChild variant="outline">
             <a href={finalized.url} download>
               Download SVG

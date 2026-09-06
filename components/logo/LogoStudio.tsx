@@ -8,6 +8,7 @@ import { LogoStallNotice, type LogoStall } from "./LogoStallNotice";
 import { LogoRefine } from "./LogoRefine";
 import { LogoEditor } from "./LogoEditor";
 import { LogoUpload } from "./LogoUpload";
+import { LogoLayout } from "./LogoLayout";
 import {
   rememberOpenLogo,
   recallOpenLogo,
@@ -98,6 +99,11 @@ export function LogoStudio() {
   // "Use what arrived" — the user has accepted the partial set, so stop
   // explaining the shortfall and let them get on with picking one.
   const [stallDismissed, setStallDismissed] = useState(false);
+  // Layout & type view. Entered automatically after an import, and reachable
+  // from the finished logo — arranging a mark you already own is not the same
+  // job as generating alternatives to it.
+  const [layoutMode, setLayoutMode] = useState(false);
+  const [brandName, setBrandName] = useState("");
 
   // The "your logos" list, for re-opening past projects. Refreshed whenever we
   // return to the landing (no active project) so a just-finished logo appears.
@@ -155,6 +161,7 @@ export function LogoStudio() {
   // poll effect rehydrates concepts/refine/final from server state.
   function openProject(id: string) {
     setEditing(false);
+    setLayoutMode(false);
     setBundle(null);
     setBrandApplied(false);
     setExpectedMockups(0);
@@ -218,6 +225,11 @@ export function LogoStudio() {
             typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c),
         );
         setBrandPalette(palette);
+        // Prefills the wordmark, so an imported mark starts beside the user's
+        // OWN name rather than placeholder text they have to clear first.
+        if (typeof kit.business_name === "string")
+          setBrandName(kit.business_name);
+        else if (typeof kit.name === "string") setBrandName(kit.name);
       })
       .catch(() => {});
   }, []);
@@ -338,7 +350,13 @@ export function LogoStudio() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not start vectorize");
-      setProjectId(data.projectId as string);
+      const id = data.projectId as string;
+      setProjectId(id);
+      rememberOpenLogo(workspaceSlug, id);
+      // An IMPORT is not a generation. The user has told us this mark is
+      // already theirs, so the next screen is layout + type — not LogoRefine,
+      // whose buttons make new logos out of the one they just brought in.
+      setLayoutMode(true);
       refreshBalance();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
@@ -599,6 +617,40 @@ export function LogoStudio() {
   // the finished-logo view.
   const displayAnchor = anchorAsset ?? finalAsset;
 
+  // Layout & type — checked BEFORE the refine branch below, because that
+  // branch is what an import used to fall into. Free, client-side, no credits.
+  if (layoutMode && displayAnchor) {
+    return (
+      <div className="px-4 py-10">
+        {banner}
+        {backBar}
+        <LogoLayout
+          projectId={projectId!}
+          sourceUrl={displayAnchor.url}
+          initialName={brandName}
+          brandPalette={brandPalette}
+          onSaved={() => {
+            setLayoutMode(false);
+            void refresh(projectId!);
+          }}
+          // The AI path stays reachable — some people DO want concepts from
+          // their old mark. Offered as a deliberate second choice rather than
+          // the thing that happens to you.
+          onGenerateInstead={() => setLayoutMode(false)}
+        />
+        <div className="mt-6 text-center">
+          <button
+            type="button"
+            onClick={() => setLayoutMode(false)}
+            className="text-sm text-muted-foreground underline"
+          >
+            Back to logo
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Free editor (Phase 2): opened from the finished logo. Edits its SVG in the
   // browser and saves versions — no credits.
   if (editing && finalAsset) {
@@ -643,6 +695,7 @@ export function LogoStudio() {
           onFinalize={finalize}
           onReanchor={anchor}
           onEdit={() => setEditing(true)}
+          onLayout={() => setLayoutMode(true)}
           onPackage={packageLogo}
           packaging={packaging}
           bundle={bundle}
