@@ -14,7 +14,7 @@ and the wording is placed automatically the moment an anchor is picked.
 This is strictly better than placing type afterwards, and the reason is worth
 keeping: stamping a headline onto whatever the model happened to compose lands
 it on a focal point, which is why the Words tool needs a scrim so often. Saying
-it up front lets the model compose *around* the gap, so the result looks
+it up front lets the model compose _around_ the gap, so the result looks
 designed rather than covered up — and the auto-placed layer sets `scrim: false`,
 because reserved space doesn't need rescuing.
 
@@ -41,7 +41,7 @@ That distinction is the whole feature. Asking an image model for specific text
 is a request, not a constraint — a hot-sauce brief that never mentioned text
 came back with bottles reading "AUNCEAAN FLEANCE" and "RAME FOOUCH Côtlene
 HOTO". Routing text-bearing briefs to Ideogram (`lib/fal/text-in-image.ts`)
-made that much better; it did not make it *guaranteed*. This does.
+made that much better; it did not make it _guaranteed_. This does.
 
 - **Claude proposes how type should LOOK, never what it says.**
   `wordTreatmentSchema` has zone, font, colour, width and scrim — and **no
@@ -61,7 +61,7 @@ made that much better; it did not make it *guaranteed*. This does.
 - **Suggestions are free** — one small Claude call. Charging per suggestion
   would tax the exploration the tool exists to encourage.
 
-Still open: font *weight* isn't in the schema (each weight is another font file
+Still open: font _weight_ isn't in the schema (each weight is another font file
 to ship), and a user-supplied family needs upload + registration in
 `FONT_FILES`, plus a licensing confirmation — many commercial fonts forbid
 server-side embedding. Until then, don't offer a free-text font box: it would
@@ -72,11 +72,11 @@ preview correctly and export wrong.
 `<main>` is **tools left │ the ad centre │ generation right**. Picking a tool
 no longer replaces the screen; it changes only what the right rail is doing.
 
-| Pane   | What                    | Component                                    |
-| ------ | ----------------------- | -------------------------------------------- |
-| Left   | section nav, `w-200px`  | `StudioNav` (inside `Studio.tsx`)            |
-| Centre | **the ad being built**  | `AdStage.tsx` — mounted once, never unmounts |
-| Right  | the selected tool       | the per-`SectionId` switch, in an `<aside>`  |
+| Pane   | What                   | Component                                    |
+| ------ | ---------------------- | -------------------------------------------- |
+| Left   | section nav, `w-200px` | `StudioNav` (inside `Studio.tsx`)            |
+| Centre | **the ad being built** | `AdStage.tsx` — mounted once, never unmounts |
+| Right  | the selected tool      | the per-`SectionId` switch, in an `<aside>`  |
 
 **The centre never unmounts on a section change.** That's the whole design: it
 owns the campaign's `CompositionDoc` (loads `latestCompositionId`, autosaves
@@ -98,7 +98,7 @@ Three constraints that shaped this and will bite anyone who forgets them:
   layer"; `addVideoToAd` replaces the background and says so.
 - **An empty artboard cannot be persisted.** `background.src` is a required
   URL, so there is no such thing as a doc with no backdrop. Before anything is
-  placed, `AdStage` draws a *placeholder* at the store's new `pendingAspect`,
+  placed, `AdStage` draws a _placeholder_ at the store's new `pendingAspect`,
   and the first image chosen creates the real doc at that aspect.
 - **Captions reuse `CAPTION_LAYER_ID`.** Regenerating replaces the caption
   rather than stacking two overlapping text blocks — the same stable-id
@@ -112,11 +112,11 @@ narrow default and overflowing off-screen, which is exactly how the Logo editor
 ended up rendering "Apply brand pale…" and "Sa[ve version]" clipped at the
 viewport edge.
 
-| mode | who | the Ad stage |
-|---|---|---|
-| `narrow` (~400px) | generate-one-thing panels | keeps the centre |
-| `wide` (~620px) | Gallery, Publish — browsers and multi-step flows | keeps the centre |
-| `full` | Compositor, Logo — editors with their own canvas | **stands down** |
+| mode              | who                                              | the Ad stage     |
+| ----------------- | ------------------------------------------------ | ---------------- |
+| `narrow` (~400px) | generate-one-thing panels                        | keeps the centre |
+| `wide` (~620px)   | Gallery, Publish — browsers and multi-step flows | keeps the centre |
+| `full`            | Compositor, Logo — editors with their own canvas | **stands down**  |
 
 `full` replaced a hardcoded `section === "compositor"` exception. Anything with
 its own canvas and its own control columns belongs there: two canvases side by
@@ -129,7 +129,7 @@ clipped silently, which is why this was invisible until someone sent a
 screenshot. A panel that renders in the narrow rail must be ONE
 column; several (`CockpitCreate`, `CaptionCanvas`, `PublishCanvas`) had
 `lg:grid-cols-[…]` splits sized for the old full-width `<main>` and were
-collapsed. Note `lg:` is a *viewport* breakpoint, not a container one, so it
+collapsed. Note `lg:` is a _viewport_ breakpoint, not a container one, so it
 does NOT protect you inside a narrow rail — it will happily render two
 columns in 400px.
 
@@ -498,7 +498,7 @@ in one place for both sides.
   `true`; every other caller doesn't.
 - **The controls are visible at rest, not hover-revealed.** They started
   hidden, on the usual reasoning that a row of tiles should read as the work
-  rather than as a toolbar. Wrong trade here: the row exists *because* ten
+  rather than as a toolbar. Wrong trade here: the row exists _because_ ten
   near-identical clips piled up with no way to remove one, and a control you
   have to discover by hovering solves that for nobody.
 - **"Tidy N" — one confirm, keep one, bin the rest.** `removeAllBut` serves
@@ -514,7 +514,7 @@ in one place for both sides.
   "that's already published") name the actual reason and the fix; replacing
   them with a generic failure throws away the only useful part.
 - **Productions' "Publish" sets the pick first.** That page lists every export
-  a campaign has, so the button means *this* card — but Studio and
+  a campaign has, so the button means _this_ card — but Studio and
   `/api/publish` resolve the campaign's video, not the card's. Best-effort: a
   failed PATCH still opens the screen, where the strip can set it by hand.
 
@@ -584,7 +584,7 @@ panel reads top-to-bottom as make-it → drop-it → it's in the list.
 Every existing route onto the canvas decides placement FOR you: brand-apply
 pins the mark to a corner, the Words step puts lettering in the reserved zone.
 Both are good defaults and neither is a way to say "no, THERE". Marks and
-lettering are also the two things people want to fiddle with *before*
+lettering are also the two things people want to fiddle with _before_
 committing — the wording, the face, whether it needs a scrim — and doing that
 on the live canvas makes every experiment an edit to the ad.
 

@@ -1,3 +1,5 @@
+import { BRAND_FONTS, weightsFor } from "@/lib/composition/layers";
+
 /**
  * Client-side brand font loading for the compositor canvas. Canvas fillText
  * silently falls back to a system font if the family isn't loaded, so we
@@ -5,10 +7,14 @@
  * first paint (docs/tenfold-compositor-brief.md §3 — no FOUT in previews).
  */
 
+// Text faces carry both weights; display faces ship one cut, so asking for
+// :wght@700 on them would have Google serve 400 and the browser fake the rest.
 const GOOGLE_FAMILIES =
   "family=Inter:wght@400;700&family=Montserrat:wght@400;700" +
   "&family=Playfair+Display:wght@400;700&family=Lora:wght@400;700" +
-  "&family=Roboto:wght@400;700";
+  "&family=Roboto:wght@400;700" +
+  "&family=Anton&family=Bebas+Neue&family=Alfa+Slab+One" +
+  "&family=Bungee&family=Rye&family=Special+Elite";
 
 const LINK_ID = "tf-compositor-fonts";
 
@@ -31,11 +37,10 @@ export function ensureBrandFontsLoaded(): Promise<void> {
   // with — and canvas falls back SILENTLY, which is the whole failure mode
   // this module exists to prevent.
   loaded = Promise.all(
-    ["Inter", "Montserrat", "Playfair Display", "Lora", "Roboto"].flatMap(
-      (f) => [
-        document.fonts.load(`400 64px "${f}"`),
-        document.fonts.load(`700 64px "${f}"`),
-      ],
+    BRAND_FONTS.flatMap((f) =>
+      // Only the weights the family really has — see FONT_WEIGHTS. Loading a
+      // weight that doesn't exist resolves anyway and teaches nothing.
+      weightsFor(f).map((w) => document.fonts.load(`${w} 64px "${f}"`)),
     ),
   )
     .then(() => document.fonts.ready)

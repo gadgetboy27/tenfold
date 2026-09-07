@@ -50,6 +50,23 @@ const FONT_FILES: Record<string, Record<400 | 700, string>> = {
   },
   Lora: { 400: "Lora.ttf", 700: "Lora-Bold.ttf" },
   Roboto: { 400: "Roboto.ttf", 700: "Roboto-Bold.ttf" },
+  // Display faces ship one cut only; `weightOf` clamps to 400 for these, and
+  // fontFileFor's fallback covers a stored 700 that predates that clamp.
+  Anton: { 400: "Anton-Regular.ttf", 700: "Anton-Regular.ttf" },
+  "Bebas Neue": {
+    400: "BebasNeue-Regular.ttf",
+    700: "BebasNeue-Regular.ttf",
+  },
+  "Alfa Slab One": {
+    400: "AlfaSlabOne-Regular.ttf",
+    700: "AlfaSlabOne-Regular.ttf",
+  },
+  Bungee: { 400: "Bungee-Regular.ttf", 700: "Bungee-Regular.ttf" },
+  Rye: { 400: "Rye-Regular.ttf", 700: "Rye-Regular.ttf" },
+  "Special Elite": {
+    400: "SpecialElite-Regular.ttf",
+    700: "SpecialElite-Regular.ttf",
+  },
 };
 
 const BLEND_NEUTRAL: Record<Exclude<BlendMode, "normal">, string> = {

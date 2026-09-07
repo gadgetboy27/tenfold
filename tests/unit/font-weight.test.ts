@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { BRAND_FONTS, weightOf } from "@/lib/composition/layers";
+import { BRAND_FONTS, weightOf, weightsFor } from "@/lib/composition/layers";
 
 /**
  * Bold has to be a FILE, and these guard the gap between claiming it and
@@ -30,7 +30,28 @@ const EXPECTED: Record<string, Record<400 | 700, string>> = {
   },
   Lora: { 400: "Lora.ttf", 700: "Lora-Bold.ttf" },
   Roboto: { 400: "Roboto.ttf", 700: "Roboto-Bold.ttf" },
+  Anton: { 400: "Anton-Regular.ttf", 700: "Anton-Regular.ttf" },
+  "Bebas Neue": { 400: "BebasNeue-Regular.ttf", 700: "BebasNeue-Regular.ttf" },
+  "Alfa Slab One": {
+    400: "AlfaSlabOne-Regular.ttf",
+    700: "AlfaSlabOne-Regular.ttf",
+  },
+  Bungee: { 400: "Bungee-Regular.ttf", 700: "Bungee-Regular.ttf" },
+  Rye: { 400: "Rye-Regular.ttf", 700: "Rye-Regular.ttf" },
+  "Special Elite": {
+    400: "SpecialElite-Regular.ttf",
+    700: "SpecialElite-Regular.ttf",
+  },
 };
+
+/** Families that ship two real cuts. The rest are display faces, one cut. */
+const TWO_WEIGHT = new Set([
+  "Inter",
+  "Montserrat",
+  "Playfair Display",
+  "Lora",
+  "Roboto",
+]);
 
 /** usWeightClass out of the OS/2 table, and whether the font is variable. */
 function fontFacts(file: string): { weightClass: number; variable: boolean } {
@@ -67,7 +88,7 @@ describe("every offered weight has a file", () => {
   it("the Bold files are actually bold, and actually static", () => {
     // The bug this catches: shipping a variable font, or the Regular renamed.
     // Either previews bold and exports 400 — silently.
-    for (const family of BRAND_FONTS) {
+    for (const family of BRAND_FONTS.filter((f) => TWO_WEIGHT.has(f))) {
       const { weightClass, variable } = fontFacts(EXPECTED[family][700]);
       expect(weightClass, `${family} Bold usWeightClass`).toBe(700);
       expect(variable, `${family} Bold is still variable`).toBe(false);
@@ -80,11 +101,37 @@ describe("every offered weight has a file", () => {
     }
   });
 
-  it("Bold and Regular are different files", () => {
-    // Pointing both weights at one file is the lazy "fix" that reintroduces
-    // exactly the mismatch this whole change exists to remove.
+  it("no shipped font is variable", () => {
+    // A variable font renders its DEFAULT instance wherever axes can't be set,
+    // which is everywhere in this pipeline.
     for (const family of BRAND_FONTS) {
-      expect(EXPECTED[family][400]).not.toBe(EXPECTED[family][700]);
+      for (const w of [400, 700] as const) {
+        expect(fontFacts(EXPECTED[family][w]).variable, family).toBe(false);
+      }
+    }
+  });
+
+  it("Bold and Regular are different files where a Bold is claimed", () => {
+    // Pointing both weights at one file is the lazy "fix" that reintroduces
+    // exactly the mismatch this whole change exists to remove — but it is the
+    // CORRECT thing for a display face, which is why those don't offer 700.
+    for (const family of BRAND_FONTS) {
+      const twoFiles = EXPECTED[family][400] !== EXPECTED[family][700];
+      expect(twoFiles, `${family}`).toBe(TWO_WEIGHT.has(family));
+      expect(weightsFor(family).includes(700), `${family} offers 700`).toBe(
+        TWO_WEIGHT.has(family),
+      );
+    }
+  });
+
+  it("never offers a weight the family has no cut for", () => {
+    // The faux-bold trap: canvas SYNTHESISES bold for a single-weight family
+    // and looks convincing; drawtext opens the Regular file and renders
+    // Regular. Offering it would recreate the mismatch in a new place.
+    for (const family of BRAND_FONTS) {
+      for (const w of weightsFor(family)) {
+        expect(fontFacts(EXPECTED[family][w]).weightClass).toBe(w);
+      }
     }
   });
 });
@@ -92,11 +139,24 @@ describe("every offered weight has a file", () => {
 describe("weightOf", () => {
   it("defaults to Regular, so pre-existing compositions render unchanged", () => {
     expect(weightOf({})).toBe(400);
-    expect(weightOf({ weight: undefined })).toBe(400);
+    expect(weightOf({ font: "Inter", weight: undefined })).toBe(400);
   });
 
-  it("passes an explicit weight through", () => {
-    expect(weightOf({ weight: 700 })).toBe(700);
-    expect(weightOf({ weight: 400 })).toBe(400);
+  it("passes an explicit weight through when the family has it", () => {
+    expect(weightOf({ font: "Inter", weight: 700 })).toBe(700);
+    expect(weightOf({ font: "Inter", weight: 400 })).toBe(400);
+  });
+
+  it("clamps a Bold the family has no file for", () => {
+    // Belt and braces with the UI: a stored 700 can arrive from an older doc
+    // or a hand-edited payload, and the canvas must not fake what the export
+    // can't produce.
+    expect(weightOf({ font: "Anton", weight: 700 })).toBe(400);
+    expect(weightOf({ font: "Bebas Neue", weight: 700 })).toBe(400);
+    expect(weightOf({ font: "Special Elite", weight: 700 })).toBe(400);
+  });
+
+  it("clamps an unknown family rather than trusting it", () => {
+    expect(weightOf({ font: "Comic Sans MS", weight: 700 })).toBe(400);
   });
 });

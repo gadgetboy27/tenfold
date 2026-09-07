@@ -1,4 +1,8 @@
-import { SUPPORTED_FONTS, type SupportedFont } from "@/lib/logo/font-list";
+import {
+  BRAND_FONTS,
+  weightsFor,
+  type BrandFont,
+} from "@/lib/composition/layers";
 
 /**
  * What a tray item carries across a drag, and how a drop becomes a layer.
@@ -15,7 +19,7 @@ export type TrayItem =
       kind: "lettering";
       id: string;
       text: string;
-      font: SupportedFont;
+      font: BrandFont;
       fontSize: number;
       /** 400 or 700 — a weight is a FILE on the export side, see layers.ts. */
       weight?: 400 | 700;
@@ -46,10 +50,15 @@ export function parseTrayItem(raw: string | null | undefined): TrayItem | null {
     if (v?.kind === "lettering" && typeof v.text === "string") {
       return {
         ...v,
-        weight: v.weight === 700 ? 700 : 400,
+        // Clamped to what the chosen family has a FILE for: a display face
+        // ships one cut, and a stored 700 on one of those would preview as a
+        // browser-synthesised faux-bold the export cannot match.
+        weight: weightsFor(v.font).includes(v.weight ?? 400)
+          ? (v.weight ?? 400)
+          : 400,
         // A font that isn't renderable downstream would look right on the
         // canvas and wrong in the export — same rule as the logo lockup.
-        font: (SUPPORTED_FONTS as readonly string[]).includes(v.font)
+        font: (BRAND_FONTS as readonly string[]).includes(v.font)
           ? v.font
           : "Montserrat",
       };

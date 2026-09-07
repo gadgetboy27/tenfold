@@ -36,3 +36,36 @@ measurably heavier than the Regular (ink width of `H` is wider in all five).
 
 Both permit embedding and redistribution. The Regular files predate this note
 and come from the same upstream families.
+
+## Display faces (added 2026-09-08)
+
+Six single-cut faces for headline character. Each ships **Regular only** —
+that is how their designers publish them, not an omission.
+
+| Family | Licence | Character |
+|---|---|---|
+| Anton | OFL | ultra-condensed heavy sans, the headline workhorse |
+| Bebas Neue | OFL | condensed poster caps |
+| Alfa Slab One | OFL | heavy vintage slab |
+| Bungee | OFL | signage type, built for tight urban lockups |
+| Rye | OFL | western wood-type |
+| Special Elite | Apache-2.0 | distressed typewriter |
+
+**Single-cut is why `FONT_WEIGHTS` exists.** Canvas lies helpfully: ask a
+browser for 700 of a family that has only 400 and it SYNTHESISES a faux-bold
+that looks convincing on screen. drawtext has no such trick — it opens the
+Regular file and renders Regular. So the pickers read `weightsFor()` and offer
+Bold only where a Bold file exists, and `weightOf()` clamps as well, because a
+stored 700 can arrive from an older doc or a hand-edited payload.
+
+Their `FONT_FILES` entries point 400 and 700 at the same file deliberately: it
+is the honest fallback for a weight that can't exist, and a test asserts the
+two-file/one-file split matches which families actually offer 700.
+
+## What colour fonts can't do here
+
+A multicolour face (COLR/CPAL or SVG-in-OpenType) will not work through this
+pipeline. FFmpeg's drawtext rasterises glyphs with a single `fontcolor` and
+does not composite a font's colour layers, so a colour font exports as flat
+monochrome no matter what the browser shows. Decorative multicolour lettering
+belongs in an SVG image layer, not a font.

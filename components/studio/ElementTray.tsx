@@ -3,8 +3,12 @@
 import { useEffect, useState } from "react";
 import { Type, Shapes, GripVertical } from "lucide-react";
 import { api } from "@/lib/api";
-import { SUPPORTED_FONTS, type SupportedFont } from "@/lib/logo/font-list";
-import { FONT_CSS } from "@/lib/logo/webfonts";
+import {
+  BRAND_FONTS,
+  weightsFor,
+  type BrandFont,
+} from "@/lib/composition/layers";
+import { ensureBrandFontsLoaded } from "@/lib/composition/fonts";
 import {
   TRAY_MIME,
   serializeTrayItem,
@@ -42,7 +46,7 @@ interface Mark {
 export function ElementTray({ workspaceSlug }: Props) {
   const [marks, setMarks] = useState<Mark[]>([]);
   const [text, setText] = useState("");
-  const [font, setFont] = useState<SupportedFont>("Montserrat");
+  const [font, setFont] = useState<BrandFont>("Montserrat");
   const [fontSize, setFontSize] = useState(64);
   const [color, setColor] = useState("#ffffff");
   const [scrim, setScrim] = useState(true);
@@ -52,6 +56,13 @@ export function ElementTray({ workspaceSlug }: Props) {
   // brand kit (the one that stamps every campaign) and finished Logo Studio
   // projects. Failing quietly is right here — an empty tray is a tray, but an
   // error banner over a side panel is noise on a screen doing another job.
+  // Without this the font <select> lists eleven families the browser hasn't
+  // fetched, so every option renders in the fallback face and the picker looks
+  // broken. Same call the compositor canvas makes; it's idempotent.
+  useEffect(() => {
+    void ensureBrandFontsLoaded();
+  }, []);
+
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -183,13 +194,22 @@ export function ElementTray({ workspaceSlug }: Props) {
 
         <select
           value={font}
-          onChange={(e) => setFont(e.target.value as SupportedFont)}
+          onChange={(e) => {
+            const next = e.target.value as BrandFont;
+            setFont(next);
+            // A single-weight display face can't honour a stored Bold.
+            if (!weightsFor(next).includes(weight)) setWeight(400);
+          }}
           aria-label="Lettering font"
-          style={{ fontFamily: FONT_CSS[font] }}
+          style={{ fontFamily: `"${font}", sans-serif` }}
           className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary/60"
         >
-          {SUPPORTED_FONTS.map((f) => (
-            <option key={f} value={f} style={{ fontFamily: FONT_CSS[f] }}>
+          {BRAND_FONTS.map((f) => (
+            <option
+              key={f}
+              value={f}
+              style={{ fontFamily: `"${f}", sans-serif` }}
+            >
               {f}
             </option>
           ))}
@@ -224,7 +244,7 @@ export function ElementTray({ workspaceSlug }: Props) {
               key={w}
               type="button"
               onClick={() => setWeight(w)}
-              style={{ fontFamily: FONT_CSS[font], fontWeight: w }}
+              style={{ fontFamily: `"${font}", sans-serif`, fontWeight: w }}
               className={`flex-1 rounded-lg border px-2 py-1 text-xs transition-colors ${
                 weight === w
                   ? "border-primary bg-primary/10 text-foreground"
@@ -259,7 +279,7 @@ export function ElementTray({ workspaceSlug }: Props) {
           <span
             className="truncate"
             style={{
-              fontFamily: FONT_CSS[font],
+              fontFamily: `"${font}", sans-serif`,
               color,
               // Scaled down from design-space px purely so a 200px setting
               // still fits a side panel; the real size goes with the payload.

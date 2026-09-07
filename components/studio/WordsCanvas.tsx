@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Type, Sparkles, Loader2, Plus } from "lucide-react";
 import toast from "react-hot-toast";
 import { api } from "@/lib/api";
-import { BRAND_FONTS } from "@/lib/composition/layers";
+import { BRAND_FONTS, weightsFor } from "@/lib/composition/layers";
 import {
   WORD_ZONES,
   WORD_SIZES,
@@ -206,7 +206,16 @@ export function WordsCanvas({
             <button
               key={f}
               type="button"
-              onClick={() => setTreatment({ ...treatment, font: f })}
+              onClick={() =>
+                setTreatment({
+                  ...treatment,
+                  font: f,
+                  // Drop a Bold this family has no file for.
+                  weight: weightsFor(f).includes(treatment.weight ?? 400)
+                    ? treatment.weight
+                    : 400,
+                })
+              }
               style={{ fontFamily: `"${f}", sans-serif` }}
               className={`rounded-md border px-2 py-1 text-xs transition-colors ${
                 treatment.font === f
@@ -221,7 +230,7 @@ export function WordsCanvas({
 
         <label className="text-[11px] text-muted-foreground">Weight</label>
         <div className="flex gap-1">
-          {([700, 400] as const).map((w) => (
+          {weightsFor(treatment.font).map((w) => (
             <button
               key={w}
               type="button"

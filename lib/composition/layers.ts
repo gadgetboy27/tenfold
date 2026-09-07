@@ -299,13 +299,65 @@ export function centerToPos(
 // each one to a real .ttf in public/fonts. Anything not in this list has no
 // font file, so it would preview correctly in the browser and silently fall
 // back to Inter in the render — keep the two in step.
+/**
+ * Every family the product may draw, text faces first, display faces after.
+ *
+ * A family is on this list only if `public/fonts/` has its file — the browser
+ * will happily render any family it can reach, while FFmpeg's drawtext resolves
+ * a FILE and silently falls back. So this list is not a menu of nice fonts, it
+ * is a statement about what is on disk.
+ */
 export const BRAND_FONTS = [
+  // Text faces — 400 and 700 each.
   "Inter",
   "Montserrat",
   "Playfair Display",
   "Lora",
   "Roboto",
+  // Display faces — headline character. All are single-weight by design
+  // (their own designers ship one cut), which FONT_WEIGHTS below records.
+  "Anton",
+  "Bebas Neue",
+  "Alfa Slab One",
+  "Bungee",
+  "Rye",
+  "Special Elite",
 ] as const;
+
+/**
+ * Which weights each family ACTUALLY has a file for.
+ *
+ * This exists because canvas lies helpfully and FFmpeg doesn't. Ask a browser
+ * for 700 of a family that ships only 400 and it SYNTHESISES a faux-bold —
+ * smeared outlines, but convincingly bold on screen. drawtext has no such
+ * trick: it opens the Regular file and renders Regular. So a Bold button on a
+ * single-weight display face would preview bold and export thin, which is the
+ * exact mismatch the Bold files were added to remove.
+ *
+ * The UI reads this to decide what to offer; `weightOf` reads it to clamp what
+ * gets rendered. Both, so a stored 700 on a 400-only family can't slip through
+ * from an older doc or a hand-edited payload.
+ */
+export const FONT_WEIGHTS: Record<string, readonly (400 | 700)[]> = {
+  Inter: [400, 700],
+  Montserrat: [400, 700],
+  "Playfair Display": [400, 700],
+  Lora: [400, 700],
+  Roboto: [400, 700],
+  Anton: [400],
+  "Bebas Neue": [400],
+  "Alfa Slab One": [400],
+  Bungee: [400],
+  Rye: [400],
+  "Special Elite": [400],
+};
+
+export type BrandFont = (typeof BRAND_FONTS)[number];
+
+/** The weights a family can really render, for building a picker. */
+export function weightsFor(font: string): readonly (400 | 700)[] {
+  return FONT_WEIGHTS[font] ?? [400];
+}
 
 const blendModeSchema = z.enum([
   "normal",
@@ -551,8 +603,14 @@ export function alignOf(layer: { align?: TextAlign }): TextAlign {
  * reason `alignOf` exists: two copies of a default is one drift away from the
  * preview disagreeing with the export.
  */
-export function weightOf(layer: { weight?: 400 | 700 }): 400 | 700 {
-  return layer.weight ?? 400;
+export function weightOf(layer: {
+  font?: string;
+  weight?: 400 | 700;
+}): 400 | 700 {
+  const want = layer.weight ?? 400;
+  // Clamped to what the family has a file for. Without this the canvas would
+  // synthesise a faux-bold the export cannot match — see FONT_WEIGHTS.
+  return weightsFor(layer.font ?? "").includes(want) ? want : 400;
 }
 
 /**

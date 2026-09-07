@@ -55,7 +55,7 @@ import {
   navRank,
   type DoneMap,
 } from "@/lib/studio/flow";
-import { BRAND_FONTS } from "@/lib/composition/layers";
+import { BRAND_FONTS, weightsFor } from "@/lib/composition/layers";
 import type { LayerAnchor } from "@/lib/composition/layers";
 import { Spinner } from "@/components/brand/Spinner";
 import CreditMeter from "@/components/shared/CreditMeter";
@@ -2387,7 +2387,14 @@ function CockpitCreate({
                           <button
                             key={f}
                             type="button"
-                            onClick={() => onAdWordsFont(f)}
+                            onClick={() => {
+                              onAdWordsFont(f);
+                              // A single-weight face can't honour a stored
+                              // Bold; drop back rather than showing a
+                              // selected button that changes nothing.
+                              if (!weightsFor(f).includes(adWordsWeight))
+                                onAdWordsWeight(400);
+                            }}
                             style={{ fontFamily: `"${f}", sans-serif` }}
                             className={`rounded border px-1.5 py-1 text-[11px] transition-colors ${
                               adWordsFont === f
@@ -2418,7 +2425,7 @@ function CockpitCreate({
                             family, so this exports as it previews. Before
                             those files existed drawtext had only the Regular
                             .ttf and would have shipped 400 regardless. */}
-                        {([700, 400] as const).map((w) => (
+                        {weightsFor(adWordsFont).map((w) => (
                           <button
                             key={w}
                             type="button"
