@@ -41,7 +41,12 @@ import { Logo } from "@/components/brand/Logo";
 import { AdStage } from "./AdStage";
 import { WordsCanvas } from "./WordsCanvas";
 import { addImageToAd, addVideoToAd, addWordsToAd } from "./adBridge";
-import { DEFAULT_TREATMENT, WORD_ZONES } from "@/lib/composition/words";
+import {
+  DEFAULT_TREATMENT,
+  WORD_ZONES,
+  WORD_SIZES,
+  type WordTreatment,
+} from "@/lib/composition/words";
 import {
   resumeSection,
   remainingSteps,
@@ -50,6 +55,7 @@ import {
   navRank,
   type DoneMap,
 } from "@/lib/studio/flow";
+import { BRAND_FONTS } from "@/lib/composition/layers";
 import type { LayerAnchor } from "@/lib/composition/layers";
 import { Spinner } from "@/components/brand/Spinner";
 import CreditMeter from "@/components/shared/CreditMeter";
@@ -409,6 +415,20 @@ export function Studio({
   // it survives section changes and is still around when an anchor is picked.
   const [adWords, setAdWords] = useState("");
   const [adWordsZone, setAdWordsZone] = useState<LayerAnchor>("bottom");
+  /**
+   * How the header LOOKS, chosen where it's written rather than only in the
+   * Words tool. Family, size and colour were always in `WordTreatment` — the
+   * images step just hardcoded DEFAULT_TREATMENT, so the one place people
+   * actually type a headline was the one place they couldn't style it.
+   *
+   * Zone stays separate above: it's the only field that also reaches the image
+   * MODEL (as "leave this area quiet"), so it isn't purely presentational.
+   */
+  const [adWordsFont, setAdWordsFont] = useState<WordTreatment["font"]>(
+    DEFAULT_TREATMENT.font,
+  );
+  const [adWordsWidth, setAdWordsWidth] = useState(DEFAULT_TREATMENT.widthFrac);
+  const [adWordsColor, setAdWordsColor] = useState(DEFAULT_TREATMENT.color);
 
   // Music — the track is sized to the chosen video length. Genre + engine reuse
   // the classic flow's curated lists (MUSIC_GENRES / MUSIC_MODELS).
@@ -822,6 +842,9 @@ export function Studio({
         addWordsToAd(adWords.trim(), {
           ...DEFAULT_TREATMENT,
           zone: adWordsZone,
+          font: adWordsFont,
+          widthFrac: adWordsWidth,
+          color: adWordsColor,
           // No scrim: the whole point of reserving the space is that the type
           // doesn't need rescuing with a dark panel.
           scrim: false,
@@ -1733,6 +1756,12 @@ export function Studio({
                   prompt={prompt}
                   setPrompt={setPrompt}
                   adWords={adWords}
+                  adWordsFont={adWordsFont}
+                  onAdWordsFont={setAdWordsFont}
+                  adWordsWidth={adWordsWidth}
+                  onAdWordsWidth={setAdWordsWidth}
+                  adWordsColor={adWordsColor}
+                  onAdWordsColor={setAdWordsColor}
                   setAdWords={setAdWords}
                   adWordsZone={adWordsZone}
                   setAdWordsZone={setAdWordsZone}
@@ -2109,6 +2138,12 @@ function CockpitCreate({
   prompt,
   setPrompt,
   adWords,
+  adWordsFont,
+  onAdWordsFont,
+  adWordsWidth,
+  onAdWordsWidth,
+  adWordsColor,
+  onAdWordsColor,
   setAdWords,
   adWordsZone,
   setAdWordsZone,
@@ -2173,6 +2208,12 @@ function CockpitCreate({
   /** Wording typed before generating — lifted to Studio so it survives a
    *  section change and is still there when an anchor is picked. */
   adWords: string;
+  adWordsFont: WordTreatment["font"];
+  onAdWordsFont: (f: WordTreatment["font"]) => void;
+  adWordsWidth: number;
+  onAdWordsWidth: (w: number) => void;
+  adWordsColor: string;
+  onAdWordsColor: (c: string) => void;
   setAdWords: (v: string) => void;
   adWordsZone: LayerAnchor;
   setAdWordsZone: (v: LayerAnchor) => void;
@@ -2325,9 +2366,59 @@ function CockpitCreate({
                           </button>
                         ))}
                       </div>
+                      {/* Family / size / colour. All three were already in
+                          WordTreatment and adjustable in the Words tool —
+                          they just weren't offered at the moment you write the
+                          headline, which is when you actually have an opinion
+                          about it. Same fields, same layer, chosen earlier. */}
+                      <span className="mt-1 text-[11px] text-muted-foreground">
+                        Type:
+                      </span>
+                      <div className="flex flex-wrap gap-1">
+                        {BRAND_FONTS.map((f) => (
+                          <button
+                            key={f}
+                            type="button"
+                            onClick={() => onAdWordsFont(f)}
+                            style={{ fontFamily: `"${f}", sans-serif` }}
+                            className={`rounded border px-1.5 py-1 text-[11px] transition-colors ${
+                              adWordsFont === f
+                                ? "border-primary bg-primary/10 text-foreground"
+                                : "border-border text-muted-foreground hover:border-primary/40"
+                            }`}
+                          >
+                            {f}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {WORD_SIZES.map((sz) => (
+                          <button
+                            key={sz.label}
+                            type="button"
+                            onClick={() => onAdWordsWidth(sz.widthFrac)}
+                            className={`rounded border px-1.5 py-1 text-[10px] transition-colors ${
+                              adWordsWidth === sz.widthFrac
+                                ? "border-primary bg-primary/10 text-foreground"
+                                : "border-border text-muted-foreground hover:border-primary/40"
+                            }`}
+                          >
+                            {sz.label}
+                          </button>
+                        ))}
+                        <input
+                          type="color"
+                          value={adWordsColor}
+                          onChange={(e) => onAdWordsColor(e.target.value)}
+                          aria-label="Wording colour"
+                          className="ml-auto h-6 w-6 cursor-pointer rounded border"
+                        />
+                      </div>
                       <p className="text-[10px] text-muted-foreground/70">
                         We draw these letters ourselves — the image model never
-                        sees them, so they can&apos;t come out misspelled.
+                        sees them, so they can&apos;t come out misspelled. Size
+                        is how much of the frame the block spans — the point
+                        size follows the longest line.
                       </p>
                     </>
                   )}
