@@ -46,6 +46,7 @@ export function ElementTray({ workspaceSlug }: Props) {
   const [fontSize, setFontSize] = useState(64);
   const [color, setColor] = useState("#ffffff");
   const [scrim, setScrim] = useState(true);
+  const [weight, setWeight] = useState<400 | 700>(700);
 
   // Marks come from the two places a workspace's marks actually live: the
   // brand kit (the one that stamps every campaign) and finished Logo Studio
@@ -116,6 +117,7 @@ export function ElementTray({ workspaceSlug }: Props) {
     text: text.trim() || "Your text",
     font,
     fontSize,
+    weight,
     color,
     scrim,
   };
@@ -216,6 +218,24 @@ export function ElementTray({ workspaceSlug }: Props) {
           />
         </div>
 
+        <div className="flex gap-1">
+          {([700, 400] as const).map((w) => (
+            <button
+              key={w}
+              type="button"
+              onClick={() => setWeight(w)}
+              style={{ fontFamily: FONT_CSS[font], fontWeight: w }}
+              className={`flex-1 rounded-lg border px-2 py-1 text-xs transition-colors ${
+                weight === w
+                  ? "border-primary bg-primary/10 text-foreground"
+                  : "border-border text-muted-foreground hover:border-primary/40"
+              }`}
+            >
+              {w === 700 ? "Bold" : "Regular"}
+            </button>
+          ))}
+        </div>
+
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
           <input
             type="checkbox"
@@ -244,7 +264,7 @@ export function ElementTray({ workspaceSlug }: Props) {
               // Scaled down from design-space px purely so a 200px setting
               // still fits a side panel; the real size goes with the payload.
               fontSize: Math.max(12, Math.min(28, fontSize / 3)),
-              fontWeight: 700,
+              fontWeight: weight,
               backgroundColor: scrim ? "rgba(0,0,0,0.45)" : undefined,
               padding: scrim ? "2px 6px" : undefined,
               borderRadius: scrim ? 4 : undefined,

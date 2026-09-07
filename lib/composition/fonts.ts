@@ -26,9 +26,16 @@ export function ensureBrandFontsLoaded(): Promise<void> {
     document.head.appendChild(link);
   }
 
+  // BOTH weights, explicitly. `document.fonts.load` resolves per weight, so
+  // loading only the 400 face leaves canvas fillText with nothing to draw 700
+  // with — and canvas falls back SILENTLY, which is the whole failure mode
+  // this module exists to prevent.
   loaded = Promise.all(
-    ["Inter", "Montserrat", "Playfair Display", "Lora", "Roboto"].map((f) =>
-      document.fonts.load(`64px "${f}"`),
+    ["Inter", "Montserrat", "Playfair Display", "Lora", "Roboto"].flatMap(
+      (f) => [
+        document.fonts.load(`400 64px "${f}"`),
+        document.fonts.load(`700 64px "${f}"`),
+      ],
     ),
   )
     .then(() => document.fonts.ready)

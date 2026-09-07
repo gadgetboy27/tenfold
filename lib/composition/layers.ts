@@ -497,6 +497,21 @@ export const textLayerSchema = layerBaseSchema.extend({
   kind: z.literal("text"),
   text: z.string().min(1).max(500),
   font: z.enum(BRAND_FONTS).default("Inter"),
+  /**
+   * 400 or 700 — nothing else, because a weight is a FILE.
+   *
+   * FFmpeg's drawtext has no weight parameter: it renders whatever the .ttf
+   * contains. So every weight offered here needs its own file in public/fonts
+   * and its own entry in export.ts's FONT_FILES, or the canvas previews bold
+   * and the MP4 ships regular. That mismatch is why this field didn't exist
+   * until the Bold files were added.
+   *
+   * Optional rather than `.default(700)`: z.infer resolves a defaulted field
+   * as REQUIRED on the output type, which would force every existing Layer
+   * literal to spell it out. Read it through `weightOf()` so the default lives
+   * in one place — same convention as `align` and `effects`.
+   */
+  weight: z.union([z.literal(400), z.literal(700)]).optional(),
   sizePx: z.number().min(8).max(400).default(64),
   color: z
     .string()
@@ -526,6 +541,18 @@ export const layerSchema = z.discriminatedUnion("kind", [
  *  export both read through this, so the default can never diverge. */
 export function alignOf(layer: { align?: TextAlign }): TextAlign {
   return layer.align ?? "center";
+}
+
+/**
+ * A text layer's effective weight.
+ *
+ * Defaults to 400, so every composition saved before this field existed keeps
+ * rendering exactly as it did. Both renderers read through here for the same
+ * reason `alignOf` exists: two copies of a default is one drift away from the
+ * preview disagreeing with the export.
+ */
+export function weightOf(layer: { weight?: 400 | 700 }): 400 | 700 {
+  return layer.weight ?? 400;
 }
 
 /**

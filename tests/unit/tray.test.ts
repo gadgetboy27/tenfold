@@ -126,10 +126,43 @@ describe("tray payloads", () => {
       text: "Summer Sale",
       font: "Playfair Display",
       fontSize: 72,
+      weight: 700,
       color: "#ffffff",
       scrim: true,
     };
     expect(parseTrayItem(serializeTrayItem(item))).toEqual(item);
+  });
+
+  it("normalises a missing weight to an explicit Regular", () => {
+    // Resolved on parse rather than left undefined, so nothing downstream has
+    // to re-derive the default — a weight is a FILE on the export side, and
+    // "unset" is the state that silently picks the wrong one.
+    const raw = JSON.stringify({
+      kind: "lettering",
+      id: "x",
+      text: "Hi",
+      font: "Inter",
+      fontSize: 40,
+      color: "#fff",
+      scrim: false,
+    });
+    expect(parseTrayItem(raw)).toMatchObject({ weight: 400 });
+  });
+
+  it("refuses a weight that has no font file", () => {
+    // Only 400 and 700 ship. Anything else would resolve to a file that
+    // doesn't exist and export in the wrong weight.
+    const raw = JSON.stringify({
+      kind: "lettering",
+      id: "x",
+      text: "Hi",
+      font: "Inter",
+      fontSize: 40,
+      weight: 250,
+      color: "#fff",
+      scrim: false,
+    });
+    expect(parseTrayItem(raw)).toMatchObject({ weight: 400 });
   });
 
   it("refuses a font the export cannot render", () => {

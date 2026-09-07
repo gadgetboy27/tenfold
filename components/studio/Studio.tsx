@@ -429,6 +429,7 @@ export function Studio({
   );
   const [adWordsWidth, setAdWordsWidth] = useState(DEFAULT_TREATMENT.widthFrac);
   const [adWordsColor, setAdWordsColor] = useState(DEFAULT_TREATMENT.color);
+  const [adWordsWeight, setAdWordsWeight] = useState<400 | 700>(700);
 
   // Music — the track is sized to the chosen video length. Genre + engine reuse
   // the classic flow's curated lists (MUSIC_GENRES / MUSIC_MODELS).
@@ -845,6 +846,7 @@ export function Studio({
           font: adWordsFont,
           widthFrac: adWordsWidth,
           color: adWordsColor,
+          weight: adWordsWeight,
           // No scrim: the whole point of reserving the space is that the type
           // doesn't need rescuing with a dark panel.
           scrim: false,
@@ -1762,6 +1764,8 @@ export function Studio({
                   onAdWordsWidth={setAdWordsWidth}
                   adWordsColor={adWordsColor}
                   onAdWordsColor={setAdWordsColor}
+                  adWordsWeight={adWordsWeight}
+                  onAdWordsWeight={setAdWordsWeight}
                   setAdWords={setAdWords}
                   adWordsZone={adWordsZone}
                   setAdWordsZone={setAdWordsZone}
@@ -2144,6 +2148,8 @@ function CockpitCreate({
   onAdWordsWidth,
   adWordsColor,
   onAdWordsColor,
+  adWordsWeight,
+  onAdWordsWeight,
   setAdWords,
   adWordsZone,
   setAdWordsZone,
@@ -2214,6 +2220,8 @@ function CockpitCreate({
   onAdWordsWidth: (w: number) => void;
   adWordsColor: string;
   onAdWordsColor: (c: string) => void;
+  adWordsWeight: 400 | 700;
+  onAdWordsWeight: (w: 400 | 700) => void;
   setAdWords: (v: string) => void;
   adWordsZone: LayerAnchor;
   setAdWordsZone: (v: LayerAnchor) => void;
@@ -2404,6 +2412,25 @@ function CockpitCreate({
                             }`}
                           >
                             {sz.label}
+                          </button>
+                        ))}
+                        {/* Real bold: public/fonts now ships a 700 file per
+                            family, so this exports as it previews. Before
+                            those files existed drawtext had only the Regular
+                            .ttf and would have shipped 400 regardless. */}
+                        {([700, 400] as const).map((w) => (
+                          <button
+                            key={w}
+                            type="button"
+                            onClick={() => onAdWordsWeight(w)}
+                            style={{ fontWeight: w }}
+                            className={`rounded border px-1.5 py-1 text-[10px] transition-colors ${
+                              adWordsWeight === w
+                                ? "border-primary bg-primary/10 text-foreground"
+                                : "border-border text-muted-foreground hover:border-primary/40"
+                            }`}
+                          >
+                            {w === 700 ? "Bold" : "Regular"}
                           </button>
                         ))}
                         <input

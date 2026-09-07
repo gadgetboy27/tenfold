@@ -219,6 +219,28 @@ export function WordsCanvas({
           ))}
         </div>
 
+        <label className="text-[11px] text-muted-foreground">Weight</label>
+        <div className="flex gap-1">
+          {([700, 400] as const).map((w) => (
+            <button
+              key={w}
+              type="button"
+              onClick={() => setTreatment({ ...treatment, weight: w })}
+              style={{
+                fontFamily: `"${treatment.font}", sans-serif`,
+                fontWeight: w,
+              }}
+              className={`rounded-md border px-2 py-1 text-xs transition-colors ${
+                (treatment.weight ?? 400) === w
+                  ? "border-primary text-primary"
+                  : "border-border text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {w === 700 ? "Bold" : "Regular"}
+            </button>
+          ))}
+        </div>
+
         <div className="flex items-center gap-3">
           <label className="text-[11px] text-muted-foreground">Colour</label>
           <input

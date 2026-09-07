@@ -88,6 +88,7 @@ export function dropTrayItem(
           kind: "text",
           text: item.text,
           font: item.font,
+          weight: item.weight ?? 400,
           sizePx: item.fontSize,
           color: item.color,
           // Same scrim the FFmpeg caption presets have always drawn: white

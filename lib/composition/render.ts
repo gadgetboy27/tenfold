@@ -8,6 +8,7 @@ import {
   type CompositionAspect,
   type CompositionDoc,
   type Layer,
+  weightOf,
 } from "@/lib/composition/layers";
 import {
   motionAt,
@@ -44,7 +45,7 @@ export function layerBounds(
     };
   }
   ctx.save();
-  ctx.font = `${layer.sizePx}px "${layer.font}", sans-serif`;
+  ctx.font = `${weightOf(layer)} ${layer.sizePx}px "${layer.font}", sans-serif`;
   const lines = layer.text.split("\n");
   const width = Math.max(...lines.map((l) => ctx.measureText(l).width), 1);
   ctx.restore();
@@ -141,7 +142,7 @@ function drawLayer(
       ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
     }
   } else {
-    ctx.font = `${layer.sizePx}px "${layer.font}", sans-serif`;
+    ctx.font = `${weightOf(layer)} ${layer.sizePx}px "${layer.font}", sans-serif`;
     const lines = layer.text.split("\n");
     const lineHeight = layer.sizePx * TEXT_LINE_HEIGHT;
     const blockW = Math.max(...lines.map((l) => ctx.measureText(l).width), 1);

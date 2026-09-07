@@ -15,6 +15,7 @@ import {
   type CompositionDoc,
   type Layer,
   type LayerPosition,
+  weightOf,
 } from "@/lib/composition/layers";
 import { motionExprs, type MotionExprs } from "@/lib/composition/effects";
 
@@ -32,12 +33,23 @@ import { motionExprs, type MotionExprs } from "@/lib/composition/effects";
  * colour, which is exactly the identity, so timing still matches preview.
  */
 
-const FONT_FILES: Record<string, string> = {
-  Inter: "Inter.ttf",
-  Montserrat: "Montserrat.ttf",
-  "Playfair Display": "PlayfairDisplay.ttf",
-  Lora: "Lora.ttf",
-  Roboto: "Roboto.ttf",
+/**
+ * family → weight → file.
+ *
+ * drawtext has no weight parameter; it renders whatever the file contains. So
+ * "bold" here is a different FILE, not a flag, and every weight the UI offers
+ * must appear in this table or the export silently falls back to Regular while
+ * the canvas shows Bold. See public/fonts/README.md.
+ */
+const FONT_FILES: Record<string, Record<400 | 700, string>> = {
+  Inter: { 400: "Inter.ttf", 700: "Inter-Bold.ttf" },
+  Montserrat: { 400: "Montserrat.ttf", 700: "Montserrat-Bold.ttf" },
+  "Playfair Display": {
+    400: "PlayfairDisplay.ttf",
+    700: "PlayfairDisplay-Bold.ttf",
+  },
+  Lora: { 400: "Lora.ttf", 700: "Lora-Bold.ttf" },
+  Roboto: { 400: "Roboto.ttf", 700: "Roboto-Bold.ttf" },
 };
 
 const BLEND_NEUTRAL: Record<Exclude<BlendMode, "normal">, string> = {
@@ -52,8 +64,11 @@ function ffmpegBlendMode(blend: BlendMode): string {
   return BLEND_MODES.find((b) => b.id === blend)?.ffmpeg ?? "normal";
 }
 
-function fontFileFor(font: string): string {
-  const file = FONT_FILES[font] ?? FONT_FILES.Inter;
+function fontFileFor(font: string, weight: 400 | 700 = 400): string {
+  const family = FONT_FILES[font] ?? FONT_FILES.Inter;
+  // Falling back to the family's Regular rather than to Inter-Bold: a missing
+  // weight should cost you the weight, not the typeface.
+  const file = family[weight] ?? family[400];
   return join(process.cwd(), "public", "fonts", file);
 }
 
@@ -224,7 +239,7 @@ export function buildFilterGraph(
           `:boxborderw=${Math.round(layer.bg.padPx * layer.scale)}`
         : "";
       const draw =
-        `drawtext=fontfile=${fontFileFor(layer.font)}:textfile=${tf}` +
+        `drawtext=fontfile=${fontFileFor(layer.font, weightOf(layer))}:textfile=${tf}` +
         `:fontsize=${fontSize}:fontcolor=${layer.color.replace("#", "0x")}` +
         `:line_spacing=${lineSpacing}:text_align=${alignOf(layer)}${box}` +
         `:${tx}:${ty}:alpha='${alpha}'`;

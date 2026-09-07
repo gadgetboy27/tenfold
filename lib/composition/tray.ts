@@ -17,6 +17,8 @@ export type TrayItem =
       text: string;
       font: SupportedFont;
       fontSize: number;
+      /** 400 or 700 — a weight is a FILE on the export side, see layers.ts. */
+      weight?: 400 | 700;
       color: string;
       scrim: boolean;
     };
@@ -44,6 +46,7 @@ export function parseTrayItem(raw: string | null | undefined): TrayItem | null {
     if (v?.kind === "lettering" && typeof v.text === "string") {
       return {
         ...v,
+        weight: v.weight === 700 ? 700 : 400,
         // A font that isn't renderable downstream would look right on the
         // canvas and wrong in the export — same rule as the logo lockup.
         font: (SUPPORTED_FONTS as readonly string[]).includes(v.font)

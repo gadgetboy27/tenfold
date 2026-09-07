@@ -73,9 +73,13 @@ export const wordTreatmentSchema = z.object({
     "bottom-right",
   ]),
   font: z.enum(BRAND_FONTS),
-  color: z
-    .string()
-    .regex(/^#[0-9a-fA-F]{6}$/),
+  /**
+   * 400 or 700. Optional so every treatment Claude has ever proposed — and
+   * every one saved before the Bold files existed — still parses, defaulting
+   * to Regular exactly as it rendered then.
+   */
+  weight: z.union([z.literal(400), z.literal(700)]).optional(),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   /** Fraction of the frame width the block should occupy, 0.2–0.9. */
   widthFrac: z.number().min(0.2).max(0.9),
   /** Whether the type needs a scrim to stay legible over busy artwork. */
@@ -114,10 +118,7 @@ export function sizeForWords(
   widthFrac: number,
   aspect: CompositionAspect,
 ): number {
-  const longest = Math.max(
-    ...text.split("\n").map((l) => l.trim().length),
-    1,
-  );
+  const longest = Math.max(...text.split("\n").map((l) => l.trim().length), 1);
   const targetPx = ASPECT_DESIGN[aspect].width * widthFrac;
   const size = targetPx / (longest * 0.5);
   // Clamp to the schema's own bounds so a very short or very long line can't
@@ -147,6 +148,7 @@ export function buildWordsLayer(params: {
     kind: "text",
     text,
     font: treatment.font,
+    ...(treatment.weight ? { weight: treatment.weight } : {}),
     sizePx: sizeForWords(text, treatment.widthFrac, params.aspect),
     color: treatment.color,
     align: "center",
@@ -173,10 +175,7 @@ export function buildWordsLayer(params: {
  * uses, so "will it fit" and "what size makes it fit" can never disagree.
  */
 function blockWidthPx(text: string, sizePx: number): number {
-  const longest = Math.max(
-    ...text.split("\n").map((l) => l.trim().length),
-    1,
-  );
+  const longest = Math.max(...text.split("\n").map((l) => l.trim().length), 1);
   return longest * sizePx * 0.5;
 }
 
@@ -188,8 +187,7 @@ export function textOverflows(
   // 0.94 rather than 1.0: type touching the exact frame edge still reads as
   // broken, and anchored layers carry a margin of their own.
   return (
-    blockWidthPx(layer.text, layer.sizePx) >
-    ASPECT_DESIGN[aspect].width * 0.94
+    blockWidthPx(layer.text, layer.sizePx) > ASPECT_DESIGN[aspect].width * 0.94
   );
 }
 
