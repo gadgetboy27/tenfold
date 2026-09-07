@@ -13,6 +13,7 @@ import {
   Play,
   Send,
   Trash2,
+  Maximize2,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { api } from "@/lib/api";
@@ -55,7 +56,12 @@ export interface ProjectProgress {
     publish: boolean;
   };
   bundle: {
-    images: { id: string; url: string; createdAt: string }[];
+    images: {
+      id: string;
+      url: string;
+      branded: boolean;
+      createdAt: string;
+    }[];
     videos: { id: string; url: string; branded: boolean; createdAt: string }[];
     audio: { id: string; url: string; createdAt: string }[];
     caption: string;
@@ -87,6 +93,7 @@ export function ProjectStrip({
   workspaceSlug,
   onChanged,
   onStageVideo,
+  onStageImage,
 }: {
   progress: ProjectProgress | null;
   /** Studio's live name field — fresher than the server's copy mid-rename. */
@@ -110,6 +117,8 @@ export function ProjectStrip({
    * brand, lay type over it) instead of a 96px thumbnail in the rail.
    */
   onStageVideo?: (video: { id: string; url: string }) => void;
+  /** Put a still on the stage as the backdrop — the image tile's main action. */
+  onStageImage?: (image: { id: string; url: string }) => void;
 }) {
   const [open, setOpen] = useState(true);
   // One id at a time — the tile shows a spinner in place of its own button
@@ -331,33 +340,72 @@ export function ProjectStrip({
                 Images
               </span>
               <div className="flex gap-1.5">
-                {bundle.images.map((a) => (
-                  <a
-                    key={a.id}
-                    href={a.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={
-                      a.id === bundle.anchorId
-                        ? "Your chosen anchor image — open full size"
-                        : "Open full size"
-                    }
-                    className={`relative h-12 w-12 shrink-0 overflow-hidden rounded-md border ${
-                      a.id === bundle.anchorId
-                        ? "border-primary ring-1 ring-primary/40"
-                        : "border-border"
-                    }`}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={thumbUrl(a.url, { width: 128 })}
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      className="h-full w-full object-cover"
-                    />
-                  </a>
-                ))}
+                {/* Clicking a still puts it ON THE STAGE. It used to be an
+                    <a target="_blank"> — "open full size" — so the one thing
+                    you cannot do in a new browser tab (edit it) was the only
+                    thing the click offered, while the video tiles next door
+                    staged their clip. Full size is still here, on the hover
+                    icon, because it IS useful — just not as the primary act.
+
+                    A branded export is excluded from staging for the same
+                    reason the video tick excludes composed_video: it is the
+                    OUTPUT of the stage, and compositing over pixels that
+                    already carry the layers gives you doubled type. */}
+                {bundle.images.map((a) => {
+                  const isAnchor = a.id === bundle.anchorId;
+                  return (
+                    <div
+                      key={a.id}
+                      className={`group/img relative h-12 w-12 shrink-0 overflow-hidden rounded-md border ${
+                        isAnchor
+                          ? "border-primary ring-1 ring-primary/40"
+                          : "border-border"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (a.branded) {
+                            toast(
+                              "That's a finished export — the stage keeps the ad you built it from.",
+                              { icon: "🎨" },
+                            );
+                            return;
+                          }
+                          onStageImage?.({ id: a.id, url: a.url });
+                        }}
+                        title={
+                          a.branded
+                            ? "A finished export — open it full size"
+                            : isAnchor
+                              ? "Your anchor — put it back on the stage"
+                              : "Put this image on the stage"
+                        }
+                        className="block h-full w-full"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={thumbUrl(a.url, { width: 128 })}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          className="h-full w-full object-cover"
+                        />
+                      </button>
+                      <a
+                        href={a.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Open full size"
+                        aria-label="Open full size"
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute right-0 top-0 hidden rounded-bl-md bg-black/70 p-0.5 text-white group-hover/img:block"
+                      >
+                        <Maximize2 className="h-2.5 w-2.5" />
+                      </a>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

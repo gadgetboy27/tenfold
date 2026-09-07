@@ -192,9 +192,16 @@ export const GET = withWorkspace<{ id: string }>(
           : null,
       },
       bundle: {
-        images: images.map(({ id, url, created_at }) => ({
+        // `type` matters to the client now: clicking an image puts it on the
+        // stage as the backdrop, and a composed_image is an OUTPUT of the
+        // stage rather than an input to it. Same distinction the video tick
+        // already draws — staging an export composites over pixels that
+        // already carry the layers, which is how you get doubled, ghosted
+        // text and then bake it in on the next render.
+        images: images.map(({ id, url, type, created_at }) => ({
           id,
           url,
+          branded: type === "composed_image",
           createdAt: created_at,
         })),
         videos: videos.map(({ id, url, type, created_at }) => ({

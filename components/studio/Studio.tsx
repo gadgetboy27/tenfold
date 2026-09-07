@@ -609,6 +609,31 @@ export function Studio({
     },
     [videoDuration],
   );
+
+  /**
+   * Put a still on the stage as the backdrop.
+   *
+   * The strip's image tiles opened a new browser tab, which is the one place
+   * you can't do anything to an image. Clicking one now does what clicking a
+   * thumbnail should: it becomes the ad you're working on, with the layers
+   * already there still on top.
+   *
+   * `workingImage` moves with it — via `enhancedUrl`, which is the derived
+   * "still currently being worked on" — because the Compositor, the Words tool
+   * and the Pro panels all read that. Staging the picture without moving it
+   * leaves the rest of the product pointing at the previous one.
+   *
+   * It does NOT change the campaign's anchor. Putting a picture on the stage
+   * to work on it is a smaller act than declaring which image the campaign is
+   * about; the anchor is stored server-side and drives publish, so quietly
+   * reassigning it from a thumbnail click would be a much bigger thing than
+   * the click looks like. `pickAnchor` remains the way to do that.
+   */
+  const stageImage = useCallback(({ url }: { id: string; url: string }) => {
+    setEnhancedUrl(url);
+    addImageToAd(url, { asBackground: true });
+    toast.success("On the stage — your layers are still on top");
+  }, []);
   useEffect(() => {
     queueMicrotask(() => refreshProgress());
   }, [refreshProgress]);
@@ -1864,6 +1889,7 @@ export function Studio({
             workspaceSlug={workspaceSlug}
             onChanged={onProjectAssetsChanged}
             onStageVideo={stageVideo}
+            onStageImage={stageImage}
           />
         )}
       </div>
