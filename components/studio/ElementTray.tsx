@@ -45,7 +45,7 @@ interface Mark {
 }
 
 export function ElementTray({ workspaceSlug, campaignId }: Props) {
-  const [marks, setMarks] = useState<Mark[]>([]);
+  const [gallery, setGallery] = useState<Mark[]>([]);
   /**
    * Images pulled in from the gallery this session.
    *
@@ -66,59 +66,45 @@ export function ElementTray({ workspaceSlug, campaignId }: Props) {
   const [scrim, setScrim] = useState(true);
   const [weight, setWeight] = useState<400 | 700>(700);
 
-  // Marks come from the two places a workspace's marks actually live: the
-  // brand kit (the one that stamps every campaign) and finished Logo Studio
-  // projects. Failing quietly is right here — an empty tray is a tray, but an
-  // error banner over a side panel is noise on a screen doing another job.
-  // Without this the font <select> lists eleven families the browser hasn't
-  // fetched, so every option renders in the fallback face and the picker looks
-  // broken. Same call the compositor canvas makes; it's idempotent.
+  // Without this the font picker lists eleven families the browser hasn't
+  // fetched, so every option renders in the fallback face and the control
+  // looks broken. Same call the canvas makes; idempotent.
   useEffect(() => {
     void ensureBrandFontsLoaded();
   }, []);
 
+  /**
+   * The workspace's images, newest first.
+   *
+   * This used to list brand marks only — the logo and its dark variant —
+   * which answered "stamp your logo" and not the far more common "put THAT
+   * picture on the ad". Reported as three mystery squares whose use wasn't
+   * obvious, which is fair: two of the three were the same mark in two
+   * colours, and neither is what you reach for most of the time.
+   *
+   * Fails quietly. An empty shelf is a shelf; an error banner over a side
+   * panel is noise on a screen doing another job.
+   */
   useEffect(() => {
     let alive = true;
     (async () => {
-      const found: Mark[] = [];
       try {
-        const res = await api("/api/brand-kit", { workspaceSlug });
-        if (res.ok) {
-          const kit = await res.json();
-          if (typeof kit?.logo_url === "string" && kit.logo_url)
-            found.push({
-              id: "kit-light",
-              label: "Brand mark",
-              src: kit.logo_url,
-            });
-          if (typeof kit?.logo_dark_url === "string" && kit.logo_dark_url)
-            found.push({
-              id: "kit-dark",
-              label: "Brand mark (dark)",
-              src: kit.logo_dark_url,
-            });
-        }
+        const res = await api("/api/gallery", { workspaceSlug });
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          assets?: { id: string; url: string }[];
+        };
+        if (!alive) return;
+        setGallery(
+          (data.assets ?? []).map((a) => ({
+            id: a.id,
+            label: "Image",
+            src: a.url,
+          })),
+        );
       } catch {
-        /* no kit — the Logo Studio marks below may still be there */
+        /* nothing to show — the picker below still works */
       }
-      try {
-        const res = await api("/api/logo", { workspaceSlug });
-        if (res.ok) {
-          const data = await res.json();
-          for (const p of (data?.projects ?? []) as {
-            id: string;
-            finalUrl?: string | null;
-            thumbnailUrl?: string | null;
-            name?: string | null;
-          }[]) {
-            const src = p.finalUrl ?? p.thumbnailUrl;
-            if (src) found.push({ id: p.id, label: p.name || "Logo", src });
-          }
-        }
-      } catch {
-        /* ignore */
-      }
-      if (alive) setMarks(found);
     })();
     return () => {
       alive = false;
@@ -136,9 +122,12 @@ export function ElementTray({ workspaceSlug, campaignId }: Props) {
     e.dataTransfer.effectAllowed = "copy";
   }
 
-  // Brand marks first — they're the ones used on every ad — then whatever was
-  // pulled in for this one.
-  const tiles = [...marks, ...picked];
+  // Anything pulled in deliberately sorts FIRST — it was chosen for this ad,
+  // where the gallery behind it is just what happens to exist.
+  const tiles = [
+    ...picked,
+    ...gallery.filter((g) => !picked.some((p) => p.id === g.id)),
+  ];
 
   const letteringItem: TrayItem = {
     kind: "lettering",
@@ -175,11 +164,15 @@ export function ElementTray({ workspaceSlug, campaignId }: Props) {
 
         {tiles.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
-            Nothing here yet — pull an image in from your gallery, or set a
-            brand logo in Logo &amp; brand.
+            No images yet — generate some, or import one below.
           </p>
         ) : (
-          <div className="grid grid-cols-3 gap-2">
+          /* Two rows visible, the rest on a scroll. A shelf that grows with
+             the gallery pushes the lettering controls off the panel entirely;
+             a fixed height keeps the tray a tray. max-h is set from the row
+             maths (2 × tile + gap + label) rather than a guessed pixel value,
+             so it stays two rows if the tile size changes. */
+          <div className="no-scrollbar grid max-h-[13.5rem] grid-cols-3 gap-2 overflow-y-auto pr-0.5">
             {tiles.map((m) => (
               <div key={m.id} className="space-y-1">
                 <div

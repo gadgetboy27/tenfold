@@ -938,7 +938,13 @@ export function CompositorCanvas({
           {activeOp && (
             <div className="space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
               <p className="text-xs text-muted-foreground">
-                Source: {selectedLayer ? "selected layer" : "background image"}
+                Changing{" "}
+                <span className="font-medium text-foreground">
+                  {selectedLayer
+                    ? "the selected layer"
+                    : "the background image"}
+                </span>{" "}
+                — click something on the ad to change that.
               </p>
               {(activeOp === "inpaint" ||
                 activeOp === "relight" ||
@@ -1212,6 +1218,36 @@ export function CompositorCanvas({
               <Maximize2 className="h-3.5 w-3.5" />
             )}
           </button>
+          {/* What the active op will actually change.
+              Reported as "you click one and nothing seems to change". The op
+              form DID say `Source: selected layer / background image`, but as
+              a small grey line in the right-hand column — nowhere near where
+              the user is looking, and the canvas itself gave no sign at all.
+              Clicking a layer to retarget already worked; it was invisible.
+              This says it on the canvas, in the op's own words. */}
+          {!preview && doc && activeOp && (
+            <div className="absolute inset-x-6 top-16 z-10 flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-[11px] backdrop-blur">
+              <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" />
+              <span className="text-foreground">
+                <strong>{OP_META[activeOp].label}</strong> will change{" "}
+                {selectedLayer ? (
+                  <strong>
+                    {selectedLayer.kind === "text"
+                      ? `the text “${selectedLayer.text.slice(0, 18)}”`
+                      : "the selected layer"}
+                  </strong>
+                ) : (
+                  <strong>the background image</strong>
+                )}
+              </span>
+              <span className="ml-auto shrink-0 text-muted-foreground">
+                {selectedLayer
+                  ? "click the background to target that instead"
+                  : "click a layer to target it instead"}
+              </span>
+            </div>
+          )}
+
           {!preview && doc && (
             <div className="absolute left-6 top-6 z-10 flex flex-wrap items-center gap-1.5">
               {/* Shape. An ad that goes to a feed and a Story is two shapes,
