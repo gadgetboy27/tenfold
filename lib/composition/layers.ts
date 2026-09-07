@@ -25,6 +25,16 @@ export const ASPECT_DESIGN: Record<
   "16:9": { width: 1920, height: 1080 },
 };
 
+/**
+ * Every aspect, in the order a picker should show them — tallest to widest.
+ *
+ * Derived from ASPECT_DESIGN's keys rather than re-typed, so adding a shape
+ * cannot leave a picker that doesn't offer it. It was previously a local const
+ * inside the classic Compositor, which is why Compose had no aspect switcher
+ * at all: the list wasn't reachable from anywhere else.
+ */
+export const ASPECTS = Object.keys(ASPECT_DESIGN) as CompositionAspect[];
+
 /** Map an aspect onto the existing compositions.format column (and back). */
 export const ASPECT_TO_FORMAT: Record<CompositionAspect, string> = {
   "9:16": "story",

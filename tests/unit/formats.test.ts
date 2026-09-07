@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ASPECT_DESIGN } from "@/lib/composition/layers";
+import { ASPECT_DESIGN, ASPECTS } from "@/lib/composition/layers";
 import {
   PLATFORM_FORMATS,
   formatsForPlatforms,
@@ -247,5 +247,28 @@ describe("intersectionArea", () => {
         { x: 0.25, y: 0.25, w: 0.5, h: 0.5 },
       ),
     ).toBeCloseTo(0.0625); // 0.25 * 0.25
+  });
+});
+
+describe("ASPECTS", () => {
+  it("offers every shape the renderer can draw", () => {
+    // Derived from ASPECT_DESIGN rather than re-typed. It used to be a local
+    // const inside the classic Compositor, which is exactly why Compose had no
+    // aspect switcher: the list wasn't reachable from anywhere else. A shape
+    // added to ASPECT_DESIGN and forgotten in a hand-written list is a shape
+    // the renderer supports and no picker offers.
+    expect([...ASPECTS].sort()).toEqual(Object.keys(ASPECT_DESIGN).sort());
+  });
+
+  it("has no duplicates", () => {
+    expect(new Set(ASPECTS).size).toBe(ASPECTS.length);
+  });
+
+  it("every aspect has real design dimensions", () => {
+    for (const a of ASPECTS) {
+      const d = ASPECT_DESIGN[a];
+      expect(d.width, a).toBeGreaterThan(0);
+      expect(d.height, a).toBeGreaterThan(0);
+    }
   });
 });

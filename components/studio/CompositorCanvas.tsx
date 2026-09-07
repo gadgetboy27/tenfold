@@ -42,10 +42,15 @@ import { LayerControls } from "@/components/compositor/LayerControls";
 import { CompositorCanvas as LayeredCanvas } from "@/components/compositor/CompositorCanvas";
 import {
   ASPECT_DESIGN,
+  ASPECTS,
   type CompositeHistoryEntry,
   type CompositeProvenance,
+  type CompositionAspect,
   type CompositionDoc,
 } from "@/lib/composition/layers";
+import { FormatRail } from "@/components/compositor/FormatRail";
+import { railFormats } from "@/lib/composition/formats";
+import { readProfilesResponse } from "@/lib/social/profiles-response";
 import { Spinner } from "@/components/brand/Spinner";
 import { InfoHint } from "@/components/ui/info-hint";
 import {
@@ -200,6 +205,48 @@ export function CompositorCanvas({
   const addLayer = useCompositorStore((s) => s.addLayer);
   const removeLayer = useCompositorStore((s) => s.removeLayer);
   const [preview, setPreview] = useState(false);
+
+  /**
+   * The format rail, brought across from the classic Compositor.
+   *
+   * Compose could not change aspect AT ALL before this — the whole
+   * multi-format system (per-aspect overrides, safe-zone warnings, the vision
+   * auto-fix) existed and was reachable only from a page nothing links to.
+   * An ad that publishes to a feed and a Story is two shapes, and Compose was
+   * the one screen that couldn't say so.
+   */
+  const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([]);
+  useEffect(() => {
+    if (!workspaceSlug) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api("/api/social/profiles", { workspaceSlug });
+        if (!res.ok) return;
+        const { profiles } = readProfilesResponse<{ platform: string }>(
+          await res.json(),
+        );
+        if (!cancelled) setConnectedPlatforms(profiles.map((p) => p.platform));
+      } catch {
+        // No connections yet, or offline: railFormats falls back to the
+        // generic aspect trio, so the rail still works — it just isn't
+        // labelled with the platforms it's for.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceSlug]);
+
+  // Stable identity, or FormatRail's redraw effects loop every render.
+  const rail = useMemo(
+    () => railFormats(connectedPlatforms),
+    [connectedPlatforms],
+  );
+  const setAspect = useCompositorStore((s) => s.setAspect);
+  const overrideMode = useCompositorStore((s) => s.overrideMode);
+  const setOverrideMode = useCompositorStore((s) => s.setOverrideMode);
+  const resetOverride = useCompositorStore((s) => s.resetOverride);
   useEffect(() => {
     if (!preview) return;
     const onKey = (e: KeyboardEvent) => {
@@ -1062,6 +1109,57 @@ export function CompositorCanvas({
               <Maximize2 className="h-3.5 w-3.5" />
             )}
           </button>
+          {!preview && doc && (
+            <div className="absolute left-6 top-6 z-10 flex flex-wrap items-center gap-1.5">
+              {/* Shape. An ad that goes to a feed and a Story is two shapes,
+                  and this was the one screen that couldn't say so — the whole
+                  multi-format system existed behind a page nothing links to. */}
+              {ASPECTS.map((a) => (
+                <button
+                  key={a}
+                  type="button"
+                  onClick={() => setAspect(a)}
+                  className={`rounded-md border px-2 py-1 text-[11px] backdrop-blur transition-colors ${
+                    doc.aspect === a
+                      ? "border-primary/50 bg-primary/15 text-primary"
+                      : "border-border bg-card/80 text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {a}
+                </button>
+              ))}
+              <span className="mx-0.5 h-4 w-px bg-border" />
+              {/* Master vs this-format-only. Without it every nudge made to fit
+                  a Story silently moved the feed version too, which is the
+                  failure the override system was built to prevent. */}
+              <button
+                type="button"
+                onClick={() => setOverrideMode(!overrideMode)}
+                title={
+                  overrideMode
+                    ? `Edits apply to the ${doc.aspect} format only`
+                    : "Edits apply to every format (the master design)"
+                }
+                className={`rounded-md border px-2 py-1 text-[11px] backdrop-blur transition-colors ${
+                  overrideMode
+                    ? "border-amber-500/60 bg-amber-500/10 text-amber-500"
+                    : "border-border bg-card/80 text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {overrideMode ? `${doc.aspect} only` : "Master"}
+              </button>
+              {doc.overrides?.[doc.aspect] && (
+                <button
+                  type="button"
+                  onClick={() => resetOverride()}
+                  title={`Revert ${doc.aspect} to the master layout`}
+                  className="rounded-md border border-border bg-card/80 px-2 py-1 text-[11px] text-muted-foreground backdrop-blur transition-colors hover:text-foreground"
+                >
+                  Reset {doc.aspect}
+                </button>
+              )}
+            </div>
+          )}
           <div
             ref={previewContainerRef}
             className="relative h-full w-full"
@@ -1135,6 +1233,23 @@ export function CompositorCanvas({
           </div>
         </div>
       </div>
+
+      {/* Live per-platform previews of the SAME master doc, each reflowed to
+          that platform's aspect. Safe-zone guides show what the platform's own
+          UI will cover, and a ⚠ badge lights when a layer lands under it —
+          which is the thing you cannot see by looking at one shape. Clicking a
+          thumbnail switches the canvas to that aspect. Hidden in fullscreen
+          preview, which is for looking at one finished ad. */}
+      {!preview && doc && (
+        <FormatRail
+          doc={doc}
+          formats={rail}
+          activeAspect={doc.aspect}
+          onPick={(a: CompositionAspect) => setAspect(a)}
+          campaignId={campaignId}
+          workspaceSlug={workspaceSlug}
+        />
+      )}
 
       <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground/70">
         <ArrowRight className="h-3 w-3" /> Depth isn&apos;t shown as its own

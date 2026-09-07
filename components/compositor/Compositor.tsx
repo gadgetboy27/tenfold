@@ -21,6 +21,7 @@ import { Spinner } from "@/components/brand/Spinner";
 import { api } from "@/lib/api";
 import { readProfilesResponse } from "@/lib/social/profiles-response";
 import {
+  ASPECTS,
   effectiveLayer,
   type CompositionAspect,
 } from "@/lib/composition/layers";
@@ -50,8 +51,6 @@ import { LayerList } from "./LayerList";
 import { LayerControls } from "./LayerControls";
 import { AssetsTray } from "./AssetsTray";
 import { FormatRail } from "./FormatRail";
-
-const ASPECTS: CompositionAspect[] = ["9:16", "1:1", "16:9"];
 
 function fmt(t: number): string {
   return `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
