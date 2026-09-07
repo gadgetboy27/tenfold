@@ -75,7 +75,29 @@ export async function GET(
       })),
       concepts: rows.filter((a) => a.metadata?.logo_stage === "logo_concepts"),
       refined: rows.filter((a) => a.metadata?.logo_stage === "logo_refine"),
-      finalized: rows.filter((a) => a.metadata?.logo_stage === "logo_finalize"),
+      /**
+       * The finished mark.
+       *
+       * `final_asset_id` FIRST, because it is the project's own answer and the
+       * stage tag is only a description of how the asset was made. An IMPORTED
+       * logo is tagged `logo_vectorize`, so a stage-only filter returned an
+       * empty `finalized` for it — and the client derives `displayAnchor` from
+       * that, so the UI fell through to the concepts grid and sat on
+       * "Generating… 0 of 6 ready" indefinitely for a project that was already
+       * done. Measured: 21 seconds of work, still "generating" eight minutes
+       * later, then a stall notice claiming spent credits for a job that had
+       * succeeded.
+       *
+       * Both sources, deduped: the id catches whatever the project actually
+       * points at however it was produced, and the stage tags keep earlier
+       * finalize runs listed alongside it.
+       */
+      finalized: rows.filter(
+        (a) =>
+          a.id === project.final_asset_id ||
+          a.metadata?.logo_stage === "logo_finalize" ||
+          a.metadata?.logo_stage === "logo_vectorize",
+      ),
       // Free client-side edits saved as new versions (Phase 2).
       edited: rows.filter((a) => a.metadata?.logo_stage === "logo_edit"),
       // Contextual mockup scenes (Phase 3b).
