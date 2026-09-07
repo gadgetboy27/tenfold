@@ -15,9 +15,13 @@ export const GET = withWorkspace(async (_req, { db }) => {
 
   const assets = (data ?? []).filter((a) => {
     const meta = a.metadata as { hd?: boolean; kind?: string } | null;
-    // Exclude derived HD upscales and logo brand-package zips (stored as
-    // image-type asset rows but not viewable images).
-    return !meta?.hd && meta?.kind !== "logo_bundle";
+    // Exclude derived HD upscales, logo brand-package zips (image-type rows
+    // that aren't viewable images), and the normalised frame a video was
+    // generated from — that one is a working copy of the anchor, so listing it
+    // would offer the user a near-identical duplicate to choose between.
+    return (
+      !meta?.hd && meta?.kind !== "logo_bundle" && meta?.kind !== "video_source"
+    );
   });
   return NextResponse.json({ assets });
 });

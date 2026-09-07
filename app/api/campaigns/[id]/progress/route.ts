@@ -145,7 +145,12 @@ export const GET = withWorkspace<{ id: string }>(
 
     const images = assets.filter(
       (a) =>
-        (a.type === "image" || a.type === "composed_image") && !a.metadata?.hd,
+        (a.type === "image" || a.type === "composed_image") &&
+        !a.metadata?.hd &&
+        // The normalised frame a video was generated from: a working copy of
+        // the anchor, owned by the campaign so it gets cleaned up, but not a
+        // separate image the user made or should have to reason about.
+        a.metadata?.kind !== "video_source",
     );
     const videos = assets.filter(
       (a) => a.type === "video" || a.type === "composed_video",

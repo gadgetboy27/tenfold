@@ -20,6 +20,7 @@ const VIDEO_IMAGE_MAX_EDGE = 2048;
 export async function prepareVideoStartImage(
   sourceUrl: string,
   workspaceId: string,
+  campaignId?: string,
 ): Promise<string> {
   try {
     const res = await fetch(sourceUrl);
@@ -54,12 +55,53 @@ export async function prepareVideoStartImage(
     }
 
     const supabase = createSupabaseAdminClient();
-    const path = `${workspaceId}/video-src/${randomUUID()}.jpg`;
+    const assetId = randomUUID();
+    const path = `${workspaceId}/video-src/${assetId}.jpg`;
     const { error } = await supabase.storage
       .from("assets")
       .upload(path, out, { contentType: "image/jpeg", upsert: true });
     if (error) return sourceUrl;
-    return supabase.storage.from("assets").getPublicUrl(path).data.publicUrl;
+    const url = supabase.storage.from("assets").getPublicUrl(path)
+      .data.publicUrl;
+
+    /**
+     * Record the frame as a real asset of the campaign.
+     *
+     * This used to be a bare storage upload — no row, no campaign. Three
+     * consequences, all quiet: the exact frame the video was generated FROM
+     * was not part of the project and could not be looked at again; nothing
+     * could delete it, because DELETE /api/campaigns/[id] collects storage
+     * paths from `assets` rows and this had none, so it outlived the campaign
+     * it belonged to; and the anchor is only normalised when it's too big for
+     * Kling, so whether the source frame existed at all depended on the file
+     * size of the image.
+     *
+     * `kind: "video_source"` keeps it out of the Gallery and the project
+     * strip, which filter on exactly this field — it is a derived working
+     * frame, not a second copy of the anchor for the user to choose between.
+     * Owned and cleaned up, without being clutter.
+     *
+     * Best-effort: a failed insert must not fail the video. The frame is
+     * uploaded either way and the URL is what the job needs; losing the row
+     * costs us the tidy-up, not the render.
+     */
+    if (campaignId) {
+      const { error: rowErr } = await supabase.from("assets").insert({
+        id: assetId,
+        campaign_id: campaignId,
+        workspace_id: workspaceId,
+        type: "image",
+        url,
+        storage_path: path,
+        metadata: { kind: "video_source", derived_from: sourceUrl },
+      });
+      if (rowErr) {
+        console.warn(
+          `video start frame stored without an asset row: ${rowErr.message}`,
+        );
+      }
+    }
+    return url;
   } catch {
     return sourceUrl;
   }

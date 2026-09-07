@@ -8,7 +8,10 @@ import { CREDIT_COSTS, type CreditCostKey } from "@/lib/credits/costs";
 import { enqueueJob, enqueueFirstOf } from "@/lib/fal/queue";
 import { getMusicModel } from "@/lib/fal/models";
 import { generateScript } from "@/lib/claude/script";
-import { getWorkspaceBrandVoice, getWorkspaceBrandName } from "@/lib/claude/brand-voice";
+import {
+  getWorkspaceBrandVoice,
+  getWorkspaceBrandName,
+} from "@/lib/claude/brand-voice";
 import { generateJingleLyrics } from "@/lib/claude/jingle";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { prepareVideoStartImage } from "@/lib/composition/video-image";
@@ -73,6 +76,7 @@ export async function POST(req: Request) {
         body.params.imageUrl = await prepareVideoStartImage(
           src,
           session.workspaceId,
+          body.campaignId,
         );
       }
     }
