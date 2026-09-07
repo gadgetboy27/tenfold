@@ -35,7 +35,9 @@ describe("a finished step always has somewhere to go", () => {
 
   it("offers the real remaining work, in flow order", () => {
     const done: DoneMap = { images: true, video: true };
-    expect(suggestionsFor("video", done)).toEqual(["words", "compositor"]);
+    // Follows STUDIO_FLOW order, so it tracked the Compositor moving to the
+    // end: the next two things outstanding are now wording and the caption.
+    expect(suggestionsFor("video", done)).toEqual(["words", "caption"]);
   });
 
   it("falls back to Publish alone when nothing else is left", () => {

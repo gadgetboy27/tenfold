@@ -70,16 +70,31 @@ describe("nextStep", () => {
     expect(nextStep(done)).toBe("video");
   });
 
-  it("puts music after the composition, not in the middle of it", () => {
-    // Music is the most skippable step (social video autoplays muted) and it
-    // used to block the view of the assembled ad. Safe to sit here only because
-    // publish re-muxes a late track onto the export — see late-music.ts.
-    expect(STUDIO_FLOW.indexOf("music")).toBeGreaterThan(
-      STUDIO_FLOW.indexOf("compositor"),
-    );
-    // The caption is post copy, so it belongs beside Publish, not before the
-    // Compositor which never renders it.
-    expect(STUDIO_FLOW.indexOf("caption")).toBeGreaterThan(
+  it("assembles last — the Compositor comes after everything it combines", () => {
+    // The step that puts the pieces together cannot precede the pieces. This
+    // inverts the previous rule (music and caption used to sit AFTER the
+    // Compositor), which asked people to assemble an ad whose parts didn't
+    // exist yet and then go on making parts afterwards.
+    const compositor = STUDIO_FLOW.indexOf("compositor");
+    for (const earlier of [
+      "images",
+      "words",
+      "video",
+      "caption",
+      "music",
+    ] as const) {
+      expect(STUDIO_FLOW.indexOf(earlier), earlier).toBeLessThan(compositor);
+    }
+    // Only publishing comes after it.
+    expect(compositor).toBe(STUDIO_FLOW.length - 2);
+  });
+
+  it("keeps music ahead of the export, so the render bakes the audio in", () => {
+    // FFmpeg muxes audio at render time: an export made before the music
+    // exists is permanently silent. lib/composition/late-music.ts re-muxes a
+    // late track, but that is the safety net for adding music AFTER exporting
+    // — it should not be the normal path for every soundtracked ad.
+    expect(STUDIO_FLOW.indexOf("music")).toBeLessThan(
       STUDIO_FLOW.indexOf("compositor"),
     );
   });
@@ -135,9 +150,9 @@ describe("remainingSteps / flowProgress", () => {
   it("lists what's left, in order", () => {
     expect(remainingSteps({ images: true, video: true })).toEqual([
       "words",
-      "compositor",
       "caption",
       "music",
+      "compositor",
       "publish",
     ]);
   });

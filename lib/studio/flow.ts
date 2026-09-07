@@ -22,30 +22,38 @@ import type { SectionId } from "@/components/studio/Studio";
 /**
  * Steps that make up a finished ad, in the order they naturally happen.
  *
- * Ordered so the ad LOOKS finished as early as possible. Music used to sit
- * between video and the composition work, which meant waiting out a second
- * generation before you could see your ad assembled at all — and music is the
- * most skippable thing here, since most social video autoplays muted.
+ * **The Compositor comes LAST, immediately before Publish** (2026-09-07). It is
+ * the room where the pieces are assembled into the thing that actually ships —
+ * anchor or clip, brand mark, wording, music bed — so every piece should exist
+ * by the time you walk into it. Sitting mid-list, it asked people to assemble
+ * an ad whose parts they hadn't made yet, and then to go on making parts
+ * afterwards; the step that combines everything cannot come before the things
+ * it combines.
  *
- * Two things decide this order, and neither is taste:
+ * This also removes a dependency rather than adding one. FFmpeg muxes audio at
+ * render time, so an export made before the music exists is permanently silent.
+ * With music ahead of the Compositor the export bakes the track in directly,
+ * and `lib/composition/late-music.ts` goes back to being the safety net it was
+ * meant to be — for someone who adds music AFTER exporting — instead of the
+ * normal path every soundtracked ad depended on.
  *
- * - **Music must precede the final export, not the Compositor.** FFmpeg muxes
- *   the audio when it renders, so an export made before the music exists is
- *   permanently silent. That used to pin music ahead of the Compositor; publish
- *   now re-muxes a late track onto the export (`lib/composition/late-music.ts`),
- *   which is what frees it to move down here.
+ * What the order still encodes:
+ *
+ * - **Music before the export, not after.** See above. The late re-mux stays,
+ *   because people do add a track late, but it is no longer load-bearing.
  * - **The caption is post copy, not artwork.** It rides as the post text
  *   (see `captionStyle: "none"` in app/api/publish/route.ts), so nothing
- *   downstream renders it and it belongs beside Publish. On-image lettering is
- *   the Words step, which is a different thing and stays up top.
+ *   downstream renders it and its position is about grouping, not rendering.
+ *   On-image lettering is the Words step, a different thing, and it stays up
+ *   top where the model can compose around it.
  */
 export const STUDIO_FLOW: readonly SectionId[] = [
   "images",
   "words",
   "video",
-  "compositor",
   "caption",
   "music",
+  "compositor",
   "publish",
 ] as const;
 
