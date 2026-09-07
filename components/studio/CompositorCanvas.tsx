@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import toast from "react-hot-toast";
 import {
   Scissors,
@@ -23,7 +22,6 @@ import {
   X,
   Sparkles,
   ArrowRight,
-  ExternalLink,
 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { useCompositorStore, type Layer } from "@/store/useCompositorStore";
@@ -184,7 +182,6 @@ export function CompositorCanvas({
   workspaceSlug,
   campaignId,
   anchorUrl,
-  classicHref,
   caption,
   onUpgrade,
   musicUrl,
@@ -194,7 +191,6 @@ export function CompositorCanvas({
   workspaceSlug: string;
   campaignId: string;
   anchorUrl: string;
-  classicHref: string;
   /** The campaign caption, for the cinema-mix presets. Absent = row hidden. */
   caption?: string | null;
   /** Raises Studio's upgrade modal. Passed in rather than owning a second one:
@@ -878,13 +874,6 @@ export function CompositorCanvas({
             change it.
           </p>
         </div>
-        <Link
-          href={classicHref}
-          className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
-        >
-          Full editor (formats, autofix, publish){" "}
-          <ExternalLink className="h-3.5 w-3.5" />
-        </Link>
       </div>
 
       {/* Canvas LEFT, controls RIGHT — matching the three-pane shell, where

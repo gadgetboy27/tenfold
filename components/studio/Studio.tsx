@@ -1484,9 +1484,9 @@ export function Studio({
       label: "Compose",
       icon: Layers,
       done: !!progress?.done.compositor,
-      classicHref: campaignId
-        ? `/${workspaceSlug}/compositor?campaign=${campaignId}`
-        : `/${workspaceSlug}/compositor`,
+      // No classicHref: the classic page is gone. Everything it had — the
+      // format rail and per-aspect overrides, fan-out, fullscreen preview,
+      // caption presets, render and the one-pager — lives here now.
     },
     {
       id: "logo",
@@ -1776,7 +1776,6 @@ export function Studio({
                   caption={caption}
                   onUpgrade={() => setShowUpgrade(true)}
                   musicUrl={musicUrl}
-                  classicHref={`/${workspaceSlug}/compositor?campaign=${campaignId}`}
                   initialOp={compositorInitialOp}
                   // Inside the controls column, not after the pane: this
                   // component is h-full, so a sibling lands below the fold.
