@@ -366,7 +366,24 @@ export function Studio({
   };
   // Pre-fill a friendly random project name; the user can keep it, clear it, or
   // rename it. Persisted to the campaign once one exists.
-  const [campaignName, setCampaignName] = useState(randomCampaignName);
+  const [campaignName, setCampaignName] = useState(() => randomCampaignName());
+  /**
+   * Names this browser session has already used, so the next pre-fill avoids
+   * them.
+   *
+   * The re-roll below is the real fix; this makes it *reliable*. Even a
+   * 2,256-combination pool collides roughly 40% of the time by the 50th
+   * project (birthday paradox), and a user looking at two "Amber Pulse" does
+   * not care about the odds. A ref rather than state: nothing renders from it,
+   * and re-rendering the whole Studio because a name was recorded would be a
+   * cost for no benefit.
+   */
+  const usedNames = useRef<Set<string>>(new Set());
+  const freshName = () => {
+    const name = randomCampaignName(usedNames.current);
+    usedNames.current.add(name);
+    return name;
+  };
   const [prompt, setPrompt] = useState("");
   // Defaults OFF. It used to default ON, but the server rejects variety for
   // non-Pro users (app/api/campaigns/route.ts) — so every free signup landed
@@ -620,7 +637,7 @@ export function Studio({
 
   // Persist the project name (once a campaign exists); never leave it blank.
   const saveName = () => {
-    const name = campaignName.trim() || randomCampaignName();
+    const name = campaignName.trim() || freshName();
     if (name !== campaignName) setCampaignName(name);
     if (campaignId) {
       api(`/api/campaigns/${campaignId}`, {
@@ -710,7 +727,7 @@ export function Studio({
             : {}),
           // Belt and braces: entitlements can change between toggle and send.
           variety: variety && varietyAllowed,
-          name: campaignName.trim() || randomCampaignName(),
+          name: campaignName.trim() || freshName(),
           ...(referenceUrl ? { referenceImageUrl: referenceUrl } : {}),
         }),
         workspaceSlug,
@@ -736,6 +753,12 @@ export function Studio({
         );
       }
       setCampaignId(data.campaignId);
+      // Re-roll for whatever comes next. POST /api/campaigns creates a NEW
+      // campaign every time, but only `newProject` re-rolled the name — so
+      // pressing Generate again without going through "New campaign" made a
+      // second project with an identical pre-filled name. That is how one
+      // workspace got four "Amber Pulse", three of them inside three minutes.
+      setCampaignName(freshName());
       refreshBalance();
       // Throws on timeout rather than returning quietly, so the catch below
       // can tell the user their images are still coming.
@@ -956,7 +979,11 @@ export function Studio({
         camp.expansion_data?.music?.url ??
         null;
       setCampaignId(id);
-      setCampaignName(camp.name?.trim() || randomCampaignName());
+      // Record an opened project's name as taken too, so a later pre-fill
+      // can't hand you the name of a project already on screen.
+      const openedName = camp.name?.trim();
+      if (openedName) usedNames.current.add(openedName);
+      setCampaignName(openedName || freshName());
       // Restore what the ad is ABOUT, not just what it produced.
       //
       // This was the flow break: reopening a project brought back every asset
@@ -1028,7 +1055,7 @@ export function Studio({
   const newProject = () => {
     setCaption("");
     setCampaignId(null);
-    setCampaignName(randomCampaignName());
+    setCampaignName(freshName());
     setPrompt("");
     setAssets([]);
     setAnchorId(null);
@@ -1060,7 +1087,9 @@ export function Studio({
         throw new Error(data.error ?? "Couldn't reuse this image");
       }
       setCampaignId(data.campaignId);
-      setCampaignName(data.campaignName?.trim() || randomCampaignName());
+      const reusedName = data.campaignName?.trim();
+      if (reusedName) usedNames.current.add(reusedName);
+      setCampaignName(reusedName || freshName());
       setAssets([
         {
           id: data.asset.id,
@@ -1780,7 +1809,7 @@ export function Studio({
                     setVideoUrl(null);
                     setMusicUrl(null);
                     setReferenceUrl(null);
-                    setCampaignName(randomCampaignName());
+                    setCampaignName(freshName());
                     setSection("brief");
                   }}
                   referenceUrl={referenceUrl}
