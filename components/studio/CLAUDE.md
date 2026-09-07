@@ -576,6 +576,67 @@ pick onto the new asset.
   stated as the real trade it is — letterboxed, or two passes — not papered
   over.
 
+## The element tray — prepare it, then drop it where you want (2026-09-07)
+
+`ElementTray` in the Compositor's control column, above `LayerList`, so the
+panel reads top-to-bottom as make-it → drop-it → it's in the list.
+
+Every existing route onto the canvas decides placement FOR you: brand-apply
+pins the mark to a corner, the Words step puts lettering in the reserved zone.
+Both are good defaults and neither is a way to say "no, THERE". Marks and
+lettering are also the two things people want to fiddle with *before*
+committing — the wording, the face, whether it needs a scrim — and doing that
+on the live canvas makes every experiment an edit to the ad.
+
+- **Drag payload is a private MIME type** (`TRAY_MIME`), not `text/plain`.
+  `text/plain` would make every dragged word, file and URL from another window
+  a candidate layer. `parseTrayItem` never throws — a foreign payload is simply
+  "not ours", and `onDragOver` only calls `preventDefault()` for our type, so
+  the canvas isn't a drop target for anything else.
+- **The drop fraction is measured against the MEDIA rect, not the container.**
+  The canvas is letterboxed inside its container (`containRect`), so measuring
+  against the container puts every drop off by the width of the bars — drop on
+  the left edge of a 9:16 ad in a wide container and it lands a fifth of the way
+  in. `dropToFraction` (`lib/composition/tray.ts`) is pure and tested for
+  exactly this; "the logo landed somewhere else" is a bug you argue with rather
+  than notice.
+- **Clamped to a 2% inset, not 0..1.** A layer centred exactly on the edge is
+  half outside the frame, which reads as "it vanished" and can't be grabbed
+  again to fix.
+- **Fonts are `BRAND_FONTS`, enforced on PARSE.** Same rule as Words and the
+  logo lockup, for the same reason: the browser renders any family, the FFmpeg
+  export resolves through `FONT_FILES` and silently falls back to Inter, so an
+  unknown font gives a correct preview and a wrong video. `parseTrayItem`
+  coerces rather than trusts, because the payload is a string that has been out
+  of our hands.
+- **Lettering gets a fresh uuid per drop — deliberately NOT `WORDS_LAYER_ID`.**
+  The Words tool owns one replaceable layer because wording is edited
+  iteratively; the tray exists to place SEVERAL independent bits of type, so
+  stacking is the feature rather than the bug it is there.
+- Marks are read from the two places a workspace's marks actually live: the
+  brand kit (`logo_url` / `logo_dark_url`) and finished Logo Studio projects.
+  Both fetches fail quietly — an empty tray is a tray, but an error banner over
+  a side panel is noise on a screen doing another job.
+
+## The Compositor comes last (2026-09-07)
+
+`STUDIO_FLOW` moved it from fourth of seven to immediately before Publish:
+
+    images → words → video → caption → music → compositor → publish
+
+It is the room where the pieces become the thing that ships, so every piece
+should exist by the time you walk into it. Mid-list, it asked people to
+assemble an ad whose parts they hadn't made yet and then carry on making parts
+afterwards.
+
+This also removed a dependency rather than adding one. FFmpeg muxes audio at
+render time, so an export made before the music exists is permanently silent.
+With music now ahead of the Compositor the export bakes the track in directly,
+and `lib/composition/late-music.ts` is back to being the safety net it was
+meant to be — for adding music AFTER exporting — instead of the path every
+soundtracked ad quietly depended on. The rail sorts by `NAV_ORDER`, which is
+`STUDIO_FLOW`, so the menu moved with it.
+
 ## Stalled phases — every poll needs a bound AND a reason (2026-08-11)
 
 Reported as "Logo & Brand stuck on `Generating… 0 of 6 ready`". The rule that

@@ -21,7 +21,13 @@ import {
 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { useCompositorStore, type Layer } from "@/store/useCompositorStore";
+import {
+  TRAY_MIME,
+  parseTrayItem,
+  dropToFraction,
+} from "@/lib/composition/tray";
 import { LayerList } from "@/components/compositor/LayerList";
+import { ElementTray } from "@/components/studio/ElementTray";
 import { LayerControls } from "@/components/compositor/LayerControls";
 // The classic Compositor's canvas — real pointer-driven drag/resize/rotate,
 // battle-tested — reused here rather than re-implemented against the
@@ -563,6 +569,54 @@ export function CompositorCanvas({
     }
   };
 
+  /**
+   * Drop a tray element onto the ad at the point it was released.
+   *
+   * The fraction is measured against the MEDIA rect, not the container — the
+   * canvas is letterboxed, so measuring against the container puts every drop
+   * off by the size of the bars. See lib/composition/tray.ts.
+   */
+  const handleTrayDrop = async (e: React.DragEvent) => {
+    const item = parseTrayItem(e.dataTransfer.getData(TRAY_MIME));
+    // Not ours — a file, a URL, text from another window. Let the browser do
+    // whatever it would normally do rather than inventing a layer.
+    if (!item) return;
+    e.preventDefault();
+    const el = previewContainerRef.current;
+    if (!el || !containRect) return;
+    const box = el.getBoundingClientRect();
+    const { nx, ny } = dropToFraction(e.clientX, e.clientY, box, containRect);
+
+    const base = {
+      id: uuidv4(),
+      pos: { mode: "fraction" as const, nx, ny },
+      scale: 1,
+      rotationDeg: 0,
+      opacity: 1,
+      blend: "normal" as const,
+      appearAt: 0,
+      disappearAt: null,
+      fadeSec: 0,
+    };
+    const layer: Layer =
+      item.kind === "mark"
+        ? { ...base, kind: "image", src: item.src }
+        : {
+            ...base,
+            kind: "text",
+            text: item.text,
+            font: item.font,
+            sizePx: item.fontSize,
+            color: item.color,
+            ...(item.scrim
+              ? { bg: { color: "#000000", opacity: 0.45, padPx: 20 } }
+              : {}),
+          };
+    addLayer(layer);
+    await persist(useCompositorStore.getState().doc ?? undefined);
+    toast.success(item.kind === "mark" ? "Mark placed" : "Lettering placed");
+  };
+
   const handleRedo = async (
     op: CompositeOp,
     params: Record<string, unknown>,
@@ -890,6 +944,16 @@ export function CompositorCanvas({
           <div className="border-t border-border" />
 
           {/* Layer stack + properties */}
+          {/* Placeable elements, above the layer list: the tray is where a
+              layer COMES FROM, so it reads top-to-bottom as make-it →
+              drop-it → it's in the list. */}
+          <div className="border-t border-border pt-3">
+            <ElementTray
+              workspaceSlug={workspaceSlug}
+              campaignId={campaignId}
+            />
+          </div>
+
           <LayerList />
           {selectedLayer && (
             <div className="border-t border-border pt-3">
@@ -918,7 +982,19 @@ export function CompositorCanvas({
             available space (canvas intrinsic size + max-w/max-h), no more
             capped-small mock. */}
         <div className="flex min-h-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-card p-4 lg:order-1">
-          <div ref={previewContainerRef} className="relative h-full w-full">
+          <div
+            ref={previewContainerRef}
+            className="relative h-full w-full"
+            onDragOver={(e) => {
+              // Only claim the drop when it's one of ours; preventDefault is
+              // what tells the browser this is a valid target at all.
+              if (e.dataTransfer.types.includes(TRAY_MIME)) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "copy";
+              }
+            }}
+            onDrop={handleTrayDrop}
+          >
             <LayeredCanvas
               playing={false}
               onTick={() => {}}
