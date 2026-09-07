@@ -22,6 +22,7 @@ import {
   dropToFractionInMedia,
 } from "@/lib/composition/tray";
 import { dropTrayItem } from "@/components/studio/adBridge";
+import { useAdShortcuts } from "@/components/studio/useAdShortcuts";
 import {
   CompositorCanvas as LayeredCanvas,
   type CompositorCanvasHandle,
@@ -180,26 +181,8 @@ export function AdStage({
   const canUndo = useCompositorStore((s) => s.past.length > 0);
   const canRedo = useCompositorStore((s) => s.future.length > 0);
 
-  // ⌘Z / ⇧⌘Z — the shortcut people reach for before they look for a button.
-  // Ignored while typing, or an inline caption edit loses its own undo to the
-  // ad's; the browser's native text undo is the right one inside a field.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "z") return;
-      const el = document.activeElement;
-      const typing =
-        el instanceof HTMLElement &&
-        (el.tagName === "INPUT" ||
-          el.tagName === "TEXTAREA" ||
-          el.isContentEditable);
-      if (typing) return;
-      e.preventDefault();
-      if (e.shiftKey) redo();
-      else undo();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [undo, redo]);
+  // Undo/redo AND delete, shared with Compose — see useAdShortcuts.
+  useAdShortcuts();
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
   // The doc's own hint until the video element reports the file's real length.
@@ -452,7 +435,7 @@ export function AdStage({
 
         <span className="h-5 w-px bg-border" />
 
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
+        <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
           <Layers className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           {layers.length === 0 ? (
             <span className="text-xs text-muted-foreground">

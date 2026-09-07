@@ -15,6 +15,9 @@ import {
   Lock,
   LockOpen,
   Loader2,
+  Trash2,
+  Maximize2,
+  X,
   Sparkles,
   ArrowRight,
   ExternalLink,
@@ -29,6 +32,7 @@ import {
 import { dropTrayItem } from "@/components/studio/adBridge";
 import { LayerList } from "@/components/compositor/LayerList";
 import { ElementTray } from "@/components/studio/ElementTray";
+import { useAdShortcuts } from "@/components/studio/useAdShortcuts";
 import { CaptionPresetRow } from "@/components/compositor/CaptionPresetRow";
 import { LayerControls } from "@/components/compositor/LayerControls";
 // The classic Compositor's canvas — real pointer-driven drag/resize/rotate,
@@ -194,6 +198,20 @@ export function CompositorCanvas({
   const selectedLayerId = useCompositorStore((s) => s.selectedLayerId);
   const load = useCompositorStore((s) => s.load);
   const addLayer = useCompositorStore((s) => s.addLayer);
+  const removeLayer = useCompositorStore((s) => s.removeLayer);
+  const [preview, setPreview] = useState(false);
+  useEffect(() => {
+    if (!preview) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPreview(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [preview]);
+  // Same keys as the Ad stage. Compose takes the full width and the stage
+  // stands down for it, so a handler living only there covers half the places
+  // a user is looking at a canvas.
+  useAdShortcuts();
   const updateLayer = useCompositorStore((s) => s.updateLayer);
   const reset = useCompositorStore((s) => s.reset);
 
@@ -718,8 +736,23 @@ export function CompositorCanvas({
           The order is flipped in CSS rather than by moving the markup, so the
           DOM keeps controls-then-canvas for reading order and nothing in the
           canvas measuring code below has to change. */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[1fr_minmax(280px,320px)]">
-        <div className="flex min-h-0 flex-col gap-3 overflow-y-auto rounded-2xl border border-border bg-card p-3 lg:order-2">
+      <div
+        className={`grid min-h-0 flex-1 grid-cols-1 gap-4 ${
+          // The controls are a fixed-width column, so every pixel past
+          // their needs belongs to the canvas. 320px was a third of a
+          // 1024px screen and a fifth of a 1600px one — the same column
+          // doing the same job while the ad got proportionally smaller.
+          preview ? "" : "lg:grid-cols-[1fr_300px]"
+        }`}
+      >
+        <div
+          className={`flex min-h-0 flex-col gap-3 overflow-y-auto rounded-2xl border border-border bg-card p-3 lg:order-2 ${
+            // Hidden, not unmounted: unmounting would throw away every
+            // in-progress op form — a half-filled inpaint prompt, an
+            // uploaded mask — for the sake of a preview you close again.
+            preview ? "hidden" : ""
+          }`}
+        >
           {/* Op menu — a vertical list (not a wrapping pill row) since the
               left column has the height to spare. */}
           <nav className="flex flex-col gap-0.5">
@@ -966,6 +999,23 @@ export function CompositorCanvas({
                   <LockOpen className="h-3.5 w-3.5" />
                 )}
                 {selectedLayer.locked ? "Locked" : "Unlocked"} — selected layer
+                {/* The one-press delete. It was two or three actions before:
+                    find the layer's row in the list and hit its bin, or select
+                    the text and delete the characters — which leaves an empty
+                    text layer behind and doesn't remove anything at all.
+                    Undo covers the mistake, which is what makes an unconfirmed
+                    destructive button reasonable here; a confirm on every
+                    delete is what trains people to stop reading confirms. */}
+                <button
+                  type="button"
+                  onClick={() => removeLayer(selectedLayer.id)}
+                  title="Delete this layer (Del)"
+                  aria-label="Delete this layer"
+                  className="ml-auto flex items-center gap-1 rounded-md px-1.5 py-1 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-400"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span className="text-[10px]">Del</span>
+                </button>
                 <InfoHint text="Locking a layer freezes it so later operations build on top instead of replacing it. Unlock to edit its settings or regenerate it." />
               </div>
               <LayerControls
@@ -983,7 +1033,35 @@ export function CompositorCanvas({
             drag to move, edge/corner handles to resize/rotate. Fills the
             available space (canvas intrinsic size + max-w/max-h), no more
             capped-small mock. */}
-        <div className="flex min-h-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-card p-4 lg:order-1">
+        <div
+          className={
+            preview
+              ? "fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-4 sm:p-8"
+              : "flex min-h-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-card p-4 lg:order-1"
+          }
+        >
+          {/* Fullscreen preview — the finished look with no editing marks,
+              ported from the classic Compositor where it was the only place
+              you could see the ad as it will actually publish. Escape closes
+              it, because a fullscreen overlay with no keyboard exit is a trap
+              on a laptop with no visible chrome. */}
+          <button
+            type="button"
+            onClick={() => setPreview((p) => !p)}
+            title={preview ? "Close preview (Esc)" : "Fullscreen preview"}
+            aria-label={preview ? "Close preview" : "Fullscreen preview"}
+            className={`absolute z-10 flex items-center gap-1.5 rounded-lg border border-border bg-card/90 px-2 py-1.5 text-xs text-muted-foreground backdrop-blur transition-colors hover:text-foreground ${
+              preview ? "right-6 top-6" : "right-6 top-6"
+            }`}
+          >
+            {preview ? (
+              <>
+                <X className="h-3.5 w-3.5" /> Close
+              </>
+            ) : (
+              <Maximize2 className="h-3.5 w-3.5" />
+            )}
+          </button>
           <div
             ref={previewContainerRef}
             className="relative h-full w-full"
@@ -999,6 +1077,7 @@ export function CompositorCanvas({
           >
             <LayeredCanvas
               playing={false}
+              cleanPreview={preview}
               onTick={() => {}}
               onEnded={() => {}}
             />

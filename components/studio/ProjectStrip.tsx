@@ -331,7 +331,7 @@ export function ProjectStrip({
       </div>
 
       {open && (
-        <div className="flex items-stretch gap-2 overflow-x-auto px-4 pb-2.5">
+        <div className="no-scrollbar flex items-stretch gap-2 overflow-x-auto px-4 pb-2.5">
           {bundle.images.length > 0 && (
             <div
               className={`${GROUP_SHELL} ${focus === "images" ? GROUP_FOCUS : GROUP_IDLE}`}

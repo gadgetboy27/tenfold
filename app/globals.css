@@ -85,18 +85,71 @@
   }
 }
 
+/* ── Scrollbars ───────────────────────────────────────────────────────────
+   
+   Default scrollbars paint a permanent light gutter down the side of a dark
+   panel. On Windows and Linux especially that is a white bar standing beside
+   the content — the content is fine, the browser chrome is what looks dated.
+   
+   Applied globally rather than per-container: there were already fourteen
+   scroll containers and only two carried `.no-scrollbar`, so the app showed
+   two different scrollbar treatments depending on which panel you were in.
+   A global rule cannot drift the way a class that must be remembered does.
+   
+   Overlay rather than hidden. Scrolling is discoverable by habit now — people
+   try it — but a thumb that appears WHILE you scroll still answers "how far
+   through am I", which nothing else on screen does. So: transparent track,
+   a thumb that is barely there at rest and legible on hover, and no arrow
+   buttons. Firefox gets `thin` + colours; WebKit gets the full treatment. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, currentColor 22%, transparent)
+    transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklab, currentColor 18%, transparent);
+  border-radius: 9999px;
+  /* Transparent border + background-clip is what makes the thumb read as a
+     floating pill rather than a full-width bar: the border is padding the
+     browser will not otherwise give us. */
+  border: 3px solid transparent;
+  background-clip: content-box;
+  transition: background-color 150ms ease;
+}
+
+*:hover::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklab, currentColor 34%, transparent);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in oklab, currentColor 55%, transparent);
+}
+
+/* The corner where two scrollbars meet is otherwise a solid light square. */
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 @layer utilities {
-  /* Scroll without the chrome.
+  /* Scroll with NO indicator at all.
      
-     The Studio rails scroll, and on Windows and Linux that paints a permanent
-     grey gutter down the side of a dark panel — the content is fine, the
-     browser's default scrollbar is what looks dated. Hiding it keeps the
-     scrolling (wheel, trackpad, keyboard, touch) and drops the track.
+     Now the global treatment above is discreet, this is for the few places a
+     thumb would still be noise — a horizontal strip of thumbnails whose
+     content visibly continues past the edge, so the overflow is already
+     obvious from the content itself.
      
-     Use ONLY where the content is obviously scrollable by other means — a
-     rail whose content visibly continues past the fold. On a container that
-     gives no other hint there's more below, this hides the only affordance
-     the user had. */
+     Use ONLY where that is true. On a container giving no other hint there is
+     more below, this removes the last affordance the user had. */
   .no-scrollbar {
     -ms-overflow-style: none; /* old Edge */
     scrollbar-width: none; /* Firefox */
