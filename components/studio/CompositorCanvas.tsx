@@ -16,6 +16,9 @@ import {
   LockOpen,
   Loader2,
   Trash2,
+  Download,
+  Layers,
+  FileText,
   Maximize2,
   X,
   Sparkles,
@@ -49,6 +52,13 @@ import {
   type CompositionDoc,
 } from "@/lib/composition/layers";
 import { FormatRail } from "@/components/compositor/FormatRail";
+import {
+  materializeDoc,
+  requestExport,
+  requestFanOutExport,
+  type FanOutOutput,
+} from "@/components/compositor/export-client";
+import { downloadCampaignPdf } from "@/lib/compositor/campaign-pdf";
 import { railFormats } from "@/lib/composition/formats";
 import { readProfilesResponse } from "@/lib/social/profiles-response";
 import { Spinner } from "@/components/brand/Spinner";
@@ -177,6 +187,7 @@ export function CompositorCanvas({
   classicHref,
   caption,
   onUpgrade,
+  musicUrl,
   initialOp = null,
   footer = null,
 }: {
@@ -189,6 +200,15 @@ export function CompositorCanvas({
   /** Raises Studio's upgrade modal. Passed in rather than owning a second one:
    *  two modals on one screen can both be open, and only one can be right. */
   onUpgrade?: () => void;
+  /**
+   * The campaign's music, baked in at render time.
+   *
+   * NOT optional in spirit: FFmpeg muxes audio when it renders, and publish's
+   * late-music remux only fires when the track is NEWER than the export. A cut
+   * rendered here is newer than every existing track, so exporting without
+   * this posts permanent silence with nothing saying why.
+   */
+  musicUrl?: string | null;
   /** Rendered at the bottom of the controls column. The done-footer used to
    *  be mounted as a sibling AFTER this component, which sits at h-full — so
    *  it landed a full screen below the fold and you had to scroll a pane that
@@ -243,6 +263,100 @@ export function CompositorCanvas({
     () => railFormats(connectedPlatforms),
     [connectedPlatforms],
   );
+  const [exporting, setExporting] = useState(false);
+  const [exportingAll, setExportingAll] = useState(false);
+  const [exportUrl, setExportUrl] = useState<string | null>(null);
+  const [fanOut, setFanOut] = useState<FanOutOutput[] | null>(null);
+
+  /**
+   * Render the finished cut.
+   *
+   * Compose is where the ad is assembled, and it had no way to turn the doc
+   * into a file — the only render lived in Publish's "Final adjustments". So
+   * the room you build the ad in couldn't produce it.
+   *
+   * `materializeDoc` first: the server renderer can only fetch http(s), so a
+   * blob: URL from a local upload has to be uploaded before it can be drawn.
+   * When anything WAS local the materialised doc is loaded back, or the next
+   * render re-uploads the same files.
+   */
+  const exportMp4 = async () => {
+    const current = useCompositorStore.getState().doc;
+    if (!current) return;
+    setExporting(true);
+    try {
+      const hadLocal = [
+        current.background.src,
+        ...current.layers.map((l) => (l.kind === "image" ? l.src : "")),
+      ].some((s) => s.startsWith("blob:"));
+      const materialized = await materializeDoc(current, workspaceSlug);
+      if (hadLocal) load(materialized);
+      const { url } = await requestExport(materialized, workspaceSlug, {
+        campaignId,
+        audioUrl: musicUrl ?? null,
+      });
+      setExportUrl(url);
+      toast.success("Rendered — every layer baked in.");
+    } catch (err) {
+      toast.error((err as Error).message ?? "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  /** Every connected format at once, each carrying its own overrides. */
+  const fanAspects = Array.from(new Set(rail.map((r) => r.aspect)));
+  const exportAllFormats = async () => {
+    const current = useCompositorStore.getState().doc;
+    if (!current) return;
+    setExportingAll(true);
+    setFanOut(null);
+    try {
+      const hadLocal = [
+        current.background.src,
+        ...current.layers.map((l) => (l.kind === "image" ? l.src : "")),
+      ].some((s) => s.startsWith("blob:"));
+      const materialized = await materializeDoc(current, workspaceSlug);
+      if (hadLocal) load(materialized);
+      const outputs = await requestFanOutExport(
+        materialized,
+        workspaceSlug,
+        fanAspects,
+        { campaignId, audioUrl: musicUrl ?? null },
+      );
+      setFanOut(outputs);
+      toast.success(
+        `Rendered ${outputs.length} format${outputs.length > 1 ? "s" : ""}.`,
+      );
+    } catch (err) {
+      toast.error((err as Error).message ?? "Export failed");
+    } finally {
+      setExportingAll(false);
+    }
+  };
+
+  /**
+   * The campaign one-pager — the ad, its caption and the brand mark on a page
+   * you can send to a client. Free and entirely client-side (pdf-lib), so it
+   * costs nothing and works with no render queue.
+   */
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const makePdf = async () => {
+    setPdfBusy(true);
+    try {
+      await downloadCampaignPdf({
+        imageUrl: exportUrl ?? anchorUrl,
+        caption: caption ?? "",
+        logoUrl: null,
+        brandName: null,
+      });
+    } catch {
+      toast.error("Couldn't build the PDF — try again.");
+    } finally {
+      setPdfBusy(false);
+    }
+  };
+
   const setAspect = useCompositorStore((s) => s.setAspect);
   const overrideMode = useCompositorStore((s) => s.overrideMode);
   const setOverrideMode = useCompositorStore((s) => s.setOverrideMode);
@@ -1233,6 +1347,94 @@ export function CompositorCanvas({
           </div>
         </div>
       </div>
+
+      {/* Render. Compose is where the ad is assembled and it had no way to
+          turn the doc into a file — the only render lived in Publish's "Final
+          adjustments", so the room you build the ad in couldn't produce it. */}
+      {!preview && doc && (
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={exportMp4}
+            disabled={exporting || exportingAll}
+            title="Render this cut with every layer and your music baked in"
+            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-40"
+          >
+            {exporting ? (
+              <Spinner size={14} />
+            ) : (
+              <Download className="h-3.5 w-3.5" />
+            )}
+            {exporting ? "Rendering…" : "Render this cut"}
+          </button>
+
+          {/* Only when there's more than one shape to render — a single-format
+              "export all" is the same button twice. */}
+          {fanAspects.length > 1 && (
+            <button
+              type="button"
+              onClick={exportAllFormats}
+              disabled={exporting || exportingAll}
+              title={`Render all ${fanAspects.length} formats at once, each with its own overrides`}
+              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
+            >
+              {exportingAll ? (
+                <Spinner size={14} />
+              ) : (
+                <Layers className="h-3.5 w-3.5" />
+              )}
+              {exportingAll
+                ? "Rendering all…"
+                : `Render all ${fanAspects.length} formats`}
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={makePdf}
+            disabled={pdfBusy}
+            title="A one-page PDF of the ad and its caption, to send to a client"
+            className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
+          >
+            {pdfBusy ? (
+              <Spinner size={14} />
+            ) : (
+              <FileText className="h-3.5 w-3.5" />
+            )}
+            {pdfBusy ? "Building…" : "One-pager PDF"}
+          </button>
+
+          {exportUrl && (
+            <a
+              href={exportUrl}
+              target="_blank"
+              rel="noopener"
+              className="text-xs text-primary hover:underline"
+            >
+              ↓ Download your MP4
+            </a>
+          )}
+        </div>
+      )}
+
+      {fanOut && fanOut.length > 0 && !preview && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs">
+          <span className="text-muted-foreground">
+            {fanOut.length} formats rendered:
+          </span>
+          {fanOut.map((o) => (
+            <a
+              key={o.aspect}
+              href={o.url}
+              target="_blank"
+              rel="noopener"
+              className="rounded-full border border-border px-2 py-0.5 text-primary hover:border-primary/50"
+            >
+              {o.aspect} ↓
+            </a>
+          ))}
+        </div>
+      )}
 
       {/* Live per-platform previews of the SAME master doc, each reflowed to
           that platform's aspect. Safe-zone guides show what the platform's own

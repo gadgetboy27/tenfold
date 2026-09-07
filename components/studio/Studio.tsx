@@ -1775,6 +1775,7 @@ export function Studio({
                   anchorUrl={workingImage}
                   caption={caption}
                   onUpgrade={() => setShowUpgrade(true)}
+                  musicUrl={musicUrl}
                   classicHref={`/${workspaceSlug}/compositor?campaign=${campaignId}`}
                   initialOp={compositorInitialOp}
                   // Inside the controls column, not after the pane: this
