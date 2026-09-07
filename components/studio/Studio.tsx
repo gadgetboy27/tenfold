@@ -187,7 +187,7 @@ const SECTION_LABELS: Record<SectionId, string> = {
   tryon: "Virtual try-on",
   talking: "Spokesperson",
   autocaption: "Subtitles",
-  compositor: "Compositor",
+  compositor: "Compose",
   logo: "Logo & brand",
   publish: "Publish",
 };
@@ -1402,7 +1402,7 @@ export function Studio({
     },
     {
       id: "compositor",
-      label: "Compositor",
+      label: "Compose",
       icon: Layers,
       done: !!progress?.done.compositor,
       classicHref: campaignId

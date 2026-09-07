@@ -7,8 +7,10 @@ import {
   CAPTION_LAYER_ID,
   type CompositionAspect,
   type ImageLayer,
+  type Layer,
   type TextLayer,
 } from "@/lib/composition/layers";
+import type { TrayItem } from "@/lib/composition/tray";
 import { wrapText } from "@/lib/composition/brand-apply";
 import {
   buildWordsLayer,
@@ -53,6 +55,50 @@ function baseLayer(id: string) {
 }
 
 export type AddResult = "background" | "layer";
+
+/**
+ * Place a prepared tray element at a point on the ad.
+ *
+ * Lives here rather than in AdStage because this file is the ONE supported way
+ * to put something on the ad — a second path that reaches the store directly is
+ * how two callers end up disagreeing about what a layer looks like.
+ *
+ * Returns false when there is no doc yet. A drop needs somewhere to land, and
+ * `background.src` is required, so there is no such thing as a composition
+ * whose first content is a logo — the ad has to have a backdrop before it can
+ * be decorated. The caller shows the empty artboard's own guidance rather than
+ * a failure, because "nothing happened" is the one outcome worth avoiding.
+ */
+export function dropTrayItem(
+  item: TrayItem,
+  at: { nx: number; ny: number },
+): boolean {
+  const s = useCompositorStore.getState();
+  if (!s.doc) return false;
+
+  const base = {
+    ...baseLayer(uuidv4()),
+    pos: { mode: "fraction" as const, ...at },
+  };
+  const layer: Layer =
+    item.kind === "mark"
+      ? { ...base, kind: "image", src: item.src }
+      : {
+          ...base,
+          kind: "text",
+          text: item.text,
+          font: item.font,
+          sizePx: item.fontSize,
+          color: item.color,
+          // Same scrim the FFmpeg caption presets have always drawn: white
+          // lettering over bright footage is unreadable.
+          ...(item.scrim
+            ? { bg: { color: "#000000", opacity: 0.45, padPx: 20 } }
+            : {}),
+        };
+  s.addLayer(layer);
+  return true;
+}
 
 /**
  * Put an image on the ad.
@@ -287,7 +333,11 @@ export async function applyBrandKitToAd(
   return {
     ok: true,
     layers: layers.length,
-    variant: !hasBoth ? "only" : logoSrc === kit.logo_dark_url ? "dark" : "light",
+    variant: !hasBoth
+      ? "only"
+      : logoSrc === kit.logo_dark_url
+        ? "dark"
+        : "light",
   };
 }
 

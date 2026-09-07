@@ -26,6 +26,7 @@ import {
   parseTrayItem,
   dropToFraction,
 } from "@/lib/composition/tray";
+import { dropTrayItem } from "@/components/studio/adBridge";
 import { LayerList } from "@/components/compositor/LayerList";
 import { ElementTray } from "@/components/studio/ElementTray";
 import { LayerControls } from "@/components/compositor/LayerControls";
@@ -587,32 +588,10 @@ export function CompositorCanvas({
     const box = el.getBoundingClientRect();
     const { nx, ny } = dropToFraction(e.clientX, e.clientY, box, containRect);
 
-    const base = {
-      id: uuidv4(),
-      pos: { mode: "fraction" as const, nx, ny },
-      scale: 1,
-      rotationDeg: 0,
-      opacity: 1,
-      blend: "normal" as const,
-      appearAt: 0,
-      disappearAt: null,
-      fadeSec: 0,
-    };
-    const layer: Layer =
-      item.kind === "mark"
-        ? { ...base, kind: "image", src: item.src }
-        : {
-            ...base,
-            kind: "text",
-            text: item.text,
-            font: item.font,
-            sizePx: item.fontSize,
-            color: item.color,
-            ...(item.scrim
-              ? { bg: { color: "#000000", opacity: 0.45, padPx: 20 } }
-              : {}),
-          };
-    addLayer(layer);
+    // Through adBridge, not addLayer directly: it is the one supported way to
+    // put something on the ad, and a second path is how two callers end up
+    // disagreeing about what a dropped layer looks like.
+    if (!dropTrayItem(item, { nx, ny })) return;
     await persist(useCompositorStore.getState().doc ?? undefined);
     toast.success(item.kind === "mark" ? "Mark placed" : "Lettering placed");
   };

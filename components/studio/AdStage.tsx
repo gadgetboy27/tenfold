@@ -15,6 +15,12 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
+  TRAY_MIME,
+  parseTrayItem,
+  dropToFractionInMedia,
+} from "@/lib/composition/tray";
+import { dropTrayItem } from "@/components/studio/adBridge";
+import {
   CompositorCanvas as LayeredCanvas,
   type CompositorCanvasHandle,
 } from "@/components/compositor/CompositorCanvas";
@@ -165,6 +171,8 @@ export function AdStage({
      Compositor's timeline, not to a stage this size. */
   const isVideoAd = doc?.background.kind === "video";
   const canvasRef = useRef<CompositorCanvasHandle>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [dragOver, setDragOver] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
   // The doc's own hint until the video element reports the file's real length.
@@ -240,12 +248,71 @@ export function AdStage({
     }
   };
 
+  /**
+   * Drop a prepared element straight onto the ad.
+   *
+   * The whole point of the stage owning the doc is that this is one gesture:
+   * the drop position becomes the layer position and the autosave below
+   * persists it, so there is no "add" step and no "save" step.
+   *
+   * The media rect comes from the <canvas> element itself, not from the
+   * container — it renders at design resolution under `max-w/h-full`, so the
+   * browser letterboxes it and its own bounding box IS the ad. Measuring the
+   * container instead puts every drop off by the width of the bars.
+   */
+  const handleStageDrop = (e: React.DragEvent) => {
+    setDragOver(false);
+    const item = parseTrayItem(e.dataTransfer.getData(TRAY_MIME));
+    if (!item) return; // not ours — let the browser do whatever it would
+    e.preventDefault();
+    const media = stageRef.current
+      ?.querySelector("canvas")
+      ?.getBoundingClientRect();
+    if (!media) return;
+    const { nx, ny } = dropToFractionInMedia(e.clientX, e.clientY, media);
+    const placed = dropTrayItem(item, { nx, ny });
+    // "Nothing happened" is the one outcome worth avoiding: a drop onto the
+    // empty artboard is a reasonable thing to try, and silence reads as broken.
+    toast[placed ? "success" : "error"](
+      placed
+        ? item.kind === "mark"
+          ? "Mark placed"
+          : "Lettering placed"
+        : "Pick an image or clip for the ad first — there's nothing to place it on yet.",
+    );
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       {/* ── The artboard ── */}
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border border-border bg-card p-4">
         {doc ? (
-          <div className="relative h-full w-full">
+          <div
+            ref={stageRef}
+            className={`relative h-full w-full rounded-lg transition-shadow ${
+              dragOver
+                ? "ring-2 ring-primary ring-offset-2 ring-offset-card"
+                : ""
+            }`}
+            onDragOver={(e) => {
+              // Only claim the drop for our own payload; preventDefault is what
+              // makes this a valid target at all, so doing it unconditionally
+              // would swallow files and links the browser should handle.
+              if (!e.dataTransfer.types.includes(TRAY_MIME)) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "copy";
+              if (!dragOver) setDragOver(true);
+            }}
+            onDragLeave={(e) => {
+              // Only when the pointer actually leaves the stage — dragging over
+              // a child fires dragleave for the parent, which would flicker the
+              // ring off and on for the whole drag.
+              if (e.currentTarget.contains(e.relatedTarget as Node | null))
+                return;
+              setDragOver(false);
+            }}
+            onDrop={handleStageDrop}
+          >
             <LayeredCanvas
               ref={canvasRef}
               playing={playing}

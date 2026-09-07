@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   dropToFraction,
+  dropToFractionInMedia,
   parseTrayItem,
   serializeTrayItem,
   TRAY_MIME,
@@ -58,6 +59,52 @@ describe("dropToFraction", () => {
     });
     expect(Number.isFinite(nx)).toBe(true);
     expect(Number.isFinite(ny)).toBe(true);
+  });
+});
+
+describe("dropToFractionInMedia", () => {
+  // The preferred path: the <canvas> renders at design resolution under
+  // max-w/h-full, so the browser letterboxes it and its own bounding box IS
+  // the ad — no arithmetic to be wrong about.
+  const MEDIA_CLIENT = { left: 187.5, top: 50, width: 225, height: 400 };
+
+  it("agrees with the container-relative form", () => {
+    // Same geometry expressed two ways; if these ever diverge, one caller is
+    // placing layers somewhere the other wouldn't.
+    for (const [x, y] of [
+      [300, 250],
+      [200, 100],
+      [380, 400],
+    ] as const) {
+      expect(dropToFractionInMedia(x, y, MEDIA_CLIENT)).toEqual(
+        dropToFraction(x, y, CONTAINER, MEDIA),
+      );
+    }
+  });
+
+  it("puts the media centre at 0.5", () => {
+    const { nx, ny } = dropToFractionInMedia(
+      MEDIA_CLIENT.left + MEDIA_CLIENT.width / 2,
+      MEDIA_CLIENT.top + MEDIA_CLIENT.height / 2,
+      MEDIA_CLIENT,
+    );
+    expect(nx).toBeCloseTo(0.5, 5);
+    expect(ny).toBeCloseTo(0.5, 5);
+  });
+
+  it("clamps and survives a zero-sized rect", () => {
+    expect(dropToFractionInMedia(-999, -999, MEDIA_CLIENT)).toEqual({
+      nx: 0.02,
+      ny: 0.02,
+    });
+    const z = dropToFractionInMedia(10, 10, {
+      left: 0,
+      top: 0,
+      width: 0,
+      height: 0,
+    });
+    expect(Number.isFinite(z.nx)).toBe(true);
+    expect(Number.isFinite(z.ny)).toBe(true);
   });
 });
 

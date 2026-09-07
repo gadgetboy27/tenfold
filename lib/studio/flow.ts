@@ -76,7 +76,7 @@ export const STEP_ACTION: Partial<Record<SectionId, string>> = {
   video: "Make it move",
   music: "Add a soundtrack",
   caption: "Write a caption",
-  compositor: "Polish the composition",
+  compositor: "Compose your ad",
   publish: "Publish it",
 };
 

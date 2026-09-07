@@ -84,11 +84,39 @@ export function dropToFraction(
   media: Rect,
   inset = 0.02,
 ): { nx: number; ny: number } {
-  const x = clientX - containerRect.left - media.left;
-  const y = clientY - containerRect.top - media.top;
+  return dropToFractionInMedia(
+    clientX,
+    clientY,
+    {
+      left: containerRect.left + media.left,
+      top: containerRect.top + media.top,
+      width: media.width,
+      height: media.height,
+    },
+    inset,
+  );
+}
+
+/**
+ * The same answer from a media rect already in CLIENT coordinates.
+ *
+ * Preferred wherever the media is a real element, because it needs no
+ * arithmetic to be wrong about: the `<canvas>` in components/compositor renders
+ * at design resolution with `max-w-full max-h-full`, so the browser letterboxes
+ * it and `getBoundingClientRect()` IS the media rect — exactly, including any
+ * border, padding or transform in between. Recomputing it from the container
+ * and an aspect ratio reproduces work the browser has already done, and is one
+ * stale layout away from disagreeing with what the user sees.
+ */
+export function dropToFractionInMedia(
+  clientX: number,
+  clientY: number,
+  media: Rect,
+  inset = 0.02,
+): { nx: number; ny: number } {
   const clamp = (v: number) => Math.min(1 - inset, Math.max(inset, v));
   return {
-    nx: clamp(media.width > 0 ? x / media.width : 0.5),
-    ny: clamp(media.height > 0 ? y / media.height : 0.5),
+    nx: clamp(media.width > 0 ? (clientX - media.left) / media.width : 0.5),
+    ny: clamp(media.height > 0 ? (clientY - media.top) / media.height : 0.5),
   };
 }
