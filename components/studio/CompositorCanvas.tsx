@@ -15,6 +15,7 @@ import {
   LockOpen,
   Loader2,
   Trash2,
+  ChevronRight,
   Download,
   Layers,
   FileText,
@@ -79,9 +80,22 @@ const OP_META: Record<
     blurb: "Lift the subject out with a clean, soft-edge alpha mask.",
   },
   inpaint: {
-    label: "Erase & replace",
+    /**
+     * "Erase & replace" read as an undo, which invited the fair question of
+     * whether it was redundant now that deleting a layer is one key. It isn't:
+     * delete removes something YOU put on the ad; this repaints pixels that
+     * were generated INTO the picture. If you didn't put it there, delete
+     * can't reach it — a stray sign, a bystander, a wrong-coloured object.
+     */
+    label: "Pixel fixer",
     icon: Wand2,
-    blurb: "Fill a masked region with something new, blended in.",
+    blurb:
+      "Repaint part of the picture itself. Use it on things the image model " +
+      "put there — a stray sign, an extra hand, an object in the wrong " +
+      "colour. Upload a mask (white = repaint, black = keep), describe what " +
+      "should be there instead, and it fills the area to match the " +
+      "surrounding light and texture. Deleting a layer removes something you " +
+      "added; this changes the picture underneath.",
   },
   relight: {
     label: "Relight",
@@ -221,6 +235,8 @@ export function CompositorCanvas({
   const addLayer = useCompositorStore((s) => s.addLayer);
   const removeLayer = useCompositorStore((s) => s.removeLayer);
   const [preview, setPreview] = useState(false);
+  const [railOpen, setRailOpen] = useState(false);
+  const [flaggedFormats, setFlaggedFormats] = useState(0);
 
   /**
    * The format rail, brought across from the classic Compositor.
@@ -937,6 +953,10 @@ export function CompositorCanvas({
           {/* Inline form for the active op */}
           {activeOp && (
             <div className="space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
+              <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                <InfoHint text={OP_META[activeOp].blurb} />
+                <span>{OP_META[activeOp].blurb.split(".")[0]}.</span>
+              </p>
               <p className="text-xs text-muted-foreground">
                 Changing{" "}
                 <span className="font-medium text-foreground">
@@ -1462,20 +1482,54 @@ export function CompositorCanvas({
       )}
 
       {/* Live per-platform previews of the SAME master doc, each reflowed to
-          that platform's aspect. Safe-zone guides show what the platform's own
-          UI will cover, and a ⚠ badge lights when a layer lands under it —
-          which is the thing you cannot see by looking at one shape. Clicking a
-          thumbnail switches the canvas to that aspect. Hidden in fullscreen
-          preview, which is for looking at one finished ad. */}
+          that platform's aspect. The safe-zone guides are the point: a ⚠ lights
+          when a layer lands under the platform's own UI chrome, which is the
+          one thing you cannot see by looking at a single shape.
+
+          COLLAPSED BY DEFAULT. At full width under the canvas it cost more
+          screen than it earned most of the time — you check formats
+          occasionally, not continuously. The warning still reaches you
+          collapsed, via the count reported up from the rail, so folding it
+          away keeps the pixels AND the point. */}
       {!preview && doc && (
-        <FormatRail
-          doc={doc}
-          formats={rail}
-          activeAspect={doc.aspect}
-          onPick={(a: CompositionAspect) => setAspect(a)}
-          campaignId={campaignId}
-          workspaceSlug={workspaceSlug}
-        />
+        <div className="rounded-xl border border-border">
+          <button
+            type="button"
+            onClick={() => setRailOpen((o) => !o)}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ChevronRight
+              className={`h-3.5 w-3.5 transition-transform ${railOpen ? "rotate-90" : ""}`}
+            />
+            <span>Platform formats</span>
+            {flaggedFormats > 0 && (
+              <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-500">
+                ⚠ {flaggedFormats} need{flaggedFormats === 1 ? "s" : ""} a look
+              </span>
+            )}
+            <span className="ml-auto text-[10px] text-muted-foreground/70">
+              {doc.aspect}
+            </span>
+          </button>
+          {/* Always MOUNTED, only visually hidden.
+              Unmounting it while collapsed was the obvious saving and it is
+              wrong: the safe-zone warning is computed BY this component, so a
+              rail that never renders never measures, the badge above never
+              lights, and folding it away would keep the code while silently
+              dropping the one thing that justifies it. It costs the redraws.
+              That is the price of the warning being trustworthy. */}
+          <div className={railOpen ? "border-t border-border p-3" : "hidden"}>
+            <FormatRail
+              doc={doc}
+              formats={rail}
+              activeAspect={doc.aspect}
+              onPick={(a: CompositionAspect) => setAspect(a)}
+              campaignId={campaignId}
+              workspaceSlug={workspaceSlug}
+              onFlaggedCount={setFlaggedFormats}
+            />
+          </div>
+        </div>
       )}
 
       <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground/70">

@@ -43,6 +43,15 @@ interface Props {
   /** Campaign context — required for the credit-costing vision auto-fix. */
   campaignId?: string | null;
   workspaceSlug?: string;
+  /**
+   * How many formats currently have a problem — a layer under the platform's
+   * UI chrome, or a clip past its duration cap.
+   *
+   * Reported UP so a collapsed parent can still show the badge. The warning is
+   * the whole reason this rail exists; hiding it behind a fold that gives no
+   * hint would keep the pixels and lose the point.
+   */
+  onFlaggedCount?: (n: number) => void;
 }
 
 /**
@@ -60,6 +69,7 @@ export function FormatRail({
   onPick,
   campaignId,
   workspaceSlug,
+  onFlaggedCount,
 }: Props) {
   const canvasEls = useRef(new Map<string, HTMLCanvasElement>());
   const bgImageRef = useRef<HTMLImageElement | null>(null);
@@ -198,6 +208,13 @@ export function FormatRail({
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect -- warnings need offscreen text measurement, computed off the render path
     setWarnings(next);
+    onFlaggedCount?.(
+      Object.values(next).filter((zones) => zones.length > 0).length,
+    );
+    // onFlaggedCount deliberately absent: an inline arrow from the parent
+    // changes identity every render, and depending on it would re-run this
+    // whole measurement pass in a loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc, formats, mediaTick, fontsReady]);
 
   if (formats.length === 0) return null;
