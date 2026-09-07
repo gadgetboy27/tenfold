@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Layers,
+  Undo2,
+  Redo2,
   Trash2,
   ChevronUp,
   ChevronDown,
@@ -173,6 +175,31 @@ export function AdStage({
   const canvasRef = useRef<CompositorCanvasHandle>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const [dragOver, setDragOver] = useState(false);
+  const undo = useCompositorStore((s) => s.undo);
+  const redo = useCompositorStore((s) => s.redo);
+  const canUndo = useCompositorStore((s) => s.past.length > 0);
+  const canRedo = useCompositorStore((s) => s.future.length > 0);
+
+  // ⌘Z / ⇧⌘Z — the shortcut people reach for before they look for a button.
+  // Ignored while typing, or an inline caption edit loses its own undo to the
+  // ad's; the browser's native text undo is the right one inside a field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "z") return;
+      const el = document.activeElement;
+      const typing =
+        el instanceof HTMLElement &&
+        (el.tagName === "INPUT" ||
+          el.tagName === "TEXTAREA" ||
+          el.isContentEditable);
+      if (typing) return;
+      e.preventDefault();
+      if (e.shiftKey) redo();
+      else undo();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undo, redo]);
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
   // The doc's own hint until the video element reports the file's real length.
@@ -393,6 +420,34 @@ export function AdStage({
               {a.label}
             </button>
           ))}
+        </div>
+
+        <span className="h-5 w-px bg-border" />
+
+        {/* Undo/redo. Everything on the ad is placed by hand now — dropped,
+            dragged, restyled — and a bin per layer only covers the one action
+            that happens to be "add". This covers all of them. */}
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={undo}
+            disabled={!canUndo}
+            title="Undo (⌘Z)"
+            aria-label="Undo"
+            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent"
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={redo}
+            disabled={!canRedo}
+            title="Redo (⇧⌘Z)"
+            aria-label="Redo"
+            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent"
+          >
+            <Redo2 className="h-3.5 w-3.5" />
+          </button>
         </div>
 
         <span className="h-5 w-px bg-border" />

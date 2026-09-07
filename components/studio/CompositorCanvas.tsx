@@ -29,6 +29,7 @@ import {
 import { dropTrayItem } from "@/components/studio/adBridge";
 import { LayerList } from "@/components/compositor/LayerList";
 import { ElementTray } from "@/components/studio/ElementTray";
+import { CaptionPresetRow } from "@/components/compositor/CaptionPresetRow";
 import { LayerControls } from "@/components/compositor/LayerControls";
 // The classic Compositor's canvas — real pointer-driven drag/resize/rotate,
 // battle-tested — reused here rather than re-implemented against the
@@ -165,6 +166,8 @@ export function CompositorCanvas({
   campaignId,
   anchorUrl,
   classicHref,
+  caption,
+  onUpgrade,
   initialOp = null,
   footer = null,
 }: {
@@ -172,6 +175,11 @@ export function CompositorCanvas({
   campaignId: string;
   anchorUrl: string;
   classicHref: string;
+  /** The campaign caption, for the cinema-mix presets. Absent = row hidden. */
+  caption?: string | null;
+  /** Raises Studio's upgrade modal. Passed in rather than owning a second one:
+   *  two modals on one screen can both be open, and only one can be right. */
+  onUpgrade?: () => void;
   /** Rendered at the bottom of the controls column. The done-footer used to
    *  be mounted as a sibling AFTER this component, which sits at h-full — so
    *  it landed a full screen below the fold and you had to scroll a pane that
@@ -923,6 +931,21 @@ export function CompositorCanvas({
           <div className="border-t border-border" />
 
           {/* Layer stack + properties */}
+          {/* Cinema mix presets — fade / lower third / crawl.
+              These were wired ONLY into the classic /[workspace]/compositor
+              page, so they were stranded there when Studio became the main
+              site: the styles existed, worked, and were reachable by nobody
+              following the normal flow. Same shape as the four Pro panels and
+              the publish UI before them. */}
+          {caption && (
+            <div className="border-t border-border pt-3">
+              <CaptionPresetRow
+                caption={caption}
+                onUpgrade={() => onUpgrade?.()}
+              />
+            </div>
+          )}
+
           {/* Placeable elements, above the layer list: the tray is where a
               layer COMES FROM, so it reads top-to-bottom as make-it →
               drop-it → it's in the list. */}

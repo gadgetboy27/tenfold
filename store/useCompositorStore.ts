@@ -68,15 +68,52 @@ interface CompositorState {
   removeLayer: (id: string) => void;
   /** Move a layer toward the front (up) or back (down) in render order. */
   moveLayer: (id: string, dir: "up" | "down") => void;
+
+  /**
+   * Undo history — snapshots of the whole doc, newest last.
+   *
+   * Every mutation already funnels through `editDoc`, which is the only reason
+   * this is cheap: one choke point to snapshot, so no action can be added later
+   * that silently escapes the history. Whole-doc snapshots rather than inverse
+   * operations because a CompositionDoc is small JSON and correctness beats
+   * cleverness here — an inverse-op log has to be right for every action, a
+   * snapshot is right by construction.
+   */
+  past: CompositionDoc[];
+  future: CompositionDoc[];
+  undo: () => void;
+  redo: () => void;
 }
 
-/** Apply an edit to the doc, marking the composition dirty. */
+/**
+ * How many steps back you can go.
+ *
+ * Docs are small (layers are JSON, media is referenced by URL, never inlined),
+ * so this is kilobytes, not megabytes. Capped anyway: an unbounded stack in a
+ * long editing session is a slow leak nobody attributes to undo.
+ */
+const HISTORY_LIMIT = 50;
+
+/**
+ * Apply an edit to the doc, marking the composition dirty and pushing the
+ * PREVIOUS state onto the undo stack.
+ *
+ * Snapshotting here rather than at each call site is the whole design: this is
+ * the single place a doc changes, so an action added later cannot forget to
+ * record itself. A redo future is discarded on any new edit — the standard
+ * rule, and the only one that can't produce a branch the UI has no way to show.
+ */
 function editDoc(
   state: CompositorState,
   mutate: (doc: CompositionDoc) => CompositionDoc,
 ): Partial<CompositorState> {
   if (!state.doc) return {};
-  return { doc: mutate(state.doc), dirty: true };
+  return {
+    doc: mutate(state.doc),
+    dirty: true,
+    past: [...state.past, state.doc].slice(-HISTORY_LIMIT),
+    future: [],
+  };
 }
 
 export const useCompositorStore = create<CompositorState>((set) => ({
@@ -85,6 +122,8 @@ export const useCompositorStore = create<CompositorState>((set) => ({
   dirty: false,
   overrideMode: false,
   pendingAspect: "1:1",
+  past: [],
+  future: [],
 
   setPendingAspect: (pendingAspect) => set({ pendingAspect }),
 
@@ -98,6 +137,10 @@ export const useCompositorStore = create<CompositorState>((set) => ({
         : null,
       dirty: false,
       overrideMode: false,
+      // A different ad's history is not just useless, it's dangerous: undoing
+      // into the previous project's doc would silently replace this one.
+      past: [],
+      future: [],
     }),
   reset: () =>
     set({
@@ -105,8 +148,51 @@ export const useCompositorStore = create<CompositorState>((set) => ({
       selectedLayerId: null,
       dirty: false,
       overrideMode: false,
+      past: [],
+      future: [],
     }),
   markSaved: () => set({ dirty: false }),
+
+  /**
+   * Step back one action.
+   *
+   * `dirty: true` on purpose — undo is an edit like any other, and the doc on
+   * screen now differs from the one on the server. Leaving it clean would let
+   * the autosave skip it, so a reload would resurrect the thing you undid.
+   *
+   * A restored doc may not contain the selected layer (undoing an add), which
+   * would leave the properties panel bound to a layer that no longer exists.
+   * Clearing the selection when it's missing is the cheap, always-correct fix.
+   */
+  undo: () =>
+    set((s) => {
+      const previous = s.past[s.past.length - 1];
+      if (!previous || !s.doc) return {};
+      return {
+        doc: previous,
+        past: s.past.slice(0, -1),
+        future: [s.doc, ...s.future].slice(0, HISTORY_LIMIT),
+        dirty: true,
+        selectedLayerId: previous.layers.some((l) => l.id === s.selectedLayerId)
+          ? s.selectedLayerId
+          : null,
+      };
+    }),
+
+  redo: () =>
+    set((s) => {
+      const next = s.future[0];
+      if (!next || !s.doc) return {};
+      return {
+        doc: next,
+        past: [...s.past, s.doc].slice(-HISTORY_LIMIT),
+        future: s.future.slice(1),
+        dirty: true,
+        selectedLayerId: next.layers.some((l) => l.id === s.selectedLayerId)
+          ? s.selectedLayerId
+          : null,
+      };
+    }),
   selectLayer: (id) => set({ selectedLayerId: id }),
   setOverrideMode: (on) => set({ overrideMode: on }),
 

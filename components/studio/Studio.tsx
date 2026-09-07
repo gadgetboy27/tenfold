@@ -1694,6 +1694,8 @@ export function Studio({
                   workspaceSlug={workspaceSlug}
                   campaignId={campaignId}
                   anchorUrl={workingImage}
+                  caption={caption}
+                  onUpgrade={() => setShowUpgrade(true)}
                   classicHref={`/${workspaceSlug}/compositor?campaign=${campaignId}`}
                   initialOp={compositorInitialOp}
                   // Inside the controls column, not after the pane: this
