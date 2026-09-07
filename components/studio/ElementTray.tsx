@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Type, Shapes, GripVertical } from "lucide-react";
+import { Type, Image as ImageIcon, Plus, GripVertical } from "lucide-react";
 import { api } from "@/lib/api";
+import { GalleryPicker } from "@/components/shared/GalleryPicker";
 import {
   BRAND_FONTS,
   weightsFor,
@@ -33,7 +34,7 @@ import {
 
 interface Props {
   workspaceSlug: string;
-  /** Kept for symmetry with the rest of the Compositor's fetches. */
+  /** Opens the gallery picker on THIS project's assets before everything else. */
   campaignId?: string | null;
 }
 
@@ -43,8 +44,21 @@ interface Mark {
   src: string;
 }
 
-export function ElementTray({ workspaceSlug }: Props) {
+export function ElementTray({ workspaceSlug, campaignId }: Props) {
   const [marks, setMarks] = useState<Mark[]>([]);
+  /**
+   * Images pulled in from the gallery this session.
+   *
+   * The section used to offer brand marks and nothing else, which answered
+   * "stamp your logo" and not the more common "put THAT picture on the ad" —
+   * a product cutout, a photo, an earlier render. There was no way to add an
+   * arbitrary image as a LAYER anywhere: the strip stages a still as the
+   * BACKDROP, and the compositing ops take a second image only as an input to
+   * a generation. Kept in state rather than persisted because the tray is a
+   * staging shelf, not a collection; the ad itself is what gets saved.
+   */
+  const [picked, setPicked] = useState<Mark[]>([]);
+  const [picking, setPicking] = useState(false);
   const [text, setText] = useState("");
   const [font, setFont] = useState<BrandFont>("Montserrat");
   const [fontSize, setFontSize] = useState(64);
@@ -122,6 +136,10 @@ export function ElementTray({ workspaceSlug }: Props) {
     e.dataTransfer.effectAllowed = "copy";
   }
 
+  // Brand marks first — they're the ones used on every ad — then whatever was
+  // pulled in for this one.
+  const tiles = [...marks, ...picked];
+
   const letteringItem: TrayItem = {
     kind: "lettering",
     id: "lettering",
@@ -136,47 +154,86 @@ export function ElementTray({ workspaceSlug }: Props) {
   return (
     <div className="flex w-full flex-col gap-5 text-sm">
       <p className="text-xs text-muted-foreground">
-        Build it here, then drag it onto the ad — it lands where you drop it.
+        Build it here, then drag it onto the ad — it lands where you drop it,
+        and you can move, resize and delete it there.
       </p>
 
-      {/* ── Marks ── */}
+      {/* ── Images ── */}
       <section className="space-y-2">
-        <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          <Shapes className="h-3.5 w-3.5" /> Marks
-        </h3>
-        {marks.length === 0 ? (
+        <div className="flex items-center justify-between">
+          <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <ImageIcon className="h-3.5 w-3.5" /> Images
+          </h3>
+          <button
+            type="button"
+            onClick={() => setPicking(true)}
+            className="flex items-center gap-1 text-[11px] text-primary hover:underline"
+          >
+            <Plus className="h-3 w-3" /> From gallery
+          </button>
+        </div>
+
+        {tiles.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
-            No marks yet — make one in Logo &amp; brand, or set a brand logo.
+            Nothing here yet — pull an image in from your gallery, or set a
+            brand logo in Logo &amp; brand.
           </p>
         ) : (
           <div className="grid grid-cols-3 gap-2">
-            {marks.map((m) => (
-              <div
-                key={m.id}
-                draggable
-                onDragStart={(e) =>
-                  startDrag(e, {
-                    kind: "mark",
-                    id: m.id,
-                    label: m.label,
-                    src: m.src,
-                  })
-                }
-                title={`Drag "${m.label}" onto the ad`}
-                className="flex aspect-square cursor-grab items-center justify-center rounded-lg border border-border bg-white p-2 transition-colors hover:border-primary/60 active:cursor-grabbing"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={m.src}
-                  alt={m.label}
-                  draggable={false}
-                  className="max-h-full max-w-full object-contain"
-                />
+            {tiles.map((m) => (
+              <div key={m.id} className="space-y-1">
+                <div
+                  draggable
+                  onDragStart={(e) =>
+                    startDrag(e, {
+                      kind: "mark",
+                      id: m.id,
+                      label: m.label,
+                      src: m.src,
+                    })
+                  }
+                  title={`Drag "${m.label}" onto the ad`}
+                  /* Checkerboard, not white. Half these are transparent PNGs
+                     and SVGs, and a white mark on a white tile is an empty
+                     box — which is exactly how three real logos read as
+                     three mystery squares. */
+                  className="flex aspect-square cursor-grab items-center justify-center rounded-lg border border-border bg-[repeating-conic-gradient(#e5e7eb_0%_25%,#fff_0%_50%)] bg-[length:12px_12px] p-2 transition-colors hover:border-primary/60 active:cursor-grabbing"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={m.src}
+                    alt={m.label}
+                    draggable={false}
+                    className="max-h-full max-w-full object-contain"
+                  />
+                </div>
+                {/* A visible label, not just a tooltip. A tooltip answers
+                    "what is this" only for someone who already suspected. */}
+                <p className="truncate text-center text-[10px] leading-tight text-muted-foreground">
+                  {m.label}
+                </p>
               </div>
             ))}
           </div>
         )}
       </section>
+
+      <GalleryPicker
+        open={picking}
+        onClose={() => setPicking(false)}
+        onPick={(a) => {
+          setPicked((prev) =>
+            prev.some((p) => p.id === a.id)
+              ? prev
+              : [...prev, { id: a.id, label: "From gallery", src: a.url }],
+          );
+          setPicking(false);
+        }}
+        workspaceSlug={workspaceSlug}
+        campaignId={campaignId}
+        title="Pick an image to place"
+        hint="It becomes a layer you drag onto the ad — position and size it there."
+      />
 
       {/* ── Lettering ── */}
       <section className="space-y-2">
