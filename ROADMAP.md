@@ -7,11 +7,22 @@
 
 ## 0. Where we are (baseline)
 
-The core pipeline works end-to-end in production (verified 2026-06-11):
+The core pipeline works end-to-end in production (baseline verified 2026-06-11,
+refreshed 2026-09-09):
 
-**prompt → 6 images (FLUX Pro) → pick anchor → branch (video / music / caption / variations) → compose + brand kit → publish to ≤13 platforms (Ayrshare).** Credits ledger + auth + Google/email signup all functioning.
+**prompt → 6 images (FLUX Pro) → pick anchor → branch (video / music / caption / variations) → Compose (layers, formats, render) → publish.** Credits ledger + auth + Google/email signup all functioning.
 
-Recently shipped: runtime env injection, scoped `withWorkspace` routing layer, asset comments + AI suggestions, instant signup, prompt-validator assist, and the credit-debit fix.
+Publishing is **standalone-first**: Meta Graph plus our own adapters, with
+Ayrshare and the Outstand broker both dark. Live today: Bluesky, Facebook,
+Instagram, TikTok. See root `CLAUDE.md` §7d — and re-verify that table rather
+than trusting it; it has been wrong in both directions.
+
+Shipped since the last baseline: brand voice profile, approval state machine,
+one-video-per-publish pick, asset delete, the Compositor renamed **Compose**
+with the classic page retired into it (format rail + per-aspect overrides,
+fan-out, fullscreen preview, caption presets, render, one-pager PDF),
+drag-to-stage from a tray, undo/redo, real Bold plus six display faces, and the
+element tray over the gallery.
 
 ---
 
@@ -47,16 +58,59 @@ deepen this; don't get dragged into competing as a cheaper scheduler.
 |---|---|---|---|
 | Image generation | mostly templates/stock | FLUX Pro (real gen) | **ahead** |
 | Video / music generation | repurpose or none | Kling + music | **ahead** (rare) |
-| Multi-platform publish | core | Ayrshare ×13 | on par |
+| Multi-platform publish | core | Meta + own adapters; Ayrshare dark | on par |
 | Brand **kit** (logo/colour) | common | overlays / stamping | on par |
-| Human-in-loop review | 78% edit before post | asset comments (shipped) | on par |
-| **Brand VOICE consistency** | **#1 complaint** | generic Claude tone | **BUILD** |
+| Human-in-loop review | 78% edit before post | comments + approval gates ✅ | on par |
+| **Brand VOICE consistency** | **#1 complaint** | voice profile ✅ shipped | on par |
 | **Analytics / reporting** | **#1 use case** | basic weekly cron | **REFINE** |
 | **Ideation / trend research** | **tied #1 use case** | none | **BUILD** |
 | **Performance / virality prediction** | emerging (OpusClip) | none | **BUILD** |
 | Scheduling calendar UX | core | schedule stage exists | **REFINE** |
 | Long-form → clips repurposing | OpusClip | content-agent skeleton | refine |
 | Social inbox / engagement | Sprout / Hootsuite | none | later (different bet) |
+
+---
+
+## 2b. Agency parity — the First Page benchmark (2026-09-09)
+
+The reason this product exists, used as a measuring stick. First Page Digital
+was engaged for the Hariko Kainga / HouseMatch app, delivered a campaign, and
+never launched it. Their own artefacts are the most concrete spec we have of
+what "a whole agency" actually produces — see the `firstpage-origin-and-gap`
+memory for the full account.
+
+**What they delivered:** 13 tasks over 18 days across 6 departments (Social
+Performance Media, Search Performance Media, Content, Design, Landing Page,
+Account Manager), producing 9 unique creatives × 2 aspect ratios, staged
+TOF / MOF / BOF, plus a media plan and a landing page.
+
+Two observations worth keeping, because they set the strategy:
+
+- **Of those 13 tasks, five are briefs and four are reviews or approvals.**
+  Three are production. We are not competing with their capability, we are
+  competing with their coordination overhead — and handoffs between people is
+  exactly what software deletes.
+- **Their creative is ~80% compositing, ~20% generation** — stock lifestyle
+  backdrops, phone mockup frames, the client's own app screenshots dropped into
+  the screens, typography over the top. We are built the other way round.
+  That asymmetry, not quality, is the actual gap.
+
+### The six gaps, in build order
+
+| # | Gap | Why it matters | Effort | Notes |
+|---|---|---|---|---|
+| 1 | **Device mockups** | Their most-used device — 5 of 9 assets | **S** | A frame PNG with a transparent screen region, dropped from the tray as an image layer with the screenshot behind. Uses the layer system as-is. Highest credibility-per-hour in the list. |
+| 2 | **Funnel sets** | Makes output read as a *campaign*, not a pile of images | **M** | `lib/claude/campaign-brief.ts` ALREADY models `goal: awareness \| conversion \| engagement \| retention` and returns 4 angles. This is an extension of that — one brief → a coordinated TOF/MOF/BOF set with distinct messages and CTAs — not a new concept. |
+| 3 | **Media plan** | Their opening task, and their whole justification | **S** | One Claude call, same shape as `analyze-url`: brief + connected platforms + budget → channel split, audience, schedule. Store on the campaign, gate behind the existing `approval_status`. Price at `script_generation` tier. |
+| 4 | **Carousels** | 4 of their 9 assets were carousel frames | **M** | A composition type: N frames sharing one brand system, exported as an ordered set. Publish already fans out per platform. |
+| 5 | **Landing pages** | 5 of their 13 tasks | **L** | brief → copy → page, hosted. We already have brief, copy, imagery and brand kit; this is assembly plus hosting. |
+| 6 | **Paid ad buying** | The honest limit | **XL** | Meta Marketing API — ad accounts, adsets, budgets, bidding, review queues. Weeks, not days. **Until this exists, prettymuch replaces their studio, not their media desk.** Say it that way; the distinction is the difference between a true claim and an overclaim. |
+
+### Where we are already ahead
+
+Generation speed (≈20s vs 18 days), multi-format fan-out with safe-zone
+warnings (they hand-built two sizes; we reflow and flag overlap), approval
+gates, versioning, undo, and a publish step they never reached at all.
 
 ---
 
@@ -83,19 +137,37 @@ Build on what already works; attack the highest-pain, lowest-effort gaps.
      "what worked / do more of this" summary (we already pull Ayrshare analytics).
    - Success: a user can answer "what should I make more of?" in one screen.
 
+4. **Device mockups** *(§2b gap 1 — smallest real step toward agency parity)*
+   - A frame plate with a transparent screen region; the screenshot sits behind it as a
+     normal image layer. No schema change, no new renderer — the compositor already does
+     layers and masks.
+   - Success: a phone-in-hand ad, built in the product, that stands next to First Page's
+     `TOF_Static-1` without apology.
+
+5. **Media plan** *(§2b gap 3)*
+   - One Claude call: brief + connected platforms + budget → channel split, audience,
+     schedule. Behind the existing approval gate.
+   - Success: the thing they spent two calendar weeks briefing and approving takes 30s.
+
 ### ⏭️ NEXT — close table-stakes + extend the moat
-4. **Ideation / trend engine** — suggest *what* to post (trending topics, a content calendar).
+6. **Funnel sets** *(§2b gap 2)* — one brief → coordinated TOF/MOF/BOF variants, extending
+   `campaign-brief.ts`'s existing `goal` field rather than inventing a new concept.
+7. **Carousels** *(§2b gap 4)* — N frames, one brand system, exported as an ordered set.
+8. **Ideation / trend engine** — suggest *what* to post (trending topics, a content calendar).
    This is the tied-#1 use case we're missing entirely.
-5. **Pre-publish performance score** — predict which generated creative will perform. Our
+9. **Pre-publish performance score** — predict which generated creative will perform. Our
    generative moat + a virality score is genuinely unique: nobody else can score *generated*
    variants before they exist.
-6. **Scheduling calendar UI** + bulk/queue.
+10. **Scheduling calendar UI** + bulk/queue.
 
 ### 🔭 LATER — expand surface
-7. **Long-form repurposing** (podcast/webinar/transcript → clips + posts) — content-agent
+11. **Landing pages** *(§2b gap 5)* — brief → copy → hosted page.
+12. **Paid ad buying** *(§2b gap 6)* — Meta Marketing API. The line between replacing their
+    studio and replacing their agency.
+13. **Long-form repurposing** (podcast/webinar/transcript → clips + posts) — content-agent
    skeleton already exists.
-8. **Team approval workflows** — build on asset comments.
-9. **Social inbox / engagement** — a separate, bigger bet.
+14. **Team approval workflows** — ✅ largely shipped (`campaigns.approval_status`).
+15. **Social inbox / engagement** — a separate, bigger bet.
 
 ---
 
