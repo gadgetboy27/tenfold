@@ -29,6 +29,12 @@ const bodySchema = z.object({
     .min(1)
     .max(3)
     .optional(),
+  /**
+   * Output resolution multiplier. Capped at 3 — beyond that the file grows
+   * quadratically for a background photo that has no more detail to give, and
+   * a 4× 9:16 render is a 4320×7680 MP4 nobody asked for.
+   */
+  scale: z.number().min(1).max(3).optional(),
 });
 
 const isHttp = (u: string) => /^https?:\/\//i.test(u);
@@ -158,6 +164,7 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
     workspaceId: session.workspaceId,
     campaignId: campaignId ?? null,
     audioUrl: audioUrl ?? null,
+    scale: parsed.data.scale ?? 1,
   };
 
   // ── Fan-out: one MP4 per requested aspect ──────────────────────────────────

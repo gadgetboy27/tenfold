@@ -95,8 +95,15 @@ function fontFileFor(font: string, weight: 400 | 700 = 400): string {
 function imageLayerChain(
   layer: Extract<Layer, { kind: "image" }>,
   fx: MotionExprs,
+  canvasScale = 1,
 ): string {
-  const parts = ["format=rgba", `scale=iw*${layer.scale}:ih*${layer.scale}`];
+  // `iw` is the LAYER's own width, not the canvas — so an image at scale 1
+  // renders at its native pixel size whatever the output resolution is.
+  // Doubling the canvas without doubling this would render every mark and
+  // cutout at half its intended size on the page. The trap only shows up at
+  // scale > 1, which is exactly where nobody looks.
+  const s = layer.scale * canvasScale;
+  const parts = ["format=rgba", `scale=iw*${s}:ih*${s}`];
 
   const staticRad = (layer.rotationDeg * Math.PI) / 180;
   if (fx.rot) {
@@ -186,8 +193,25 @@ export function buildFilterGraph(
   doc: CompositionDoc,
   dur: number,
   files: GraphFiles,
+  /**
+   * Output resolution multiplier. 1 = the design space (1080-class).
+   *
+   * Everything positional is already a fraction of the canvas, so those scale
+   * for free. Everything measured in PIXELS does not, and there are exactly
+   * three: an image layer's own scale, a text layer's font size, and the
+   * scrim's border width. Miss one and the render is subtly wrong in a way
+   * that only appears above 1×.
+   *
+   * The honest ceiling: this resamples the design space, it does not add
+   * detail. Text and vector marks genuinely resharpen because they are drawn
+   * at the output size; a background photo cannot exceed its source and will
+   * simply be a larger copy of the same pixels.
+   */
+  scale = 1,
 ): { graph: string; outLabel: string } {
-  const { width, height } = ASPECT_DESIGN[doc.aspect];
+  const base = ASPECT_DESIGN[doc.aspect];
+  const width = Math.round(base.width * scale);
+  const height = Math.round(base.height * scale);
   const chains: string[] = [
     // Cover-fit the background into the design space; gbrp keeps the chain in
     // planar RGB so blend maths matches the canvas (yuv blending drifts).
@@ -212,7 +236,7 @@ export function buildFilterGraph(
       const idx = files.imageInputIdx.get(layer.id);
       if (idx === undefined) continue;
       const lbl = `l${step}`;
-      chains.push(`[${idx}:v]${imageLayerChain(layer, fx)}[${lbl}]`);
+      chains.push(`[${idx}:v]${imageLayerChain(layer, fx, scale)}[${lbl}]`);
       const pos = overlayPos(layer, fx, width, height);
 
       if (layer.blend === "normal") {
@@ -230,7 +254,7 @@ export function buildFilterGraph(
     } else {
       const tf = files.textFile.get(layer.id);
       if (!tf) continue;
-      const fontSize = Math.round(layer.sizePx * layer.scale);
+      const fontSize = Math.round(layer.sizePx * layer.scale * scale);
       // drawtext can't rotate, so text ignores the rot channel (documented
       // v1 limit); position + alpha effects apply fully.
       const base = basePos(layer.pos, width, height, "text_w", "text_h");
@@ -253,7 +277,7 @@ export function buildFilterGraph(
       // interaction between the two is known-good rather than assumed.
       const box = layer.bg
         ? `:box=1:boxcolor=${layer.bg.color.replace("#", "0x")}@${layer.bg.opacity}` +
-          `:boxborderw=${Math.round(layer.bg.padPx * layer.scale)}`
+          `:boxborderw=${Math.round(layer.bg.padPx * layer.scale * scale)}`
         : "";
       const draw =
         `drawtext=fontfile=${fontFileFor(layer.font, weightOf(layer))}:textfile=${tf}` +
@@ -325,6 +349,8 @@ export interface RenderCompositionInput {
   campaignId?: string | null;
   /** Optional music track — replaces the clip's own audio, like the mix. */
   audioUrl?: string | null;
+  /** Output resolution multiplier — see buildFilterGraph. Defaults to 1. */
+  scale?: number;
 }
 
 export async function renderComposition(
@@ -392,7 +418,12 @@ export async function renderComposition(
       args.push("-stream_loop", "-1", "-i", audioPath);
     }
 
-    const { graph, outLabel } = buildFilterGraph(doc, dur, files);
+    const { graph, outLabel } = buildFilterGraph(
+      doc,
+      dur,
+      files,
+      input.scale ?? 1,
+    );
     args.push("-filter_complex", graph, "-map", `[${outLabel}]`);
     // `-t dur` (below) caps the output at the VIDEO length — the video is always
     // the master; the looped music is snipped to match. No `-shortest` (it would

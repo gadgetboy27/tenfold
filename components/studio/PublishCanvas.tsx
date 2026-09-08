@@ -19,6 +19,7 @@ import {
   X,
   Loader2,
   Download,
+  Package,
   Sparkles,
   Settings2,
   ChevronDown,
@@ -211,6 +212,66 @@ export function PublishCanvas({
   const [applying, setApplying] = useState<number | null>(null);
   /** The re-exported cut, once an overlay has been burnt in. */
   const [appliedUrl, setAppliedUrl] = useState<string | null>(null);
+
+  /**
+   * The workspace's finished logo, so the brand pack can be offered here.
+   *
+   * Workspace-level, not per-campaign: a mark belongs to the business, not to
+   * one ad. Absent (no finished logo yet) simply hides the row rather than
+   * offering a button that would 404.
+   */
+  const [logoProjectId, setLogoProjectId] = useState<string | null>(null);
+  const [packing, setPacking] = useState(false);
+  const [brandPackUrl, setBrandPackUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await api("/api/logo", { workspaceSlug });
+        if (!res.ok) return;
+        const d = (await res.json()) as {
+          projects?: { id: string; status: string }[];
+        };
+        if (!alive) return;
+        const finished = (d.projects ?? []).find(
+          (p) => p.status === "finalized" || p.status === "packaged",
+        );
+        setLogoProjectId(finished?.id ?? null);
+      } catch {
+        /* no logo yet — the row stays hidden */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [workspaceSlug]);
+
+  const buildBrandPack = async () => {
+    if (!logoProjectId) return;
+    setPacking(true);
+    try {
+      const res = await api(`/api/logo/${logoProjectId}/package`, {
+        method: "POST",
+        workspaceSlug,
+      });
+      const d = (await res.json().catch(() => ({}))) as {
+        downloadUrl?: string;
+        fileCount?: number;
+        error?: string;
+      };
+      if (!res.ok || !d.downloadUrl)
+        throw new Error(d.error ?? "Couldn't build the brand pack");
+      setBrandPackUrl(d.downloadUrl);
+      toast.success(`Brand pack ready — ${d.fileCount ?? 0} files`);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Couldn't build the brand pack",
+      );
+    } finally {
+      setPacking(false);
+    }
+  };
   /** The re-exported cut, once an overlay has been burnt in. */
 
   const runReview = async () => {
@@ -1081,25 +1142,74 @@ export function PublishCanvas({
             Free on purpose — every file in the zip is one this workspace has
             already paid to generate, and charging to collect them into a
             folder is charging twice for the same pixels. */}
-        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-background p-3">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium">Take it with you</p>
-            <p className="text-[11px] text-muted-foreground">
-              Every render and every source file, zipped — for a designer, a
-              website, or to post somewhere we don&apos;t reach.
-            </p>
+        <div className="mt-3 space-y-2 rounded-xl border border-border bg-background p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium">Take it with you</p>
+              <p className="text-[11px] text-muted-foreground">
+                Every render and every source file, zipped — for a designer, a
+                website, or to post somewhere we don&apos;t reach.
+              </p>
+            </div>
+            <a
+              href={campaignId ? `/api/campaigns/${campaignId}/pack` : "#"}
+              aria-disabled={!campaignId}
+              className={`flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs transition-colors ${
+                campaignId
+                  ? "text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                  : "pointer-events-none opacity-40"
+              }`}
+            >
+              <Download className="h-3.5 w-3.5" /> Download everything
+            </a>
           </div>
-          <a
-            href={campaignId ? `/api/campaigns/${campaignId}/pack` : "#"}
-            aria-disabled={!campaignId}
-            className={`flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs transition-colors ${
-              campaignId
-                ? "text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                : "pointer-events-none opacity-40"
-            }`}
-          >
-            <Download className="h-3.5 w-3.5" /> Download everything
-          </a>
+
+          {/* The brand pack, surfaced where you'd reach for it.
+              It was already built — master PNGs at 512/1024/2048, transparent
+              /light/dark variants, JPG, favicon .ico, a social profile+cover
+              set, a PDF and a README — but only offered inside Logo Studio, so
+              nobody standing at Publish knew it existed. Same shape as every
+              other stranded capability this product has had.
+
+              The SVG in it is the one genuinely resolution-independent thing
+              here: an ad render is capped by its source photo, a vector mark
+              isn't. That's the file a web designer actually wants. */}
+          {logoProjectId && (
+            <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium">Brand pack</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Your mark as SVG, PNGs to 2048px, favicon, social profile and
+                  cover sizes. The SVG scales to any size at all.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={packing}
+                onClick={buildBrandPack}
+                className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground disabled:opacity-40"
+              >
+                {packing ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Package className="h-3.5 w-3.5" />
+                )}
+                {packing
+                  ? "Building…"
+                  : `Brand pack · ${CREDIT_COSTS.brand_package} credits`}
+              </button>
+            </div>
+          )}
+          {brandPackUrl && (
+            <a
+              href={brandPackUrl}
+              target="_blank"
+              rel="noopener"
+              className="block text-[11px] text-primary hover:underline"
+            >
+              ↓ Download your brand pack
+            </a>
+          )}
         </div>
 
         {/* ── Final adjustments ──────────────────────────────────────────────

@@ -287,6 +287,16 @@ export function CompositorCanvas({
     [connectedPlatforms],
   );
   const [exporting, setExporting] = useState(false);
+  /**
+   * Output resolution. 1× is the design space (1080-class); 2× is for handing
+   * a file to a designer or putting it on a website.
+   *
+   * Honest about its ceiling in the UI, because "2×" invites the belief that
+   * it adds detail. It resamples: text and vector marks are redrawn at the
+   * output size and genuinely resharpen, a background photo cannot exceed its
+   * source and just becomes a bigger copy of the same pixels.
+   */
+  const [renderScale, setRenderScale] = useState<1 | 2>(1);
   const [exportingAll, setExportingAll] = useState(false);
   const [exportUrl, setExportUrl] = useState<string | null>(null);
   const [fanOut, setFanOut] = useState<FanOutOutput[] | null>(null);
@@ -317,6 +327,7 @@ export function CompositorCanvas({
       const { url } = await requestExport(materialized, workspaceSlug, {
         campaignId,
         audioUrl: musicUrl ?? null,
+        scale: renderScale,
       });
       setExportUrl(url);
       toast.success("Rendered — every layer baked in.");
@@ -361,7 +372,7 @@ export function CompositorCanvas({
         materialized,
         workspaceSlug,
         fanAspects,
-        { campaignId, audioUrl: musicUrl ?? null },
+        { campaignId, audioUrl: musicUrl ?? null, scale: renderScale },
       );
       setFanOut(outputs);
       toast.success(
@@ -1487,6 +1498,31 @@ export function CompositorCanvas({
                   : `Render all ${fanAspects.length} formats`}
             </button>
           )}
+
+          {/* Resolution. Two options, not a slider: 1× is what publishes, 2× is
+              what you hand over. Offering 3× would mostly produce enormous
+              files from the same source pixels. */}
+          <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
+            {([1, 2] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setRenderScale(s)}
+                title={
+                  s === 1
+                    ? "Design size — 1080-class, what publishes"
+                    : "Double size for handover. Type and marks resharpen; a background photo can't exceed its source."
+                }
+                className={`rounded-md px-2 py-1 text-[11px] transition-colors ${
+                  renderScale === s
+                    ? "bg-primary/15 text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {s}×
+              </button>
+            ))}
+          </div>
 
           <button
             type="button"

@@ -79,6 +79,9 @@ export interface ExportOptions {
   campaignId?: string | null;
   /** Music track layered under the film (replaces clip audio). */
   audioUrl?: string | null;
+  /** Output resolution multiplier (1–3). Resamples the design space; it does
+   *  not add detail a source photo never had. */
+  scale?: number;
 }
 
 export async function requestExport(
@@ -92,6 +95,7 @@ export async function requestExport(
       doc,
       campaignId: options.campaignId ?? null,
       audioUrl: options.audioUrl ?? null,
+      ...(options.scale && options.scale !== 1 ? { scale: options.scale } : {}),
     }),
     workspaceSlug,
   });
@@ -164,6 +168,7 @@ export async function requestFanOutExport(
       aspects,
       campaignId: options.campaignId ?? null,
       audioUrl: options.audioUrl ?? null,
+      ...(options.scale && options.scale !== 1 ? { scale: options.scale } : {}),
     }),
     workspaceSlug,
   });
