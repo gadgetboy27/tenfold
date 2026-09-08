@@ -18,6 +18,7 @@ import {
   XCircle,
   X,
   Loader2,
+  Download,
   Sparkles,
   Settings2,
   ChevronDown,
@@ -1069,6 +1070,37 @@ export function PublishCanvas({
             </div>
           </div>
         )}
+
+        {/* ── Take it with you ───────────────────────────────────────────────
+            The product could publish and it could render, and between those
+            two there was no way to simply KEEP the work. "Send it to my web
+            designer", "upload it somewhere else later", "put it on the
+            website" all had the same answer: right-click each asset in turn
+            and hope you got them all.
+
+            Free on purpose — every file in the zip is one this workspace has
+            already paid to generate, and charging to collect them into a
+            folder is charging twice for the same pixels. */}
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-background p-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium">Take it with you</p>
+            <p className="text-[11px] text-muted-foreground">
+              Every render and every source file, zipped — for a designer, a
+              website, or to post somewhere we don&apos;t reach.
+            </p>
+          </div>
+          <a
+            href={campaignId ? `/api/campaigns/${campaignId}/pack` : "#"}
+            aria-disabled={!campaignId}
+            className={`flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs transition-colors ${
+              campaignId
+                ? "text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                : "pointer-events-none opacity-40"
+            }`}
+          >
+            <Download className="h-3.5 w-3.5" /> Download everything
+          </a>
+        </div>
 
         {/* ── Final adjustments ──────────────────────────────────────────────
             The last gap in the flow. Ticking a clip in the strip puts it on
