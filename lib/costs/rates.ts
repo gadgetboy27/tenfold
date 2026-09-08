@@ -48,6 +48,17 @@ export const PROVIDER_COST_USD: Record<string, number> = {
   // ~1.5k tokens). Estimate, not yet measured against real usage — see
   // lib/credits/CLAUDE.md before repricing off this alone.
   brand_import: 0.015,
+  // Anthropic — claude-sonnet-4-6, one call returning THREE complete landing
+  // page documents. Output-dominated in a way no other text action here is:
+  // ~2k in (brief + brand + caption + block schema) at $3/M = $0.006, ~5k out
+  // (three pages of structured copy as JSON) at $15/M = $0.075.
+  //
+  // ESTIMATE. The output half is the volatile one — a "story" page is
+  // materially longer than an "offer" page, so real spend will vary with which
+  // styles get generated rather than sitting on this number. Check
+  // creative_jobs.actual_cost_usd against real usage before repricing off it;
+  // see lib/credits/CLAUDE.md.
+  landing_pages: 0.081,
   // Anthropic — claude-opus-5 VISION, and the most expensive Claude call we
   // make by an order of magnitude. Six 768px frames ≈ 440 tokens each (~2.6k),
   // plus system, brief and tool schema (~1.1k) ≈ 3.7k in; adaptive thinking

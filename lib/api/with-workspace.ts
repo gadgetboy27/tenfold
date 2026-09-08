@@ -43,6 +43,12 @@ export const WORKSPACE_SCOPED_TABLES = new Set<string>([
   "workspace_addons",
   "publish_attempts",
   "promo_redemptions",
+  // Landing pages (migration 0034). page_leads carries workspace_id too, so
+  // its reads are tenant-filtered here as well — the public lead WRITE goes
+  // through ctx.admin in app/api/pages/[slug]/lead, which has no session to
+  // scope by and resolves the workspace from the page itself.
+  "landing_pages",
+  "page_leads",
 ]);
 
 type AdminClient = SupabaseClient;

@@ -68,6 +68,28 @@ export const CREDIT_COSTS = {
   // suggestion. Available to every tier — the flat charge is the gate, not a
   // tier lock (see app/api/campaigns/analyze-url/route.ts).
   brand_import: 8,
+  /**
+   * Three landing pages — one Claude call, three whole documents
+   * (lib/landing/generate.ts).
+   *
+   * The most expensive text action here, and priced off measured shape rather
+   * than by analogy: ~2k tokens in (brief, brand, caption, block schema) and
+   * ~5k out (three pages of structured copy) on Sonnet 4.6 is ~USD 0.081 raw
+   * — five times brand_import, because the OUTPUT is five times the size.
+   *
+   * 30 credits ≈ USD 1.38 at CREDIT_VALUE_USD, so ~17x. That is inside the
+   * shoulder of the Claude text band (script_generation 23x, brand_import
+   * 24.5x) rather than at its top, which is deliberate: this is the one action
+   * whose cost scales with how much it writes, so the margin should have room
+   * to absorb a long page. Roughly half a 10s video, which is about the right
+   * felt price for three pages.
+   *
+   * Charged once for the SET. Picking between the three, editing the one you
+   * picked, publishing it and collecting leads are all free — the generation
+   * is the inference, and charging rent on a page that exists to make the ads
+   * work would tax the thing we want people doing.
+   */
+  landing_pages: 30,
   // ── Image Compositing (lib/compositing/). All async via the fal webhook
   // pipeline except the Sharp-only mechanical blends (0 credits, no fal call).
   composite_cutout: 1, // fal-ai/birefnet/v2 (~$0.02 raw) — reuses bg_remove's engine

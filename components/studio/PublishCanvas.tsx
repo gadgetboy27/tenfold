@@ -31,6 +31,7 @@ import {
   Eye,
   Undo2,
   Clapperboard,
+  Globe,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import {
@@ -47,6 +48,7 @@ import { CREDIT_COSTS } from "@/lib/credits/costs";
 import { useCompositorStore } from "@/store/useCompositorStore";
 import { InfoHint } from "@/components/ui/info-hint";
 import { platformDefaults } from "@/lib/social/platform-defaults";
+import { LandingPagePanel } from "@/components/landing/LandingPagePanel";
 
 /**
  * Studio-native Publish surface. Ported from the classic dashboard's
@@ -305,15 +307,21 @@ export function PublishCanvas({
     }
   };
 
-  // Which of the three questions is expanded. All three open by default —
-  // collapsing is an escape hatch for a full rail, not a wall someone has to
-  // click through on a first visit.
+  // Which question is expanded. The first three open by default — collapsing is
+  // an escape hatch for a full rail, not a wall someone has to click through on
+  // a first visit.
+  //
+  // The landing page starts SHUT, alone among them. It is the only optional
+  // thing on this rail and the only one that costs credits, so it should be
+  // found rather than met: an open panel quoting a price above the publish
+  // button reads as something you have to deal with before you can post.
   const [openSections, setOpenSections] = useState({
     where: true,
     what: true,
     words: true,
+    page: false,
   });
-  const toggleSection = (k: "where" | "what" | "words") =>
+  const toggleSection = (k: "where" | "what" | "words" | "page") =>
     setOpenSections((prev) => ({ ...prev, [k]: !prev[k] }));
 
   const [platforms, setPlatforms] = useState<string[]>([]);
@@ -656,6 +664,37 @@ export function PublishCanvas({
 
   const isReviewer = role === "owner" || role === "admin";
   const canPublish = isReviewer || approvalStatus === "approved";
+
+  /**
+   * What still has to be true before a landing page can be written.
+   *
+   * The user's framing was "once all other stages are fixed in place and ready
+   * to publish", so the gate is genuinely the publish gate — not a softer one
+   * that happens to be easier to satisfy. Each item is phrased as the thing to
+   * go and do, because this list is shown to the person who has to do it.
+   *
+   * A caption counts here where it doesn't for publishing. A post can go out
+   * on the image alone; a page written with no idea what the ad promised will
+   * argue a different case to the one the click was made on, which is the one
+   * failure this feature exists to avoid.
+   */
+  const landingBlockers = useMemo(() => {
+    const out: string[] = [];
+    if (!campaignId) out.push("Start a campaign");
+    if (!workingImage && !videoUrl)
+      out.push("Make something to build the page around");
+    if (platforms.length === 0) out.push("Pick where this is going out");
+    if (!caption.trim()) out.push("Write the caption — the page follows it");
+    if (!canPublish) out.push("Get the campaign approved");
+    return out;
+  }, [
+    campaignId,
+    workingImage,
+    videoUrl,
+    platforms.length,
+    caption,
+    canPublish,
+  ]);
 
   const addHashtag = (raw: string) => {
     const tag = raw.replace(/^#+/, "").trim().replace(/\s+/g, "_");
@@ -1623,6 +1662,34 @@ export function PublishCanvas({
             />
           )}
         </div>
+      </Section>
+
+      {/* ── Where the ad points ────────────────────────────────────────────
+          Last on the rail, and deliberately so. A landing page is downstream
+          of the ad in the most literal way — it shows the image the ad shows
+          and argues the case the caption makes — so writing one before those
+          are settled produces a page for a different advert.
+
+          `landingBlockers` is what makes that a checklist rather than a dead
+          button. "Not ready yet" with no reason attached is the worst state a
+          gate can be in. */}
+      <Section
+        title="Landing page"
+        icon={Globe}
+        open={openSections.page}
+        onToggle={() => toggleSection("page")}
+        summary={
+          landingBlockers.length
+            ? `${landingBlockers.length} thing${landingBlockers.length === 1 ? "" : "s"} to finish first`
+            : "Ready to build"
+        }
+      >
+        <LandingPagePanel
+          workspaceSlug={workspaceSlug}
+          campaignId={campaignId}
+          caption={caption}
+          blockers={landingBlockers}
+        />
       </Section>
 
       {/* The action stays OUTSIDE the sections. Collapsing one must never hide

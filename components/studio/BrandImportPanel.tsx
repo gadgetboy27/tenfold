@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import toast from "react-hot-toast";
 import { Globe, Loader2, Wand2, Palette, Film } from "lucide-react";
 import { api } from "@/lib/api";
 import { CREDIT_COSTS } from "@/lib/credits/costs";
+import { useCreditEstimate } from "@/lib/billing/useCreditEstimate";
 
 /**
  * "Brand Brain" (PRODUCT_STRATEGY.md §3/§4.6): paste a website URL, get a
@@ -70,29 +71,9 @@ export function BrandImportPanel({
 }) {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
-  const [nzdEstimate, setNzdEstimate] = useState<number | null>(null);
 
   const cost = CREDIT_COSTS.brand_import;
-
-  useEffect(() => {
-    api("/api/billing", { workspaceSlug })
-      .then((r) => (r.ok ? r.json() : null))
-      .then(
-        (
-          d: {
-            plans?: { id: string; priceNzd: number; creditsPerMonth: number }[];
-          } | null,
-        ) => {
-          const creator = d?.plans?.find((p) => p.id === "creator");
-          if (creator) {
-            setNzdEstimate(
-              Math.ceil(cost * (creator.priceNzd / creator.creditsPerMonth)),
-            );
-          }
-        },
-      )
-      .catch(() => {});
-  }, [workspaceSlug, cost]);
+  const { label: costLabel } = useCreditEstimate(cost, workspaceSlug);
 
   const handleAnalyze = async () => {
     if (!url.trim()) return;
@@ -118,10 +99,6 @@ export function BrandImportPanel({
       setLoading(false);
     }
   };
-
-  const costLabel = nzdEstimate
-    ? `${cost} credits (≈ $${nzdEstimate} NZD)`
-    : `${cost} credits`;
 
   return (
     <div className="flex flex-col gap-3">

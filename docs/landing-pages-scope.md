@@ -1,6 +1,8 @@
 # Campaign landing pages — scope
 
-**Status: proposed, not built.** Written 2026-09-09. Nothing below exists yet.
+**Status: v1 BUILT, 2026-09-09.** Written as a proposal the same day and then
+built, with two deliberate departures recorded in §10. Sections 1-3 and 5-6
+describe shipped code; §4 describes an editor that does NOT exist yet.
 
 ## What this is, and what it deliberately isn't
 
@@ -197,3 +199,59 @@ campaign.
   app is behind a session. Rate limit and honeypot are not polish here.
 - **Scope creep is the actual risk, not difficulty.** "Can it have a blog" is
   one question away from every request in §8, and each sounds small.
+
+---
+
+## 10. What actually shipped, and where it differs
+
+Built 2026-09-09, migration `0034_landing_pages.sql`.
+
+| piece | file |
+|---|---|
+| Block union + theme + slug | `lib/landing/blocks.ts` |
+| Claude generation (3 pages, one call) | `lib/landing/generate.ts` |
+| Generate + list | `app/api/campaigns/[id]/landing/route.ts` |
+| Publish / take down / delete | `app/api/landing/[id]/route.ts` |
+| Lead CSV export | `app/api/landing/[id]/leads/route.ts` |
+| Public lead capture | `app/api/pages/[slug]/lead/route.ts` |
+| Public renderer | `app/p/[slug]/page.tsx`, `components/landing/` |
+| Publish-rail entry point | `components/landing/LandingPagePanel.tsx` |
+
+### Two departures from the scope above
+
+**The entry point is Publish, not Compose (§4).** Scoped as a Page tab beside
+the ad; built as the last section of the Publish rail, gated on the campaign
+being ready to publish. That was the user's call and it is the better one: a
+page is downstream of the ad in the most literal way — it shows the ad's image
+and argues the ad's caption — so offering it in Compose, where the caption
+often isn't written yet, invites a page that makes a different case to the one
+the click was made on. The gate is a named checklist, never a dead button.
+
+**Three pages at once, not one draft.** Three *styles* — enquiry, story, offer
+— because those are structurally different documents, and picking between them
+is the same "one of a set" choice the six anchor images already teach. One
+Claude call rather than three, so the model can see what it used for the
+enquiry page when it writes the offer page; three independent calls reliably
+produce three near-identical heroes.
+
+### The price
+
+`CREDIT_COSTS.landing_pages = 30`, with `PROVIDER_COST_USD.landing_pages =
+0.081` added in the same commit — never one without the other. ~17x, sitting
+in the shoulder of the Claude text band rather than at its top because this is
+the one action whose raw cost scales with how much it writes. The full working
+is in the comment on the key. Charged once for the set; publishing, editing,
+serving and collecting leads are all free.
+
+### Still missing, and worth naming
+
+- **No block editor.** §4's reorder/edit/drag UI does not exist. You get the
+  three pages Claude wrote, and can publish, take down or delete them — you
+  cannot change a headline. This is the biggest gap and the obvious next step.
+- **No email on a new lead.** The count on the card links to a CSV, so a lead
+  is never unreachable, but nobody is told one arrived. Someone has to look.
+- **Reserved slugs still unenforced** on workspace creation. Generated page
+  slugs are safe by construction (`buildPageSlug` suffixes every one), and
+  `RESERVED_SLUGS` now exists in `lib/landing/blocks.ts` — but nothing calls it
+  on the workspace path yet. Unchanged from before this feature; not made worse
+  by it.

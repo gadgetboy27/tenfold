@@ -120,7 +120,7 @@ Two observations worth keeping, because they set the strategy:
 | 2 | **Funnel sets** | Makes output read as a *campaign*, not a pile of images | **M** | `lib/claude/campaign-brief.ts` ALREADY models `goal: awareness \| conversion \| engagement \| retention` and returns 4 angles. This is an extension of that — one brief → a coordinated TOF/MOF/BOF set with distinct messages and CTAs — not a new concept. |
 | 3 | **Media plan** | Their opening task, and their whole justification | **S** | One Claude call, same shape as `analyze-url`: brief + connected platforms + budget → channel split, audience, schedule. Store on the campaign, gate behind the existing `approval_status`. Price at `script_generation` tier. |
 | 4 | **Carousels** | 4 of their 9 assets were carousel frames | **M** | A composition type: N frames sharing one brand system, exported as an ordered set. Publish already fans out per platform. |
-| 5 | **Landing pages** | 5 of their 13 tasks | **M**, scoped narrowly | See the note below — the delivered page is smaller than the task count implies, and the scope decision matters more than the build. |
+| 5 | **Landing pages** | 5 of their 13 tasks | ✅ **v1 shipped 2026-09-09** | Closed. The scope decision (serve from our own app, blocks not a canvas) did matter more than the build — see `docs/landing-pages-scope.md`. Generation only; no editor yet. |
 | 6 | **Conversion tracking** | Item 3 of what they sold; we have no attribution at all | **M** | Meta Pixel / Conversions API. Without it "which ad worked" is unanswerable, which also blocks the performance-prediction bet in §3. |
 | 7 | **Boost a published post** | Item 5 — their ACTUAL paid model | **M**, not XL | Promoting a post we already published is a small Meta surface next to the full campaign graph. This is the cheap 80% of "paid", and it is reachable. |
 | 8 | **Full campaign management** | Cold-audience buying, adsets, bidding | **XL** | The real remainder. **Until 7 and 8 exist, prettymuch replaces their studio, not their media desk** — say it in those words; the distinction is the difference between a true claim and an overclaim. |
@@ -214,7 +214,16 @@ Build on what already works; attack the highest-pain, lowest-effort gaps.
 10. **Scheduling calendar UI** + bulk/queue.
 
 ### 🔭 LATER — expand surface
-11. **Landing pages** *(§2b gap 5)* — brief → copy → hosted page.
+11. **Landing pages** *(§2b gap 5)* — ✅ **v1 shipped 2026-09-09.** Three pages
+    (enquiry / story / offer) written in one Claude call from the campaign's own
+    brief, brand and caption; served at `prettymuch.nz/p/<slug>`; lead capture
+    with CSV export. Entry point is the END of the Publish rail, gated on the
+    campaign being ready to publish — the page is downstream of the ad and
+    writing one first produces a page for a different advert.
+    `CREDIT_COSTS.landing_pages = 30`. See `docs/landing-pages-scope.md` §10 for
+    what shipped and the three things that didn't: **no block editor** (you
+    can't change a headline yet — the obvious next step), no email on a new
+    lead, and reserved workspace slugs still unenforced.
 12. **Paid ad buying** *(§2b gap 6)* — Meta Marketing API. The line between replacing their
     studio and replacing their agency.
 13. **Long-form repurposing** (podcast/webinar/transcript → clips + posts) — content-agent
