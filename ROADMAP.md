@@ -79,10 +79,27 @@ never launched it. Their own artefacts are the most concrete spec we have of
 what "a whole agency" actually produces — see the `firstpage-origin-and-gap`
 memory for the full account.
 
+**What they SOLD** (proposal, 22 Oct 2025 — the cleanest spec of the product
+we are replacing). "Paid Social Advertising — Facebook and Instagram",
+$1,300/mo + GST, media spend paid direct to Meta, 30-day minimum rolling with
+60-day written notice:
+
+1. Custom creative & ad copy
+2. **Funnel creation**
+3. **Conversion Pixel installation**
+4. Experienced PPC specialist
+5. **Boosting done based on organic posts** — additional artwork chargeable
+
 **What they delivered:** 13 tasks over 18 days across 6 departments (Social
 Performance Media, Search Performance Media, Content, Design, Landing Page,
 Account Manager), producing 9 unique creatives × 2 aspect ratios, staged
-TOF / MOF / BOF, plus a media plan and a landing page.
+TOF / MOF / BOF, plus a media plan and a landing page. The ads never ran.
+
+Line 5 is the most useful sentence in the whole engagement: **their paid model
+was BOOSTING ORGANIC POSTS**, not building ad campaigns from scratch. That
+matters enormously to our sizing below — promoting an existing published post
+is a far smaller Meta surface than the full campaign/adset/ad object graph, and
+publishing that post is something we already do.
 
 Two observations worth keeping, because they set the strategy:
 
@@ -95,7 +112,7 @@ Two observations worth keeping, because they set the strategy:
   the screens, typography over the top. We are built the other way round.
   That asymmetry, not quality, is the actual gap.
 
-### The six gaps, in build order
+### The gaps, in build order
 
 | # | Gap | Why it matters | Effort | Notes |
 |---|---|---|---|---|
@@ -104,7 +121,9 @@ Two observations worth keeping, because they set the strategy:
 | 3 | **Media plan** | Their opening task, and their whole justification | **S** | One Claude call, same shape as `analyze-url`: brief + connected platforms + budget → channel split, audience, schedule. Store on the campaign, gate behind the existing `approval_status`. Price at `script_generation` tier. |
 | 4 | **Carousels** | 4 of their 9 assets were carousel frames | **M** | A composition type: N frames sharing one brand system, exported as an ordered set. Publish already fans out per platform. |
 | 5 | **Landing pages** | 5 of their 13 tasks | **L** | brief → copy → page, hosted. We already have brief, copy, imagery and brand kit; this is assembly plus hosting. |
-| 6 | **Paid ad buying** | The honest limit | **XL** | Meta Marketing API — ad accounts, adsets, budgets, bidding, review queues. Weeks, not days. **Until this exists, prettymuch replaces their studio, not their media desk.** Say it that way; the distinction is the difference between a true claim and an overclaim. |
+| 6 | **Conversion tracking** | Item 3 of what they sold; we have no attribution at all | **M** | Meta Pixel / Conversions API. Without it "which ad worked" is unanswerable, which also blocks the performance-prediction bet in §3. |
+| 7 | **Boost a published post** | Item 5 — their ACTUAL paid model | **M**, not XL | Promoting a post we already published is a small Meta surface next to the full campaign graph. This is the cheap 80% of "paid", and it is reachable. |
+| 8 | **Full campaign management** | Cold-audience buying, adsets, bidding | **XL** | The real remainder. **Until 7 and 8 exist, prettymuch replaces their studio, not their media desk** — say it in those words; the distinction is the difference between a true claim and an overclaim. |
 
 ### Where we are already ahead
 
