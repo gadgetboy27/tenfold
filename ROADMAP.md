@@ -120,10 +120,44 @@ Two observations worth keeping, because they set the strategy:
 | 2 | **Funnel sets** | Makes output read as a *campaign*, not a pile of images | **M** | `lib/claude/campaign-brief.ts` ALREADY models `goal: awareness \| conversion \| engagement \| retention` and returns 4 angles. This is an extension of that — one brief → a coordinated TOF/MOF/BOF set with distinct messages and CTAs — not a new concept. |
 | 3 | **Media plan** | Their opening task, and their whole justification | **S** | One Claude call, same shape as `analyze-url`: brief + connected platforms + budget → channel split, audience, schedule. Store on the campaign, gate behind the existing `approval_status`. Price at `script_generation` tier. |
 | 4 | **Carousels** | 4 of their 9 assets were carousel frames | **M** | A composition type: N frames sharing one brand system, exported as an ordered set. Publish already fans out per platform. |
-| 5 | **Landing pages** | 5 of their 13 tasks | **L** | brief → copy → page, hosted. We already have brief, copy, imagery and brand kit; this is assembly plus hosting. |
+| 5 | **Landing pages** | 5 of their 13 tasks | **M**, scoped narrowly | See the note below — the delivered page is smaller than the task count implies, and the scope decision matters more than the build. |
 | 6 | **Conversion tracking** | Item 3 of what they sold; we have no attribution at all | **M** | Meta Pixel / Conversions API. Without it "which ad worked" is unanswerable, which also blocks the performance-prediction bet in §3. |
 | 7 | **Boost a published post** | Item 5 — their ACTUAL paid model | **M**, not XL | Promoting a post we already published is a small Meta surface next to the full campaign graph. This is the cheap 80% of "paid", and it is reachable. |
 | 8 | **Full campaign management** | Cold-audience buying, adsets, bidding | **XL** | The real remainder. **Until 7 and 8 exist, prettymuch replaces their studio, not their media desk** — say it in those words; the distinction is the difference between a true claim and an overclaim. |
+
+### The landing page, examined (2026-09-09)
+
+Five of their thirteen tasks were the landing page — brief, copy, design,
+review, approval, roughly two calendar weeks. The delivered artefact is
+`housematch.enquiretoday.co.nz`, and its source says what it actually is:
+
+- **Built with an AI app builder.** Asset URLs are
+  `storage.googleapis.com/gpt-engineer-file-uploads/…` — GPT Engineer, now
+  Lovable. A Vite React SPA: `<div id="root">`, hashed `/assets/index-*.js`.
+- **Stock photography.** The hero and OG image are `shutterstock_2571809105`.
+  Not custom creative — on a campaign whose whole point was custom creative.
+- **On THEIR domain.** `enquiretoday.co.nz` belongs to First Page, so the
+  client never owned the page they paid for.
+
+That reframes the build. **Do not build a website builder.** If the job is
+commoditised enough that an agency reaches for Lovable, competing with
+Lovable, Framer and Carrd is a fight with none of our advantages.
+
+**Do build a campaign landing page** — one page, generated from the campaign
+that already exists, using its anchor image, its brand kit, its funnel copy,
+on our subdomain, with a lead form. It exists because the ad needs somewhere
+to point. It is a feature OF the ad, not a product beside it — and it is the
+one version Lovable cannot do, because Lovable does not know about the
+campaign.
+
+The real work is not the HTML. It is **hosting** (a subdomain per workspace;
+custom domains mean DNS, TLS and verification — infrastructure, not a
+feature) and **lead capture** (submissions have to land somewhere, with spam
+handling, notification and export). Scope those two deliberately or the page
+generator becomes the easy 20%.
+
+Quality edge worth naming: theirs used a stock photo. Ours would use the
+actual campaign creative, which is the whole reason the creative exists.
 
 ### Where we are already ahead
 
