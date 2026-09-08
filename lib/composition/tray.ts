@@ -15,6 +15,26 @@ import {
 
 export type TrayItem =
   | { kind: "mark"; id: string; label: string; src: string }
+  /**
+   * A clip. Dropping it makes it the BACKDROP, never a layer — `layerSchema`
+   * is a discriminated union of image|text, so there is no video layer to
+   * stack. Draggable anyway, because "put this on the ad" is the same
+   * gesture; what it MEANS differs, and the UI says so rather than quietly
+   * doing something else.
+   */
+  | {
+      kind: "video";
+      id: string;
+      label: string;
+      src: string;
+      durationSec?: number;
+    }
+  /**
+   * A track. It never appears on the canvas at all — FFmpeg muxes it at
+   * render time. Dropping it sets what the next render bakes in, which is the
+   * closest honest meaning "put this on the ad" can have for audio.
+   */
+  | { kind: "music"; id: string; label: string; src: string }
   | {
       kind: "lettering";
       id: string;
@@ -47,6 +67,8 @@ export function parseTrayItem(raw: string | null | undefined): TrayItem | null {
   try {
     const v = JSON.parse(raw) as TrayItem;
     if (v?.kind === "mark" && typeof v.src === "string" && v.src) return v;
+    if (v?.kind === "video" && typeof v.src === "string" && v.src) return v;
+    if (v?.kind === "music" && typeof v.src === "string" && v.src) return v;
     if (v?.kind === "lettering" && typeof v.text === "string") {
       return {
         ...v,

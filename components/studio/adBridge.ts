@@ -69,12 +69,28 @@ export type AddResult = "background" | "layer";
  * be decorated. The caller shows the empty artboard's own guidance rather than
  * a failure, because "nothing happened" is the one outcome worth avoiding.
  */
+export type DropOutcome =
+  | { placed: "layer" }
+  | { placed: "background" }
+  | { placed: "music"; src: string }
+  | { placed: "none"; reason: "no-doc" };
+
 export function dropTrayItem(
   item: TrayItem,
   at: { nx: number; ny: number },
-): boolean {
+): DropOutcome {
   const s = useCompositorStore.getState();
-  if (!s.doc) return false;
+
+  // A clip REPLACES the backdrop rather than stacking, and it needs no doc to
+  // land on — dropping a video onto an empty artboard is how you start.
+  if (item.kind === "video") {
+    addVideoToAd(item.src, item.durationSec);
+    return { placed: "background" };
+  }
+  // Audio never touches the canvas; the caller wires it to the render.
+  if (item.kind === "music") return { placed: "music", src: item.src };
+
+  if (!s.doc) return { placed: "none", reason: "no-doc" };
 
   const base = {
     ...baseLayer(uuidv4()),
@@ -98,7 +114,7 @@ export function dropTrayItem(
             : {}),
         };
   s.addLayer(layer);
-  return true;
+  return { placed: "layer" };
 }
 
 /**

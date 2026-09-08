@@ -1675,6 +1675,7 @@ export function Studio({
                   key={campaignId ?? "no-campaign"}
                   campaignId={campaignId}
                   workspaceSlug={workspaceSlug}
+                  onPickMusic={setMusicUrl}
                 />
               </div>
             )}
@@ -1775,6 +1776,7 @@ export function Studio({
                   anchorUrl={workingImage}
                   caption={caption}
                   onUpgrade={() => setShowUpgrade(true)}
+                  onPickMusic={setMusicUrl}
                   musicUrl={musicUrl}
                   initialOp={compositorInitialOp}
                   // Inside the controls column, not after the pane: this

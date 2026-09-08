@@ -191,6 +191,38 @@ describe("tray payloads", () => {
     expect(parseTrayItem('{"kind":"something-else"}')).toBeNull();
   });
 
+  it("round-trips a clip, which lands as the BACKDROP not a layer", () => {
+    // layerSchema is a discriminated union of image|text — there is no video
+    // layer to stack, so a dropped clip replaces the backdrop. Draggable all
+    // the same, because "put this on the ad" is the same gesture; what it
+    // MEANS differs, and the UI says so rather than surprising you.
+    const item: TrayItem = {
+      kind: "video",
+      id: "v1",
+      label: "Clip",
+      src: "https://example.test/clip.mp4",
+    };
+    expect(parseTrayItem(serializeTrayItem(item))).toEqual(item);
+  });
+
+  it("round-trips a track, which never touches the canvas", () => {
+    // FFmpeg muxes audio at render time, so a dropped track sets what the next
+    // render bakes in — the closest honest meaning "put this on the ad" has
+    // for something with no visual form.
+    const item: TrayItem = {
+      kind: "music",
+      id: "a1",
+      label: "Track 1",
+      src: "https://example.test/track.mp3",
+    };
+    expect(parseTrayItem(serializeTrayItem(item))).toEqual(item);
+  });
+
+  it("refuses a clip or track with no source", () => {
+    expect(parseTrayItem('{"kind":"video","id":"v","label":"x"}')).toBeNull();
+    expect(parseTrayItem('{"kind":"music","id":"a","label":"x"}')).toBeNull();
+  });
+
   it("uses a private MIME type, not text/plain", () => {
     // text/plain would make every dragged word a candidate layer.
     expect(TRAY_MIME).not.toBe("text/plain");

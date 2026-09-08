@@ -31,7 +31,11 @@ import {
   parseTrayItem,
   dropToFraction,
 } from "@/lib/composition/tray";
-import { dropTrayItem } from "@/components/studio/adBridge";
+import {
+  dropTrayItem,
+  addVideoToAd,
+  addCaptionToAd,
+} from "@/components/studio/adBridge";
 import { LayerList } from "@/components/compositor/LayerList";
 import { ElementTray } from "@/components/studio/ElementTray";
 import { useAdShortcuts } from "@/components/studio/useAdShortcuts";
@@ -198,6 +202,7 @@ export function CompositorCanvas({
   anchorUrl,
   caption,
   onUpgrade,
+  onPickMusic,
   musicUrl,
   initialOp = null,
   footer = null,
@@ -210,6 +215,8 @@ export function CompositorCanvas({
   /** Raises Studio's upgrade modal. Passed in rather than owning a second one:
    *  two modals on one screen can both be open, and only one can be right. */
   onUpgrade?: () => void;
+  /** Sets the render soundtrack when a track is dropped on the ad. */
+  onPickMusic?: (url: string) => void;
   /**
    * The campaign's music, baked in at render time.
    *
@@ -790,9 +797,24 @@ export function CompositorCanvas({
     // Through adBridge, not addLayer directly: it is the one supported way to
     // put something on the ad, and a second path is how two callers end up
     // disagreeing about what a dropped layer looks like.
-    if (!dropTrayItem(item, { nx, ny })) return;
+    const outcome = dropTrayItem(item, { nx, ny });
+    if (outcome.placed === "music") {
+      onPickMusic?.(outcome.src);
+      toast.success("Soundtrack set — it's baked in on the next render");
+      return;
+    }
+    if (outcome.placed === "none") {
+      toast.error("Put an image or clip on the ad first.");
+      return;
+    }
     await persist(useCompositorStore.getState().doc ?? undefined);
-    toast.success(item.kind === "mark" ? "Mark placed" : "Lettering placed");
+    toast.success(
+      outcome.placed === "background"
+        ? "On the stage — your layers are still on top"
+        : item.kind === "mark"
+          ? "Mark placed"
+          : "Lettering placed",
+    );
   };
 
   const handleRedo = async (
@@ -1162,6 +1184,12 @@ export function CompositorCanvas({
             <ElementTray
               workspaceSlug={workspaceSlug}
               campaignId={campaignId}
+              onStageVideo={(v) => addVideoToAd(v.url)}
+              onPickMusic={(url) => onPickMusic?.(url)}
+              onPlaceCaption={() => {
+                if (caption) addCaptionToAd(caption);
+              }}
+              musicUrl={musicUrl}
             />
           </div>
 

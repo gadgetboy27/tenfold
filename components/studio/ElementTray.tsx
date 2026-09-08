@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Type, Image as ImageIcon, Plus, GripVertical } from "lucide-react";
+import {
+  Type,
+  Image as ImageIcon,
+  Plus,
+  GripVertical,
+  Film,
+  Music,
+  MessageSquare,
+} from "lucide-react";
 import { api } from "@/lib/api";
 import { GalleryPicker } from "@/components/shared/GalleryPicker";
 import {
@@ -34,8 +42,23 @@ import {
 
 interface Props {
   workspaceSlug: string;
-  /** Opens the gallery picker on THIS project's assets before everything else. */
+  /** Scopes the shelf, and opens the picker on this project's assets first. */
   campaignId?: string | null;
+  /**
+   * A clip becomes the BACKDROP, never a layer — `layerSchema` is a
+   * discriminated union of image|text, so there is no video layer to stack.
+   * Handed up so Studio's own videoUrl follows the stage.
+   */
+  onStageVideo?: (v: { id: string; url: string }) => void;
+  /**
+   * Music is not a layer either. FFmpeg muxes it at render time, so picking a
+   * track sets what the next render bakes in.
+   */
+  onPickMusic?: (url: string) => void;
+  /** The caption, placed as a text layer on the ad. */
+  onPlaceCaption?: () => void;
+  /** Which track is currently going into the render, for the selected state. */
+  musicUrl?: string | null;
 }
 
 interface Mark {
@@ -44,8 +67,71 @@ interface Mark {
   src: string;
 }
 
-export function ElementTray({ workspaceSlug, campaignId }: Props) {
+export function ElementTray({
+  workspaceSlug,
+  campaignId,
+  onStageVideo,
+  onPickMusic,
+  onPlaceCaption,
+  musicUrl,
+}: Props) {
   const [gallery, setGallery] = useState<Mark[]>([]);
+  /**
+   * Everything THIS project has produced, gathered in the room where the ad is
+   * assembled.
+   *
+   * Every tool wrote its output somewhere else — images to the gallery, clips
+   * and tracks to the strip, the caption into campaign state, the logo into
+   * the brand kit — so building the finished thing meant remembering where
+   * each piece had gone. The pieces were never missing; they were scattered.
+   *
+   * Product shot and Virtual try-on need no special handling: they write
+   * ordinary campaign assets, so they arrive in `images` with everything else.
+   */
+  const [project, setProject] = useState<{
+    images: Mark[];
+    videos: { id: string; url: string; branded: boolean }[];
+    audio: { id: string; url: string }[];
+    caption: string;
+  }>({ images: [], videos: [], audio: [], caption: "" });
+
+  useEffect(() => {
+    if (!campaignId) return;
+    let alive = true;
+    (async () => {
+      try {
+        const res = await api(`/api/campaigns/${campaignId}/progress`, {
+          workspaceSlug,
+        });
+        if (!res.ok) return;
+        const d = (await res.json()) as {
+          bundle?: {
+            images?: { id: string; url: string; branded: boolean }[];
+            videos?: { id: string; url: string; branded: boolean }[];
+            audio?: { id: string; url: string }[];
+            caption?: string;
+          };
+        };
+        if (!alive) return;
+        setProject({
+          // Branded exports are excluded: an export is the OUTPUT of this
+          // stage, and compositing over pixels that already carry the layers
+          // is how you get doubled type — the same rule the strip applies.
+          images: (d.bundle?.images ?? [])
+            .filter((i) => !i.branded)
+            .map((i) => ({ id: i.id, label: "This project", src: i.url })),
+          videos: d.bundle?.videos ?? [],
+          audio: d.bundle?.audio ?? [],
+          caption: d.bundle?.caption ?? "",
+        });
+      } catch {
+        /* the gallery and brand shelves below still work */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [campaignId, workspaceSlug]);
   /**
    * Images pulled in from the gallery this session.
    *
@@ -59,6 +145,37 @@ export function ElementTray({ workspaceSlug, campaignId }: Props) {
    */
   const [picked, setPicked] = useState<Mark[]>([]);
   const [picking, setPicking] = useState(false);
+  const [marks, setMarks] = useState<Mark[]>([]);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await api("/api/brand-kit", { workspaceSlug });
+        if (!res.ok) return;
+        const kit = await res.json();
+        if (!alive) return;
+        const found: Mark[] = [];
+        if (typeof kit?.logo_url === "string" && kit.logo_url)
+          found.push({
+            id: "kit-light",
+            label: "Brand mark",
+            src: kit.logo_url,
+          });
+        if (typeof kit?.logo_dark_url === "string" && kit.logo_dark_url)
+          found.push({
+            id: "kit-dark",
+            label: "Dark mark",
+            src: kit.logo_dark_url,
+          });
+        setMarks(found);
+      } catch {
+        /* no kit yet */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [workspaceSlug]);
   const [text, setText] = useState("");
   const [font, setFont] = useState<BrandFont>("Montserrat");
   const [fontSize, setFontSize] = useState(64);
@@ -122,12 +239,15 @@ export function ElementTray({ workspaceSlug, campaignId }: Props) {
     e.dataTransfer.effectAllowed = "copy";
   }
 
-  // Anything pulled in deliberately sorts FIRST — it was chosen for this ad,
-  // where the gallery behind it is just what happens to exist.
-  const tiles = [
-    ...picked,
-    ...gallery.filter((g) => !picked.some((p) => p.id === g.id)),
-  ];
+  /**
+   * Shelf order, most-relevant first: what you imported for THIS ad, then what
+   * this project made, then your brand marks, then the rest of the workspace.
+   * De-duped by id, so a project image doesn't appear twice via the gallery.
+   */
+  const seen = new Set<string>();
+  const tiles = [...picked, ...project.images, ...marks, ...gallery].filter(
+    (m) => (seen.has(m.id) ? false : (seen.add(m.id), true)),
+  );
 
   const letteringItem: TrayItem = {
     kind: "lettering",
@@ -227,6 +347,125 @@ export function ElementTray({ workspaceSlug, campaignId }: Props) {
         title="Pick an image to place"
         hint="It becomes a layer you drag onto the ad — position and size it there."
       />
+
+      {/* ── Clips ──
+          Draggable like everything else, because "put this on the ad" is the
+          same gesture. What it MEANS differs: a clip replaces the backdrop
+          rather than stacking, since layerSchema is image|text and there is no
+          video layer. The label says so instead of the drop surprising you. */}
+      {project.videos.length > 0 && (
+        <section className="space-y-2">
+          <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <Film className="h-3.5 w-3.5" /> Clips
+            <span className="font-normal normal-case tracking-normal opacity-70">
+              · becomes the backdrop
+            </span>
+          </h3>
+          <div className="grid grid-cols-3 gap-2">
+            {project.videos.map((v) => (
+              <button
+                key={v.id}
+                draggable
+                onDragStart={(e) =>
+                  startDrag(e, {
+                    kind: "video",
+                    id: v.id,
+                    label: v.branded ? "Export" : "Clip",
+                    src: v.url,
+                  })
+                }
+                onClick={() => onStageVideo?.({ id: v.id, url: v.url })}
+                title="Drag onto the ad, or click — either way it becomes the backdrop"
+                className="flex aspect-square cursor-grab items-center justify-center rounded-lg border border-border bg-black/40 text-[10px] text-muted-foreground transition-colors hover:border-primary/60 active:cursor-grabbing"
+              >
+                <span className="flex flex-col items-center gap-1">
+                  <Film className="h-4 w-4" />
+                  {v.branded ? "Export" : "Clip"}
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Music ──
+          Never appears on the canvas — FFmpeg muxes it at render time — so
+          dropping it sets what the next render bakes in. That is the closest
+          honest meaning "put this on the ad" can have for audio. */}
+      {project.audio.length > 0 && (
+        <section className="space-y-2">
+          <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <Music className="h-3.5 w-3.5" /> Music
+            <span className="font-normal normal-case tracking-normal opacity-70">
+              · baked in on render
+            </span>
+          </h3>
+          <div className="space-y-1.5">
+            {project.audio.map((a, i) => (
+              <button
+                key={a.id}
+                draggable
+                onDragStart={(e) =>
+                  startDrag(e, {
+                    kind: "music",
+                    id: a.id,
+                    label: `Track ${i + 1}`,
+                    src: a.url,
+                  })
+                }
+                onClick={() => onPickMusic?.(a.url)}
+                title="Drag onto the ad, or click — either way it becomes the soundtrack"
+                className={`flex w-full cursor-grab items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition-colors active:cursor-grabbing ${
+                  musicUrl === a.url
+                    ? "border-primary bg-primary/10 text-foreground"
+                    : "border-border text-muted-foreground hover:border-primary/40"
+                }`}
+              >
+                <Music className="h-3.5 w-3.5 shrink-0" />
+                Track {i + 1}
+                {musicUrl === a.url && (
+                  <span className="ml-auto text-[10px] text-primary">
+                    in the mix
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── The caption ──
+          A real text layer, so once it's on the ad it moves, restyles and
+          edits in place like any other — double-click to retype it. */}
+      {project.caption && (
+        <section className="space-y-2">
+          <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <MessageSquare className="h-3.5 w-3.5" /> Caption
+          </h3>
+          <button
+            type="button"
+            draggable
+            onDragStart={(e) =>
+              startDrag(e, {
+                kind: "lettering",
+                id: "caption",
+                text: project.caption,
+                font,
+                fontSize,
+                weight,
+                color,
+                scrim,
+              })
+            }
+            onClick={() => onPlaceCaption?.()}
+            title="Drag it where you want it, or click to drop it in"
+            className="w-full cursor-grab rounded-lg border border-border px-2.5 py-2 text-left text-xs leading-relaxed text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground active:cursor-grabbing"
+          >
+            {project.caption.slice(0, 120)}
+            {project.caption.length > 120 ? "…" : ""}
+          </button>
+        </section>
+      )}
 
       {/* ── Lettering ── */}
       <section className="space-y-2">

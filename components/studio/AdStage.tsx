@@ -65,9 +65,12 @@ const ASPECTS: { id: CompositionAspect; label: string; box: string }[] = [
 export function AdStage({
   campaignId,
   workspaceSlug,
+  onPickMusic,
 }: {
   campaignId: string | null;
   workspaceSlug: string;
+  /** A dropped track is not a layer — it sets what the next render bakes in. */
+  onPickMusic?: (url: string) => void;
 }) {
   const doc = useCompositorStore((s) => s.doc);
   const pendingAspect = useCompositorStore((s) => s.pendingAspect);
@@ -280,16 +283,28 @@ export function AdStage({
       ?.getBoundingClientRect();
     if (!media) return;
     const { nx, ny } = dropToFractionInMedia(e.clientX, e.clientY, media);
-    const placed = dropTrayItem(item, { nx, ny });
-    // "Nothing happened" is the one outcome worth avoiding: a drop onto the
-    // empty artboard is a reasonable thing to try, and silence reads as broken.
-    toast[placed ? "success" : "error"](
-      placed
-        ? item.kind === "mark"
-          ? "Mark placed"
-          : "Lettering placed"
-        : "Pick an image or clip for the ad first — there's nothing to place it on yet.",
-    );
+    // Each kind lands differently, and the toast says which — a clip REPLACES
+    // the backdrop and a track never touches the canvas at all, so reporting
+    // all three as "placed" would describe something that didn't happen.
+    const outcome = dropTrayItem(item, { nx, ny });
+    if (outcome.placed === "music") {
+      onPickMusic?.(outcome.src);
+      toast.success("Soundtrack set — it's baked in on the next render");
+      return;
+    }
+    if (outcome.placed === "background") {
+      toast.success("On the stage — your layers are still on top");
+      return;
+    }
+    if (outcome.placed === "none") {
+      // "Nothing happened" is the one outcome worth avoiding: dropping onto an
+      // empty artboard is a reasonable thing to try, and silence reads broken.
+      toast.error(
+        "Pick an image or clip for the ad first — there's nothing to place it on yet.",
+      );
+      return;
+    }
+    toast.success(item.kind === "mark" ? "Mark placed" : "Lettering placed");
   };
 
   return (
