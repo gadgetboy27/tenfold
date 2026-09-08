@@ -166,8 +166,10 @@ const RAIL_MODE: Record<SectionId, RailMode> = {
   images: "narrow",
   video: "narrow",
   music: "narrow",
-  caption: "narrow",
-  words: "narrow",
+  // Wording stacks two tools (write, then style) — narrow makes the pair a
+  // long scroll where wide shows both without hunting.
+  caption: "wide",
+  words: "wide",
   productshot: "narrow",
   tryon: "narrow",
   talking: "narrow",
@@ -184,11 +186,11 @@ const RAIL_MODE: Record<SectionId, RailMode> = {
 const SECTION_LABELS: Record<SectionId, string> = {
   projects: "Gallery",
   brief: "Images",
-  images: "Images",
-  video: "Video",
+  images: "Create",
+  video: "Create",
   music: "Music",
-  caption: "Caption",
-  words: "Words",
+  caption: "Wording",
+  words: "Wording",
   productshot: "Product shot",
   tryon: "Virtual try-on",
   talking: "Spokesperson",
@@ -1408,9 +1410,18 @@ export function Studio({
     },
     {
       id: "images",
-      label: "Images",
+      // "Create" — this screen already rendered stills AND video (CockpitCreate
+      // branches on isCreate/isVideo); they were simply two menu entries
+      // pointing at one component. Video is downstream of the still it
+      // animates, so splitting them asked the user to navigate between two
+      // halves of one decision.
+      label: "Create",
       icon: ImagesIcon,
-      done: anchorPicked || !!progress?.done.images,
+      done:
+        anchorPicked ||
+        !!progress?.done.images ||
+        !!videoUrl ||
+        !!progress?.done.video,
     },
     // Pro image tools. They work off their own uploads rather than the anchor,
     // but every one of them bills to a campaign — so they stay disabled until
@@ -1434,12 +1445,6 @@ export function Studio({
       done: !!progress?.done.tryon,
       disabled: !campaignId,
       disabledTitle: needsProjectTitle,
-    },
-    {
-      id: "video",
-      label: "Video",
-      icon: Play,
-      done: !!videoUrl || !!progress?.done.video,
     },
     {
       id: "talking",
@@ -1466,18 +1471,18 @@ export function Studio({
       done: !!musicUrl || !!progress?.done.music,
     },
     {
-      id: "caption",
-      label: "Caption",
-      icon: MessageSquare,
-      done: !!progress?.done.caption,
-    },
-    {
       id: "words",
-      label: "Words",
+      // "Wording" — Caption and Words are not two halves of one thing, they
+      // are inverses: Caption asks Claude what the words SAY (a paid
+      // script_generation job), Words asks it how the type should LOOK (a free
+      // treatment; the letters are yours and never reach an image model).
+      // Write it, then style it — one place, in that order.
+      label: "Wording",
       icon: Type,
-      // Not derived from progress: words live on the composition, and the
-      // stage's own layer list is the truth for whether any are placed.
-      done: false,
+      // Caption is a real recorded fact; the styling half isn't — words live
+      // on the composition, and the stage's layer list is the truth for
+      // whether any are placed. So the tick means "there is copy".
+      done: !!progress?.done.caption,
     },
     {
       id: "compositor",
@@ -1724,16 +1729,28 @@ export function Studio({
                   onBack={() => setSection("video")}
                   onContinue={() => setSection("compositor")}
                 />
-              ) : section === "words" ? (
-                <WordsCanvas workspaceSlug={workspaceSlug} context={prompt} />
-              ) : section === "caption" ? (
-                <CaptionCanvas
-                  workspaceSlug={workspaceSlug}
-                  campaignId={campaignId}
-                  campaignName={campaignName}
-                  initialTopic={prompt}
-                  onCaption={setCaption}
-                />
+              ) : section === "words" || section === "caption" ? (
+                /* Wording — one screen, in the order the work happens.
+                   Caption asks Claude what the words SAY; Words asks how the
+                   type should LOOK. Inverses, not halves, which is exactly why
+                   they belong together: write it, then style it. `caption`
+                   still resolves here so the "what's next" prompts and any old
+                   deep link keep working. */
+                <div className="flex flex-col gap-4">
+                  <CaptionCanvas
+                    workspaceSlug={workspaceSlug}
+                    campaignId={campaignId}
+                    campaignName={campaignName}
+                    initialTopic={prompt}
+                    onCaption={setCaption}
+                  />
+                  <div className="border-t border-border pt-4">
+                    <WordsCanvas
+                      workspaceSlug={workspaceSlug}
+                      context={prompt}
+                    />
+                  </div>
+                </div>
               ) : section === "productshot" ? (
                 <div className="mx-auto h-full max-w-3xl">
                   <ProductShotPanel />

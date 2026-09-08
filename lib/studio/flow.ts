@@ -72,10 +72,10 @@ export const STUDIO_FLOW: readonly SectionId[] = [
 /** Human label for a step, for "next up" prompts. */
 export const STEP_ACTION: Partial<Record<SectionId, string>> = {
   images: "Pick your image",
-  words: "Add your wording",
+  words: "Style your wording",
   video: "Make it move",
   music: "Add a soundtrack",
-  caption: "Write a caption",
+  caption: "Write your wording",
   compositor: "Compose your ad",
   publish: "Publish it",
 };
