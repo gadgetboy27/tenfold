@@ -93,7 +93,8 @@ export function ElementTray({
     videos: { id: string; url: string; branded: boolean }[];
     audio: { id: string; url: string }[];
     caption: string;
-  }>({ images: [], videos: [], audio: [], caption: "" });
+    anchorId: string | null;
+  }>({ images: [], videos: [], audio: [], caption: "", anchorId: null });
 
   useEffect(() => {
     if (!campaignId) return;
@@ -110,6 +111,7 @@ export function ElementTray({
             videos?: { id: string; url: string; branded: boolean }[];
             audio?: { id: string; url: string }[];
             caption?: string;
+            anchorId?: string | null;
           };
         };
         if (!alive) return;
@@ -123,6 +125,7 @@ export function ElementTray({
           videos: d.bundle?.videos ?? [],
           audio: d.bundle?.audio ?? [],
           caption: d.bundle?.caption ?? "",
+          anchorId: d.bundle?.anchorId ?? null,
         });
       } catch {
         /* the gallery and brand shelves below still work */
@@ -263,8 +266,10 @@ export function ElementTray({
   return (
     <div className="flex w-full flex-col gap-5 text-sm">
       <p className="text-xs text-muted-foreground">
-        Build it here, then drag it onto the ad — it lands where you drop it,
-        and you can move, resize and delete it there.
+        Everything this project has made, in one place. Drag any of it onto the
+        ad — it lands where you drop it, and moves, resizes and deletes there.
+        The ★ is the still your video was generated from; the others are its
+        siblings from the same generation, so swapping the look is one drag.
       </p>
 
       {/* ── Images ── */}
@@ -323,7 +328,15 @@ export function ElementTray({
                 {/* A visible label, not just a tooltip. A tooltip answers
                     "what is this" only for someone who already suspected. */}
                 <p className="truncate text-center text-[10px] leading-tight text-muted-foreground">
-                  {m.label}
+                  {/* The one the video was generated from. Without it the six
+                      directions are six identical-looking tiles and you cannot
+                      tell which became the ad — so swapping to a sibling is a
+                      guess rather than a choice. */}
+                  {m.id === project.anchorId ? (
+                    <span className="text-primary">★ used for the video</span>
+                  ) : (
+                    m.label
+                  )}
                 </p>
               </div>
             ))}

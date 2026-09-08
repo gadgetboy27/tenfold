@@ -62,7 +62,11 @@ import {
   type FanOutOutput,
 } from "@/components/compositor/export-client";
 import { downloadCampaignPdf } from "@/lib/compositor/campaign-pdf";
-import { railFormats } from "@/lib/composition/formats";
+import {
+  railFormats,
+  formatsForPlatforms,
+  distinctAspects,
+} from "@/lib/composition/formats";
 import { readProfilesResponse } from "@/lib/social/profiles-response";
 import { Spinner } from "@/components/brand/Spinner";
 import { InfoHint } from "@/components/ui/info-hint";
@@ -323,8 +327,24 @@ export function CompositorCanvas({
     }
   };
 
-  /** Every connected format at once, each carrying its own overrides. */
-  const fanAspects = Array.from(new Set(rail.map((r) => r.aspect)));
+  /**
+   * Every connected platform at once.
+   *
+   * The fan-out renders one file per ASPECT — safe zones change the ⚠ overlay,
+   * not the pixels — but a person doesn't think in aspects, they think "the
+   * TikTok one". So we render by aspect (no wasted work) and LABEL by platform,
+   * which is the same file described in the words the user is holding it for.
+   *
+   * Two platforms sharing a shape share a file, and the label says so rather
+   * than implying two renders happened.
+   */
+  const platformFormats = formatsForPlatforms(connectedPlatforms);
+  const fanAspects =
+    platformFormats.length > 0
+      ? distinctAspects(platformFormats)
+      : Array.from(new Set(rail.map((r) => r.aspect)));
+  const platformsForAspect = (a: CompositionAspect) =>
+    platformFormats.filter((f) => f.aspect === a).map((f) => f.label);
   const exportAllFormats = async () => {
     const current = useCompositorStore.getState().doc;
     if (!current) return;
@@ -1448,7 +1468,11 @@ export function CompositorCanvas({
               type="button"
               onClick={exportAllFormats}
               disabled={exporting || exportingAll}
-              title={`Render all ${fanAspects.length} formats at once, each with its own overrides`}
+              title={
+                platformFormats.length
+                  ? `One file per shape, covering ${platformFormats.map((f) => f.label).join(", ")}`
+                  : `Render all ${fanAspects.length} formats at once, each with its own overrides`
+              }
               className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
             >
               {exportingAll ? (
@@ -1458,7 +1482,9 @@ export function CompositorCanvas({
               )}
               {exportingAll
                 ? "Rendering all…"
-                : `Render all ${fanAspects.length} formats`}
+                : platformFormats.length
+                  ? `Render for ${platformFormats.map((f) => f.label).join(", ")}`
+                  : `Render all ${fanAspects.length} formats`}
             </button>
           )}
 
@@ -1495,17 +1521,25 @@ export function CompositorCanvas({
           <span className="text-muted-foreground">
             {fanOut.length} formats rendered:
           </span>
-          {fanOut.map((o) => (
-            <a
-              key={o.aspect}
-              href={o.url}
-              target="_blank"
-              rel="noopener"
-              className="rounded-full border border-border px-2 py-0.5 text-primary hover:border-primary/50"
-            >
-              {o.aspect} ↓
-            </a>
-          ))}
+          {fanOut.map((o) => {
+            const names = platformsForAspect(o.aspect);
+            return (
+              <a
+                key={o.aspect}
+                href={o.url}
+                target="_blank"
+                rel="noopener"
+                title={
+                  names.length
+                    ? `${names.join(" + ")} — ${o.aspect}`
+                    : `${o.aspect} render`
+                }
+                className="rounded-full border border-border px-2 py-0.5 text-primary hover:border-primary/50"
+              >
+                {names.length ? names.join(" + ") : o.aspect} ↓
+              </a>
+            );
+          })}
         </div>
       )}
 
