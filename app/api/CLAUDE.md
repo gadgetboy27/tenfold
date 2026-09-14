@@ -141,6 +141,27 @@ card. See `components/studio/CLAUDE.md`.
 Webhook handler: log first (idempotency) → find job → handle success/failure → mark processed.
 Client: Supabase Realtime `postgres_changes` on `creative_jobs` table.
 
+The success/failure handling lives in `lib/fal/handle-result.ts`, not the route,
+because the webhook is not the only way a result reaches us — see next section.
+
+### The webhook is late more often than it is lost — hence the poll reclaim
+
+fal accepts a request within a second of our job row and Recraft renders six
+logo concepts in ~12s (measured 2026-09-15, six in parallel, no queueing), but
+fal's webhook for the same call has been measured landing 30–61s after submit
+and, once, 75 minutes later. A flow that can only learn of a result from the
+webhook shows "Generating… 0 of 6" for exactly that long.
+
+So the GET routes a client polls also ask fal directly. Campaign images do it
+in `GET /api/campaigns/[id]` via `lib/fal/result-fetcher.ts` (after 20s);
+logos do it in `GET /api/logo/[id]` via `lib/logo/reclaim.ts` (after 8s),
+which hands the fetched result to the webhook's own `handleSuccess` so the
+saved asset is identical. Both are race-safe against the webhook through the
+claim on `webhook_logs (source, event_id)` — first to insert owns the request,
+and losing the claim is the normal outcome, not an error. If you add a new
+webhook-fed flow with its own poll, reclaim through `handle-result.ts`; a
+second save path is a second place for asset metadata to drift.
+
 ### The webhook is a single point of failure for refunds — hence the sweeper
 
 Every terminal outcome for a fal job runs through the webhook, **including

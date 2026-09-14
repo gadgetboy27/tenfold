@@ -55,11 +55,14 @@ const POLL_MS = 2500;
 
 // This poll had no bound at all: it ran every 2.5s for as long as the tab was
 // open, and its only exit was the project reaching `finalized`. A concepts job
-// whose fal webhook never arrives sits in `processing` forever — nothing
-// server-side ever marks it failed — so the grid showed "Generating… 0 of 6
-// ready" indefinitely with no reason and no way out. These two thresholds are
-// counted in ticks rather than wall-clock so that a backgrounded tab (where
-// browsers throttle intervals) under-counts rather than false-alarming.
+// whose fal webhook never arrives used to sit in `processing` until the
+// 45-minute sweeper failed it, so the grid showed "Generating… 0 of 6 ready"
+// indefinitely with no reason and no way out. Each poll now also reclaims any
+// request fal has finished but not yet called back about (lib/logo/reclaim.ts),
+// so a late webhook — the common case, measured at 30–60s — no longer delays
+// the grid; these thresholds are for the genuinely stuck. They are counted in
+// ticks rather than wall-clock so that a backgrounded tab (where browsers
+// throttle intervals) under-counts rather than false-alarming.
 const SLOW_AFTER_TICKS = 30; // ~75s — usually landed well before here
 const GIVE_UP_AFTER_TICKS = 120; // ~5min — stop hitting the endpoint
 

@@ -31,7 +31,7 @@ const BUCKET_ALLOWED = [
 
 describe("every content type the webhook can store is accepted", () => {
   it("covers the extensions the fal webhook derives", () => {
-    const src = readFileSync("app/api/webhooks/fal/route.ts", "utf8");
+    const src = readFileSync("lib/fal/handle-result.ts", "utf8");
 
     // The webhook branches on content type to pick an extension: svg, png,
     // else jpg. Each of those must be storable or the row dangles.
@@ -48,7 +48,7 @@ describe("every content type the webhook can store is accepted", () => {
   });
 
   it("checks the upload result instead of assuming it worked", () => {
-    const src = readFileSync("app/api/webhooks/fal/route.ts", "utf8");
+    const src = readFileSync("lib/fal/handle-result.ts", "utf8");
     // A discarded upload result is precisely how a dangling asset row is
     // created: rejected by the bucket, recorded as success.
     expect(src).toMatch(/const \{ error: upErr \}[\s\S]{0,200}?\.upload\(/);

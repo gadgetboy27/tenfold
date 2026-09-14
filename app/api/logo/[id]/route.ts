@@ -2,9 +2,16 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isEnabled } from "@/lib/flags";
+import { reclaimLogoJobs } from "@/lib/logo/reclaim";
 
 // GET /api/logo/:id — the project, its jobs' status, and its logo assets
 // (concepts, refined, finalized), tenant-scoped. The UI polls this.
+//
+// The poll is also the delivery fallback: any job still processing past the
+// point fal has usually finished is checked against fal's queue directly and
+// its result saved here, because waiting on fal's webhook alone has meant
+// 30–60s (once 75 minutes) between a rendered concept and the user seeing
+// it. See lib/logo/reclaim.ts for the measurements.
 export async function GET(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
@@ -25,6 +32,22 @@ export async function GET(
       .maybeSingle();
     if (!project) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    // Jobs first: a late-webhook reclaim below can add assets, and the asset
+    // query must run after it or this response would be one poll behind.
+    const jobSelect = () =>
+      admin
+        .from("creative_jobs")
+        .select(
+          "id, campaign_id, workspace_id, type, status, error_message, credits_charged, created_at, input_params, fal_request_id, fal_raw_error",
+        )
+        .eq("workspace_id", session.workspaceId)
+        .eq("input_params->>logoProjectId", id)
+        .order("created_at", { ascending: true });
+    let { data: jobs } = await jobSelect();
+    if (await reclaimLogoJobs(admin, jobs ?? [])) {
+      ({ data: jobs } = await jobSelect());
     }
 
     // Logo assets carry metadata.logo_project_id — filter to this project.
@@ -48,13 +71,6 @@ export async function GET(
     // invisible to the poller, which sat on "Generating… 0 of 6 ready"
     // forever with no way to learn why. Every logo job tags itself with
     // input_params.logoProjectId (see app/api/logo/route.ts and siblings).
-    const { data: jobs } = await admin
-      .from("creative_jobs")
-      .select("id, type, status, error_message, created_at, input_params")
-      .eq("workspace_id", session.workspaceId)
-      .eq("input_params->>logoProjectId", id)
-      .order("created_at", { ascending: true });
-
     return NextResponse.json({
       project,
       jobs: (jobs ?? []).map((j) => ({
