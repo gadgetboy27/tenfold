@@ -67,6 +67,14 @@ made that much better; it did not make it _guaranteed_. This does.
   from the same tool — upload, gallery, or a small generated one via the
   ordinary `image_generation` job (`lib/studio/generate-image.ts`), priced from
   `CREDIT_COSTS`.
+- **One row of pickers for every text** (`TextStylePicker`). `CaptionCanvas`
+  is gone; "Write a caption for me" lives in the Words card, runs the same
+  `script_generation` job, and drops the result on the ad as the
+  `CAPTION_LAYER_ID` block (then selects it). The font/weight/colour/panel
+  controls style whichever text is selected on the stage — `pickTextTarget`
+  resolves selected → words → caption — via `restyleAdText`, which changes
+  nothing about position or size. A per-kind duplicate of the pickers is the
+  thing this exists to avoid; don't add one.
 - **Fonts are restricted to `BRAND_FONTS`** because those are the five with
   real `.ttf` files in `public/fonts/`. The browser will happily render any
   family, but the FFmpeg export resolves through `FONT_FILES` and silently
@@ -241,9 +249,13 @@ hardcoded empty string — video generation today is driven purely by
 duration/style presets plus (now) this direction field, **not** by the
 original campaign image prompt as an earlier read of this code assumed.
 
-## Caption — `CaptionCanvas`, reusing an existing backend entirely (2026-07-26)
+## Caption — reusing an existing backend entirely (2026-07-26)
 
-`components/studio/CaptionCanvas.tsx`: a topic textarea (prefilled from
+_2026-09-15: `CaptionCanvas` was folded into `WordsCanvas` as one "Write a
+caption for me" button (platform `instagram`, tone `professional`, 60 words —
+no pickers), see the Words section. The backend notes below still hold._
+
+`CaptionCanvas.tsx` was a topic textarea (prefilled from
 Studio's root `prompt`, editable), platform + tone pickers, Generate/
 Regenerate, and a Copy-to-clipboard result. Posts to the **already-complete**
 `POST /api/jobs` (`type: "script_generation"`) — `lib/claude/script.ts`'s

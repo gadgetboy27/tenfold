@@ -86,7 +86,6 @@ import {
   type CampaignAngle,
 } from "@/components/studio/BrandImportPanel";
 import { BrandAnalysisResults } from "@/components/studio/BrandAnalysisResults";
-import { CaptionCanvas } from "@/components/studio/CaptionCanvas";
 import { ProductShotPanel } from "@/components/scene/ProductShotPanel";
 import { VirtualTryOnPanel } from "@/components/tryon/VirtualTryOnPanel";
 import { TalkingVideoPanel } from "@/components/talking/TalkingVideoPanel";
@@ -405,7 +404,7 @@ export function Studio({
   const [referenceUrl, setReferenceUrl] = useState<string | null>(null);
   const [refUploading, setRefUploading] = useState(false);
   const [pickingReference, setPickingReference] = useState(false);
-  // The generated caption, lifted out of CaptionCanvas so Publish can start
+  // The generated caption, lifted out of WordsCanvas so Publish can start
   // pre-filled instead of making the user write it twice. Also the handover
   // point the orchestrator needs — a caption stuck in a child component can't
   // be carried to the publish step.
@@ -642,7 +641,7 @@ export function Studio({
   // Re-derive whenever a generation finishes, so a tick appears without a
   // reload. `generating`/`videoGenerating`/`musicGenerating` cover Studio's own
   // jobs; `section` covers everything else — the four Pro panels and
-  // CaptionCanvas are self-contained and never report back to Studio, so
+  // WordsCanvas are self-contained and never report back to Studio, so
   // navigating away from one is the moment to re-read what it produced.
   useEffect(() => {
     if (!generating && !videoGenerating && !musicGenerating)
@@ -1736,22 +1735,14 @@ export function Studio({
                    they belong together: write it, then style it. `caption`
                    still resolves here so the "what's next" prompts and any old
                    deep link keep working. */
-                <div className="flex flex-col gap-4">
-                  <CaptionCanvas
-                    workspaceSlug={workspaceSlug}
-                    campaignId={campaignId}
-                    campaignName={campaignName}
-                    initialTopic={prompt}
-                    onCaption={setCaption}
-                  />
-                  <div className="border-t border-border pt-4">
-                    <WordsCanvas
-                      workspaceSlug={workspaceSlug}
-                      campaignId={campaignId}
-                      onSpent={refreshBalance}
-                    />
-                  </div>
-                </div>
+                <WordsCanvas
+                  workspaceSlug={workspaceSlug}
+                  campaignId={campaignId}
+                  campaignName={campaignName}
+                  topic={prompt}
+                  onCaption={setCaption}
+                  onSpent={refreshBalance}
+                />
               ) : section === "productshot" ? (
                 <div className="mx-auto h-full max-w-3xl">
                   <ProductShotPanel />

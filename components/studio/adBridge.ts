@@ -14,6 +14,7 @@ import type { TrayItem } from "@/lib/composition/tray";
 import { wrapText } from "@/lib/composition/brand-apply";
 import {
   buildWordsLayer,
+  DEFAULT_TREATMENT,
   refitTextLayer,
   textOverflows,
   type WordTreatment,
@@ -329,6 +330,82 @@ export function syncAdWords(
     bg: fresh.bg,
   });
   return "updated";
+}
+
+/** The four things the Wording panel's pickers can change on any text. */
+export interface TextStyle {
+  font: WordTreatment["font"];
+  weight: 400 | 700;
+  color: string;
+  scrim: boolean;
+}
+
+/** Read a text layer's style in the pickers' terms. */
+export function textStyleOf(layer: TextLayer): TextStyle {
+  return {
+    font: layer.font as WordTreatment["font"],
+    weight: layer.weight ?? 400,
+    color: layer.color,
+    scrim: !!layer.bg,
+  };
+}
+
+/**
+ * Which text the pickers are editing right now.
+ *
+ * The one the user clicked on the stage, if it's text; otherwise the Words
+ * block, then the caption. One set of font/colour controls serves every piece
+ * of type on the ad this way — a headline and a generated caption are both
+ * just text layers, and giving each its own duplicate row of pickers was the
+ * clutter this replaces. Pure, so it can be a zustand selector.
+ */
+export function pickTextTarget(
+  layers: readonly Layer[] | undefined,
+  selectedId: string | null,
+): TextLayer | null {
+  const byId = (id: string | null) => {
+    const l = id ? layers?.find((x) => x.id === id) : undefined;
+    return l && l.kind === "text" ? l : null;
+  };
+  return byId(selectedId) ?? byId(WORDS_LAYER_ID) ?? byId(CAPTION_LAYER_ID);
+}
+
+/** Restyle one text layer in place — nothing about its position or size moves. */
+export function restyleAdText(id: string, patch: Partial<TextStyle>): boolean {
+  const s = useCompositorStore.getState();
+  const layer = s.doc?.layers.find((l) => l.id === id);
+  if (!layer || layer.kind !== "text") return false;
+  s.updateLayer(id, {
+    ...(patch.font !== undefined ? { font: patch.font } : {}),
+    ...(patch.weight !== undefined ? { weight: patch.weight } : {}),
+    ...(patch.color !== undefined ? { color: patch.color } : {}),
+    ...(patch.scrim !== undefined
+      ? {
+          bg: patch.scrim
+            ? { color: "#000000", opacity: 0.45, padPx: 20 }
+            : undefined,
+        }
+      : {}),
+  });
+  return true;
+}
+
+/**
+ * Retype the Words block without touching its look. The style comes from the
+ * layer itself when it exists — a colour picked a moment ago must survive the
+ * next keystroke — and from `fallback` (the panel's last-used style) only when
+ * the block is being created.
+ */
+export function retypeAdWords(
+  text: string,
+  fallback: TextStyle,
+): SyncWordsOutcome {
+  const existing = useCompositorStore
+    .getState()
+    .doc?.layers.find((l) => l.id === WORDS_LAYER_ID);
+  const style =
+    existing && existing.kind === "text" ? textStyleOf(existing) : fallback;
+  return syncAdWords(text, { ...DEFAULT_TREATMENT, ...style });
 }
 
 /** The wording currently on the ad, so the tool reopens on what is there. */

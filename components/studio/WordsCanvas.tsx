@@ -1,57 +1,148 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Type } from "lucide-react";
-import { BRAND_FONTS, weightsFor } from "@/lib/composition/layers";
-import { DEFAULT_TREATMENT, type WordTreatment } from "@/lib/composition/words";
+import { Loader2, Sparkles, Type } from "lucide-react";
+import toast from "react-hot-toast";
+import { api } from "@/lib/api";
+import { CREDIT_COSTS } from "@/lib/credits/costs";
+import { CAPTION_LAYER_ID } from "@/lib/composition/layers";
+import { DEFAULT_TREATMENT } from "@/lib/composition/words";
+import { useCompositorStore } from "@/store/useCompositorStore";
 import { AddImageCard } from "./AddImageCard";
-import { adHasDoc, currentAdWords, syncAdWords } from "./adBridge";
+import { TextStylePicker } from "./TextStylePicker";
+import {
+  addCaptionToAd,
+  currentAdWords,
+  restyleAdText,
+  retypeAdWords,
+  pickTextTarget,
+  textStyleOf,
+  WORDS_LAYER_ID,
+  type TextStyle,
+} from "./adBridge";
 
 /**
- * The Words tool.
+ * The Wording tool: every piece of type on the ad, from one panel.
  *
  * You type the exact wording; we draw it. The letters never reach an image
- * model, which is the entire reason this exists — asking a model for specific
- * text is a request, not a constraint, and it produced "AUNCEAAN FLEANCE" on a
- * brief that never mentioned text at all.
+ * model — asking a model for specific text is a request, not a constraint,
+ * and it produced "AUNCEAAN FLEANCE" on a brief that never mentioned text.
  *
- * Everything here is live. Type and the words appear on the ad; pick a face or
- * a colour and the ad changes as you pick — there is no "place" step to
- * remember. Where the block sits and how big it is are not settings any more:
- * you drag it on the ad and pull its edges, the same as any other layer. The
- * Zone grid and Size presets this panel used to carry were a second, blunter
- * way of doing what the stage already does with the cursor, so they are gone.
+ * Everything is live and nothing is duplicated. Typing writes to the Words
+ * block as you type. "Write a caption" asks Claude for one (the only paid
+ * step here) and drops it on the ad as its own block. The ONE row of font /
+ * weight / colour pickers styles whichever text is selected on the stage —
+ * click the headline, click the caption, same controls — so a second set of
+ * pickers per kind of text never has to exist. Where a block sits and how big
+ * it is are not settings: drag it, pull its edges.
  */
 export function WordsCanvas({
   workspaceSlug,
   campaignId,
+  campaignName,
+  topic,
+  onCaption,
   onSpent,
 }: {
   workspaceSlug: string;
   campaignId: string | null;
+  campaignName: string;
+  /** What the ad is about — the campaign prompt — for the caption. */
+  topic: string;
+  /** Hands the generated caption up so Publish starts pre-filled. */
+  onCaption?: (caption: string) => void;
   onSpent?: () => void;
 }) {
-  // Lazy initial state, not an effect: read whatever is already on the ad ONCE
-  // at mount, so the tool edits the existing block rather than starting over.
   const [text, setText] = useState(() => currentAdWords());
-  const [treatment, setTreatment] = useState<WordTreatment>(DEFAULT_TREATMENT);
-  const [hasDoc, setHasDoc] = useState(() => adHasDoc());
+  // The style new words are born with — follows whatever was last picked.
+  const [lastStyle, setLastStyle] = useState<TextStyle>({
+    font: DEFAULT_TREATMENT.font,
+    weight: 400,
+    color: DEFAULT_TREATMENT.color,
+    scrim: DEFAULT_TREATMENT.scrim,
+  });
+  const [captioning, setCaptioning] = useState(false);
+
+  // The pickers follow the stage: click a text block and they style that one.
+  const hasDoc = useCompositorStore((s) => s.doc !== null);
+  const target = useCompositorStore((s) =>
+    pickTextTarget(s.doc?.layers, s.selectedLayerId),
+  );
+  const style = target ? textStyleOf(target) : lastStyle;
+  const targetName =
+    target?.id === WORDS_LAYER_ID
+      ? "your words"
+      : target?.id === CAPTION_LAYER_ID
+        ? "the caption"
+        : target
+          ? "the selected text"
+          : null;
 
   // Sync on change, never on mount: mounting must not rewrite a block the
-  // canvas may have re-wrapped or the user may have resized. The ref skips the
-  // first run; everything after is a genuine edit.
+  // canvas may have re-wrapped or the user may have resized.
   const mounted = useRef(false);
+  const fallback = useRef(lastStyle);
+  useEffect(() => {
+    fallback.current = lastStyle;
+  }, [lastStyle]);
   useEffect(() => {
     if (!mounted.current) {
       mounted.current = true;
       return;
     }
-    const outcome = syncAdWords(text, treatment);
-    setHasDoc(outcome !== "no-doc");
-  }, [text, treatment]);
+    retypeAdWords(text, fallback.current);
+  }, [text]);
 
-  const set = (patch: Partial<WordTreatment>) =>
-    setTreatment((t) => ({ ...t, ...patch }));
+  const apply = (patch: Partial<TextStyle>) => {
+    setLastStyle((s) => ({ ...s, ...patch }));
+    if (target) restyleAdText(target.id, patch);
+  };
+
+  const writeCaption = async () => {
+    if (!campaignId || captioning) return;
+    setCaptioning(true);
+    try {
+      const res = await api("/api/jobs", {
+        method: "POST",
+        body: JSON.stringify({
+          campaignId,
+          type: "script_generation",
+          params: {
+            imageDescription: (topic || text).trim(),
+            businessName: campaignName,
+            platform: "instagram",
+            tone: "professional",
+            maxWords: 60,
+          },
+        }),
+        workspaceSlug,
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        result?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.result) {
+        throw new Error(
+          res.status === 402
+            ? `Not enough credits — this costs ${CREDIT_COSTS.script_generation}.`
+            : (data.error ?? "Couldn't write a caption"),
+        );
+      }
+      onSpent?.();
+      onCaption?.(data.result);
+      if (addCaptionToAd(data.result) === null) {
+        toast.error("Caption written — add an image to put it on the ad.");
+        return;
+      }
+      // Hand the pickers the caption straight away.
+      useCompositorStore.getState().selectLayer(CAPTION_LAYER_ID);
+      toast.success("Caption on your ad — drag it, or restyle it below");
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setCaptioning(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -61,12 +152,10 @@ export function WordsCanvas({
             <Type className="h-4 w-4" /> Words
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            A caption, a headline, your brand name — type it exactly as it
-            should appear and it shows on the ad as you type. Drag it where you
-            want it; pull its edges to resize.
+            A headline, your brand name, an offer — it shows on the ad as you
+            type. Drag it where you want it; pull its edges to resize.
           </p>
         </div>
-
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -80,93 +169,32 @@ export function WordsCanvas({
             Add an image to your ad first — type needs something to sit on.
           </p>
         )}
+        <button
+          type="button"
+          onClick={() => void writeCaption()}
+          disabled={!campaignId || captioning}
+          className="flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-primary/50 disabled:opacity-50"
+        >
+          {captioning ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Sparkles className="h-3.5 w-3.5" />
+          )}
+          {captioning
+            ? "Writing…"
+            : `Write a caption for me · ${CREDIT_COSTS.script_generation}`}
+        </button>
       </div>
 
-      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4">
-        <label className="text-[11px] text-muted-foreground">Font</label>
-        <div className="flex flex-wrap gap-1">
-          {BRAND_FONTS.map((f) => (
-            <button
-              key={f}
-              type="button"
-              onClick={() =>
-                set({
-                  font: f,
-                  // Drop a Bold this family has no file for.
-                  weight: weightsFor(f).includes(treatment.weight ?? 400)
-                    ? treatment.weight
-                    : 400,
-                })
-              }
-              style={{ fontFamily: `"${f}", sans-serif` }}
-              className={`rounded-md border px-2 py-1 text-xs transition-colors ${
-                treatment.font === f
-                  ? "border-primary text-primary"
-                  : "border-border text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {f}
-            </button>
-          ))}
-        </div>
-
-        <label className="text-[11px] text-muted-foreground">Weight</label>
-        <div className="flex gap-1">
-          {weightsFor(treatment.font).map((w) => (
-            <button
-              key={w}
-              type="button"
-              onClick={() => set({ weight: w })}
-              style={{
-                fontFamily: `"${treatment.font}", sans-serif`,
-                fontWeight: w,
-              }}
-              className={`rounded-md border px-2 py-1 text-xs transition-colors ${
-                (treatment.weight ?? 400) === w
-                  ? "border-primary text-primary"
-                  : "border-border text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {w === 700 ? "Bold" : "Regular"}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-3">
-          <label className="text-[11px] text-muted-foreground">Colour</label>
-          {/* onInput, not just onChange: browsers fire `change` only when the
-              picker closes, so the ad wouldn't move until the dialog was
-              dismissed — the opposite of live. */}
-          <input
-            type="color"
-            value={treatment.color}
-            onInput={(e) => set({ color: e.currentTarget.value })}
-            onChange={(e) => set({ color: e.currentTarget.value })}
-            className="h-7 w-12 cursor-pointer rounded border border-border bg-background"
-          />
-          <span
-            className="text-sm"
-            style={{
-              fontFamily: `"${treatment.font}", sans-serif`,
-              fontWeight: treatment.weight ?? 400,
-              color: treatment.color,
-              ...(treatment.scrim
-                ? { background: "rgba(0,0,0,0.45)", padding: "0 6px" }
-                : {}),
-            }}
-          >
-            {text.trim().split("\n")[0].slice(0, 24) || "Preview"}
-          </span>
-          <label className="ml-auto flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={treatment.scrim}
-              onChange={(e) => set({ scrim: e.target.checked })}
-            />
-            Panel behind
-          </label>
-        </div>
-      </div>
+      <TextStylePicker
+        style={style}
+        onChange={apply}
+        legend={
+          targetName
+            ? `Styling ${targetName} — click any text on the ad to switch.`
+            : "Style for the next words you add."
+        }
+      />
 
       <AddImageCard
         workspaceSlug={workspaceSlug}

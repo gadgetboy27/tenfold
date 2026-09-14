@@ -1,10 +1,15 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useCompositorStore } from "@/store/useCompositorStore";
 import {
+  addCaptionToAd,
+  pickTextTarget,
+  restyleAdText,
+  retypeAdWords,
   syncAdWords,
   WORDS_LAYER_ID,
   currentAdWords,
 } from "@/components/studio/adBridge";
+import { CAPTION_LAYER_ID } from "@/lib/composition/layers";
 import { DEFAULT_TREATMENT } from "@/lib/composition/words";
 
 /**
@@ -88,5 +93,78 @@ describe("syncAdWords", () => {
     expect(syncAdWords("   ", DEFAULT_TREATMENT)).toBe("removed");
     expect(words()).toBeUndefined();
     expect(syncAdWords("", DEFAULT_TREATMENT)).toBe("empty");
+  });
+
+  it("retyping keeps the colour picked a moment ago, not the panel default", () => {
+    load();
+    syncAdWords("Sale", { ...DEFAULT_TREATMENT, color: "#00ff00" });
+    retypeAdWords("Sale on", {
+      font: "Inter",
+      weight: 400,
+      color: "#ffffff",
+      scrim: true,
+    });
+    const l = words();
+    expect(l?.kind === "text" && l.color).toBe("#00ff00");
+    expect(currentAdWords()).toBe("Sale on");
+  });
+});
+
+describe("one set of pickers for every text on the ad", () => {
+  beforeEach(() => useCompositorStore.getState().reset());
+
+  it("targets the selected text layer, else the words, else the caption", () => {
+    load();
+    const s = () => useCompositorStore.getState();
+    expect(pickTextTarget(s().doc?.layers, null)).toBeNull();
+
+    addCaptionToAd("A caption");
+    expect(pickTextTarget(s().doc?.layers, null)?.id).toBe(CAPTION_LAYER_ID);
+
+    syncAdWords("Headline", DEFAULT_TREATMENT);
+    // addLayer selects what it adds; with nothing selected the words win.
+    expect(pickTextTarget(s().doc?.layers, null)?.id).toBe(WORDS_LAYER_ID);
+    expect(pickTextTarget(s().doc?.layers, CAPTION_LAYER_ID)?.id).toBe(
+      CAPTION_LAYER_ID,
+    );
+    // An image selection is not text — fall through to the words.
+    s().addLayer({
+      id: "img",
+      kind: "image",
+      src: "http://x/logo.png",
+      pos: { mode: "fraction", nx: 0.5, ny: 0.5 },
+      scale: 1,
+      rotationDeg: 0,
+      opacity: 1,
+      blend: "normal",
+      appearAt: 0,
+      disappearAt: null,
+      fadeSec: 0,
+    });
+    expect(pickTextTarget(s().doc?.layers, "img")?.id).toBe(WORDS_LAYER_ID);
+  });
+
+  it("restyles the caption without touching the words, and vice versa", () => {
+    load();
+    addCaptionToAd("A caption");
+    syncAdWords("Headline", DEFAULT_TREATMENT);
+    expect(
+      restyleAdText(CAPTION_LAYER_ID, { color: "#123456", scrim: false }),
+    ).toBe(true);
+    const doc = useCompositorStore.getState().doc!;
+    const cap = doc.layers.find((l) => l.id === CAPTION_LAYER_ID);
+    const w = doc.layers.find((l) => l.id === WORDS_LAYER_ID);
+    if (cap?.kind !== "text" || w?.kind !== "text") throw new Error();
+    expect(cap.color).toBe("#123456");
+    expect(cap.bg).toBeUndefined();
+    expect(w.color).toBe(DEFAULT_TREATMENT.color);
+    expect(w.bg).toBeTruthy();
+    // Position untouched by a restyle.
+    expect(cap.pos).toEqual({ mode: "fraction", nx: 0.5, ny: 0.84 });
+  });
+
+  it("refuses to restyle something that isn't text", () => {
+    load();
+    expect(restyleAdText("nope", { color: "#000000" })).toBe(false);
   });
 });
