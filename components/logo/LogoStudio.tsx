@@ -504,7 +504,25 @@ export function LogoStudio() {
   // Why has this stopped moving? Only asked while concepts are still short —
   // a settled job (completed/failed) or a full grid needs no explanation.
   const stall: LogoStall | null = (() => {
-    if (!state || !conceptsJob || stallDismissed) return null;
+    if (!state || stallDismissed) return null;
+    // An import (vectorize) has no concepts job. When it fails — Recraft
+    // rejecting the file, most often — the project has nothing to show, and
+    // this used to render as an empty "Nothing to pick from yet" grid with no
+    // hint that anything had gone wrong or that the credit was already back.
+    if (!conceptsJob) {
+      const failedImport = state.jobs.find(
+        (j) => j.type === "logo_vectorize" && j.status === "failed",
+      );
+      if (failedImport && !state.project.final_asset_id) {
+        return {
+          kind: "failed",
+          detail: failedImport.errorMessage,
+          arrived: 0,
+          expected: 0,
+        };
+      }
+      return null;
+    }
     const arrived = state.concepts.length;
     if (arrived >= expectedConcepts) return null;
     // The anchor is already chosen — the user has moved past this phase and a

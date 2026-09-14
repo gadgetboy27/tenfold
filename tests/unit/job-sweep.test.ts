@@ -31,6 +31,7 @@ function makeAdmin(
         "update",
         "not",
         "gte",
+        "single",
       ]) {
         obj[m] = (...args: unknown[]) => {
           calls.push({ m, args });
@@ -70,9 +71,13 @@ async function loadSweeper(opts: {
   advance?: ReturnType<typeof vi.fn>;
   jobs?: unknown[];
   onWrite?: (table: string, calls: Call[]) => void;
+  /** What fal turns out to have finished — reclaim returns true and the
+   *  job reads back as this status. Default: nothing to reclaim. */
+  reclaim?: { statusAfter: string };
 }) {
   const refund = opts.refund ?? vi.fn(async () => ({ success: true }));
   const advance = opts.advance ?? vi.fn(async () => undefined);
+  const reclaimLogoJobs = vi.fn(async () => Boolean(opts.reclaim));
 
   vi.doMock("@/lib/supabase/admin", () => ({
     createSupabaseAdminClient: () =>
@@ -83,6 +88,14 @@ async function loadSweeper(opts: {
             if (isUpdate(calls)) {
               return {
                 data: opts.updateWins === false ? [] : [{ id: JOB.id }],
+              };
+            }
+            // The post-reclaim status re-read is the one select on this
+            // table that narrows to a single job.
+            if (calls.some((c) => c.m === "eq" && c.args[0] === "id")) {
+              return {
+                data: { status: opts.reclaim?.statusAfter ?? "processing" },
+                error: null,
               };
             }
             return { data: opts.jobs ?? [JOB], error: null };
@@ -96,9 +109,10 @@ async function loadSweeper(opts: {
   }));
   vi.doMock("@/lib/credits/refund", () => ({ refundCredits: refund }));
   vi.doMock("@/lib/foreman/advance", () => ({ advanceRunForJob: advance }));
+  vi.doMock("@/lib/logo/reclaim", () => ({ reclaimLogoJobs }));
 
   const mod = await import("@/lib/jobs/sweep");
-  return { ...mod, refund, advance };
+  return { ...mod, refund, advance, reclaimLogoJobs };
 }
 
 describe("sweepStalledJobs", () => {
@@ -115,6 +129,38 @@ describe("sweepStalledJobs", () => {
     expect(result.creditsRefunded).toBe(30);
     expect(result.settledPartial).toBe(0);
     expect(refund).toHaveBeenCalledWith("job-1");
+  });
+
+  it("asks fal first — a render whose webhook was lost is reclaimed, not refunded", async () => {
+    const { sweepStalledJobs, refund, reclaimLogoJobs } = await loadSweeper({
+      assetCount: 0,
+      reclaim: { statusAfter: "completed" },
+    });
+    const result = await sweepStalledJobs();
+
+    expect(reclaimLogoJobs).toHaveBeenCalledTimes(1);
+    expect(result.reclaimed).toBe(1);
+    expect(result.refunded).toBe(0);
+    expect(refund).not.toHaveBeenCalled();
+  });
+
+  it("still refunds when reclaiming found nothing finished", async () => {
+    const { sweepStalledJobs, refund } = await loadSweeper({
+      assetCount: 0,
+      reclaim: undefined,
+    });
+    const result = await sweepStalledJobs();
+    expect(result.refunded).toBe(1);
+    expect(refund).toHaveBeenCalledWith("job-1");
+  });
+
+  it("never reclaims on a dry run — a dry run writes nothing", async () => {
+    const { sweepStalledJobs, reclaimLogoJobs } = await loadSweeper({
+      assetCount: 0,
+      reclaim: { statusAfter: "completed" },
+    });
+    await sweepStalledJobs({ dryRun: true });
+    expect(reclaimLogoJobs).not.toHaveBeenCalled();
   });
 
   it("does NOT refund a job that delivered some assets", async () => {

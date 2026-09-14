@@ -8,7 +8,8 @@ import { debitCredits } from "@/lib/credits/debit";
 import { refundCredits } from "@/lib/credits/refund";
 import { enqueueJob } from "@/lib/fal/queue";
 import { ensureLogoCampaign } from "@/app/api/logo/route";
-import { validateVectorizeUpload, extensionOf } from "@/lib/logo/upload";
+import { validateVectorizeUpload } from "@/lib/logo/upload";
+import { fitForVectorize } from "@/lib/logo/vectorize-source";
 import { resolveOwnedAsset } from "@/lib/assets/owned";
 
 // POST /api/logo/vectorize — the acquisition hook: upload an old raster logo,
@@ -16,6 +17,8 @@ import { resolveOwnedAsset } from "@/lib/assets/owned";
 // project so the result has a home; the webhook records it as final_asset_id.
 //
 // Upload rules (png/jpg/webp under 5MB) live in lib/logo/upload for testability.
+// Whatever the source, it passes through fitForVectorize first: Recraft
+// rejects anything under 256px a side, and that is the size old logos come in.
 
 const ERROR_MESSAGES = {
   empty: "No file provided",
@@ -59,6 +62,24 @@ export async function POST(req: Request) {
       }
       sourceUrl = owned.url;
       sourceName = "Gallery logo";
+      // A gallery asset can be a small uploaded mark too (brand-kit logos).
+      // Only a copy that had to be enlarged is re-stored; otherwise the
+      // asset's own URL is the source and nothing is duplicated.
+      const res = await fetch(owned.url);
+      if (res.ok) {
+        const fitted = await fitForVectorize(
+          await res.arrayBuffer(),
+          res.headers.get("content-type") ?? "image/png",
+        );
+        if (fitted.resized) {
+          sourceUrl = await storeSource(
+            admin,
+            session.workspaceId,
+            fitted.buffer,
+            fitted.contentType,
+          );
+        }
+      }
     } else {
       const form = await req.formData();
       const file = form.get("file") as File | null;
@@ -75,22 +96,15 @@ export async function POST(req: Request) {
           { status: 400 },
         );
       }
-      const ext = extensionOf(file.name);
-
-      // Store the source raster so vectorize can pull it from a public URL.
-      const uploadPath = `uploads/${session.workspaceId}/${uuidv4()}.${ext}`;
-      const { error: upErr } = await admin.storage
-        .from("assets")
-        .upload(uploadPath, await file.arrayBuffer(), {
-          contentType: file.type,
-        });
-      if (upErr) {
-        return NextResponse.json({ error: upErr.message }, { status: 500 });
-      }
-      const { data: urlData } = admin.storage
-        .from("assets")
-        .getPublicUrl(uploadPath);
-      sourceUrl = urlData.publicUrl;
+      // Store the source raster (enlarged if it's under Recraft's minimum)
+      // so vectorize can pull it from a public URL.
+      const fitted = await fitForVectorize(await file.arrayBuffer(), file.type);
+      sourceUrl = await storeSource(
+        admin,
+        session.workspaceId,
+        fitted.buffer,
+        fitted.contentType,
+      );
       sourceName = file.name.replace(/\.[^.]+$/, "");
     }
 
@@ -179,4 +193,25 @@ export async function POST(req: Request) {
       { status: msg === "Unauthorized" ? 401 : 500 },
     );
   }
+}
+
+const EXT_FOR: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+};
+
+async function storeSource(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  workspaceId: string,
+  buffer: Buffer,
+  contentType: string,
+): Promise<string> {
+  const ext = EXT_FOR[contentType] ?? "png";
+  const uploadPath = `uploads/${workspaceId}/${uuidv4()}.${ext}`;
+  const { error } = await admin.storage
+    .from("assets")
+    .upload(uploadPath, buffer, { contentType });
+  if (error) throw new Error(error.message);
+  return admin.storage.from("assets").getPublicUrl(uploadPath).data.publicUrl;
 }

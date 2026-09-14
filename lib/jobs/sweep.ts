@@ -1,6 +1,7 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { refundCredits } from "@/lib/credits/refund";
 import { advanceRunForJob } from "@/lib/foreman/advance";
+import { reclaimLogoJobs } from "@/lib/logo/reclaim";
 
 /**
  * The stalled-job sweeper — the money half of the "stuck forever" problem.
@@ -47,11 +48,13 @@ export interface SweepResult {
   settledPartial: number;
   /** Jobs that errored during the sweep; left alone for the next run. */
   errored: number;
+  /** fal had finished after all — result saved, job settled, nothing refunded. */
+  reclaimed: number;
   details: {
     jobId: string;
     type: string;
     ageMinutes: number;
-    outcome: "refunded" | "settled_partial" | "error";
+    outcome: "refunded" | "settled_partial" | "error" | "reclaimed";
     assets: number;
     credits: number;
   }[];
@@ -66,6 +69,8 @@ interface StalledJob {
   credits_charged: number;
   input_params: Record<string, unknown> | null;
   created_at: string;
+  fal_request_id: string | null;
+  fal_raw_error: { swept_by?: string } | null;
 }
 
 export async function sweepStalledJobs(
@@ -80,7 +85,7 @@ export async function sweepStalledJobs(
   const { data, error } = await admin
     .from("creative_jobs")
     .select(
-      "id, type, status, campaign_id, workspace_id, credits_charged, input_params, created_at",
+      "id, type, status, campaign_id, workspace_id, credits_charged, input_params, created_at, fal_request_id, fal_raw_error",
     )
     .in("status", IN_FLIGHT)
     .lt("created_at", cutoff)
@@ -95,6 +100,7 @@ export async function sweepStalledJobs(
     creditsRefunded: 0,
     settledPartial: 0,
     errored: 0,
+    reclaimed: 0,
     details: [],
   };
 
@@ -108,6 +114,35 @@ export async function sweepStalledJobs(
       (Date.now() - new Date(job.created_at).getTime()) / 60_000,
     );
     try {
+      // A lost webhook is not a lost render. Before treating a logo job as
+      // dead, ask fal whether its requests finished and save whatever did —
+      // the studio poll does this while the tab is open (lib/logo/reclaim.ts),
+      // and this is the same recovery for a user who started a logo, left,
+      // and never came back to trigger it. A reclaimed job is no longer
+      // in flight, so it is left alone rather than refunded.
+      if (!dryRun && (await reclaimLogoJobs(admin, [job]))) {
+        const { data: after } = await admin
+          .from("creative_jobs")
+          .select("status")
+          .eq("id", job.id)
+          .single();
+        if (
+          after &&
+          !(IN_FLIGHT as readonly string[]).includes(after.status as string)
+        ) {
+          result.details.push({
+            jobId: job.id,
+            type: job.type,
+            ageMinutes,
+            outcome: "reclaimed",
+            assets: 0,
+            credits: 0,
+          });
+          result.reclaimed++;
+          continue;
+        }
+      }
+
       // Did anything actually land? A multi-request job (6 logo concepts, a
       // variety pack) can deliver some of its assets and then stall waiting on
       // the rest, and those assets are real and usable.
