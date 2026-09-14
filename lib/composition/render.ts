@@ -117,6 +117,14 @@ function drawLayer(
 ): void {
   if (motion.alpha <= 0) return;
 
+  // Nothing to draw — and, critically, no scrim either. A text layer whose
+  // letters were all deleted in the inline editor used to keep painting its
+  // panel behind a 1px-wide "block": a small dark rectangle left on the ad
+  // that nothing seemed to explain. The editor now removes such a layer on
+  // blur; this guards every other way a blank text layer could exist. Checked
+  // before save() so an early exit can't leak this layer's transform.
+  if (layer.kind === "text" && !layer.text.trim()) return;
+
   const c = layerCenter(ctx, layer, aspect, images);
   ctx.save();
   ctx.globalAlpha = motion.alpha;
@@ -195,8 +203,9 @@ export interface DrawFrameInput {
   /** Text layer being edited inline — the DOM textarea replaces it, so the
    *  canvas skips drawing it to avoid a double image. */
   editingLayerId?: string | null;
-  /** Show the selected layer's outline regardless of ghosting (edge hover /
-   *  resize feedback). Still paused-only. */
+  /** No longer read — the selected layer's outline and handles now draw
+   *  whenever the stage is paused. Kept so existing callers still type-check;
+   *  remove with the next caller change. */
   forceOutline?: boolean;
 }
 
@@ -233,7 +242,6 @@ export function drawFrame(
   }
 
   const effectCtx: EffectCtx = { W: width, H: height };
-  let selectedGhosted = false;
 
   for (const master of input.doc.layers) {
     if (master.id === input.editingLayerId) continue; // DOM textarea covers it
@@ -257,30 +265,50 @@ export function drawFrame(
         input.doc.aspect,
         input.images,
       );
-      if (isSelected) selectedGhosted = true;
-    } else if (isSelected) {
-      selectedGhosted = true;
     }
   }
 
-  // The dashed box marks placeholder spots only — a ghosted selection or an
-  // active drag, and only while paused. Playback and finished content stay
-  // completely clean.
+  // The selection box, with its eight pull handles, whenever a layer is
+  // selected and the stage is paused. It used to appear only on an edge hover
+  // or mid-drag, which left the resize affordance undiscoverable: the edge
+  // band is nine display pixels wide and nothing on screen said where it was,
+  // so people concluded the block couldn't be sized at all. Playback and the
+  // clean preview still show nothing — `paused` is false for both.
   const selected = input.doc.layers.find((l) => l.id === input.selectedLayerId);
-  const dragging = input.draggingLayerId === input.selectedLayerId;
-  if (
-    input.paused &&
-    selected &&
-    selected.id !== input.editingLayerId &&
-    (selectedGhosted || dragging || input.forceOutline)
-  ) {
+  if (input.paused && selected && selected.id !== input.editingLayerId) {
     drawSelectionOutline(
       ctx,
       effectiveLayer(selected, input.doc.aspect, input.doc.overrides),
       input.doc.aspect,
       input.images,
+      // Handles are pointless on a layer that can't be pulled.
+      !selected.locked,
     );
   }
+}
+
+/** Handle size in design px — reads ~6px on a phone-width stage, ~12 on a
+ *  desktop one, which is the range editors' handles usually sit in. */
+const HANDLE_PX = 18;
+/** Gap between the layer's tight box and the outline — the handles sit on
+ *  the outline, so hit-testing must use the same padded box. */
+export const OUTLINE_PAD = 8;
+
+/** The eight handle centres of a box, relative to its centre. */
+export function handlePoints(
+  halfW: number,
+  halfH: number,
+): { x: number; y: number }[] {
+  return [
+    { x: -halfW, y: -halfH },
+    { x: 0, y: -halfH },
+    { x: halfW, y: -halfH },
+    { x: -halfW, y: 0 },
+    { x: halfW, y: 0 },
+    { x: -halfW, y: halfH },
+    { x: 0, y: halfH },
+    { x: halfW, y: halfH },
+  ];
 }
 
 function drawSelectionOutline(
@@ -288,21 +316,38 @@ function drawSelectionOutline(
   layer: Layer,
   aspect: CompositionAspect,
   images: Map<string, HTMLImageElement>,
+  withHandles: boolean,
 ): void {
   const b = layerBounds(ctx, layer, images);
   const c = layerCenter(ctx, layer, aspect, images);
+  const halfW = (b.width * layer.scale) / 2 + OUTLINE_PAD;
+  const halfH = (b.height * layer.scale) / 2 + OUTLINE_PAD;
   ctx.save();
   ctx.translate(c.x, c.y);
   ctx.rotate((layer.rotationDeg * Math.PI) / 180);
   ctx.strokeStyle = "#818cf8";
   ctx.lineWidth = 3;
   ctx.setLineDash([10, 8]);
-  ctx.strokeRect(
-    (-b.width * layer.scale) / 2 - 8,
-    (-b.height * layer.scale) / 2 - 8,
-    b.width * layer.scale + 16,
-    b.height * layer.scale + 16,
-  );
+  ctx.strokeRect(-halfW, -halfH, halfW * 2, halfH * 2);
+  if (withHandles) {
+    ctx.setLineDash([]);
+    ctx.fillStyle = "#ffffff";
+    ctx.lineWidth = 2;
+    for (const p of handlePoints(halfW, halfH)) {
+      ctx.fillRect(
+        p.x - HANDLE_PX / 2,
+        p.y - HANDLE_PX / 2,
+        HANDLE_PX,
+        HANDLE_PX,
+      );
+      ctx.strokeRect(
+        p.x - HANDLE_PX / 2,
+        p.y - HANDLE_PX / 2,
+        HANDLE_PX,
+        HANDLE_PX,
+      );
+    }
+  }
   ctx.restore();
 }
 

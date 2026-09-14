@@ -2,6 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   buildWordsLayer,
   sizeForWords,
+  CHAR_EM,
+  wrapHeadline,
+  HEADLINE_WRAP_CHARS,
   wordTreatmentSchema,
   wordTreatmentsSchema,
   DEFAULT_TREATMENT,
@@ -76,7 +79,11 @@ describe("buildWordsLayer", () => {
       treatment: DEFAULT_TREATMENT,
       aspect: "1:1",
     });
-    expect(layer.text).toBe("Hop Pilot — 4.8% Pale Ale");
+    // A long headline is broken into lines, but only whitespace moves: put
+    // the breaks back and it is letter-for-letter what was typed.
+    expect(layer.text.replace(/\n/g, " ")).toBe("Hop Pilot — 4.8% Pale Ale");
+    // …and broken evenly, not with one word stranded on the last line.
+    expect(layer.text).toBe("Hop Pilot —\n4.8% Pale Ale");
   });
 
   it("produces a layer the document schema accepts", () => {
@@ -138,9 +145,9 @@ describe("sizeForWords", () => {
     for (const aspect of ["1:1", "9:16", "16:9"] as const) {
       const size = sizeForWords(text, 0.8, aspect);
       const widest = Math.max(...text.split("\n").map((l) => l.length));
-      // ~0.5em per character for a sans face — the same approximation the
-      // sizing uses, checked against the real design width.
-      expect(widest * size * 0.5).toBeLessThanOrEqual(
+      // The same per-character estimate the sizing uses, checked against
+      // the real design width.
+      expect(widest * size * CHAR_EM).toBeLessThanOrEqual(
         ASPECT_DESIGN[aspect].width,
       );
     }
@@ -149,7 +156,9 @@ describe("sizeForWords", () => {
   it("stays within the schema's own size bounds", () => {
     // One very long word, and one very short line on the widest frame — both
     // would otherwise produce a size the layer schema rejects.
-    expect(sizeForWords("a".repeat(400), 0.9, "9:16")).toBeGreaterThanOrEqual(8);
+    expect(sizeForWords("a".repeat(400), 0.9, "9:16")).toBeGreaterThanOrEqual(
+      8,
+    );
     expect(sizeForWords("A", 0.9, "16:9")).toBeLessThanOrEqual(400);
   });
 });
@@ -184,8 +193,43 @@ describe("size presets", () => {
     const longest = WORD_SIZES[WORD_SIZES.length - 1];
     const text = "Our biggest clearance event of the entire year, ends Sunday";
     const size = sizeForWords(text, longest.widthFrac, "9:16");
-    expect(text.length * size * 0.5).toBeLessThanOrEqual(
+    expect(text.length * size * CHAR_EM).toBeLessThanOrEqual(
       ASPECT_DESIGN["9:16"].width,
     );
+  });
+});
+
+describe("headline wrapping", () => {
+  it("breaks a long single line into headline-length lines", () => {
+    const out = wrapHeadline("Our biggest clearance event of the entire year");
+    const lines = out.split("\n");
+    expect(lines.length).toBeGreaterThan(1);
+    for (const l of lines) {
+      expect(l.length).toBeLessThanOrEqual(HEADLINE_WRAP_CHARS);
+    }
+  });
+
+  it("keeps the breaks the user typed and leaves short lines alone", () => {
+    expect(wrapHeadline("Summer\nSale")).toBe("Summer\nSale");
+    expect(wrapHeadline("Electrified Garage")).toBe("Electrified Garage");
+  });
+
+  it("a built layer fits the frame on every aspect, at a real char width", () => {
+    // The bug this pins: sized at 0.5em/char, a headline spanned 95–110% of a
+    // 1:1 or 9:16 frame and its handles sat off the canvas.
+    const text = "Small-batch hot sauce, made in Wellington since 2019";
+    for (const aspect of ["1:1", "9:16", "16:9"] as const) {
+      const layer = buildWordsLayer({
+        id: "w",
+        text,
+        treatment: { ...DEFAULT_TREATMENT, widthFrac: 0.8 },
+        aspect,
+      });
+      const widest = Math.max(...layer.text.split("\n").map((l) => l.length));
+      expect(widest * layer.sizePx * CHAR_EM).toBeLessThanOrEqual(
+        ASPECT_DESIGN[aspect].width * 0.85,
+      );
+      expect(layer.text.split("\n").length).toBeGreaterThan(1);
+    }
   });
 });

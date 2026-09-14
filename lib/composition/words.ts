@@ -105,13 +105,58 @@ export const DEFAULT_TREATMENT: WordTreatment = {
 };
 
 /**
+ * How wide a character is, as a fraction of the point size.
+ *
+ * This was 0.5, described as "conservative". It wasn't: measured against the
+ * real faces in public/fonts, mixed-case Inter Regular averages ~0.55em, Bold
+ * ~0.6, and an all-caps headline in a display face runs 0.65–0.7. So a block
+ * sized to span 80% of the frame at 0.5 actually spanned 95–110% and ran off
+ * both edges of a 1:1 or 9:16 ad — and, because the resize handles sit on the
+ * block's edges, they were off the canvas too, and the block could not be
+ * pulled back in. 0.62 covers bold mixed case with room; caps in a wide face
+ * may still touch the outline pad, which the re-fit catches.
+ *
+ * ONE constant for sizing, the overflow check and the re-fit, so "will it
+ * fit" and "what size makes it fit" can never disagree.
+ */
+export const CHAR_EM = 0.62;
+
+/**
+ * Longest line a headline should run before wrapping. A headline is not body
+ * copy: three or four words a line reads as a headline, forty characters reads
+ * as a sentence set too large. Lines the user broke themselves are kept.
+ */
+export const HEADLINE_WRAP_CHARS = 22;
+
+/**
+ * Wrap each over-long line, keeping every break the user typed.
+ *
+ * Balanced, not greedy: a 25-character line cut at 22 leaves one word
+ * stranded on its own line ("…Pale" / "Ale"), which is the classic widow a
+ * designer would never let stand. Work out how many lines the text needs,
+ * then aim each at an equal share, so the two lines come out near-even.
+ * Only whitespace changes — the letters are exactly what was typed.
+ */
+export function wrapHeadline(text: string): string {
+  return text
+    .split("\n")
+    .map((raw) => {
+      const line = raw.trim();
+      if (line.length <= HEADLINE_WRAP_CHARS) return line;
+      const lines = Math.ceil(line.length / HEADLINE_WRAP_CHARS);
+      const longestWord = Math.max(...line.split(/\s+/).map((w) => w.length));
+      const target = Math.max(Math.ceil(line.length / lines), longestWord);
+      return wrapText(line, target);
+    })
+    .join("\n");
+}
+
+/**
  * Size the type so the longest line fits the treatment's width.
  *
  * Same reasoning as the caption fitting: a fixed pixel size cannot work when
- * the text is user-supplied and its length is unknown. ~0.5em per character is
- * the usual approximation for a sans face — deliberately conservative, because
- * type that is slightly small reads as a design choice and type that overflows
- * reads as a bug.
+ * the text is user-supplied and its length is unknown. Type that is slightly
+ * small reads as a design choice; type that overflows reads as a bug.
  */
 export function sizeForWords(
   text: string,
@@ -120,7 +165,7 @@ export function sizeForWords(
 ): number {
   const longest = Math.max(...text.split("\n").map((l) => l.trim().length), 1);
   const targetPx = ASPECT_DESIGN[aspect].width * widthFrac;
-  const size = targetPx / (longest * 0.5);
+  const size = targetPx / (longest * CHAR_EM);
   // Clamp to the schema's own bounds so a very short or very long line can't
   // produce a layer the doc rejects.
   return Math.round(Math.min(400, Math.max(8, size)));
@@ -140,7 +185,9 @@ export function buildWordsLayer(params: {
   treatment: WordTreatment;
   aspect: CompositionAspect;
 }): TextLayer {
-  const text = params.text.trim().slice(0, 500);
+  // Wrapped so a long headline becomes a block, not one line that has to be
+  // shrunk to fit; the wrap is what keeps the type readable on a phone.
+  const text = wrapHeadline(params.text.trim().slice(0, 500));
   const { treatment } = params;
 
   return {
@@ -168,15 +215,10 @@ export function buildWordsLayer(params: {
   };
 }
 
-/**
- * How wide a text block renders, in design pixels.
- *
- * ~0.5em per character for a sans face — the same approximation sizeForWords
- * uses, so "will it fit" and "what size makes it fit" can never disagree.
- */
+/** How wide a text block renders, in design pixels — see CHAR_EM. */
 function blockWidthPx(text: string, sizePx: number): number {
   const longest = Math.max(...text.split("\n").map((l) => l.trim().length), 1);
-  return longest * sizePx * 0.5;
+  return longest * sizePx * CHAR_EM;
 }
 
 /** Does this text layer run off the frame at its current size? */
@@ -229,7 +271,7 @@ export function refitTextLayer(
       ...layer,
       text: wrapped,
       sizePx: Math.round(
-        Math.min(400, Math.max(8, (width * 0.92) / (longest * 0.5))),
+        Math.min(400, Math.max(8, (width * 0.92) / (longest * CHAR_EM))),
       ),
     };
   }
@@ -240,7 +282,7 @@ export function refitTextLayer(
   );
   // 0.92 sits just under textOverflows' 0.94, so a re-fit always clears the
   // check without shrinking further than it has to.
-  const target = (width * 0.92) / (longest * 0.5);
+  const target = (width * 0.92) / (longest * CHAR_EM);
   return {
     ...layer,
     // Clamped to the schema's own bounds, or the re-fit produces a layer the

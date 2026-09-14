@@ -19,6 +19,7 @@ import {
   hitTestLayer,
   layerBounds,
   layerCenter,
+  OUTLINE_PAD,
   scaledHalfExtents,
 } from "@/lib/composition/render";
 import { wrapText } from "@/lib/composition/brand-apply";
@@ -98,6 +99,7 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
     const selectedLayerId = useCompositorStore((s) => s.selectedLayerId);
     const selectLayer = useCompositorStore((s) => s.selectLayer);
     const updateLayer = useCompositorStore((s) => s.updateLayer);
+    const removeLayer = useCompositorStore((s) => s.removeLayer);
     const patchLayout = useCompositorStore((s) => s.patchLayout);
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -351,7 +353,8 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
     };
 
     // Which zone of a layer's box the pointer is in — edges/corners resize,
-    // the interior moves. The band is ~9 display px, converted to design px.
+    // the interior moves. The band is ~12 display px, converted to design px —
+    // wide enough to land on the drawn handles without hunting.
     const zoneFor = (
       ctx: CanvasRenderingContext2D,
       layer: Layer,
@@ -360,14 +363,16 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
     ): Zone | null => {
       const canvas = canvasRef.current!;
       const rect = canvas.getBoundingClientRect();
-      const band = 9 / (rect.width / canvas.width);
+      const band = 12 / (rect.width / canvas.width);
       const e = eff(layer);
       // Centre from rotated extents (anchor lockstep); handles on the tight box.
       const ext = scaledHalfExtents(ctx, e, imagesRef.current);
       const c = resolveCenter(e.pos, doc!.aspect, ext.halfW, ext.halfH);
       const bnds = layerBounds(ctx, e, imagesRef.current);
-      const hw = (bnds.width * e.scale) / 2;
-      const hh = (bnds.height * e.scale) / 2;
+      // The padded box the outline and handles are drawn on, not the tight
+      // text box — a handle you can see but can't grab is worse than none.
+      const hw = (bnds.width * e.scale) / 2 + OUTLINE_PAD;
+      const hh = (bnds.height * e.scale) / 2 + OUTLINE_PAD;
       const dx = px - c.x;
       const dy = py - c.y;
       if (Math.abs(dx) > hw + band || Math.abs(dy) > hh + band) return null;
@@ -618,7 +623,13 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
             }}
             onChange={(e) => updateLayer(editing.id, { text: e.target.value })}
             onFocus={(e) => e.target.select()}
-            onBlur={() => setEditing(null)}
+            // Deleting every letter means "get rid of this", not "keep an
+            // invisible block here" — an empty text layer can't be seen or
+            // clicked, so it could never be removed by hand afterwards.
+            onBlur={() => {
+              if (!editingLayer.text.trim()) removeLayer(editing.id);
+              setEditing(null);
+            }}
             onKeyDown={(e) => {
               if (e.key === "Escape") setEditing(null);
             }}
