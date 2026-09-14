@@ -270,6 +270,67 @@ export function addWordsToAd(
   return "layer";
 }
 
+export type SyncWordsOutcome =
+  | "placed"
+  | "updated"
+  | "removed"
+  | "empty"
+  | "no-doc";
+
+/**
+ * Keep the Words layer in step with the tool, live.
+ *
+ * `addWordsToAd` rebuilds the whole layer from a treatment — including its
+ * position — which is right for "place this here" and wrong for "make it
+ * blue": rebuilding would snap type the user had dragged into place back to
+ * the zone it started in. This is the other half: the layer already on the ad
+ * keeps wherever it was put (`pos`) and however it was pulled (`scale`), and
+ * only what the tool actually changed — the letters, the face, the colour,
+ * the panel — is written. Size is re-derived from the text so a headline that
+ * grows from "Sale" to "Summer sale now on" stays inside the frame as it is
+ * typed, rather than keeping the 400px size four letters earned.
+ *
+ * With no text left the layer is removed rather than left as an empty block
+ * nobody can see to delete. With no doc there is nothing to draw on — the
+ * caller says so instead of silently doing nothing.
+ */
+export function syncAdWords(
+  text: string,
+  treatment: WordTreatment,
+): SyncWordsOutcome {
+  const s = useCompositorStore.getState();
+  if (!s.doc) return "no-doc";
+  const trimmed = text.trim();
+  const existing = s.doc.layers.find((l) => l.id === WORDS_LAYER_ID);
+
+  if (!trimmed) {
+    if (!existing) return "empty";
+    s.removeLayer(WORDS_LAYER_ID);
+    return "removed";
+  }
+
+  const fresh = buildWordsLayer({
+    id: WORDS_LAYER_ID,
+    text: trimmed,
+    treatment,
+    aspect: s.doc.aspect,
+  });
+  if (!existing || existing.kind !== "text") {
+    s.addLayer(fresh);
+    return "placed";
+  }
+  s.updateLayer(WORDS_LAYER_ID, {
+    text: fresh.text,
+    font: fresh.font,
+    weight: fresh.weight ?? 400,
+    sizePx: fresh.sizePx,
+    color: fresh.color,
+    // Written even when absent, so unticking "panel" actually clears it.
+    bg: fresh.bg,
+  });
+  return "updated";
+}
+
 /** The wording currently on the ad, so the tool reopens on what is there. */
 export function currentAdWords(): string {
   const layer = useCompositorStore

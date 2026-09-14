@@ -1747,7 +1747,8 @@ export function Studio({
                   <div className="border-t border-border pt-4">
                     <WordsCanvas
                       workspaceSlug={workspaceSlug}
-                      context={prompt}
+                      campaignId={campaignId}
+                      onSpent={refreshBalance}
                     />
                   </div>
                 </div>

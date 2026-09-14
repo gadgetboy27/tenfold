@@ -50,6 +50,23 @@ made that much better; it did not make it _guaranteed_. This does.
   guarantee dies, and a test pins it.
 - **Zones are the nine existing anchors**, not new geometry. Anchor mode is why
   a corner lock-up survives a 1:1 → 9:16 re-render; fraction mode would drift.
+  Since 2026-09-15 the panel no longer _offers_ a zone or a size: the block
+  is placed at the default anchor and then moved by dragging it on the stage
+  and resized by pulling its edges, like every other layer. `zone` and
+  `widthFrac` stay in the schema because Claude's treatments (ad-watch) and
+  the Create step's "leave this area quiet" still use them.
+- **Live, not "place".** `syncAdWords` (adBridge) writes each keystroke and
+  each font/colour/panel change straight to the layer, keeping the `pos` and
+  `scale` the user set on the stage — `addWordsToAd` rebuilds the whole layer
+  and would snap it back to its zone, so it is for first placement only. Size
+  is re-derived from the text on every edit so a headline that grows while
+  being typed stays inside the frame. The colour input listens on `onInput`,
+  because `onChange` on a colour picker fires only when the dialog closes.
+- **"Suggest treatments" is gone from the panel.** `POST /api/words/treatments`
+  stays for ad-watch. In its place, `AddImageCard` puts a picture on the ad
+  from the same tool — upload, gallery, or a small generated one via the
+  ordinary `image_generation` job (`lib/studio/generate-image.ts`), priced from
+  `CREDIT_COSTS`.
 - **Fonts are restricted to `BRAND_FONTS`** because those are the five with
   real `.ttf` files in `public/fonts/`. The browser will happily render any
   family, but the FFmpeg export resolves through `FONT_FILES` and silently
