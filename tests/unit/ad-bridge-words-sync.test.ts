@@ -110,6 +110,45 @@ describe("syncAdWords", () => {
   });
 });
 
+describe("a box drawn on the stage survives retyping", () => {
+  beforeEach(() => useCompositorStore.getState().reset());
+
+  it("re-wraps to the width the side handle set and keeps the size", () => {
+    load();
+    syncAdWords("Summer sale now on", DEFAULT_TREATMENT);
+    // What the canvas writes when a side handle is pulled to ~12 chars.
+    const s = useCompositorStore.getState();
+    s.updateLayer(WORDS_LAYER_ID, {
+      text: "Summer sale\nnow on",
+      wrapChars: 12,
+      sizePx: 90,
+    });
+
+    syncAdWords("Summer sale now on across the store", DEFAULT_TREATMENT);
+    const l = words();
+    if (l?.kind !== "text") throw new Error();
+    expect(l.sizePx).toBe(90); // not re-derived
+    expect(l.wrapChars).toBe(12); // still remembered
+    for (const line of l.text.split("\n")) {
+      expect(line.length).toBeLessThanOrEqual(12);
+    }
+    expect(l.text.replace(/\n/g, " ")).toBe(
+      "Summer sale now on across the store",
+    );
+  });
+
+  it("without a drawn box, retyping still lays the headline out afresh", () => {
+    load();
+    syncAdWords("Sale", DEFAULT_TREATMENT);
+    const before = words();
+    syncAdWords("Summer sale now on across the store", DEFAULT_TREATMENT);
+    const after = words();
+    if (before?.kind !== "text" || after?.kind !== "text") throw new Error();
+    expect(after.wrapChars).toBeUndefined();
+    expect(after.sizePx).not.toBe(before.sizePx);
+  });
+});
+
 describe("one set of pickers for every text on the ad", () => {
   beforeEach(() => useCompositorStore.getState().reset());
 

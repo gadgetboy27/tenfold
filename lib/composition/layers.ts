@@ -592,6 +592,14 @@ export const textLayerSchema = layerBaseSchema.extend({
   /** Scrim behind the text. Optional and absent by default, so every
    *  composition saved before this existed still parses unchanged. */
   bg: textBackgroundSchema.optional(),
+  /**
+   * The line length the user set by pulling a side handle on the stage, in
+   * characters. Absent until they do. While present, retyping re-wraps to
+   * THIS width and keeps the size — the box they drew governs, not the
+   * headline default — which is what makes the block behave like a text box
+   * rather than snapping back to auto layout on the next keystroke.
+   */
+  wrapChars: z.number().int().min(4).max(200).optional(),
 });
 
 export const layerSchema = z.discriminatedUnion("kind", [

@@ -320,11 +320,19 @@ export function syncAdWords(
     s.addLayer(fresh);
     return "placed";
   }
+  // A box the user drew by pulling a side handle wins over auto layout: wrap
+  // to its width and leave the size alone, so more words mean more lines in
+  // the same box — not a re-flow to the headline default and a new size.
+  const boxed = existing.wrapChars
+    ? {
+        text: wrapText(trimmed.replace(/\n/g, " "), existing.wrapChars),
+        sizePx: existing.sizePx,
+      }
+    : { text: fresh.text, sizePx: fresh.sizePx };
   s.updateLayer(WORDS_LAYER_ID, {
-    text: fresh.text,
+    ...boxed,
     font: fresh.font,
     weight: fresh.weight ?? 400,
-    sizePx: fresh.sizePx,
     color: fresh.color,
     // Written even when absent, so unticking "panel" actually clears it.
     bg: fresh.bg,

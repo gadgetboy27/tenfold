@@ -529,7 +529,11 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
         if (maxChars !== a.lastMaxChars) {
           a.lastMaxChars = maxChars;
           // Re-wrapping changes text content → shared across formats (master).
-          updateLayer(a.id, { text: wrapText(a.raw, maxChars) });
+          // wrapChars records the width so retyping keeps the box they drew.
+          updateLayer(a.id, {
+            text: wrapText(a.raw, maxChars),
+            wrapChars: maxChars,
+          });
         }
         return;
       }
