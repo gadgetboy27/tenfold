@@ -119,7 +119,9 @@ funnels
   plan             jsonb   -- STRATEGISE output (stages[], throughline)
   frame_id         -> device_frames   -- ONE frame per funnel (§5.2)
   status           'draft' | 'generating' | 'qc' | 'needs_review' | 'approved' | 'packaged'
-  media_plan       jsonb   -- §8.8 runbook
+  media_plan       jsonb   -- §9 runbook
+  checklist        jsonb   -- Ads Manager steps ticked, e.g. { pixel: true, tof_live: '2026-10-01' }
+                           -- position in the journey is NOT stored: derived, §8b
   credits_spent, created_at
 
 campaigns.parameters.funnel = { id, stage: 'TOF'|'MOF'|'BOF', angle, hook, cta }
@@ -313,6 +315,90 @@ the page is message-matched, and no leadgen-API integration is needed.
 
 ---
 
+## 8b. Leaving and coming back — the funnel is durable state, the browser is a viewer
+
+A funnel is many minutes of work across many screens, and people leave —
+close the laptop, go to Billing, open a different project, get interrupted at
+"Consider is rendering". Every one of those must land them back exactly where
+they were, with nothing lost and nothing re-run. Three rules, each with a
+precedent already in the app.
+
+### 1. Nothing about the journey lives in React state
+
+Every fact about where a funnel is comes from rows:
+
+```
+funnels.status                 draft | generating | qc | needs_review | approved | packaged
+campaigns (×3, stage-tagged)   each stage's own status, anchor, assets
+campaign_runs (×3)             the foreman's stages[] — plan AND log, per stage
+qc_reports                     which creatives are checked, and how many attempts
+landing_pages.published_at     whether the page is live
+funnels.checklist              jsonb — the Ads Manager runbook steps ticked (§9)
+```
+
+The **position is derived, never stored as a cursor**: "the first stage whose
+run isn't complete, else the first creative without a passing report, else
+the landing page if unpublished, else the checklist". This is the Logo Studio
+rule — phases derived from `status` + which assets exist — and it is why a
+refresh mid-flow there rehydrates correctly. A stored "current step" column
+would drift from the rows the moment a webhook landed while the tab was shut.
+
+`lib/studio/flow.ts` (`resumeSection`, `remainingSteps`) is the model for the
+derivation: one pure function, one list, so the resume button, the progress
+header and the "what's next" prompt can never disagree.
+
+### 2. Work in flight keeps going without the browser
+
+Rendering, copy, QC and the landing page run on the **foreman**
+(`campaign_runs`, advanced from the fal webhook — `lib/foreman/advance.ts`)
+and on the same reclaim/sweep paths every other job uses (`lib/logo/
+reclaim.ts` pattern, `lib/jobs/sweep.ts`). A stage that was rendering when
+the tab closed is finished, checked and waiting when the user returns. The
+funnel's own driver is the same loop: when a stage's run completes, the
+webhook path starts the next stage — no client tick required. **This is the
+foreman's first real use, and the reason it is Phase 4's risk, not Phase 6's.**
+
+### 3. Every door back is wired, in both directions
+
+The link between a funnel and its projects is stored on **both** sides:
+`funnels.id` on the parent and `campaigns.parameters.funnel = { id, stage }`
+on each child. So:
+
+- **Gallery** — the funnel header shows its derived position as the action:
+  _"Resume — Consider is rendering"_, _"Resume — 2 creatives need review"_,
+  _"Resume — set up the Pixel"_. One click lands on that step.
+- **Any stage opened as a normal project** (Studio, Compose, Publish) shows
+  a banner: _"Part of Funnel: Spring launch — Reach stage (1 of 3)"_ with the
+  way back. Editing the stage there is legitimate — it's a campaign — and the
+  funnel sees the edit because it reads the same rows.
+- **The last-open pointer** — `tf_funnel_open_<workspace>` in localStorage,
+  the same shape as `rememberOpenLogo` / `tf_last_section_<campaign>`: a
+  cursor is personal to one browser, not workspace state worth a migration.
+  It only says _which_ funnel to reopen; _where_ in it is derived (rule 1).
+  Wrapped like the logo one — a thrown localStorage is a lost convenience,
+  never a broken screen.
+- **A project deleted from under a funnel** drops to `needs_review` with the
+  reason, never to a 404 the resume button keeps hitting (the logo studio's
+  "polling forever at a 404" lesson).
+
+### 4. What "resume" must never do
+
+- **Re-run a completed stage.** Each node is idempotent on its rows: the
+  driver checks `campaign_runs` before submitting, and the credit debit for a
+  stage happens once, inside that stage, never at funnel start (CLAUDE.md §2
+  atomicity). Reopening a funnel costs nothing.
+- **Re-check a passed creative.** A passing `qc_reports` row for the current
+  composition version is final until the composition changes.
+- **Forget a partial stage.** Two of six renders landed and the tab closed:
+  the four remaining arrive via webhook or reclaim, the run completes, the
+  header updates. Same partial-set rule as the multi-image gate.
+
+Phase 4's DoD includes this explicitly: start a funnel, close the browser at
+each of the seven positions above, reopen from the Gallery, and land on the
+right step every time with every credit accounted for once.
+
+---
+
 ## 9. Where the creative goes — and the gap we have to carry the user across
 
 `POST /api/publish` posts **organic** content to a connected Page/IG/TikTok/
@@ -402,15 +488,15 @@ cannot silently overrun.
 Each phase ships on its own. Phase 4 is the acceptance test for the thesis;
 nothing after it starts until it passes.
 
-| Phase                          | Build                                                                                                                                                      | DoD                                                                                                                                                         |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **1. Device frame + template** | `device` layer kind in `layers.ts` + `render.ts` + export; `device_frames` seed (2 frames); template mode that assembles §5.1 from tokens for 1:1 and 9:16 | An existing project's anchor + an uploaded screenshot → a rendered ad with the phone, text in zone, scrim only when needed, identical in preview and export |
-| **2. Product assets + labels** | `product_assets`, upload with vision-proposed label the user confirms; screenshot selection by label match to a stated message                             | Given three labelled screenshots and a headline, the right one is picked; the wrong one never is                                                            |
-| **3. QC gate**                 | Tool schema on `ad-watcher`, `qc_reports`, bounded auto-fix, `needs_review`                                                                                | **Thesis test:** mismatched screenshot → `message_match:false`, packaging blocked, report explains. Reliable across 10 deliberate mismatches                |
-| **4. Stages**                  | `funnels`, "Funnel this project", STRATEGISE + stage-scene composer + stage copy, three campaigns on the foreman (**its first real run**)                  | One click on a Gallery project → TOF/MOF/BOF rendered in both aspects, all QC passing, visible as three projects under one header                           |
-| **5. Landing + runbook**       | TOF angle into `lib/landing`, `pixel_id` + script, media-plan runbook, ZIP export with names matching the plan, in-app checklist, `/guides` page           | The package a user can take to Ads Manager and follow without asking us anything                                                                            |
-| **6. Marketing API**           | Second consent, ad account, paused campaign tree, Pixel + retargeting audience creation                                                                    | Launch creates the tree in the user's Ads Manager, paused; verified on our own account before review                                                        |
-| **7. Positioning**             | Nav placement, first-run entry, pricing page copy                                                                                                          | Only after 4–6 and real funnels running                                                                                                                     |
+| Phase                          | Build                                                                                                                                                      | DoD                                                                                                                                                                                                                                             |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1. Device frame + template** | `device` layer kind in `layers.ts` + `render.ts` + export; `device_frames` seed (2 frames); template mode that assembles §5.1 from tokens for 1:1 and 9:16 | An existing project's anchor + an uploaded screenshot → a rendered ad with the phone, text in zone, scrim only when needed, identical in preview and export                                                                                     |
+| **2. Product assets + labels** | `product_assets`, upload with vision-proposed label the user confirms; screenshot selection by label match to a stated message                             | Given three labelled screenshots and a headline, the right one is picked; the wrong one never is                                                                                                                                                |
+| **3. QC gate**                 | Tool schema on `ad-watcher`, `qc_reports`, bounded auto-fix, `needs_review`                                                                                | **Thesis test:** mismatched screenshot → `message_match:false`, packaging blocked, report explains. Reliable across 10 deliberate mismatches                                                                                                    |
+| **4. Stages**                  | `funnels`, "Funnel this project", STRATEGISE + stage-scene composer + stage copy, three campaigns on the foreman (**its first real run**)                  | One click on a Gallery project → TOF/MOF/BOF rendered in both aspects, all QC passing, visible as three projects under one header; **close the browser at any point and resume from the Gallery to the right step, credits debited once** (§8b) |
+| **5. Landing + runbook**       | TOF angle into `lib/landing`, `pixel_id` + script, media-plan runbook, ZIP export with names matching the plan, in-app checklist, `/guides` page           | The package a user can take to Ads Manager and follow without asking us anything                                                                                                                                                                |
+| **6. Marketing API**           | Second consent, ad account, paused campaign tree, Pixel + retargeting audience creation                                                                    | Launch creates the tree in the user's Ads Manager, paused; verified on our own account before review                                                                                                                                            |
+| **7. Positioning**             | Nav placement, first-run entry, pricing page copy                                                                                                          | Only after 4–6 and real funnels running                                                                                                                                                                                                         |
 
 Phases 1–3 are a few sessions on top of what exists and prove or kill the
 idea before the expensive parts.
