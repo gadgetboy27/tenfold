@@ -1540,12 +1540,12 @@ export function PublishCanvas({
 
       {/* 3 — what it says, and when */}
       <Section
-        title="Caption & timing"
+        title="Post text & timing"
         icon={Clock}
         open={openSections.words}
         onToggle={() => toggleSection("words")}
         summary={
-          `${caption.trim() ? `${charCount} chars` : "No caption"}` +
+          `${caption.trim() ? `${charCount} chars` : "No post text"}` +
           `${hashtags.length ? ` · ${hashtags.length} tag${hashtags.length === 1 ? "" : "s"}` : ""}` +
           ` · ${scheduleMode === "now" ? "Post now" : "Scheduled"}`
         }
@@ -1553,8 +1553,8 @@ export function PublishCanvas({
         <div>
           <div className="mb-1.5 flex items-center justify-between">
             <label className="text-xs font-medium text-muted-foreground">
-              Caption{" "}
-              <InfoHint text="Write one caption here and it's automatically rewritten to each platform's tone and character limit before posting — you don't need to write several. Editing this resets those fitted versions." />
+              Post text{" "}
+              <InfoHint text="The words that go out WITH the post — the text under an Instagram photo, the TikTok description — not text drawn on the image (that's Wording). Write it once; it's automatically rewritten to each platform's tone and character limit before posting. Editing this resets those fitted versions." />
             </label>
             <span
               className={`flex items-center gap-1.5 text-[11px] ${overLimit ? "text-destructive" : "text-muted-foreground"}`}
@@ -1574,7 +1574,7 @@ export function PublishCanvas({
               setCaptionTouched(true);
               setPlatformCaptions({});
             }}
-            placeholder="Write your caption — each connected platform gets its own AI-fitted tone and length automatically."
+            placeholder="What to say alongside the post — each connected platform gets its own AI-fitted tone and length automatically."
             rows={4}
             className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary/50"
           />

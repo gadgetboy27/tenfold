@@ -638,10 +638,35 @@ on the live canvas makes every experiment an edit to the ad.
   unknown font gives a correct preview and a wrong video. `parseTrayItem`
   coerces rather than trusts, because the payload is a string that has been out
   of our hands.
-- **Lettering gets a fresh uuid per drop — deliberately NOT `WORDS_LAYER_ID`.**
-  The Words tool owns one replaceable layer because wording is edited
-  iteratively; the tray exists to place SEVERAL independent bits of type, so
-  stacking is the feature rather than the bug it is there.
+- **"Another text block" gets a fresh uuid per drop — deliberately NOT
+  `WORDS_LAYER_ID`.** The Words tool owns one replaceable layer because
+  wording is edited iteratively; the tray exists to place SEVERAL independent
+  bits of type, so stacking is the feature rather than the bug it is there.
+  Since 2026-09-15 the section carries **no font / size / colour / weight
+  controls** — they were a second copy of the Wording picker. A new block
+  lands styled like the text already on the ad (`trayTextItem` /
+  `addTextBlockToAd` in adBridge, via `currentTextStyle`) and is selected on
+  creation, so the Wording picker styles it next. The same removal happened
+  to the Create step's "Save a space for your headline": it keeps the words
+  and the keep-clear zone (the part that reaches the image model) and nothing
+  about how they look.
+
+### One word, five things — the names are deliberate (2026-09-15)
+
+A review found nine places touching "caption"/text. They are not duplicates,
+and each is now named for what it does so the app doesn't read as repeating
+itself. Keep these distinct:
+
+| Where | Label | What it is |
+| --- | --- | --- |
+| Create step | **Save a space for your headline** | Words + keep-clear zone → shapes the *image* |
+| Wording | **Words on the ad** / **Write a caption for me** | The on-ad text layer; Claude's caption dropped on as a layer |
+| Wording | Style row | The one picker for every text on the ad |
+| Compose tray | **Caption · from Wording** | That same caption as a drag chip |
+| Compose tray | **Another text block** | A separate, additional text layer |
+| Compose | **Caption motion** | Fade / lower-third / crawl on video |
+| Publish | **Post text** | The words that go out *with* the post — not on the image |
+| Subtitles | Subtitles | Speech-to-text burnt in |
 - Marks are read from the two places a workspace's marks actually live: the
   brand kit (`logo_url` / `logo_dark_url`) and finished Logo Studio projects.
   Both fetches fail quietly — an empty tray is a tray, but an error banner over

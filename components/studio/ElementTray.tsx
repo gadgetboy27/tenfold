@@ -10,19 +10,15 @@ import {
   Music,
   MessageSquare,
 } from "lucide-react";
+import toast from "react-hot-toast";
 import { api } from "@/lib/api";
 import { GalleryPicker } from "@/components/shared/GalleryPicker";
-import {
-  BRAND_FONTS,
-  weightsFor,
-  type BrandFont,
-} from "@/lib/composition/layers";
-import { ensureBrandFontsLoaded } from "@/lib/composition/fonts";
 import {
   TRAY_MIME,
   serializeTrayItem,
   type TrayItem,
 } from "@/lib/composition/tray";
+import { addTextBlockToAd, trayTextItem } from "./adBridge";
 
 /**
  * The element tray — prepare a thing, then drop it where you want it.
@@ -180,18 +176,6 @@ export function ElementTray({
     };
   }, [workspaceSlug]);
   const [text, setText] = useState("");
-  const [font, setFont] = useState<BrandFont>("Montserrat");
-  const [fontSize, setFontSize] = useState(64);
-  const [color, setColor] = useState("#ffffff");
-  const [scrim, setScrim] = useState(true);
-  const [weight, setWeight] = useState<400 | 700>(700);
-
-  // Without this the font picker lists eleven families the browser hasn't
-  // fetched, so every option renders in the fallback face and the control
-  // looks broken. Same call the canvas makes; idempotent.
-  useEffect(() => {
-    void ensureBrandFontsLoaded();
-  }, []);
 
   /**
    * The workspace's images, newest first.
@@ -252,15 +236,15 @@ export function ElementTray({
     (m) => (seen.has(m.id) ? false : (seen.add(m.id), true)),
   );
 
-  const letteringItem: TrayItem = {
-    kind: "lettering",
-    id: "lettering",
-    text: text.trim() || "Your text",
-    font,
-    fontSize,
-    weight,
-    color,
-    scrim,
+  const addBlock = () => {
+    if (!text.trim()) return;
+    if (addTextBlockToAd(text) === null) {
+      toast.error(
+        "Add an image to your ad first — type needs something to sit on.",
+      );
+      return;
+    }
+    setText("");
   };
 
   return (
@@ -453,22 +437,13 @@ export function ElementTray({
       {project.caption && (
         <section className="space-y-2">
           <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            <MessageSquare className="h-3.5 w-3.5" /> Caption
+            <MessageSquare className="h-3.5 w-3.5" /> Caption · from Wording
           </h3>
           <button
             type="button"
             draggable
             onDragStart={(e) =>
-              startDrag(e, {
-                kind: "lettering",
-                id: "caption",
-                text: project.caption,
-                font,
-                fontSize,
-                weight,
-                color,
-                scrim,
-              })
+              startDrag(e, trayTextItem("caption", project.caption))
             }
             onClick={() => onPlaceCaption?.()}
             title="Drag it where you want it, or click to drop it in"
@@ -480,121 +455,55 @@ export function ElementTray({
         </section>
       )}
 
-      {/* ── Lettering ── */}
+      {/* ── Another text block ──
+          The Words tool owns ONE block (edited in place); this makes a
+          SEPARATE one — a price, a date, a second line — with its own id, so
+          it stacks beside the headline. No font / size / colour here any more:
+          the block lands styled like the text already on the ad, and the
+          Wording picker restyles it the moment it's selected, which it is. */}
       <section className="space-y-2">
         <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          <Type className="h-3.5 w-3.5" /> Lettering
+          <Type className="h-3.5 w-3.5" /> Another text block
         </h3>
-
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Type your wording"
-          aria-label="Lettering text"
-          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary/60"
-        />
-
-        <select
-          value={font}
-          onChange={(e) => {
-            const next = e.target.value as BrandFont;
-            setFont(next);
-            // A single-weight display face can't honour a stored Bold.
-            if (!weightsFor(next).includes(weight)) setWeight(400);
-          }}
-          aria-label="Lettering font"
-          style={{ fontFamily: `"${font}", sans-serif` }}
-          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary/60"
-        >
-          {BRAND_FONTS.map((f) => (
-            <option
-              key={f}
-              value={f}
-              style={{ fontFamily: `"${f}", sans-serif` }}
-            >
-              {f}
-            </option>
-          ))}
-        </select>
-
-        <div className="flex items-center gap-2">
+        <p className="text-[11px] text-muted-foreground">
+          A second line, a price, a date — its own block, beside your headline.
+          Style it in Wording once it&apos;s down.
+        </p>
+        <div className="flex gap-2">
           <input
-            type="range"
-            min={16}
-            max={200}
-            step={2}
-            value={fontSize}
-            aria-label="Lettering size"
-            onChange={(e) => setFontSize(Number(e.target.value))}
-            className="flex-1 accent-[var(--primary)]"
-          />
-          <span className="w-9 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-            {fontSize}
-          </span>
-          <input
-            type="color"
-            value={color}
-            aria-label="Lettering colour"
-            onChange={(e) => setColor(e.target.value)}
-            className="h-7 w-7 shrink-0 cursor-pointer rounded border"
-          />
-        </div>
-
-        <div className="flex gap-1">
-          {([700, 400] as const).map((w) => (
-            <button
-              key={w}
-              type="button"
-              onClick={() => setWeight(w)}
-              style={{ fontFamily: `"${font}", sans-serif`, fontWeight: w }}
-              className={`flex-1 rounded-lg border px-2 py-1 text-xs transition-colors ${
-                weight === w
-                  ? "border-primary bg-primary/10 text-foreground"
-                  : "border-border text-muted-foreground hover:border-primary/40"
-              }`}
-            >
-              {w === 700 ? "Bold" : "Regular"}
-            </button>
-          ))}
-        </div>
-
-        <label className="flex items-center gap-2 text-xs text-muted-foreground">
-          <input
-            type="checkbox"
-            checked={scrim}
-            onChange={(e) => setScrim(e.target.checked)}
-            className="accent-[var(--primary)]"
-          />
-          {/* Same reason the FFmpeg caption presets have always drawn a box:
-              white lettering over bright footage is unreadable. */}
-          Shade behind the text (keeps it readable on bright footage)
-        </label>
-
-        {/* The draggable chip IS the preview — what you drag is what lands. */}
-        <div
-          draggable
-          onDragStart={(e) => startDrag(e, letteringItem)}
-          title="Drag this onto the ad"
-          className="flex cursor-grab items-center gap-2 rounded-lg border border-border bg-[repeating-conic-gradient(#e5e7eb_0%_25%,#fff_0%_50%)] bg-[length:16px_16px] p-3 transition-colors hover:border-primary/60 active:cursor-grabbing"
-        >
-          <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span
-            className="truncate"
-            style={{
-              fontFamily: `"${font}", sans-serif`,
-              color,
-              // Scaled down from design-space px purely so a 200px setting
-              // still fits a side panel; the real size goes with the payload.
-              fontSize: Math.max(12, Math.min(28, fontSize / 3)),
-              fontWeight: weight,
-              backgroundColor: scrim ? "rgba(0,0,0,0.45)" : undefined,
-              padding: scrim ? "2px 6px" : undefined,
-              borderRadius: scrim ? 4 : undefined,
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") addBlock();
             }}
+            maxLength={200}
+            placeholder="Type the words"
+            aria-label="Text block"
+            className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary/60"
+          />
+          <button
+            type="button"
+            onClick={addBlock}
+            disabled={!text.trim()}
+            title="Or drag the words below onto the ad"
+            className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
           >
-            {text.trim() || "Your text"}
-          </span>
+            <Plus className="h-3.5 w-3.5" /> Add
+          </button>
         </div>
+        {text.trim() && (
+          <div
+            draggable
+            onDragStart={(e) =>
+              startDrag(e, trayTextItem("lettering", text.trim()))
+            }
+            title="Drag this onto the ad"
+            className="flex cursor-grab items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-primary/60 active:cursor-grabbing"
+          >
+            <GripVertical className="h-4 w-4 shrink-0" />
+            <span className="truncate">{text.trim()}</span>
+          </div>
+        )}
       </section>
     </div>
   );

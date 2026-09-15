@@ -149,7 +149,7 @@ export function WordsCanvas({
       <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4">
         <div>
           <h2 className="flex items-center gap-2 text-sm font-semibold">
-            <Type className="h-4 w-4" /> Words
+            <Type className="h-4 w-4" /> Words on the ad
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">
             A headline, your brand name, an offer — it shows on the ad as you

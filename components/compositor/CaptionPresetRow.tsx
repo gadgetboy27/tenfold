@@ -64,9 +64,9 @@ export function CaptionPresetRow({
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-lg border border-border bg-card px-3 py-1.5">
       <span
         className="flex items-center gap-1.5 text-xs font-semibold text-foreground"
-        title="A starting point — drag, retime, or restyle the caption afterwards."
+        title="How the caption moves on a video — fade, lower third, crawl. A starting point: drag, retime or restyle it afterwards."
       >
-        <Film className="h-3.5 w-3.5 text-primary" /> Caption
+        <Film className="h-3.5 w-3.5 text-primary" /> Caption motion
       </span>
       {CAPTION_PRESETS.map((p) => {
         const locked = p.proOnly && !ent?.isPro;

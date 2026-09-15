@@ -16,6 +16,7 @@ import {
   buildWordsLayer,
   DEFAULT_TREATMENT,
   refitTextLayer,
+  sizeForWords,
   textOverflows,
   type WordTreatment,
 } from "@/lib/composition/words";
@@ -414,6 +415,54 @@ export function retypeAdWords(
   const style =
     existing && existing.kind === "text" ? textStyleOf(existing) : fallback;
   return syncAdWords(text, { ...DEFAULT_TREATMENT, ...style });
+}
+
+/** What new text should look like: whatever text is current on the ad, or a
+ *  plain bold white default when there is none yet. */
+export function currentTextStyle(): TextStyle {
+  const s = useCompositorStore.getState();
+  const target = pickTextTarget(s.doc?.layers, s.selectedLayerId);
+  return target
+    ? textStyleOf(target)
+    : { font: "Inter", weight: 700, color: "#ffffff", scrim: false };
+}
+
+/**
+ * Prepare a piece of text for the tray — as a drag payload, styled like the
+ * text already on the ad so it lands matching rather than in some third
+ * default. The tray used to carry its own font / size / colour / weight
+ * controls for this, a second copy of the Wording picker; now it carries
+ * none, and the picker restyles the block once it's down.
+ */
+export function trayTextItem(id: string, text: string): TrayItem {
+  const s = useCompositorStore.getState();
+  const style = currentTextStyle();
+  const aspect = s.doc?.aspect ?? s.pendingAspect;
+  return {
+    kind: "lettering",
+    id,
+    text,
+    font: style.font,
+    fontSize: sizeForWords(text, 0.5, aspect),
+    weight: style.weight,
+    color: style.color,
+    scrim: style.scrim,
+  };
+}
+
+/**
+ * Put ANOTHER text block on the ad — a price, a date, a second line — as its
+ * own layer with a fresh id, so it stacks beside the Words block instead of
+ * replacing it. Centred; the user drags it from there. Selected on creation,
+ * so the Wording picker styles it immediately.
+ */
+export function addTextBlockToAd(text: string): AddResult | null {
+  const s = useCompositorStore.getState();
+  const trimmed = text.trim();
+  if (!trimmed || !s.doc) return null;
+  const item = trayTextItem(uuidv4(), trimmed);
+  const outcome = dropTrayItem(item, { nx: 0.5, ny: 0.5 });
+  return outcome.placed === "layer" ? "layer" : null;
 }
 
 /** The wording currently on the ad, so the tool reopens on what is there. */

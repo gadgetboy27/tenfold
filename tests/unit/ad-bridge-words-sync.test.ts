@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { useCompositorStore } from "@/store/useCompositorStore";
 import {
   addCaptionToAd,
+  addTextBlockToAd,
+  currentTextStyle,
   pickTextTarget,
   restyleAdText,
   retypeAdWords,
@@ -205,5 +207,37 @@ describe("one set of pickers for every text on the ad", () => {
   it("refuses to restyle something that isn't text", () => {
     load();
     expect(restyleAdText("nope", { color: "#000000" })).toBe(false);
+  });
+});
+
+describe("another text block", () => {
+  beforeEach(() => useCompositorStore.getState().reset());
+
+  it("stacks beside the words as its own layer, styled like them", () => {
+    load();
+    syncAdWords("Headline", { ...DEFAULT_TREATMENT, color: "#ff00ff" });
+    expect(addTextBlockToAd("$49")).toBe("layer");
+    expect(addTextBlockToAd("Ends Sunday")).toBe("layer");
+    const doc = useCompositorStore.getState().doc!;
+    const texts = doc.layers.filter((l) => l.kind === "text");
+    expect(texts).toHaveLength(3);
+    expect(new Set(texts.map((l) => l.id)).size).toBe(3);
+    const price = texts.find((l) => l.kind === "text" && l.text === "$49");
+    expect(price?.kind === "text" && price.color).toBe("#ff00ff");
+    // The newest block is selected, so the picker styles it next.
+    expect(doc.layers[doc.layers.length - 1].text).toBe("Ends Sunday");
+    expect(useCompositorStore.getState().selectedLayerId).toBe(
+      doc.layers[doc.layers.length - 1].id,
+    );
+  });
+
+  it("needs an ad to land on, and falls back to a plain default style", () => {
+    expect(addTextBlockToAd("Hi")).toBeNull();
+    expect(currentTextStyle()).toEqual({
+      font: "Inter",
+      weight: 700,
+      color: "#ffffff",
+      scrim: false,
+    });
   });
 });
