@@ -41,7 +41,13 @@ import type {
   Layer,
 } from "@/lib/composition/layers";
 
-const ASPECTS: { id: CompositionAspect; label: string; box: string }[] = [
+/** The three shapes with their little proportional boxes. Shared with the
+ *  Compose pane so the picker reads the same on every screen. */
+export const ASPECT_CHIPS: {
+  id: CompositionAspect;
+  label: string;
+  box: string;
+}[] = [
   { id: "9:16", label: "9:16", box: "h-6 w-[13.5px]" },
   { id: "1:1", label: "1:1", box: "h-6 w-6" },
   { id: "16:9", label: "16:9", box: "h-[13.5px] w-6" },
@@ -396,7 +402,7 @@ export function AdStage({
       {/* ── Aspect picker + layer stack ── */}
       <div className="flex shrink-0 flex-wrap items-center gap-3 rounded-2xl border border-border bg-card px-3 py-2">
         <div className="flex items-center gap-1">
-          {ASPECTS.map((a) => (
+          {ASPECT_CHIPS.map((a) => (
             <button
               key={a.id}
               type="button"

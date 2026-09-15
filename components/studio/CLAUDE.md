@@ -672,6 +672,20 @@ itself. Keep these distinct:
   Both fetches fail quietly — an empty tray is a tray, but an error banner over
   a side panel is noise on a screen doing another job.
 
+## Nothing is `absolute` inside an unpositioned box (2026-09-15)
+
+The Compose pane's shape chips and enlarge button spent a week in the page's
+top corners, under the navbar. They were `absolute` overlays inside the canvas
+container, and that container is positioned only in fullscreen (`fixed`) — in
+normal use it had no `relative`, so the overlays resolved against the page
+shell. Fullscreen looked right in testing; normal mode didn't. They now sit in
+a bar under the canvas (`ASPECT_CHIPS`, shared with `AdStage`, so the picker
+reads the same on every screen), and the container is `relative` so the two
+overlays that legitimately remain — the op hint, the fullscreen Close — cannot
+escape. If you add an overlay to any pane, put `relative` on the box you mean
+it to sit in, in the SAME class string, and check it in the non-fullscreen
+state.
+
 ## The Compositor comes last (2026-09-07)
 
 `STUDIO_FLOW` moved it from fourth of seven to immediately before Publish:

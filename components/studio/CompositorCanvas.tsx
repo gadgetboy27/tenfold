@@ -48,13 +48,13 @@ import { LayerControls } from "@/components/compositor/LayerControls";
 import { CompositorCanvas as LayeredCanvas } from "@/components/compositor/CompositorCanvas";
 import {
   ASPECT_DESIGN,
-  ASPECTS,
   type CompositeHistoryEntry,
   type CompositeProvenance,
   type CompositionAspect,
   type CompositionDoc,
 } from "@/lib/composition/layers";
 import { FormatRail } from "@/components/compositor/FormatRail";
+import { ASPECT_CHIPS } from "./AdStage";
 import {
   materializeDoc,
   requestExport,
@@ -1268,187 +1268,218 @@ export function CompositorCanvas({
             drag to move, edge/corner handles to resize/rotate. Fills the
             available space (canvas intrinsic size + max-w/max-h), no more
             capped-small mock. */}
-        <div
-          className={
-            preview
-              ? "fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-4 sm:p-8"
-              : "flex min-h-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-card p-4 lg:order-1"
-          }
-        >
-          {/* Fullscreen preview — the finished look with no editing marks,
-              ported from the classic Compositor where it was the only place
-              you could see the ad as it will actually publish. Escape closes
-              it, because a fullscreen overlay with no keyboard exit is a trap
-              on a laptop with no visible chrome. */}
-          <button
-            type="button"
-            onClick={() => setPreview((p) => !p)}
-            title={preview ? "Close preview (Esc)" : "Fullscreen preview"}
-            aria-label={preview ? "Close preview" : "Fullscreen preview"}
-            className={`absolute z-10 flex items-center gap-1.5 rounded-lg border border-border bg-card/90 px-2 py-1.5 text-xs text-muted-foreground backdrop-blur transition-colors hover:text-foreground ${
-              preview ? "right-6 top-6" : "right-6 top-6"
-            }`}
+        <div className="flex min-h-0 flex-col gap-3 lg:order-1">
+          {/* `relative` is load-bearing. The shape chips and the enlarge button
+            used to be absolute overlays inside this box, which is positioned
+            only in fullscreen (`fixed`) — so in normal use they resolved
+            against the page shell and floated up into the corners under the
+            navbar. They now live in the bar below, like every other page, and
+            the box is positioned so anything still overlaid here (the op hint,
+            the fullscreen Close) can't escape it. */}
+          <div
+            className={
+              preview
+                ? "fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-4 sm:p-8"
+                : "relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-xl border border-border bg-card p-4"
+            }
           >
-            {preview ? (
-              <>
+            {/* Fullscreen preview — the finished look with no editing marks.
+              Escape closes it, because a fullscreen overlay with no keyboard
+              exit is a trap on a laptop with no visible chrome. The Close
+              button is the one overlay that belongs here: in fullscreen there
+              is no bar to put it in. */}
+            {preview && (
+              <button
+                type="button"
+                onClick={() => setPreview(false)}
+                title="Close preview (Esc)"
+                aria-label="Close preview"
+                className="absolute right-6 top-6 z-10 flex items-center gap-1.5 rounded-lg border border-border bg-card/90 px-2 py-1.5 text-xs text-muted-foreground backdrop-blur transition-colors hover:text-foreground"
+              >
                 <X className="h-3.5 w-3.5" /> Close
-              </>
-            ) : (
-              <Maximize2 className="h-3.5 w-3.5" />
+              </button>
             )}
-          </button>
-          {/* What the active op will actually change.
+            {/* What the active op will actually change.
               Reported as "you click one and nothing seems to change". The op
               form DID say `Source: selected layer / background image`, but as
               a small grey line in the right-hand column — nowhere near where
               the user is looking, and the canvas itself gave no sign at all.
               Clicking a layer to retarget already worked; it was invisible.
               This says it on the canvas, in the op's own words. */}
-          {!preview && doc && activeOp && (
-            <div className="absolute inset-x-6 top-16 z-10 flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-[11px] backdrop-blur">
-              <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" />
-              <span className="text-foreground">
-                <strong>{OP_META[activeOp].label}</strong> will change{" "}
-                {selectedLayer ? (
-                  <strong>
-                    {selectedLayer.kind === "text"
-                      ? `the text “${selectedLayer.text.slice(0, 18)}”`
-                      : "the selected layer"}
-                  </strong>
-                ) : (
-                  <strong>the background image</strong>
-                )}
-              </span>
-              <span className="ml-auto shrink-0 text-muted-foreground">
-                {selectedLayer
-                  ? "click the background to target that instead"
-                  : "click a layer to target it instead"}
-              </span>
-            </div>
-          )}
+            {!preview && doc && activeOp && (
+              <div className="absolute inset-x-6 top-6 z-10 flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-[11px] backdrop-blur">
+                <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" />
+                <span className="text-foreground">
+                  <strong>{OP_META[activeOp].label}</strong> will change{" "}
+                  {selectedLayer ? (
+                    <strong>
+                      {selectedLayer.kind === "text"
+                        ? `the text “${selectedLayer.text.slice(0, 18)}”`
+                        : "the selected layer"}
+                    </strong>
+                  ) : (
+                    <strong>the background image</strong>
+                  )}
+                </span>
+                <span className="ml-auto shrink-0 text-muted-foreground">
+                  {selectedLayer
+                    ? "click the background to target that instead"
+                    : "click a layer to target it instead"}
+                </span>
+              </div>
+            )}
 
-          {!preview && doc && (
-            <div className="absolute left-6 top-6 z-10 flex flex-wrap items-center gap-1.5">
-              {/* Shape. An ad that goes to a feed and a Story is two shapes,
-                  and this was the one screen that couldn't say so — the whole
-                  multi-format system existed behind a page nothing links to. */}
-              {ASPECTS.map((a) => (
-                <button
-                  key={a}
-                  type="button"
-                  onClick={() => setAspect(a)}
-                  className={`rounded-md border px-2 py-1 text-[11px] backdrop-blur transition-colors ${
-                    doc.aspect === a
-                      ? "border-primary/50 bg-primary/15 text-primary"
-                      : "border-border bg-card/80 text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {a}
-                </button>
-              ))}
-              <span className="mx-0.5 h-4 w-px bg-border" />
-              {/* Master vs this-format-only. Without it every nudge made to fit
-                  a Story silently moved the feed version too, which is the
-                  failure the override system was built to prevent. */}
-              <button
-                type="button"
-                onClick={() => setOverrideMode(!overrideMode)}
-                title={
-                  overrideMode
-                    ? `Edits apply to the ${doc.aspect} format only`
-                    : "Edits apply to every format (the master design)"
+            <div
+              ref={previewContainerRef}
+              className="relative h-full w-full"
+              onDragOver={(e) => {
+                // Only claim the drop when it's one of ours; preventDefault is
+                // what tells the browser this is a valid target at all.
+                if (e.dataTransfer.types.includes(TRAY_MIME)) {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "copy";
                 }
-                className={`rounded-md border px-2 py-1 text-[11px] backdrop-blur transition-colors ${
-                  overrideMode
-                    ? "border-amber-500/60 bg-amber-500/10 text-amber-500"
-                    : "border-border bg-card/80 text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {overrideMode ? `${doc.aspect} only` : "Master"}
-              </button>
-              {doc.overrides?.[doc.aspect] && (
-                <button
-                  type="button"
-                  onClick={() => resetOverride()}
-                  title={`Revert ${doc.aspect} to the master layout`}
-                  className="rounded-md border border-border bg-card/80 px-2 py-1 text-[11px] text-muted-foreground backdrop-blur transition-colors hover:text-foreground"
+              }}
+              onDrop={handleTrayDrop}
+            >
+              <LayeredCanvas
+                playing={false}
+                cleanPreview={preview}
+                onTick={() => {}}
+                onEnded={() => {}}
+              />
+              {activeOp === "inpaint" && containRect && (
+                <div
+                  className="absolute overflow-hidden rounded-lg"
+                  style={{
+                    left: containRect.left,
+                    top: containRect.top,
+                    width: containRect.width,
+                    height: containRect.height,
+                  }}
                 >
-                  Reset {doc.aspect}
-                </button>
-              )}
-            </div>
-          )}
-          <div
-            ref={previewContainerRef}
-            className="relative h-full w-full"
-            onDragOver={(e) => {
-              // Only claim the drop when it's one of ours; preventDefault is
-              // what tells the browser this is a valid target at all.
-              if (e.dataTransfer.types.includes(TRAY_MIME)) {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = "copy";
-              }
-            }}
-            onDrop={handleTrayDrop}
-          >
-            <LayeredCanvas
-              playing={false}
-              cleanPreview={preview}
-              onTick={() => {}}
-              onEnded={() => {}}
-            />
-            {activeOp === "inpaint" && containRect && (
-              <div
-                className="absolute overflow-hidden rounded-lg"
-                style={{
-                  left: containRect.left,
-                  top: containRect.top,
-                  width: containRect.width,
-                  height: containRect.height,
-                }}
-              >
-                <input
-                  ref={maskInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg"
-                  className="hidden"
-                  onChange={(e) => setMaskFile(e.target.files?.[0] ?? null)}
-                />
-                {maskPreviewUrl ? (
-                  <>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={maskPreviewUrl}
-                      alt="Mask preview"
-                      className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-70 mix-blend-screen"
-                    />
-                    <span className="pointer-events-none absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white">
-                      Mask preview — white = fill
-                    </span>
+                  <input
+                    ref={maskInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    className="hidden"
+                    onChange={(e) => setMaskFile(e.target.files?.[0] ?? null)}
+                  />
+                  {maskPreviewUrl ? (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={maskPreviewUrl}
+                        alt="Mask preview"
+                        className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-70 mix-blend-screen"
+                      />
+                      <span className="pointer-events-none absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white">
+                        Mask preview — white = fill
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => maskInputRef.current?.click()}
+                        className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[10px] font-medium text-white hover:bg-black/80"
+                      >
+                        <Upload className="h-3 w-3" /> Change mask
+                      </button>
+                    </>
+                  ) : (
                     <button
                       type="button"
                       onClick={() => maskInputRef.current?.click()}
-                      className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[10px] font-medium text-white hover:bg-black/80"
+                      className="absolute inset-0 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-primary/40 bg-background/60 text-center text-sm text-muted-foreground transition-colors hover:border-primary/70 hover:text-foreground"
                     >
-                      <Upload className="h-3 w-3" /> Change mask
+                      <Upload className="h-5 w-5" />
+                      Click to upload a mask
+                      <span className="text-xs text-muted-foreground/80">
+                        white = fill, black = keep
+                      </span>
                     </button>
-                  </>
-                ) : (
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* The bar under the canvas — same card, same chips as the stage on
+            every other page. Shape, whose layout the edits apply to, and the
+            enlarge button. */}
+          {!preview && doc && (
+            <div className="flex shrink-0 flex-wrap items-center gap-3 rounded-2xl border border-border bg-card px-3 py-2">
+              <div className="flex items-center gap-1">
+                {/* Shape. An ad that goes to a feed and a Story is two shapes,
+                  and this was the one screen that couldn't say so — the whole
+                  multi-format system existed behind a page nothing links to. */}
+                {ASPECT_CHIPS.map((a) => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => setAspect(a.id)}
+                    title={`${a.label} artboard`}
+                    className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors ${
+                      doc.aspect === a.id
+                        ? "bg-primary/15 text-primary"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <span
+                      className={`${a.box} rounded-[2px] border ${
+                        doc.aspect === a.id
+                          ? "border-primary"
+                          : "border-muted-foreground/50"
+                      }`}
+                    />
+                    {a.label}
+                  </button>
+                ))}
+              </div>
+
+              <span className="h-5 w-px bg-border" />
+
+              {/* Master vs this-format-only. Without it every nudge made to fit
+                a Story silently moved the feed version too, which is the
+                failure the override system was built to prevent. */}
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setOverrideMode(!overrideMode)}
+                  title={
+                    overrideMode
+                      ? `Edits apply to the ${doc.aspect} format only`
+                      : "Edits apply to every format (the master design)"
+                  }
+                  className={`rounded-md border px-2 py-1 text-[11px] transition-colors ${
+                    overrideMode
+                      ? "border-amber-500/60 bg-amber-500/10 text-amber-500"
+                      : "border-border text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {overrideMode ? `${doc.aspect} only` : "Master"}
+                </button>
+                {doc.overrides?.[doc.aspect] && (
                   <button
                     type="button"
-                    onClick={() => maskInputRef.current?.click()}
-                    className="absolute inset-0 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-primary/40 bg-background/60 text-center text-sm text-muted-foreground transition-colors hover:border-primary/70 hover:text-foreground"
+                    onClick={() => resetOverride()}
+                    title={`Revert ${doc.aspect} to the master layout`}
+                    className="rounded-md border border-border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
                   >
-                    <Upload className="h-5 w-5" />
-                    Click to upload a mask
-                    <span className="text-xs text-muted-foreground/80">
-                      white = fill, black = keep
-                    </span>
+                    Reset {doc.aspect}
                   </button>
                 )}
               </div>
-            )}
-          </div>
+
+              <button
+                type="button"
+                onClick={() => setPreview(true)}
+                title="Fullscreen preview"
+                aria-label="Fullscreen preview"
+                className="ml-auto flex items-center gap-1.5 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+              >
+                <Maximize2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

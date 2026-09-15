@@ -225,10 +225,9 @@ describe("another text block", () => {
     const price = texts.find((l) => l.kind === "text" && l.text === "$49");
     expect(price?.kind === "text" && price.color).toBe("#ff00ff");
     // The newest block is selected, so the picker styles it next.
-    expect(doc.layers[doc.layers.length - 1].text).toBe("Ends Sunday");
-    expect(useCompositorStore.getState().selectedLayerId).toBe(
-      doc.layers[doc.layers.length - 1].id,
-    );
+    const last = doc.layers[doc.layers.length - 1];
+    expect(last.kind === "text" && last.text).toBe("Ends Sunday");
+    expect(useCompositorStore.getState().selectedLayerId).toBe(last.id);
   });
 
   it("needs an ad to land on, and falls back to a plain default style", () => {
