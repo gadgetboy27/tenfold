@@ -496,14 +496,26 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
         const layer = eff(master);
         // New design-space centre → aspect-independent pos (mode-preserving).
         // Writes to the master, or this aspect's override in override mode.
+        //
+        // Except for anchored TEXT: an anchor-mode layer only moves along
+        // its anchored edges, so a "bottom" headline (centre-anchored on x)
+        // could be dragged up and down and nowhere else. Text is placed by
+        // hand; a drag means "put it exactly here", which is a fraction
+        // position. New Words blocks are already fraction; this frees the
+        // ones saved before that change. Logos keep their anchors — a corner
+        // mark that holds across formats is what anchor mode is for.
         const { halfW, halfH } = scaledHalfExtents(
           ctx,
           layer,
           imagesRef.current,
         );
+        const prevPos =
+          layer.kind === "text" && layer.pos.mode === "anchor"
+            ? ({ mode: "fraction", nx: 0.5, ny: 0.5 } as const)
+            : layer.pos;
         patchLayout(a.id, {
           pos: centerToPos(
-            layer.pos,
+            prevPos,
             p.x - a.dx,
             p.y - a.dy,
             doc.aspect,

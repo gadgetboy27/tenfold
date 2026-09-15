@@ -99,16 +99,33 @@ describe("buildWordsLayer", () => {
     }
   });
 
-  it("anchors rather than floats, so a corner stays a corner", () => {
-    const layer = buildWordsLayer({
+  it("floats freely, starting where the zone says", () => {
+    // Anchor mode pinned a "bottom" block to the horizontal centre, so it
+    // could only be dragged up and down. The zone now only picks the start.
+    const br = buildWordsLayer({
       id: "words",
       text: "Sale",
       treatment: { ...DEFAULT_TREATMENT, zone: "bottom-right" },
       aspect: "16:9",
     });
-    // Fraction mode would drift as the frame changes shape; anchor mode is
-    // exactly why a logo lock-up survives a 1:1 → 9:16 re-render.
-    expect(layer.pos).toMatchObject({ mode: "anchor", anchor: "bottom-right" });
+    expect(br.pos.mode).toBe("fraction");
+    if (br.pos.mode !== "fraction") return;
+    // The block's CENTRE — inset from the corner by its own half-size, so a
+    // wide headline's centre sits well left of 0.9 while its edge is at the
+    // margin. Right-and-down of centre is the claim, not a corner pixel.
+    expect(br.pos.nx).toBeGreaterThan(0.6);
+    expect(br.pos.ny).toBeGreaterThan(0.6);
+    expect(br.pos.nx).toBeLessThan(1);
+
+    const top = buildWordsLayer({
+      id: "words",
+      text: "Sale",
+      treatment: { ...DEFAULT_TREATMENT, zone: "top" },
+      aspect: "9:16",
+    });
+    if (top.pos.mode !== "fraction") throw new Error();
+    expect(top.pos.nx).toBeCloseTo(0.5, 5);
+    expect(top.pos.ny).toBeLessThan(0.25);
   });
 
   it("adds a scrim only when the treatment asks for one", () => {

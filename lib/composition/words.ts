@@ -3,10 +3,12 @@ import { wrapText } from "./brand-apply";
 import {
   ASPECT_DESIGN,
   BRAND_FONTS,
+  resolveCenter,
   type CompositionAspect,
   type LayerAnchor,
   type TextLayer,
 } from "./layers";
+import { TEXT_LINE_HEIGHT } from "./render";
 
 /**
  * The Words tool: exact wording, drawn by us.
@@ -189,6 +191,28 @@ export function buildWordsLayer(params: {
   // shrunk to fit; the wrap is what keeps the type readable on a phone.
   const text = wrapHeadline(params.text.trim().slice(0, 500));
   const { treatment } = params;
+  const sizePx = sizeForWords(text, treatment.widthFrac, params.aspect);
+
+  // The zone is a STARTING position, resolved once to a free-floating point.
+  // This used to be an anchor-mode pos — right for a corner stamp that must
+  // survive a 1:1 → 9:16 re-render, wrong for a block the user places by
+  // hand: dragging an anchored layer only recomputes the margins of its
+  // anchored edges, so a "bottom" block (centre-anchored on x) could only be
+  // moved up and down. Since the panel stopped offering zones (2026-09-15)
+  // the block is positioned on the stage, and a stage-positioned layer is a
+  // fraction layer like every other thing you drag. A user who needs a
+  // corner to hold across formats has the per-format overrides for that.
+  const lines = text.split("\n");
+  const halfW =
+    (Math.max(...lines.map((l) => l.trim().length), 1) * sizePx * CHAR_EM) / 2;
+  const halfH = (lines.length * sizePx * TEXT_LINE_HEIGHT) / 2;
+  const start = resolveCenter(
+    { mode: "anchor", anchor: treatment.zone, mx: 0.05, my: 0.05 },
+    params.aspect,
+    halfW,
+    halfH,
+  );
+  const { width: W, height: H } = ASPECT_DESIGN[params.aspect];
 
   return {
     id: params.id,
@@ -196,12 +220,10 @@ export function buildWordsLayer(params: {
     text,
     font: treatment.font,
     ...(treatment.weight ? { weight: treatment.weight } : {}),
-    sizePx: sizeForWords(text, treatment.widthFrac, params.aspect),
+    sizePx,
     color: treatment.color,
     align: "center",
-    // Anchor, not fraction: a corner stamp must stay in its corner at every
-    // aspect ratio, which is exactly what anchor mode exists for.
-    pos: { mode: "anchor", anchor: treatment.zone, mx: 0.05, my: 0.05 },
+    pos: { mode: "fraction", nx: start.x / W, ny: start.y / H },
     scale: 1,
     rotationDeg: 0,
     opacity: 1,

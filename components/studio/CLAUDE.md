@@ -48,13 +48,16 @@ made that much better; it did not make it _guaranteed_. This does.
   field for letters**. A model that tries to send wording has it stripped by
   Zod. Don't add a `text` field "for convenience": that is the day the
   guarantee dies, and a test pins it.
-- **Zones are the nine existing anchors**, not new geometry. Anchor mode is why
-  a corner lock-up survives a 1:1 → 9:16 re-render; fraction mode would drift.
-  Since 2026-09-15 the panel no longer _offers_ a zone or a size: the block
-  is placed at the default anchor and then moved by dragging it on the stage
-  and resized by pulling its edges, like every other layer. `zone` and
+- **Zones are the nine existing anchors** — but since 2026-09-16 the Words
+  block is a **fraction** layer: the zone is resolved once to a starting
+  point (`buildWordsLayer`) and the block floats from there. It was anchor
+  mode, which is right for a corner logo that must hold across formats and
+  wrong for a block placed by hand — dragging an anchored layer only moves
+  along its anchored edges, so a "bottom" headline could go up and down and
+  nowhere else. The canvas also converts any anchored TEXT to fraction on
+  the first drag, which frees blocks saved before the change. `zone` and
   `widthFrac` stay in the schema because Claude's treatments (ad-watch) and
-  the Create step's "leave this area quiet" still use them.
+  the Create step's "keep this area clear" still use them.
 - **Live, not "place".** `syncAdWords` (adBridge) writes each keystroke and
   each font/colour/panel change straight to the layer, keeping the `pos` and
   `scale` the user set on the stage — `addWordsToAd` rebuilds the whole layer
