@@ -311,6 +311,23 @@ describe("brandKitLayers", () => {
     });
   });
 
+  it("sets the caption in the body face and keeps the tagline in the heading face", () => {
+    // A site usually has two faces. The caption is body copy; the tagline is
+    // the brand speaking. Borrowing only one face reads as almost-the-site.
+    const twoFace = { ...kit, body_font_family: "Lora" };
+    const layers = brandKitLayers(twoFace, "1:1", 10, 500, "Fresh drop friday");
+    const texts = layers.filter((l) => l.kind === "text");
+    expect(texts[0]).toMatchObject({ text: "Fresh drop friday", font: "Lora" });
+    expect(texts[1]).toMatchObject({ font: "Montserrat" });
+  });
+
+  it("with no body face, everything stays in the heading face — as before", () => {
+    const layers = brandKitLayers(kit, "1:1", 10, 500, "Fresh drop friday");
+    for (const l of layers.filter((l) => l.kind === "text")) {
+      expect(l).toMatchObject({ font: "Montserrat" });
+    }
+  });
+
   it("uses the campaign caption as main text and moves the tagline to the end card", () => {
     const layers = brandKitLayers(kit, "9:16", 10, 500, "Fresh drop friday");
     const texts = layers.filter((l) => l.kind === "text");

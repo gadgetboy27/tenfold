@@ -38,7 +38,10 @@ interface BrandKit {
   primary_color: string;
   secondary_color: string;
   accent_color: string;
+  /** Headings. */
   font_family: Font;
+  /** Body copy; null = same as headings. */
+  body_font_family: Font | null;
   tagline: string;
   logo_url: string | null;
   /** Dark variant of the mark, for light backgrounds. */
@@ -50,6 +53,7 @@ const DEFAULTS: BrandKit = {
   secondary_color: "#8b5cf6",
   accent_color: "#f59e0b",
   font_family: "Inter",
+  body_font_family: null,
   tagline: "",
   logo_url: null,
   logo_dark_url: null,
@@ -78,6 +82,7 @@ export default function BrandKitPage() {
     kit.secondary_color !== saved.secondary_color ||
     kit.accent_color !== saved.accent_color ||
     kit.font_family !== saved.font_family ||
+    kit.body_font_family !== saved.body_font_family ||
     kit.tagline !== saved.tagline;
 
   useEffect(() => {
@@ -103,6 +108,7 @@ export default function BrandKitPage() {
           secondary_color: kit.secondary_color,
           accent_color: kit.accent_color,
           font_family: kit.font_family,
+          body_font_family: kit.body_font_family,
           tagline: kit.tagline,
         }),
       });
@@ -446,9 +452,17 @@ export default function BrandKitPage() {
 
           {/* Typography */}
           <section>
-            <h2 className="text-sm font-semibold text-foreground mb-4">
+            <h2 className="text-sm font-semibold text-foreground mb-1">
               Typography
             </h2>
+            <p className="text-xs text-muted-foreground mb-4">
+              Headings carry the brand; body copy carries the reading. Most
+              sites use two faces — matching both keeps an ad and the page it
+              points at looking like one thing.
+            </p>
+            <h3 className="text-xs font-medium text-muted-foreground mb-2">
+              Headings
+            </h3>
             <div className="grid grid-cols-2 gap-2">
               {FONTS.map((f) => (
                 <button
@@ -465,6 +479,32 @@ export default function BrandKitPage() {
                     <Check className="w-3.5 h-3.5 shrink-0" />
                   )}
                   <span style={{ fontFamily: f }}>{f}</span>
+                </button>
+              ))}
+            </div>
+            <h3 className="text-xs font-medium text-muted-foreground mt-4 mb-2">
+              Body copy
+            </h3>
+            <div className="grid grid-cols-2 gap-2">
+              {/* null = same as headings; kept as its own option so "one face
+                  everywhere" is a choice, not the absence of one. */}
+              {[null, ...FONTS].map((f) => (
+                <button
+                  key={f ?? "same"}
+                  onClick={() => setKit((k) => ({ ...k, body_font_family: f }))}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm transition-all text-left",
+                    kit.body_font_family === f
+                      ? "border-primary/50 bg-primary/10 text-primary"
+                      : "border-border bg-card hover:border-primary/30 text-foreground",
+                  )}
+                >
+                  {kit.body_font_family === f && (
+                    <Check className="w-3.5 h-3.5 shrink-0" />
+                  )}
+                  <span style={{ fontFamily: f ?? kit.font_family }}>
+                    {f ?? "Same as headings"}
+                  </span>
                 </button>
               ))}
             </div>

@@ -242,6 +242,7 @@ export function AdStage({
         logo_dark_url?: string | null;
         tagline?: string | null;
         font_family?: string | null;
+        body_font_family?: string | null;
       };
       // The real clip length, not the 10s default: brandKitLayers times its
       // end card off this, so a 30s ad would otherwise flash the logo a third

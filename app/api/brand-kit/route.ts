@@ -18,6 +18,8 @@ const updateSchema = z.object({
   secondary_color: hexColor.optional(),
   accent_color: hexColor.optional(),
   font_family: z.enum(FONTS).optional(),
+  // Body copy face; null = same as font_family (the pre-0035 behaviour).
+  body_font_family: z.enum(FONTS).nullable().optional(),
   tagline: z.string().max(200).optional(),
   // Nullable so "remove logo" persists (previously stripped by this schema,
   // which made logo removal a UI-only illusion).

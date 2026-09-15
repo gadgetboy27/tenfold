@@ -28,6 +28,8 @@ export interface BrandKitInfo {
   logo_dark_url?: string | null;
   tagline?: string | null;
   font_family?: string | null;
+  /** Body copy face; null/absent = same as font_family. */
+  body_font_family?: string | null;
 }
 
 /** The light mark glows on dark footage (screen blend); fall back to dark. */
@@ -71,6 +73,13 @@ export function brandKitLayers(
   )
     ? (kit.font_family as BrandFont)
     : "Inter";
+  // Body copy — the caption — in the body face when the kit has one. The
+  // tagline stays in the heading face: it is the brand speaking, not prose.
+  const bodyFont: BrandFont = (BRAND_FONTS as readonly string[]).includes(
+    kit.body_font_family ?? "",
+  )
+    ? (kit.body_font_family as BrandFont)
+    : font;
 
   const tagline = kit.tagline?.trim();
   const mainText = caption?.trim() || tagline;
@@ -82,7 +91,9 @@ export function brandKitLayers(
       id: CAPTION_LAYER_ID,
       kind: "text",
       text: wrapText(mainText),
-      font,
+      // A caption is body copy; a tagline standing in for one is still the
+      // brand's line, so it keeps the heading face.
+      font: caption?.trim() ? bodyFont : font,
       sizePx: Math.round(design.width / 22),
       color: "#ffffff",
       pos: { mode: "fraction", nx: 0.5, ny: 0.84 },

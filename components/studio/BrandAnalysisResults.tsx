@@ -50,6 +50,7 @@ export function BrandAnalysisResults({
           secondary_color: kit.secondary_color.value,
           accent_color: kit.accent_color.value,
           font_family: kit.font_family.value,
+          body_font_family: kit.body_font_family?.value ?? null,
           tagline: kit.tagline,
         }),
         workspaceSlug,
@@ -107,16 +108,23 @@ export function BrandAnalysisResults({
               </div>
             </div>
           ))}
-          <div className="ml-2 flex flex-col leading-tight">
-            <span className="text-sm font-medium">
-              {result.proposedBrandKit.font_family.value}
-            </span>
-            <span className="text-[10px] text-muted-foreground">
-              {result.proposedBrandKit.font_family.source === "detected"
-                ? "detected"
-                : "AI suggested"}
-            </span>
-          </div>
+          {/* Two faces, each with where it came from. When the site declares
+              a family we can't ship, the site's own name is shown beside the
+              stand-in — a substitution the user can see is one they can
+              accept; a silent one is a mismatch they find in the ad. */}
+          <FontField
+            label="Headings"
+            field={result.proposedBrandKit.font_family}
+            detected={result.proposedBrandKit.detected_fonts?.heading ?? null}
+          />
+          <FontField
+            label="Body"
+            field={
+              result.proposedBrandKit.body_font_family ??
+              result.proposedBrandKit.font_family
+            }
+            detected={result.proposedBrandKit.detected_fonts?.body ?? null}
+          />
         </div>
         {result.proposedBrandKit.tagline && (
           <p className="mt-3 text-sm italic text-muted-foreground">
@@ -166,6 +174,35 @@ export function BrandAnalysisResults({
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+function FontField({
+  label,
+  field,
+  detected,
+}: {
+  label: string;
+  field: { value: string; source: "detected" | "ai_suggested" };
+  detected: { name: string; mapped: string | null } | null;
+}) {
+  const standIn = detected && detected.name !== field.value;
+  return (
+    <div className="ml-2 flex flex-col leading-tight">
+      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+      <span className="text-sm font-medium" style={{ fontFamily: field.value }}>
+        {field.value}
+      </span>
+      <span className="text-[10px] text-muted-foreground">
+        {field.source === "detected"
+          ? standIn
+            ? `site uses ${detected.name} — closest we render`
+            : "detected"
+          : "AI suggested"}
+      </span>
     </div>
   );
 }

@@ -37,11 +37,21 @@ export interface ResolvedField {
   source: "detected" | "ai_suggested";
 }
 
+export interface DetectedFont {
+  name: string;
+  mapped: string | null;
+}
+
 export interface ProposedBrandKit {
   primary_color: ResolvedField;
   secondary_color: ResolvedField;
   accent_color: ResolvedField;
+  /** Headings. */
   font_family: ResolvedField;
+  /** Body copy — same as font_family when the site uses one face. */
+  body_font_family: ResolvedField;
+  /** What the site actually declares, so a stand-in is visible. */
+  detected_fonts: { heading: DetectedFont | null; body: DetectedFont | null };
   tagline: string;
 }
 
@@ -108,10 +118,10 @@ export function BrandImportPanel({
           Build a campaign from your website
         </div>
         <p className="mb-2.5 text-xs text-muted-foreground">
-          Reads your site&apos;s colors, font and content, then drafts 4
-          on-brand campaign angles — pick one to generate matching images, then
-          branch into video. This matches your site&apos;s look and tone; it
-          doesn&apos;t show the site itself in the video (that&apos;s a
+          Reads your site&apos;s colors, heading and body fonts and content,
+          then drafts 4 on-brand campaign angles — pick one to generate matching
+          images, then branch into video. This matches your site&apos;s look and
+          tone; it doesn&apos;t show the site itself in the video (that&apos;s a
           separate, not-yet-built feature).
         </p>
         <div className="flex flex-col gap-1 text-[11px] text-muted-foreground">

@@ -256,12 +256,21 @@ export async function POST(req: Request) {
       const resolvedFont: ResolvedField = signals.fontFamily
         ? { value: signals.fontFamily, source: "detected" }
         : { value: brief.brandSuggestion.fontFamily, source: "ai_suggested" };
+      // Body copy face. Detected when the site sets one we can stand in for;
+      // otherwise the heading face — never a third, unrelated suggestion.
+      const resolvedBodyFont: ResolvedField = signals.fonts.body?.mapped
+        ? { value: signals.fonts.body.mapped, source: "detected" }
+        : { value: resolvedFont.value, source: resolvedFont.source };
 
       const proposedBrandKit = {
         primary_color: resolvedColors.primary_color,
         secondary_color: resolvedColors.secondary_color,
         accent_color: resolvedColors.accent_color,
         font_family: resolvedFont,
+        body_font_family: resolvedBodyFont,
+        // What the site really declares, mapped or not — shown beside the
+        // pick so a substitution is visible rather than silent.
+        detected_fonts: signals.fonts,
         tagline: brief.businessSummary.slice(0, 200),
       };
 
@@ -289,6 +298,8 @@ export async function POST(req: Request) {
             secondary_color: proposedBrandKit.secondary_color.value,
             accent_color: proposedBrandKit.accent_color.value,
             font_family: proposedBrandKit.font_family.value,
+            body_font_family: proposedBrandKit.body_font_family.value,
+            detected_fonts: proposedBrandKit.detected_fonts,
             tagline: proposedBrandKit.tagline,
             source_url: body.url,
             imported_at: new Date().toISOString(),
