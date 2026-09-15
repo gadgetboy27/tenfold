@@ -9,6 +9,7 @@ import { CAPTION_LAYER_ID } from "@/lib/composition/layers";
 import { DEFAULT_TREATMENT } from "@/lib/composition/words";
 import { useCompositorStore } from "@/store/useCompositorStore";
 import { AddImageCard } from "./AddImageCard";
+import { StickerCard } from "./StickerCard";
 import { TextStylePicker } from "./TextStylePicker";
 import {
   addCaptionToAd,
@@ -195,6 +196,8 @@ export function WordsCanvas({
             : "Style for the next words you add."
         }
       />
+
+      <StickerCard />
 
       <AddImageCard
         workspaceSlug={workspaceSlug}

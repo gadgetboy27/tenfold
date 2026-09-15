@@ -667,6 +667,7 @@ itself. Keep these distinct:
 | Wording | Style row | The one picker for every text on the ad |
 | Compose tray | **Caption · from Wording** | That same caption as a drag chip |
 | Compose tray | **Another text block** | A separate, additional text layer |
+| Wording | **Sticker** | Rasterised text as an image layer — tilt, flip, glow, neon (§ below) |
 | Compose | **Caption motion** | Fade / lower-third / crawl on video |
 | Publish | **Post text** | The words that go out *with* the post — not on the image |
 | Subtitles | Subtitles | Speech-to-text burnt in |
@@ -674,6 +675,32 @@ itself. Keep these distinct:
   brand kit (`logo_url` / `logo_dark_url`) and finished Logo Studio projects.
   Both fetches fail quietly — an empty tray is a tray, but an error banner over
   a side panel is noise on a screen doing another job.
+
+## Sticker — text that is really an image (2026-09-16)
+
+A "SALE" burst, a price, a stamp: the other kind of type. It needs tilt,
+flip, mirror, afterglow and neon, and the export draws text with FFmpeg's
+`drawtext`, which can do none of those. So a sticker is **not a text layer**.
+`lib/composition/sticker.ts` rasterises it in the browser — canvas 2D, the
+loaded display faces, glow via `shadowBlur`, neon via a stroked halo, flips
+via a negative scale — into a transparent PNG, and it lives on the ad as an
+**image layer with a `sticker` spec** (`imageLayerSchema.sticker`). Every
+image thing then applies unchanged: drag, pull, rotate, per-format nudge,
+and the export's overlay-with-rotation. Preview and MP4 share the exact
+pixels, which is the parity rule this codebase keeps.
+
+- **`src` is a `data:` URL.** `export.ts`'s `download` decodes those
+  (`dataUrlBytes`) instead of fetching. The canvas image cache prunes stale
+  `data:` keys so an editing session doesn't keep every intermediate PNG.
+- **Editable because the spec rides along.** `restyleSticker` re-rasterises
+  in place and keeps pos / scale / tilt. `StickerCard` edits the selected
+  sticker live (150ms debounce on typing — a PNG per keystroke otherwise)
+  and otherwise adds a new one. `pickStickerTarget` is the selector.
+- **Not the Words block, not the shared style row — on purpose.** A headline
+  is the brand's voice in the brand's face; a sticker is a thing stuck on
+  top. `STICKER_FONTS` puts the single-cut display faces first.
+- Tilt is the layer's ordinary `rotationDeg` (via `patchLayout`), so it is
+  per-format-overridable like any rotation and already exported.
 
 ## Nothing is `absolute` inside an unpositioned box (2026-09-15)
 

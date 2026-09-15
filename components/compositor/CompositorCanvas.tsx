@@ -149,13 +149,22 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
     // Keep layer images cached (drawImage only — never through a model).
     useEffect(() => {
       const cache = imagesRef.current;
+      const live = new Set<string>();
       for (const layer of doc?.layers ?? []) {
-        if (layer.kind === "image" && !cache.has(layer.src)) {
+        if (layer.kind !== "image") continue;
+        live.add(layer.src);
+        if (!cache.has(layer.src)) {
           const img = new Image();
           img.crossOrigin = "anonymous";
           img.src = layer.src;
           cache.set(layer.src, img);
         }
+      }
+      // Stickers are data: URLs re-rasterised on every edit — a PNG per
+      // keystroke. Drop the ones no layer points at any more, or an editing
+      // session slowly fills memory with every intermediate "SAL", "SALE".
+      for (const key of cache.keys()) {
+        if (key.startsWith("data:") && !live.has(key)) cache.delete(key);
       }
     }, [doc?.layers]);
 

@@ -336,7 +336,23 @@ async function probeDuration(path: string): Promise<number> {
   }
 }
 
+/** The bytes of a data: URL, or null if it isn't one. Stickers travel as
+ *  data URLs — rasterised in the browser so the export ships the exact pixels
+ *  the user saw — and fetch() in Node won't read those. */
+export function dataUrlBytes(url: string): Buffer | null {
+  const m = /^data:([^;,]+)?(;base64)?,([\s\S]*)$/.exec(url);
+  if (!m) return null;
+  return m[2]
+    ? Buffer.from(m[3], "base64")
+    : Buffer.from(decodeURIComponent(m[3]), "utf8");
+}
+
 async function download(url: string, path: string): Promise<void> {
+  const inline = dataUrlBytes(url);
+  if (inline) {
+    await writeFile(path, inline);
+    return;
+  }
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`);
   await writeFile(path, Buffer.from(await res.arrayBuffer()));

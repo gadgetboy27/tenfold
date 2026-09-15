@@ -523,10 +523,48 @@ export const compositeHistoryEntrySchema = z.object({
 });
 export type CompositeHistoryEntry = z.infer<typeof compositeHistoryEntrySchema>;
 
+/**
+ * Sticker text spec — see lib/composition/sticker.ts for what it means and
+ * how it is drawn. Defined here (not there) only so the layer schema doesn't
+ * import a module that imports this one.
+ */
+export const STICKER_EFFECTS = [
+  "none",
+  "shadow",
+  "glow",
+  "neon",
+  "outline",
+] as const;
+export type StickerEffect = (typeof STICKER_EFFECTS)[number];
+
+export const stickerSpecSchema = z.object({
+  text: z.string().min(1).max(60),
+  font: z.enum(BRAND_FONTS),
+  weight: z.union([z.literal(400), z.literal(700)]).default(700),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  effect: z.enum(STICKER_EFFECTS).default("none"),
+  /** Glow / neon / outline / shadow colour. Ignored for "none". */
+  effectColor: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .default("#ff2d95"),
+  flipH: z.boolean().default(false),
+  flipV: z.boolean().default(false),
+});
+export type StickerSpec = z.infer<typeof stickerSpecSchema>;
+
 export const imageLayerSchema = layerBaseSchema.extend({
   kind: z.literal("image"),
-  /** Storage URL. Drawn with drawImage only — never through a model. */
+  /** Storage URL — or a data: URL for a sticker (see `sticker`). Drawn with
+   *  drawImage only — never through a model. */
   src: z.string().url(),
+  /**
+   * Present when this image IS rasterised text — a sticker
+   * (lib/composition/sticker.ts). The pixels in `src` were drawn from this
+   * spec; keeping it here is what makes the sticker editable rather than a
+   * flattened picture. Absent on every other image layer.
+   */
+  sticker: stickerSpecSchema.optional(),
   /** Set only for layers produced by an Image Compositing op — see above. */
   producedBy: compositeProvenanceSchema.optional(),
   /** Previous src/producedBy pairs, most recent first — lets a redo be

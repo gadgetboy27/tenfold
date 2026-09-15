@@ -8,8 +8,10 @@ import {
   type CompositionAspect,
   type ImageLayer,
   type Layer,
+  type StickerSpec,
   type TextLayer,
 } from "@/lib/composition/layers";
+import { rasterizeSticker } from "@/lib/composition/sticker";
 import type { TrayItem } from "@/lib/composition/tray";
 import { wrapText } from "@/lib/composition/brand-apply";
 import {
@@ -463,6 +465,54 @@ export function addTextBlockToAd(text: string): AddResult | null {
   const item = trayTextItem(uuidv4(), trimmed);
   const outcome = dropTrayItem(item, { nx: 0.5, ny: 0.5 });
   return outcome.placed === "layer" ? "layer" : null;
+}
+
+/**
+ * Put a sticker on the ad — rasterised text as an image layer (see
+ * lib/composition/sticker.ts for why it is not a text layer). Sized to about
+ * two-fifths of the frame width, centred, selected; the user tilts and drags
+ * it from there. Returns the new layer id, or null with no ad to land on.
+ */
+export function addStickerToAd(spec: StickerSpec): string | null {
+  const s = useCompositorStore.getState();
+  if (!s.doc) return null;
+  const raster = rasterizeSticker(spec);
+  const design = ASPECT_DESIGN[s.doc.aspect];
+  const id = uuidv4();
+  s.addLayer({
+    ...baseLayer(id),
+    kind: "image",
+    src: raster.dataUrl,
+    sticker: spec,
+    scale: Math.min(1, (design.width * 0.4) / raster.width),
+  });
+  return id;
+}
+
+/**
+ * Re-draw a sticker in place. Position, scale and tilt are the user's and
+ * stay; only the pixels and the spec they came from change. A new PNG is
+ * the same width as the old one only by coincidence, so a text change can
+ * grow or shrink the block — which is what typing into a sticker should do.
+ */
+export function restyleSticker(id: string, spec: StickerSpec): boolean {
+  const s = useCompositorStore.getState();
+  const layer = s.doc?.layers.find((l) => l.id === id);
+  if (!layer || layer.kind !== "image" || !layer.sticker) return false;
+  const raster = rasterizeSticker(spec);
+  s.updateLayer(id, { src: raster.dataUrl, sticker: spec });
+  return true;
+}
+
+/** The sticker the user has selected on the stage, if any. Pure. */
+export function pickStickerTarget(
+  layers: readonly Layer[] | undefined,
+  selectedId: string | null,
+): (ImageLayer & { sticker: StickerSpec }) | null {
+  const l = selectedId ? layers?.find((x) => x.id === selectedId) : undefined;
+  return l && l.kind === "image" && l.sticker
+    ? (l as ImageLayer & { sticker: StickerSpec })
+    : null;
 }
 
 /** The wording currently on the ad, so the tool reopens on what is there. */

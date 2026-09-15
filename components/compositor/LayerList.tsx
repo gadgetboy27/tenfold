@@ -57,7 +57,11 @@ export function LayerList() {
               <span
                 className={`truncate ${layer.locked ? "text-muted-foreground" : ""}`}
               >
-                {layer.kind === "text" ? layer.text : "Image / logo"}
+                {layer.kind === "text"
+                  ? layer.text
+                  : layer.sticker
+                    ? `Sticker: ${layer.sticker.text}`
+                    : "Image / logo"}
               </span>
             </button>
             <button
