@@ -1,24 +1,17 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { withWorkspace } from "@/lib/api/with-workspace";
 import { publishToAyrshare } from "@/lib/content-agent/stage5-publish";
 import { approvePublishSchema } from "@/lib/validation/content-schemas";
 
-export async function POST(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try {
-    const { id } = await params;
-    const session = await getSession(req);
+export const POST = withWorkspace<{ id: string }>(
+  async (req, { db, admin, session, params }) => {
+    const { id } = params;
     const body = approvePublishSchema.parse(await req.json());
-    const admin = createSupabaseAdminClient();
 
-    const { data: submission } = await admin
+    const { data: submission } = await db
       .from("content_submissions")
       .select("id, workspace_id, created_by")
       .eq("id", id)
-      .eq("workspace_id", session.workspaceId)
       .single();
 
     if (!submission) {
@@ -28,7 +21,7 @@ export async function POST(
       );
     }
 
-    const { data: workspace } = await admin
+    const { data: workspace } = await db
       .from("workspaces")
       .select("ayrshare_profile_key")
       .eq("id", session.workspaceId)
@@ -45,25 +38,15 @@ export async function POST(
       workspaceId: session.workspaceId,
       profileKey: workspace.ayrshare_profile_key,
       userId: session.userId,
+      // The pipeline writes across tables by hand; it takes the raw client.
       db: admin,
     });
 
-    await admin
+    await db
       .from("content_submissions")
       .update({ status: "published" })
       .eq("id", id);
 
     return NextResponse.json(publishResult, { status: 200 });
-  } catch (error) {
-    if (error instanceof Error && error.message.includes("Unauthorized")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    console.error("Approve publish error:", error);
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Internal server error",
-      },
-      { status: 500 },
-    );
-  }
-}
+  },
+);

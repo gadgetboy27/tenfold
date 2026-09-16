@@ -1,23 +1,20 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { withWorkspace } from "@/lib/api/with-workspace";
 
-export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try {
-    const { id } = await params;
-    const session = await getSession(req);
-    const admin = createSupabaseAdminClient();
+// GET /api/content/[id]/status — a server-sent event stream that polls the
+// pipeline results for up to five minutes. One long-lived request per
+// submission, not a burst, so the per-IP bucket is left off.
+export const GET = withWorkspace<{ id: string }>(
+  async (_req, { db, params }) => {
+    const { id } = params;
 
-    const { data: submission } = await admin
+    const { data: submission } = await db
       .from("content_submissions")
       .select("id, workspace_id, created_by")
       .eq("id", id)
       .single();
 
-    if (!submission || submission.workspace_id !== session.workspaceId) {
+    if (!submission) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
@@ -34,7 +31,7 @@ export async function GET(
         const startTime = Date.now();
 
         while (Date.now() - startTime < timeout) {
-          const { data: results } = await admin
+          const { data: results } = await db
             .from("content_pipeline_results")
             .select("*")
             .eq("submission_id", id)
@@ -72,14 +69,6 @@ export async function GET(
         Connection: "keep-alive",
       },
     });
-  } catch (error) {
-    if (error instanceof Error && error.message.includes("Unauthorized")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    console.error("Status stream error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 },
-    );
-  }
-}
+  },
+  { rateLimit: false },
+);

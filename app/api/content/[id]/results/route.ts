@@ -1,28 +1,23 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { withWorkspace } from "@/lib/api/with-workspace";
 
-export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try {
-    const { id } = await params;
-    const session = await getSession(req);
-    const admin = createSupabaseAdminClient();
+// GET /api/content/[id]/results — polled every 3s by ContentReview while a
+// submission runs, so it is exempt from the shared per-IP bucket.
+export const GET = withWorkspace<{ id: string }>(
+  async (_req, { db, params }) => {
+    const { id } = params;
 
-    const { data: submission } = await admin
+    const { data: submission } = await db
       .from("content_submissions")
       .select("*")
       .eq("id", id)
-      .eq("workspace_id", session.workspaceId)
       .single();
 
     if (!submission) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    const { data: pipelineResults } = await admin
+    const { data: pipelineResults } = await db
       .from("content_pipeline_results")
       .select("*")
       .eq("submission_id", id)
@@ -32,14 +27,6 @@ export async function GET(
       submission,
       pipelineResults: pipelineResults || [],
     });
-  } catch (error) {
-    if (error instanceof Error && error.message.includes("Unauthorized")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    console.error("Results fetch error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 },
-    );
-  }
-}
+  },
+  { rateLimit: false },
+);

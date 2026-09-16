@@ -1,22 +1,15 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { withWorkspace } from "@/lib/api/with-workspace";
 import { fetchAndProcessFalJob } from "@/lib/fal/result-fetcher";
 
-export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try {
-    const session = await getSession(req);
-    const { id } = await params;
-    const admin = createSupabaseAdminClient();
+export const GET = withWorkspace<{ id: string }>(
+  async (_req, { db, params }) => {
+    const { id } = params;
 
-    const { data: job } = await admin
+    const { data: job } = await db
       .from("creative_jobs")
       .select("*")
       .eq("id", id)
-      .eq("workspace_id", session.workspaceId)
       .single();
 
     if (!job)
@@ -45,7 +38,7 @@ export async function GET(
         fal_request_id: j0.fal_request_id,
       });
       // Re-fetch after potential update
-      const { data: refreshed } = await admin
+      const { data: refreshed } = await db
         .from("creative_jobs")
         .select("*")
         .eq("id", id)
@@ -65,7 +58,7 @@ export async function GET(
       completed_at: string | null;
     };
 
-    const { data: jobAssets } = await admin
+    const { data: jobAssets } = await db
       .from("assets")
       .select("id, url, type")
       .eq("job_id", j.id);
@@ -86,9 +79,6 @@ export async function GET(
       createdAt: j.created_at,
       completedAt: j.completed_at,
     });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    const status = msg === "Unauthorized" ? 401 : 500;
-    return NextResponse.json({ error: msg }, { status });
-  }
-}
+  },
+  { rateLimit: false },
+);

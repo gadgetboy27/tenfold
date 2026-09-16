@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { withWorkspace } from "@/lib/api/with-workspace";
 import { z } from "zod";
-import { errorMessage } from "@/lib/api/error-message";
 
 const FONTS = [
   "Inter",
@@ -31,47 +29,30 @@ const updateSchema = z.object({
   imported_at: z.string().datetime().optional(),
 });
 
-export async function GET(req: Request) {
-  try {
-    const session = await getSession(req);
-    const admin = createSupabaseAdminClient();
-    const { data } = await admin
-      .from("brand_kits")
-      .select("*")
-      .eq("workspace_id", session.workspaceId)
-      .single();
+export const GET = withWorkspace(
+  async (_req, { db }) => {
+    const { data } = await db.from("brand_kits").select("*").single();
     return NextResponse.json(data ?? {});
-  } catch (err) {
-    const msg = errorMessage(err, "Unknown error");
-    const status = msg === "Unauthorized" ? 401 : 500;
-    return NextResponse.json({ error: msg }, { status });
-  }
-}
+  },
+  { rateLimit: false },
+);
 
-export async function PATCH(req: Request) {
-  try {
-    const session = await getSession(req);
-    const body = updateSchema.parse(await req.json());
-    const admin = createSupabaseAdminClient();
+export const PATCH = withWorkspace(async (req, { db, session }) => {
+  const body = updateSchema.parse(await req.json());
 
-    const { data, error } = await admin
-      .from("brand_kits")
-      .upsert(
-        {
-          workspace_id: session.workspaceId,
-          ...body,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "workspace_id" },
-      )
-      .select()
-      .single();
+  const { data, error } = await db
+    .from("brand_kits")
+    .upsert(
+      {
+        workspace_id: session.workspaceId,
+        ...body,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "workspace_id" },
+    )
+    .select()
+    .single();
 
-    if (error) throw new Error(error.message);
-    return NextResponse.json(data);
-  } catch (err) {
-    const msg = errorMessage(err, "Unknown error");
-    const status = msg === "Unauthorized" ? 401 : 500;
-    return NextResponse.json({ error: msg }, { status });
-  }
-}
+  if (error) throw new Error(error.message);
+  return NextResponse.json(data);
+});
