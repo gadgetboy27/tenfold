@@ -96,7 +96,10 @@ describe("naming the pick", () => {
     expect(idx).toBeGreaterThan(-1);
     const block = src.slice(idx, idx + 1200);
     expect(block).toContain('.eq("campaign_id", id)');
-    expect(block).toContain('.eq("workspace_id", session.workspaceId)');
+    // The workspace filter comes from withWorkspace's scoped client, which
+    // appends .eq("workspace_id", …) to every read on `assets` — so the pin
+    // is that the lookup goes through `db`, not the raw admin client.
+    expect(block).toMatch(/await db\s*\.from\("assets"\)/);
     expect(block).toMatch(/composed_video/);
   });
 

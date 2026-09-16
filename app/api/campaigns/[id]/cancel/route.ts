@@ -1,30 +1,23 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { withWorkspace } from "@/lib/api/with-workspace";
 import { refundCredits } from "@/lib/credits/refund";
 
-export async function POST(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try {
-    const session = await getSession(req);
-    const { id } = await params;
-    const admin = createSupabaseAdminClient();
+export const POST = withWorkspace<{ id: string }>(
+  async (_req, { db, params }) => {
+    const { id } = params;
 
     // Verify campaign belongs to this workspace
-    const { data: campaign } = await admin
+    const { data: campaign } = await db
       .from("campaigns")
       .select("id, status")
       .eq("id", id)
-      .eq("workspace_id", session.workspaceId)
       .single();
 
     if (!campaign)
       return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     // Find all cancellable jobs for this campaign
-    const { data: jobs } = await admin
+    const { data: jobs } = await db
       .from("creative_jobs")
       .select("id, status, credits_charged, type")
       .eq("campaign_id", id)
@@ -40,7 +33,7 @@ export async function POST(
     // Cancel each job and refund its credits
     if (cancellable.length > 0) {
       const jobIds = cancellable.map((j) => j.id);
-      await admin
+      await db
         .from("creative_jobs")
         .update({ status: "cancelled", error_message: "Cancelled by user" })
         .in("id", jobIds);
@@ -54,7 +47,7 @@ export async function POST(
     }
 
     // Check if any assets already exist (from a partial success)
-    const { data: existingAssets } = await admin
+    const { data: existingAssets } = await db
       .from("assets")
       .select("id")
       .eq("campaign_id", id)
@@ -63,7 +56,7 @@ export async function POST(
     const hasAssets = (existingAssets?.length ?? 0) > 0;
     const newStatus = hasAssets ? "ready" : "failed";
 
-    await admin.from("campaigns").update({ status: newStatus }).eq("id", id);
+    await db.from("campaigns").update({ status: newStatus }).eq("id", id);
 
     return NextResponse.json({
       ok: true,
@@ -74,9 +67,5 @@ export async function POST(
         0,
       ),
     });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    const status = msg === "Unauthorized" ? 401 : 500;
-    return NextResponse.json({ error: msg }, { status });
-  }
-}
+  },
+);

@@ -1,22 +1,15 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { withWorkspace } from "@/lib/api/with-workspace";
 import { fetchAndProcessFalJob } from "@/lib/fal/result-fetcher";
 
-export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try {
-    const session = await getSession(req);
-    const { id } = await params;
-    const admin = createSupabaseAdminClient();
+export const GET = withWorkspace<{ id: string }>(
+  async (_req, { db, params }) => {
+    const { id } = params;
 
-    const { data: campaign } = await admin
+    const { data: campaign } = await db
       .from("campaigns")
       .select("*")
       .eq("id", id)
-      .eq("workspace_id", session.workspaceId)
       .single();
 
     if (!campaign)
@@ -24,9 +17,9 @@ export async function GET(
 
     const [{ data: jobs }, { data: campaignAssets }, { data: compositions }] =
       await Promise.all([
-        admin.from("creative_jobs").select("*").eq("campaign_id", id),
-        admin.from("assets").select("*").eq("campaign_id", id),
-        admin
+        db.from("creative_jobs").select("*").eq("campaign_id", id),
+        db.from("assets").select("*").eq("campaign_id", id),
+        db
           .from("compositions")
           .select("id")
           .eq("campaign_id", id)
@@ -63,8 +56,8 @@ export async function GET(
       // Re-fetch after potential updates
       const [{ data: refreshedJobs }, { data: refreshedAssets }] =
         await Promise.all([
-          admin.from("creative_jobs").select("*").eq("campaign_id", id),
-          admin.from("assets").select("*").eq("campaign_id", id),
+          db.from("creative_jobs").select("*").eq("campaign_id", id),
+          db.from("assets").select("*").eq("campaign_id", id),
         ]);
       jobList = refreshedJobs ?? jobList;
       if (refreshedAssets) {
@@ -108,25 +101,13 @@ export async function GET(
       assets: campaignAssets ?? [],
       latestCompositionId: compositions?.[0]?.id ?? null,
     });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    const status =
-      msg === "Unauthorized"
-        ? 401
-        : msg === "Not a workspace member"
-          ? 403
-          : 500;
-    return NextResponse.json({ error: msg }, { status });
-  }
-}
+  },
+  { rateLimit: false },
+);
 
-export async function PATCH(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try {
-    const session = await getSession(req);
-    const { id } = await params;
+export const PATCH = withWorkspace<{ id: string }>(
+  async (req, { db, params }) => {
+    const { id } = params;
     const raw = (await req.json()) as {
       status?: string;
       prompt?: string;
@@ -158,7 +139,6 @@ export async function PATCH(
       update.expansion_data = raw.expansion_data;
     if (raw.anchor_asset_id !== undefined)
       update.anchor_asset_id = raw.anchor_asset_id;
-    const admin = createSupabaseAdminClient();
 
     // The one video this campaign publishes (migration 0032). Verified to be a
     // VIDEO belonging to THIS campaign before it's stored: the FK only proves
@@ -169,12 +149,11 @@ export async function PATCH(
       if (raw.publish_asset_id === null) {
         update.publish_asset_id = null;
       } else {
-        const { data: pick } = await admin
+        const { data: pick } = await db
           .from("assets")
           .select("id, type")
           .eq("id", raw.publish_asset_id)
           .eq("campaign_id", id)
-          .eq("workspace_id", session.workspaceId)
           .maybeSingle();
         const p = pick as { type: string } | null;
         if (!p || (p.type !== "video" && p.type !== "composed_video")) {
@@ -187,45 +166,36 @@ export async function PATCH(
       }
     }
 
-    const { data: updated, error } = await admin
+    const { data: updated, error } = await db
       .from("campaigns")
       .update(update)
       .eq("id", id)
-      .eq("workspace_id", session.workspaceId)
       .select()
       .single();
 
     if (error || !updated)
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json(updated);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: msg }, { status: 500 });
-  }
-}
+  },
+  { rateLimit: false },
+);
 
-export async function DELETE(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try {
-    const session = await getSession(req);
-    const { id } = await params;
-    const admin = createSupabaseAdminClient();
+export const DELETE = withWorkspace<{ id: string }>(
+  async (_req, { db, params }) => {
+    const { id } = params;
 
     // Confirm campaign belongs to this workspace
-    const { data: campaign } = await admin
+    const { data: campaign } = await db
       .from("campaigns")
       .select("id")
       .eq("id", id)
-      .eq("workspace_id", session.workspaceId)
       .single();
 
     if (!campaign)
       return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     // Collect all storage paths before deleting rows
-    const { data: assets } = await admin
+    const { data: assets } = await db
       .from("assets")
       .select("storage_path")
       .eq("campaign_id", id);
@@ -236,22 +206,14 @@ export async function DELETE(
 
     // Delete storage files (best-effort — don't fail the whole request if some are missing)
     if (storagePaths.length > 0) {
-      await admin.storage.from("assets").remove(storagePaths);
+      await db.storage.from("assets").remove(storagePaths);
     }
 
     // Delete campaign — CASCADE removes assets, creative_jobs, compositions
-    const { error: delErr } = await admin
-      .from("campaigns")
-      .delete()
-      .eq("id", id)
-      .eq("workspace_id", session.workspaceId);
+    const { error: delErr } = await db.from("campaigns").delete().eq("id", id);
 
     if (delErr) throw new Error(delErr.message);
 
     return NextResponse.json({ deleted: true });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    const status = msg === "Unauthorized" ? 401 : 500;
-    return NextResponse.json({ error: msg }, { status });
-  }
-}
+  },
+);

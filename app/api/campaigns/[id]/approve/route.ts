@@ -1,27 +1,20 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { withWorkspace } from "@/lib/api/with-workspace";
 
 // POST /api/campaigns/[id]/approve — owner/admin only. Callable from draft OR
 // pending_review, so an owner/admin can self-approve directly without the
 // review round-trip (the whole point of the role gate: it restricts
 // "member"-role publishing, not solo/owner workflows).
-export async function POST(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try {
-    const session = await getSession(req);
+export const POST = withWorkspace<{ id: string }>(
+  async (_req, { db, session, params }) => {
     if (session.role !== "owner" && session.role !== "admin") {
       return NextResponse.json(
         { error: "Only a workspace owner or admin can approve" },
         { status: 403 },
       );
     }
-    const { id } = await params;
-    const admin = createSupabaseAdminClient();
 
-    const { data: updated, error } = await admin
+    const { data: updated, error } = await db
       .from("campaigns")
       .update({
         approval_status: "approved",
@@ -29,8 +22,7 @@ export async function POST(
         approved_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
-      .eq("id", id)
-      .eq("workspace_id", session.workspaceId)
+      .eq("id", params.id)
       .neq("approval_status", "approved")
       .select("id, approval_status, approved_by, approved_at")
       .maybeSingle();
@@ -43,14 +35,5 @@ export async function POST(
       );
     }
     return NextResponse.json(updated);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    const status =
-      msg === "Unauthorized"
-        ? 401
-        : msg === "Not a workspace member"
-          ? 403
-          : 500;
-    return NextResponse.json({ error: msg }, { status });
-  }
-}
+  },
+);

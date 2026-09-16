@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { withWorkspace } from "@/lib/api/with-workspace";
 import { createCampaignSchema } from "@/lib/validation/schemas";
 import { debitCreditsAmount } from "@/lib/credits/debit";
 import { refundCredits } from "@/lib/credits/refund";
@@ -15,7 +14,6 @@ import { validatePrompt } from "@/lib/fal/prompt-validator";
 import { resolveImageModel } from "@/lib/fal/text-in-image";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { v4 as uuidv4 } from "uuid";
-import { errorMessage } from "@/lib/api/error-message";
 
 const ASPECT_TO_IMAGE_SIZE: Record<string, string> = {
   "1:1": "square_hd",
@@ -44,14 +42,11 @@ const STYLE_SUFFIXES: Record<string, string> = {
   "3D": "3D render, Octane render, volumetric lighting, ray tracing, subsurface scattering, photorealistic PBR materials, cinema4d, ultra-detailed, 8K, sharp edges, studio HDRI",
 };
 
-export async function GET(req: Request) {
-  try {
-    const session = await getSession(req);
-    const admin = createSupabaseAdminClient();
-    const { data: campaigns, error } = await admin
+export const GET = withWorkspace(
+  async (_req, { db }) => {
+    const { data: campaigns, error } = await db
       .from("campaigns")
       .select("*")
-      .eq("workspace_id", session.workspaceId)
       // Most recently WORKED ON first, not most recently created. The Gallery
       // is where you go to pick a project back up, so a campaign you opened an
       // hour ago belongs above one you started last month and abandoned —
@@ -65,7 +60,7 @@ export async function GET(req: Request) {
 
     // Fetch first image asset per campaign for thumbnails
     const ids = campaigns.map((c) => c.id as string);
-    const { data: thumbAssets } = await admin
+    const { data: thumbAssets } = await db
       .from("assets")
       .select("id, url, campaign_id")
       .in("campaign_id", ids)
@@ -86,22 +81,19 @@ export async function GET(req: Request) {
       { data: audioAssets },
       { data: compositionRows },
     ] = await Promise.all([
-      admin
+      db
         .from("assets")
         .select("campaign_id")
         .in("campaign_id", ids)
         .in("type", ["video", "composed_video"]),
-      admin
+      db
         .from("assets")
         .select("campaign_id")
         .in("campaign_id", ids)
         .eq("type", "audio"),
       // publish_records has no campaign_id — it hangs off compositions, so
       // fetch composition ids here and cross-reference below.
-      admin
-        .from("compositions")
-        .select("id, campaign_id")
-        .in("campaign_id", ids),
+      db.from("compositions").select("id, campaign_id").in("campaign_id", ids),
     ]);
     const videoCampaigns = new Set(
       (videoAssets ?? []).map((a) => a.campaign_id as string),
@@ -120,7 +112,7 @@ export async function GET(req: Request) {
     );
     const publishedCampaigns = new Set<string>();
     if (compositionToCampaign.size > 0) {
-      const { data: publishRows } = await admin
+      const { data: publishRows } = await db
         .from("publish_records")
         .select("composition_id, status")
         .in("composition_id", [...compositionToCampaign.keys()])
@@ -135,7 +127,7 @@ export async function GET(req: Request) {
       .map((c) => c.anchor_asset_id)
       .filter(Boolean) as string[];
     if (anchorIds.length) {
-      const { data: anchorAssets } = await admin
+      const { data: anchorAssets } = await db
         .from("assets")
         .select("id, url")
         .in("id", anchorIds);
@@ -151,7 +143,7 @@ export async function GET(req: Request) {
     const stale = campaigns.filter((c) => c.status === "generating");
     if (stale.length > 0) {
       const staleIds = stale.map((c) => c.id as string);
-      const { data: jobRows } = await admin
+      const { data: jobRows } = await db
         .from("creative_jobs")
         .select("campaign_id, status")
         .in("campaign_id", staleIds);
@@ -175,7 +167,7 @@ export async function GET(req: Request) {
       }
 
       if (toReady.length) {
-        await admin
+        await db
           .from("campaigns")
           .update({ status: "ready" })
           .in("id", toReady);
@@ -184,7 +176,7 @@ export async function GET(req: Request) {
         }
       }
       if (toFailed.length) {
-        await admin
+        await db
           .from("campaigns")
           .update({ status: "failed" })
           .in("id", toFailed);
@@ -212,299 +204,279 @@ export async function GET(req: Request) {
       };
     });
     return NextResponse.json(enriched);
-  } catch (err) {
-    const msg = errorMessage(err, "Unknown error");
-    const status =
-      msg === "Unauthorized"
-        ? 401
-        : msg === "Not a workspace member"
-          ? 403
-          : 500;
-    return NextResponse.json({ error: msg }, { status });
-  }
-}
+  },
+  { rateLimit: false },
+);
 
-export async function POST(req: Request) {
-  try {
-    const session = await getSession(req);
-    const body = createCampaignSchema.parse(await req.json());
-    const admin = createSupabaseAdminClient();
+export const POST = withWorkspace(async (req, { db, session }) => {
+  const body = createCampaignSchema.parse(await req.json());
 
-    // Pro perk: paid tiers get more distinct anchor directions (6–8) than the
-    // free 4 — same base credit cost, a deliberately premium commercial-tier feel.
-    const ent = await getEntitlements(session.workspaceId);
+  // Pro perk: paid tiers get more distinct anchor directions (6–8) than the
+  // free 4 — same base credit cost, a deliberately premium commercial-tier feel.
+  const ent = await getEntitlements(session.workspaceId);
 
-    // Resolve the chosen image model (fal gateway). Premium models are gated to
-    // paid tiers — reject before touching credits.
-    //
-    // With no explicit choice, a brief that will produce lettering is routed to
-    // a model that can actually spell — FLUX is the better photographic model
-    // but renders text as garbage ("AUNCEAAN FLEANCE" on a hot-sauce label),
-    // which is unpublishable for a tool that sells brand assets. An explicit
-    // pick is always honoured. See lib/fal/text-in-image.ts.
-    const resolved = resolveImageModel({
-      requested: body.model,
-      prompt: body.prompt ?? "",
-      isPro: ent.isPro,
-    });
-    const imageModel = resolved.model;
-    if (imageModel.proOnly && !ent.isPro) {
-      return NextResponse.json(
-        {
-          error: `${imageModel.label} is a Pro model — upgrade to use it.`,
-          upgrade: true,
-        },
-        { status: 403 },
-      );
-    }
-
-    // Bring-your-own product photo → image-conditioned generation (FLUX Kontext).
-    // A reference drives one consistent transformation, so it overrides variety.
-    const useReference = !!body.referenceImageUrl;
-
-    // Variety pack: the anchor set spans the top models (2 each) so the user
-    // picks the look they prefer — Pro-only (premium models).
-    const variety = body.variety === true && !useReference;
-    if (variety && !ent.isPro) {
-      return NextResponse.json(
-        {
-          error:
-            "The variety pack (top models, side by side) is a Pro feature — upgrade to use it.",
-          upgrade: true,
-        },
-        { status: 403 },
-      );
-    }
-
-    // 0. Validate prompt quality before touching credits. The validator assists
-    //    rather than blocks: a weak prompt is auto-upgraded to the AI-refined
-    //    version and generation proceeds. We only hard-reject when there is
-    //    nothing usable to generate from (e.g. prohibited/empty content).
-    // Wording typed before generating: every direction is composed to leave
-    // that zone quiet, so the overlay lands on clean space rather than being
-    // stamped over a focal point. Only the ZONE is passed — the words stay out
-    // of the image model entirely (lib/fal/reserve-space.ts).
-    const reserveZone = body.words?.trim()
-      ? (body.wordsZone ?? "bottom")
-      : null;
-
-    const validation = await validatePrompt(
-      body.prompt,
-      body.style ?? "Photorealistic",
-      ent.maxVariations,
-      reserveZone,
-    );
-    let effectivePrompt = body.prompt;
-    let promptRefined = false;
-    if (!validation.isValid) {
-      if (
-        validation.refinedPrompt &&
-        validation.refinedPrompt.trim().length >= 5
-      ) {
-        effectivePrompt = validation.refinedPrompt.trim();
-        promptRefined = true;
-      } else {
-        return NextResponse.json(
-          {
-            error: "Prompt rejected",
-            issues: validation.issues,
-            refinedPrompt: validation.refinedPrompt,
-          },
-          { status: 422 },
-        );
-      }
-    }
-
-    const campaignId = uuidv4();
-    const jobId = uuidv4();
-    const cost = variety ? CREDIT_COSTS.image_variety : imageModel.creditCost;
-
-    // 1. Debit credits before anything else (per-model cost)
-    const debit = await debitCreditsAmount(
-      session.workspaceId,
-      jobId,
-      cost,
-      `image generation (${imageModel.label})`,
-    );
-    if (!debit.success) {
-      return NextResponse.json(
-        { error: "Insufficient credits" },
-        { status: 402 },
-      );
-    }
-
-    const imageSize =
-      ASPECT_TO_IMAGE_SIZE[body.aspectRatio ?? "1:1"] ?? "square_hd";
-    const styleSuffix = STYLE_SUFFIXES[body.style ?? ""] ?? "";
-
-    // Normal: N distinct creative directions from ONE model. Variety pack: the
-    // top 3 models each render the same 2 directions (2 images per model = 6),
-    // so the six differ by MODEL and the user picks the look they prefer. Each
-    // variety direction carries its own modelId so the webhook can tag the
-    // asset — that tag is what powers the "which model do users pick" signal.
-    interface Direction {
-      index: number;
-      label: string;
-      prompt: string;
-      modelId?: string;
-    }
-    const withStyle = (p: string) => (styleSuffix ? `${p}, ${styleSuffix}` : p);
-    const directions: Direction[] = variety
-      ? VARIETY_IMAGE_MODELS.flatMap((m, mi) =>
-          validation.directions.slice(0, 2).map((d, di) => ({
-            index: mi * 2 + di,
-            label: `${m.label} · ${d.label}`,
-            prompt: withStyle(d.prompt),
-            modelId: m.id,
-          })),
-        )
-      : validation.directions.map((d, i) => ({
-          index: i,
-          label: d.label,
-          prompt: withStyle(d.prompt),
-        }));
-
-    // 2. Create campaign row
-    const { error: campErr } = await admin.from("campaigns").insert({
-      id: campaignId,
-      workspace_id: session.workspaceId,
-      created_by: session.userId,
-      name: body.name ?? "Untitled Campaign",
-      prompt: effectivePrompt,
-      parameters: {
-        aspectRatio: body.aspectRatio,
-        style: body.style,
-        model: useReference ? "flux-kontext" : imageModel.id,
-        referenceImageUrl: body.referenceImageUrl,
-        originalPrompt: promptRefined ? body.prompt : undefined,
+  // Resolve the chosen image model (fal gateway). Premium models are gated to
+  // paid tiers — reject before touching credits.
+  //
+  // With no explicit choice, a brief that will produce lettering is routed to
+  // a model that can actually spell — FLUX is the better photographic model
+  // but renders text as garbage ("AUNCEAAN FLEANCE" on a hot-sauce label),
+  // which is unpublishable for a tool that sells brand assets. An explicit
+  // pick is always honoured. See lib/fal/text-in-image.ts.
+  const resolved = resolveImageModel({
+    requested: body.model,
+    prompt: body.prompt ?? "",
+    isPro: ent.isPro,
+  });
+  const imageModel = resolved.model;
+  if (imageModel.proOnly && !ent.isPro) {
+    return NextResponse.json(
+      {
+        error: `${imageModel.label} is a Pro model — upgrade to use it.`,
+        upgrade: true,
       },
-      status: "generating",
-    });
-    if (campErr) throw new Error(campErr.message);
+      { status: 403 },
+    );
+  }
 
-    // 3. Create job row (one job, four fal requests)
-    const { error: jobErr } = await admin.from("creative_jobs").insert({
-      id: jobId,
-      campaign_id: campaignId,
-      workspace_id: session.workspaceId,
-      type: "image_generation",
-      status: "queued",
+  // Bring-your-own product photo → image-conditioned generation (FLUX Kontext).
+  // A reference drives one consistent transformation, so it overrides variety.
+  const useReference = !!body.referenceImageUrl;
+
+  // Variety pack: the anchor set spans the top models (2 each) so the user
+  // picks the look they prefer — Pro-only (premium models).
+  const variety = body.variety === true && !useReference;
+  if (variety && !ent.isPro) {
+    return NextResponse.json(
+      {
+        error:
+          "The variety pack (top models, side by side) is a Pro feature — upgrade to use it.",
+        upgrade: true,
+      },
+      { status: 403 },
+    );
+  }
+
+  // 0. Validate prompt quality before touching credits. The validator assists
+  //    rather than blocks: a weak prompt is auto-upgraded to the AI-refined
+  //    version and generation proceeds. We only hard-reject when there is
+  //    nothing usable to generate from (e.g. prohibited/empty content).
+  // Wording typed before generating: every direction is composed to leave
+  // that zone quiet, so the overlay lands on clean space rather than being
+  // stamped over a focal point. Only the ZONE is passed — the words stay out
+  // of the image model entirely (lib/fal/reserve-space.ts).
+  const reserveZone = body.words?.trim() ? (body.wordsZone ?? "bottom") : null;
+
+  const validation = await validatePrompt(
+    body.prompt,
+    body.style ?? "Photorealistic",
+    ent.maxVariations,
+    reserveZone,
+  );
+  let effectivePrompt = body.prompt;
+  let promptRefined = false;
+  if (!validation.isValid) {
+    if (
+      validation.refinedPrompt &&
+      validation.refinedPrompt.trim().length >= 5
+    ) {
+      effectivePrompt = validation.refinedPrompt.trim();
+      promptRefined = true;
+    } else {
+      return NextResponse.json(
+        {
+          error: "Prompt rejected",
+          issues: validation.issues,
+          refinedPrompt: validation.refinedPrompt,
+        },
+        { status: 422 },
+      );
+    }
+  }
+
+  const campaignId = uuidv4();
+  const jobId = uuidv4();
+  const cost = variety ? CREDIT_COSTS.image_variety : imageModel.creditCost;
+
+  // 1. Debit credits before anything else (per-model cost)
+  const debit = await debitCreditsAmount(
+    session.workspaceId,
+    jobId,
+    cost,
+    `image generation (${imageModel.label})`,
+  );
+  if (!debit.success) {
+    return NextResponse.json(
+      { error: "Insufficient credits" },
+      { status: 402 },
+    );
+  }
+
+  const imageSize =
+    ASPECT_TO_IMAGE_SIZE[body.aspectRatio ?? "1:1"] ?? "square_hd";
+  const styleSuffix = STYLE_SUFFIXES[body.style ?? ""] ?? "";
+
+  // Normal: N distinct creative directions from ONE model. Variety pack: the
+  // top 3 models each render the same 2 directions (2 images per model = 6),
+  // so the six differ by MODEL and the user picks the look they prefer. Each
+  // variety direction carries its own modelId so the webhook can tag the
+  // asset — that tag is what powers the "which model do users pick" signal.
+  interface Direction {
+    index: number;
+    label: string;
+    prompt: string;
+    modelId?: string;
+  }
+  const withStyle = (p: string) => (styleSuffix ? `${p}, ${styleSuffix}` : p);
+  const directions: Direction[] = variety
+    ? VARIETY_IMAGE_MODELS.flatMap((m, mi) =>
+        validation.directions.slice(0, 2).map((d, di) => ({
+          index: mi * 2 + di,
+          label: `${m.label} · ${d.label}`,
+          prompt: withStyle(d.prompt),
+          modelId: m.id,
+        })),
+      )
+    : validation.directions.map((d, i) => ({
+        index: i,
+        label: d.label,
+        prompt: withStyle(d.prompt),
+      }));
+
+  // 2. Create campaign row
+  const { error: campErr } = await db.from("campaigns").insert({
+    id: campaignId,
+    workspace_id: session.workspaceId,
+    created_by: session.userId,
+    name: body.name ?? "Untitled Campaign",
+    prompt: effectivePrompt,
+    parameters: {
+      aspectRatio: body.aspectRatio,
+      style: body.style,
+      model: useReference ? "flux-kontext" : imageModel.id,
+      referenceImageUrl: body.referenceImageUrl,
+      originalPrompt: promptRefined ? body.prompt : undefined,
+    },
+    status: "generating",
+  });
+  if (campErr) throw new Error(campErr.message);
+
+  // 3. Create job row (one job, four fal requests)
+  const { error: jobErr } = await db.from("creative_jobs").insert({
+    id: jobId,
+    campaign_id: campaignId,
+    workspace_id: session.workspaceId,
+    type: "image_generation",
+    status: "queued",
+    input_params: {
+      prompt: effectivePrompt,
+      imageSize,
+      style: body.style,
+      model: imageModel.id,
+      directions,
+    },
+    credits_charged: cost,
+  });
+  if (jobErr) {
+    // Debited at step 2, so throwing here without a refund charges for a job
+    // that never existed — and with no job row, nothing downstream can ever
+    // refund it. The fal-submit failure below already refunds; this path is
+    // likelier (a bad campaignId trips the FK) and didn't.
+    await refundCredits(jobId);
+    throw new Error(jobErr.message);
+  }
+
+  // 4. Enqueue one fal request per direction (num_images:1 each). The webhook
+  //    is told which direction via ?d=<index>. Refund only if ALL fail.
+  type Submitted = {
+    index: number;
+    label: string;
+    prompt: string;
+    requestId: string;
+    modelId?: string;
+  };
+  // Fire all fal submits in parallel so campaign start is fast. A direction
+  // that fails is dropped; the rest still run.
+  // - Normal: try the chosen model, then fall through to reliable endpoints.
+  // - Variety: each direction is pinned to ITS model (no cross-model fallback,
+  //   so the tag stays accurate) with that model's own params.
+  const fallbackEndpoints = imageFallbackEndpoints(imageModel.id);
+  const results = await Promise.all(
+    directions.map(async (d): Promise<Submitted | null> => {
+      const webhookUrl = `${process.env.APP_URL}/api/webhooks/fal?j=${jobId}&d=${d.index}`;
+      const vm = d.modelId
+        ? VARIETY_IMAGE_MODELS.find((m) => m.id === d.modelId)
+        : undefined;
+      const endpoints = useReference
+        ? [KONTEXT_ENDPOINT]
+        : vm
+          ? [vm.endpoint]
+          : fallbackEndpoints;
+      const input = useReference
+        ? {
+            image_url: body.referenceImageUrl,
+            prompt: d.prompt,
+            aspect_ratio: ASPECT_TO_KONTEXT[body.aspectRatio ?? "1:1"] ?? "1:1",
+            num_images: 1,
+          }
+        : vm
+          ? imageInputFor(vm, d.prompt, imageSize)
+          : { prompt: d.prompt, image_size: imageSize, num_images: 1 };
+      try {
+        const { requestId } = await enqueueWithFallback(
+          endpoints,
+          input,
+          webhookUrl,
+        );
+        return { ...d, requestId };
+      } catch {
+        return null; // others can still succeed
+      }
+    }),
+  );
+  const submitted: Submitted[] = results.filter(
+    (r): r is Submitted => r !== null,
+  );
+
+  if (submitted.length === 0) {
+    await refundCredits(jobId);
+    throw new Error("Image generation could not be submitted to fal.ai");
+  }
+
+  // 5. Persist submitted requests + expected count, mark processing.
+  await db
+    .from("creative_jobs")
+    .update({
+      fal_request_id: submitted[0].requestId,
+      status: "processing",
       input_params: {
         prompt: effectivePrompt,
         imageSize,
         style: body.style,
         model: imageModel.id,
-        directions,
+        expected_images: submitted.length,
+        directions: submitted,
       },
-      credits_charged: cost,
-    });
-    if (jobErr) {
-      // Debited at step 2, so throwing here without a refund charges for a job
-      // that never existed — and with no job row, nothing downstream can ever
-      // refund it. The fal-submit failure below already refunds; this path is
-      // likelier (a bad campaignId trips the FK) and didn't.
-      await refundCredits(jobId);
-      throw new Error(jobErr.message);
-    }
+    })
+    .eq("id", jobId);
 
-    // 4. Enqueue one fal request per direction (num_images:1 each). The webhook
-    //    is told which direction via ?d=<index>. Refund only if ALL fail.
-    type Submitted = {
-      index: number;
-      label: string;
-      prompt: string;
-      requestId: string;
-      modelId?: string;
-    };
-    // Fire all fal submits in parallel so campaign start is fast. A direction
-    // that fails is dropped; the rest still run.
-    // - Normal: try the chosen model, then fall through to reliable endpoints.
-    // - Variety: each direction is pinned to ITS model (no cross-model fallback,
-    //   so the tag stays accurate) with that model's own params.
-    const fallbackEndpoints = imageFallbackEndpoints(imageModel.id);
-    const results = await Promise.all(
-      directions.map(async (d): Promise<Submitted | null> => {
-        const webhookUrl = `${process.env.APP_URL}/api/webhooks/fal?j=${jobId}&d=${d.index}`;
-        const vm = d.modelId
-          ? VARIETY_IMAGE_MODELS.find((m) => m.id === d.modelId)
-          : undefined;
-        const endpoints = useReference
-          ? [KONTEXT_ENDPOINT]
-          : vm
-            ? [vm.endpoint]
-            : fallbackEndpoints;
-        const input = useReference
-          ? {
-              image_url: body.referenceImageUrl,
-              prompt: d.prompt,
-              aspect_ratio:
-                ASPECT_TO_KONTEXT[body.aspectRatio ?? "1:1"] ?? "1:1",
-              num_images: 1,
-            }
-          : vm
-            ? imageInputFor(vm, d.prompt, imageSize)
-            : { prompt: d.prompt, image_size: imageSize, num_images: 1 };
-        try {
-          const { requestId } = await enqueueWithFallback(
-            endpoints,
-            input,
-            webhookUrl,
-          );
-          return { ...d, requestId };
-        } catch {
-          return null; // others can still succeed
-        }
-      }),
-    );
-    const submitted: Submitted[] = results.filter(
-      (r): r is Submitted => r !== null,
-    );
-
-    if (submitted.length === 0) {
-      await refundCredits(jobId);
-      throw new Error("Image generation could not be submitted to fal.ai");
-    }
-
-    // 5. Persist submitted requests + expected count, mark processing.
-    await admin
-      .from("creative_jobs")
-      .update({
-        fal_request_id: submitted[0].requestId,
-        status: "processing",
-        input_params: {
-          prompt: effectivePrompt,
-          imageSize,
-          style: body.style,
-          model: imageModel.id,
-          expected_images: submitted.length,
-          directions: submitted,
-        },
-      })
-      .eq("id", jobId);
-
-    return NextResponse.json(
-      {
-        campaignId,
-        jobId,
-        status: "generating",
-        promptRefined,
-        effectivePrompt,
-        // So the UI can SAY it switched. Silently changing the model would
-        // leave a user wondering why the look changed between runs.
-        modelSwitchedForText: resolved.switchedForText
-          ? imageModel.label
-          : undefined,
-        // Echoed so the client can place the wording the moment an anchor is
-        // chosen, without having to remember what it sent.
-        reservedZone: reserveZone ?? undefined,
-        directions: submitted.map((s) => s.label),
-      },
-      { status: 201 },
-    );
-  } catch (err) {
-    const msg = errorMessage(err, "Unknown error");
-    const status =
-      msg === "Unauthorized" ? 401 : msg === "Insufficient credits" ? 402 : 500;
-    return NextResponse.json({ error: msg }, { status });
-  }
-}
+  return NextResponse.json(
+    {
+      campaignId,
+      jobId,
+      status: "generating",
+      promptRefined,
+      effectivePrompt,
+      // So the UI can SAY it switched. Silently changing the model would
+      // leave a user wondering why the look changed between runs.
+      modelSwitchedForText: resolved.switchedForText
+        ? imageModel.label
+        : undefined,
+      // Echoed so the client can place the wording the moment an anchor is
+      // chosen, without having to remember what it sent.
+      reservedZone: reserveZone ?? undefined,
+      directions: submitted.map((s) => s.label),
+    },
+    { status: 201 },
+  );
+});
