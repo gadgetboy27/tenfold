@@ -48,6 +48,12 @@ interface CompositorState {
 
   setAspect: (aspect: CompositionAspect) => void;
   setBackground: (background: CompositionBackground) => void;
+  /**
+   * Swap the background AND drop every layer, as ONE undo step. For staging a
+   * finished render: its words and logo are already in the pixels, so the
+   * layers that produced it would draw over themselves. Undo brings them back.
+   */
+  restage: (background: CompositionBackground) => void;
   addLayer: (layer: Layer) => void;
   updateLayer: (id: string, patch: LayerPatch) => void;
   /** Layout edit (position/size/rotation) from the canvas — writes to the
@@ -201,6 +207,11 @@ export const useCompositorStore = create<CompositorState>((set) => ({
   setBackground: (background) =>
     set((s) => editDoc(s, (doc) => ({ ...doc, background }))),
 
+  restage: (background) =>
+    set((s) => ({
+      ...editDoc(s, (doc) => ({ ...doc, background, layers: [] })),
+      selectedLayerId: null,
+    })),
   addLayer: (layer) =>
     set((s) => ({
       ...editDoc(s, (doc) => ({ ...doc, layers: [...doc.layers, layer] })),

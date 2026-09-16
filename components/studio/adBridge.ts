@@ -160,6 +160,32 @@ export function addImageToAd(
  * union is image|text, so there is no video layer to stack. Callers must not
  * offer "add as layer" for a clip.
  */
+/**
+ * Put a FINISHED render on the stage to keep working from it.
+ *
+ * Unlike addVideoToAd this clears the layer stack: the render already carries
+ * the words and logo in its pixels, so the layers that produced it would draw
+ * over themselves and the next export would carry doubled type. One undo step
+ * restores them (useCompositorStore.restage).
+ */
+export function stageRenderedVideoOnAd(
+  src: string,
+  durationSec?: number,
+): AddResult {
+  const s = useCompositorStore.getState();
+  const background = {
+    kind: "video" as const,
+    src,
+    ...(durationSec ? { durationSec } : {}),
+  };
+  if (!s.doc) {
+    s.load({ id: uuidv4(), aspect: s.pendingAspect, background, layers: [] });
+  } else {
+    s.restage(background);
+  }
+  return "background";
+}
+
 export function addVideoToAd(src: string, durationSec?: number): AddResult {
   const s = useCompositorStore.getState();
   const background = {

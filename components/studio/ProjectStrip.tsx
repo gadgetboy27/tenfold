@@ -16,6 +16,7 @@ import {
   Maximize2,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { useCompositorStore } from "@/store/useCompositorStore";
 import { api } from "@/lib/api";
 import { thumbUrl } from "@/lib/images/thumb";
 
@@ -94,7 +95,7 @@ export function ProjectStrip({
   onChanged,
   onStageVideo,
   onStageImage,
-  onPreviewVideo,
+  onStageRenderedVideo,
 }: {
   progress: ProjectProgress | null;
   /** Studio's live name field — fresher than the server's copy mid-rename. */
@@ -118,9 +119,9 @@ export function ProjectStrip({
    * brand, lay type over it) instead of a 96px thumbnail in the rail.
    */
   onStageVideo?: (video: { id: string; url: string }) => void;
-  /** A finished export can't be staged (its layers are burnt in); play it
-   *  in the stage area instead. */
-  onPreviewVideo?: (video: { url: string; label: string }) => void;
+  /** A finished export: staged as the background with the layers cleared
+   *  (they're already in its pixels). `hadLayers` lets the toast say so. */
+  onStageRenderedVideo?: (video: { url: string; hadLayers: boolean }) => void;
   /** Put a still on the stage as the backdrop — the image tile's main action. */
   onStageImage?: (image: { id: string; url: string }) => void;
 }) {
@@ -446,9 +447,11 @@ export function ProjectStrip({
                         type="button"
                         onClick={() => {
                           if (v.branded) {
-                            onPreviewVideo?.({
+                            onStageRenderedVideo?.({
                               url: v.url,
-                              label: "Branded export",
+                              hadLayers:
+                                (useCompositorStore.getState().doc?.layers
+                                  .length ?? 0) > 0,
                             });
                             return;
                           }
@@ -456,7 +459,7 @@ export function ProjectStrip({
                         }}
                         title={
                           v.branded
-                            ? "A finished export — play it here on the stage"
+                            ? "Put this finished render on the stage to work from it (its layers are already in the pixels)"
                             : "Put this clip on the stage to keep working on it"
                         }
                         className="block h-full w-full"
