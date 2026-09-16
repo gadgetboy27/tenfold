@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
+import { withWorkspace } from "@/lib/api/with-workspace";
 import { v4 as uuidv4 } from "uuid";
 import JSZip from "jszip";
-import { getSession } from "@/lib/auth/session";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isEnabled } from "@/lib/flags";
 import { CREDIT_COSTS } from "@/lib/credits/costs";
 import { debitCredits } from "@/lib/credits/debit";
@@ -16,23 +15,17 @@ import { logoBriefSchema } from "@/lib/logo/brief";
 // rasterize the finalized SVG into every deliverable, zip it, store it, and
 // write the extracted palette into the workspace brand kit. Synchronous (Sharp,
 // no fal) — the work is CPU-bound and finishes inside the request.
-export async function POST(
-  req: Request,
-  ctx: { params: Promise<{ id: string }> },
-) {
-  if (!isEnabled("logoBuilder")) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-  try {
-    const session = await getSession(req);
-    const { id } = await ctx.params;
-    const admin = createSupabaseAdminClient();
+export const POST = withWorkspace<{ id: string }>(
+  async (_req, { db, admin, session, params }) => {
+    if (!isEnabled("logoBuilder")) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    const { id } = params;
 
-    const { data: project } = await admin
+    const { data: project } = await db
       .from("logo_projects")
       .select("id, final_asset_id, brief")
       .eq("id", id)
-      .eq("workspace_id", session.workspaceId)
       .maybeSingle();
     const finalId = (project as { final_asset_id: string | null } | null)
       ?.final_asset_id;
@@ -43,11 +36,10 @@ export async function POST(
       );
     }
 
-    const { data: asset } = await admin
+    const { data: asset } = await db
       .from("assets")
       .select("url")
       .eq("id", finalId)
-      .eq("workspace_id", session.workspaceId)
       .maybeSingle();
     const svgUrl = (asset as { url: string } | null)?.url;
     if (!svgUrl) {
@@ -105,7 +97,7 @@ export async function POST(
         .from("assets")
         .getPublicUrl(storagePath);
 
-      await admin.from("assets").insert({
+      await db.from("assets").insert({
         id: bundleId,
         campaign_id: campaignId,
         workspace_id: session.workspaceId,
@@ -122,7 +114,7 @@ export async function POST(
 
       // Write the logo's palette + recommended heading font into the brand kit.
       if (palette.length > 0 || fonts) {
-        await admin.from("brand_kits").upsert(
+        await db.from("brand_kits").upsert(
           {
             workspace_id: session.workspaceId,
             ...(palette[0] ? { primary_color: palette[0] } : {}),
@@ -143,7 +135,7 @@ export async function POST(
         // Brand adoption failed; the package download is unaffected.
       }
 
-      await admin
+      await db
         .from("logo_projects")
         .update({ status: "packaged", updated_at: new Date().toISOString() })
         .eq("id", id);
@@ -162,11 +154,5 @@ export async function POST(
       await refundCredits(jobId);
       throw err;
     }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json(
-      { error: msg },
-      { status: msg === "Unauthorized" ? 401 : 500 },
-    );
-  }
-}
+  },
+);

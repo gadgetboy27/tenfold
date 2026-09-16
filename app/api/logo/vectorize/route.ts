@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
+import { withWorkspace } from "@/lib/api/with-workspace";
 import { v4 as uuidv4 } from "uuid";
-import { getSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isEnabled } from "@/lib/flags";
 import { CREDIT_COSTS } from "@/lib/credits/costs";
@@ -31,186 +31,176 @@ const ERROR_MESSAGES = {
   size: "Image must be under 5 MB",
 } as const;
 
-export async function POST(req: Request) {
+export const POST = withWorkspace(async (req, { db, admin, session }) => {
   if (!isEnabled("logoBuilder")) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  try {
-    const session = await getSession(req);
-    const admin = createSupabaseAdminClient();
 
-    // Two ways in, one pipeline: a multipart file upload, or JSON naming an
-    // asset the workspace already owns (the gallery picker). The asset path
-    // resolves the URL server-side under this workspace — never trusting a
-    // client-supplied URL — and needs no second copy in storage.
-    const isJson = (req.headers.get("content-type") ?? "").includes(
-      "application/json",
-    );
-    let sourceUrl: string;
-    let sourceName: string;
+  // Two ways in, one pipeline: a multipart file upload, or JSON naming an
+  // asset the workspace already owns (the gallery picker). The asset path
+  // resolves the URL server-side under this workspace — never trusting a
+  // client-supplied URL — and needs no second copy in storage.
+  const isJson = (req.headers.get("content-type") ?? "").includes(
+    "application/json",
+  );
+  let sourceUrl: string;
+  let sourceName: string;
 
-    if (isJson) {
-      const body = (await req.json()) as { assetId?: unknown };
-      if (typeof body.assetId !== "string" || !body.assetId) {
-        return NextResponse.json(
-          { error: ERROR_MESSAGES.empty },
-          { status: 400 },
-        );
-      }
-      const owned = await resolveOwnedAsset(
-        admin,
-        session.workspaceId,
-        body.assetId,
-      );
-      if (!owned) {
-        return NextResponse.json({ error: "Not found" }, { status: 404 });
-      }
-      sourceUrl = owned.url;
-      sourceName = "Gallery logo";
-      // A gallery asset can be a small uploaded mark too (brand-kit logos).
-      // Only a copy that had to be enlarged is re-stored; otherwise the
-      // asset's own URL is the source and nothing is duplicated.
-      const res = await fetch(owned.url);
-      if (res.ok) {
-        const fitted = await fitForVectorize(
-          await res.arrayBuffer(),
-          res.headers.get("content-type") ?? "image/png",
-        );
-        if (fitted.resized) {
-          sourceUrl = await storeSource(
-            admin,
-            session.workspaceId,
-            fitted.buffer,
-            fitted.contentType,
-          );
-        }
-      }
-    } else {
-      const form = await req.formData();
-      const file = form.get("file") as File | null;
-      if (!file) {
-        return NextResponse.json(
-          { error: ERROR_MESSAGES.empty },
-          { status: 400 },
-        );
-      }
-      const invalid = validateVectorizeUpload(file);
-      if (invalid) {
-        return NextResponse.json(
-          { error: ERROR_MESSAGES[invalid] },
-          { status: 400 },
-        );
-      }
-      // Store the source raster (enlarged if it's under Recraft's minimum)
-      // so vectorize can pull it from a public URL.
-      const bytes = await file.arrayBuffer();
-      const ext = extensionOf(file.name);
-      // Bytes must be the raster the name claims; the type is ours, not
-      // file.type's (lib/uploads/content.ts).
-      try {
-        await assertRasterMatches(bytes, ext);
-      } catch (e) {
-        return NextResponse.json(
-          { error: e instanceof Error ? e.message : "Unreadable image" },
-          { status: 400 },
-        );
-      }
-      const fitted = await fitForVectorize(bytes, IMAGE_TYPES[ext]);
-      sourceUrl = await storeSource(
-        admin,
-        session.workspaceId,
-        fitted.buffer,
-        fitted.contentType,
-      );
-      sourceName = file.name.replace(/\.[^.]+$/, "");
-    }
-
-    const projectId = uuidv4();
-    const jobId = uuidv4();
-    const cost = CREDIT_COSTS.logo_vectorize;
-
-    const debit = await debitCredits(
-      session.workspaceId,
-      jobId,
-      "logo_vectorize",
-    );
-    if (!debit.success) {
+  if (isJson) {
+    const body = (await req.json()) as { assetId?: unknown };
+    if (typeof body.assetId !== "string" || !body.assetId) {
       return NextResponse.json(
-        { error: "Insufficient credits" },
-        { status: 402 },
+        { error: ERROR_MESSAGES.empty },
+        { status: 400 },
       );
     }
-
-    const { error: projErr } = await admin.from("logo_projects").insert({
-      id: projectId,
-      workspace_id: session.workspaceId,
-      created_by: session.userId,
-      brief: { businessName: sourceName, source: "vectorize" },
-      status: "generating",
-    });
-    if (projErr) {
-      await refundCredits(jobId);
-      throw new Error(projErr.message);
-    }
-
-    const campaignId = await ensureLogoCampaign(
+    const owned = await resolveOwnedAsset(
       admin,
       session.workspaceId,
-      session.userId,
+      body.assetId,
     );
-
-    const { error: jobErr } = await admin.from("creative_jobs").insert({
-      id: jobId,
-      campaign_id: campaignId,
-      workspace_id: session.workspaceId,
-      type: "logo_vectorize",
-      status: "queued",
-      input_params: { logoProjectId: projectId, source_url: sourceUrl },
-      credits_charged: cost,
-    });
-    if (jobErr) {
-      await refundCredits(jobId);
-      throw new Error(jobErr.message);
+    if (!owned) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-
-    const webhookUrl = `${process.env.APP_URL}/api/webhooks/fal?j=${jobId}`;
-    try {
-      const { requestId } = await enqueueJob(
-        "logo_vectorize",
-        { image_url: sourceUrl },
-        webhookUrl,
+    sourceUrl = owned.url;
+    sourceName = "Gallery logo";
+    // A gallery asset can be a small uploaded mark too (brand-kit logos).
+    // Only a copy that had to be enlarged is re-stored; otherwise the
+    // asset's own URL is the source and nothing is duplicated.
+    const res = await fetch(owned.url);
+    if (res.ok) {
+      const fitted = await fitForVectorize(
+        await res.arrayBuffer(),
+        res.headers.get("content-type") ?? "image/png",
       );
-      await admin
-        .from("creative_jobs")
-        .update({ fal_request_id: requestId, status: "processing" })
-        .eq("id", jobId);
-    } catch {
-      await admin
-        .from("creative_jobs")
-        .update({
-          status: "failed",
-          error_message: "Vectorize submission failed",
-        })
-        .eq("id", jobId);
-      await refundCredits(jobId);
+      if (fitted.resized) {
+        sourceUrl = await storeSource(
+          admin,
+          session.workspaceId,
+          fitted.buffer,
+          fitted.contentType,
+        );
+      }
+    }
+  } else {
+    const form = await req.formData();
+    const file = form.get("file") as File | null;
+    if (!file) {
       return NextResponse.json(
-        { error: "Could not start vectorize" },
-        { status: 500 },
+        { error: ERROR_MESSAGES.empty },
+        { status: 400 },
       );
     }
-
-    return NextResponse.json(
-      { projectId, jobId, creditCost: cost },
-      { status: 201 },
+    const invalid = validateVectorizeUpload(file);
+    if (invalid) {
+      return NextResponse.json(
+        { error: ERROR_MESSAGES[invalid] },
+        { status: 400 },
+      );
+    }
+    // Store the source raster (enlarged if it's under Recraft's minimum)
+    // so vectorize can pull it from a public URL.
+    const bytes = await file.arrayBuffer();
+    const ext = extensionOf(file.name);
+    // Bytes must be the raster the name claims; the type is ours, not
+    // file.type's (lib/uploads/content.ts).
+    try {
+      await assertRasterMatches(bytes, ext);
+    } catch (e) {
+      return NextResponse.json(
+        { error: e instanceof Error ? e.message : "Unreadable image" },
+        { status: 400 },
+      );
+    }
+    const fitted = await fitForVectorize(bytes, IMAGE_TYPES[ext]);
+    sourceUrl = await storeSource(
+      admin,
+      session.workspaceId,
+      fitted.buffer,
+      fitted.contentType,
     );
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
+    sourceName = file.name.replace(/\.[^.]+$/, "");
+  }
+
+  const projectId = uuidv4();
+  const jobId = uuidv4();
+  const cost = CREDIT_COSTS.logo_vectorize;
+
+  const debit = await debitCredits(
+    session.workspaceId,
+    jobId,
+    "logo_vectorize",
+  );
+  if (!debit.success) {
     return NextResponse.json(
-      { error: msg },
-      { status: msg === "Unauthorized" ? 401 : 500 },
+      { error: "Insufficient credits" },
+      { status: 402 },
     );
   }
-}
+
+  const { error: projErr } = await db.from("logo_projects").insert({
+    id: projectId,
+    workspace_id: session.workspaceId,
+    created_by: session.userId,
+    brief: { businessName: sourceName, source: "vectorize" },
+    status: "generating",
+  });
+  if (projErr) {
+    await refundCredits(jobId);
+    throw new Error(projErr.message);
+  }
+
+  const campaignId = await ensureLogoCampaign(
+    admin,
+    session.workspaceId,
+    session.userId,
+  );
+
+  const { error: jobErr } = await db.from("creative_jobs").insert({
+    id: jobId,
+    campaign_id: campaignId,
+    workspace_id: session.workspaceId,
+    type: "logo_vectorize",
+    status: "queued",
+    input_params: { logoProjectId: projectId, source_url: sourceUrl },
+    credits_charged: cost,
+  });
+  if (jobErr) {
+    await refundCredits(jobId);
+    throw new Error(jobErr.message);
+  }
+
+  const webhookUrl = `${process.env.APP_URL}/api/webhooks/fal?j=${jobId}`;
+  try {
+    const { requestId } = await enqueueJob(
+      "logo_vectorize",
+      { image_url: sourceUrl },
+      webhookUrl,
+    );
+    await db
+      .from("creative_jobs")
+      .update({ fal_request_id: requestId, status: "processing" })
+      .eq("id", jobId);
+  } catch {
+    await db
+      .from("creative_jobs")
+      .update({
+        status: "failed",
+        error_message: "Vectorize submission failed",
+      })
+      .eq("id", jobId);
+    await refundCredits(jobId);
+    return NextResponse.json(
+      { error: "Could not start vectorize" },
+      { status: 500 },
+    );
+  }
+
+  return NextResponse.json(
+    { projectId, jobId, creditCost: cost },
+    { status: 201 },
+  );
+});
 
 const EXT_FOR: Record<string, string> = {
   "image/png": "png",

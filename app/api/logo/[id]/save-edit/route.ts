@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
+import { withWorkspace } from "@/lib/api/with-workspace";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
-import { getSession } from "@/lib/auth/session";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isEnabled } from "@/lib/flags";
 import { ensureLogoCampaign } from "@/app/api/logo/route";
 
@@ -25,16 +24,12 @@ function sanitizeSvg(svg: string): string {
     .replace(/\son\w+='[^']*'/gi, "");
 }
 
-export async function POST(
-  req: Request,
-  ctx: { params: Promise<{ id: string }> },
-) {
-  if (!isEnabled("logoBuilder")) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-  try {
-    const session = await getSession(req);
-    const { id } = await ctx.params;
+export const POST = withWorkspace<{ id: string }>(
+  async (req, { db, admin, session, params }) => {
+    if (!isEnabled("logoBuilder")) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    const { id } = params;
     const parsed = bodySchema.safeParse(await req.json().catch(() => ({})));
     if (!parsed.success) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
@@ -43,13 +38,11 @@ export async function POST(
     if (!svg.includes("<svg")) {
       return NextResponse.json({ error: "Not an SVG" }, { status: 400 });
     }
-    const admin = createSupabaseAdminClient();
 
-    const { data: project } = await admin
+    const { data: project } = await db
       .from("logo_projects")
       .select("id")
       .eq("id", id)
-      .eq("workspace_id", session.workspaceId)
       .maybeSingle();
     if (!project) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -75,7 +68,7 @@ export async function POST(
       .from("assets")
       .getPublicUrl(storagePath);
 
-    const { error: insErr } = await admin.from("assets").insert({
+    const { error: insErr } = await db.from("assets").insert({
       id: assetId,
       campaign_id: campaignId,
       workspace_id: session.workspaceId,
@@ -97,11 +90,5 @@ export async function POST(
       { asset: { id: assetId, url: urlData.publicUrl } },
       { status: 201 },
     );
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json(
-      { error: msg },
-      { status: msg === "Unauthorized" ? 401 : 500 },
-    );
-  }
-}
+  },
+);

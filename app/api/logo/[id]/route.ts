@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { withWorkspace } from "@/lib/api/with-workspace";
 import { isEnabled } from "@/lib/flags";
 import { reclaimLogoJobs } from "@/lib/logo/reclaim";
 
@@ -12,23 +11,17 @@ import { reclaimLogoJobs } from "@/lib/logo/reclaim";
 // its result saved here, because waiting on fal's webhook alone has meant
 // 30–60s (once 75 minutes) between a rendered concept and the user seeing
 // it. See lib/logo/reclaim.ts for the measurements.
-export async function GET(
-  req: Request,
-  ctx: { params: Promise<{ id: string }> },
-) {
-  if (!isEnabled("logoBuilder")) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-  try {
-    const session = await getSession(req);
-    const { id } = await ctx.params;
-    const admin = createSupabaseAdminClient();
+export const GET = withWorkspace<{ id: string }>(
+  async (_req, { db, admin, params }) => {
+    if (!isEnabled("logoBuilder")) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    const { id } = params;
 
-    const { data: project } = await admin
+    const { data: project } = await db
       .from("logo_projects")
       .select("id, brief, anchor_asset_id, final_asset_id, status, created_at")
       .eq("id", id)
-      .eq("workspace_id", session.workspaceId)
       .maybeSingle();
     if (!project) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -37,12 +30,11 @@ export async function GET(
     // Jobs first: a late-webhook reclaim below can add assets, and the asset
     // query must run after it or this response would be one poll behind.
     const jobSelect = () =>
-      admin
+      db
         .from("creative_jobs")
         .select(
           "id, campaign_id, workspace_id, type, status, error_message, credits_charged, created_at, input_params, fal_request_id, fal_raw_error",
         )
-        .eq("workspace_id", session.workspaceId)
         .eq("input_params->>logoProjectId", id)
         .order("created_at", { ascending: true });
     let { data: jobs } = await jobSelect();
@@ -51,10 +43,9 @@ export async function GET(
     }
 
     // Logo assets carry metadata.logo_project_id — filter to this project.
-    const { data: assets } = await admin
+    const { data: assets } = await db
       .from("assets")
       .select("id, url, storage_path, metadata, created_at")
-      .eq("workspace_id", session.workspaceId)
       .eq("type", "image")
       .eq("metadata->>logo_project_id", id)
       .order("created_at", { ascending: true });
@@ -119,47 +110,35 @@ export async function GET(
       // Contextual mockup scenes (Phase 3b).
       mockups: rows.filter((a) => a.metadata?.logo_stage === "logo_mockups"),
     });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json(
-      { error: msg },
-      { status: msg === "Unauthorized" ? 401 : 500 },
-    );
-  }
-}
+  },
+  { rateLimit: false },
+);
 
 // DELETE /api/logo/:id — permanently remove a logo project and its assets
 // (storage files + rows), tenant-scoped. Lets users clear out old/failed
 // projects and start fresh. The FK from logo_projects to its assets is
 // ON DELETE SET NULL, so delete order is safe.
-export async function DELETE(
-  req: Request,
-  ctx: { params: Promise<{ id: string }> },
-) {
-  if (!isEnabled("logoBuilder")) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-  try {
-    const session = await getSession(req);
-    const { id } = await ctx.params;
-    const admin = createSupabaseAdminClient();
+export const DELETE = withWorkspace<{ id: string }>(
+  async (_req, { db, admin, params }) => {
+    if (!isEnabled("logoBuilder")) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    const { id } = params;
 
     // Ownership check first — never delete another workspace's project.
-    const { data: project } = await admin
+    const { data: project } = await db
       .from("logo_projects")
       .select("id")
       .eq("id", id)
-      .eq("workspace_id", session.workspaceId)
       .maybeSingle();
     if (!project) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
     // Remove the project's asset files from storage, then the rows.
-    const { data: assets } = await admin
+    const { data: assets } = await db
       .from("assets")
       .select("storage_path")
-      .eq("workspace_id", session.workspaceId)
       .eq("metadata->>logo_project_id", id);
     const paths = (assets ?? [])
       .map((a) => (a as { storage_path: string | null }).storage_path)
@@ -170,24 +149,10 @@ export async function DELETE(
         .remove(paths)
         .catch(() => {});
     }
-    await admin
-      .from("assets")
-      .delete()
-      .eq("workspace_id", session.workspaceId)
-      .eq("metadata->>logo_project_id", id);
+    await db.from("assets").delete().eq("metadata->>logo_project_id", id);
 
-    await admin
-      .from("logo_projects")
-      .delete()
-      .eq("id", id)
-      .eq("workspace_id", session.workspaceId);
+    await db.from("logo_projects").delete().eq("id", id);
 
     return NextResponse.json({ ok: true });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json(
-      { error: msg },
-      { status: msg === "Unauthorized" ? 401 : 500 },
-    );
-  }
-}
+  },
+);

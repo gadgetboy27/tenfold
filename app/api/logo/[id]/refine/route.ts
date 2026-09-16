@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
+import { withWorkspace } from "@/lib/api/with-workspace";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
-import { getSession } from "@/lib/auth/session";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isEnabled } from "@/lib/flags";
 import { CREDIT_COSTS } from "@/lib/credits/costs";
 import { debitCredits } from "@/lib/credits/debit";
@@ -23,27 +22,21 @@ const bodySchema = z.object({
   instruction: z.string().trim().max(300).optional().default(""),
 });
 
-export async function POST(
-  req: Request,
-  ctx: { params: Promise<{ id: string }> },
-) {
-  if (!isEnabled("logoBuilder")) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-  try {
-    const session = await getSession(req);
-    const { id } = await ctx.params;
+export const POST = withWorkspace<{ id: string }>(
+  async (req, { db, admin, session, params }) => {
+    if (!isEnabled("logoBuilder")) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    const { id } = params;
     const parsed = bodySchema.safeParse(await req.json().catch(() => ({})));
     if (!parsed.success) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     }
-    const admin = createSupabaseAdminClient();
 
-    const { data: project } = await admin
+    const { data: project } = await db
       .from("logo_projects")
       .select("id, brief, anchor_asset_id")
       .eq("id", id)
-      .eq("workspace_id", session.workspaceId)
       .maybeSingle();
     const anchorId = (project as { anchor_asset_id: string | null } | null)
       ?.anchor_asset_id;
@@ -82,7 +75,7 @@ export async function POST(
       session.userId,
     );
 
-    const { error: jobErr } = await admin.from("creative_jobs").insert({
+    const { error: jobErr } = await db.from("creative_jobs").insert({
       id: jobId,
       campaign_id: campaignId,
       workspace_id: session.workspaceId,
@@ -111,12 +104,12 @@ export async function POST(
         },
         webhookUrl,
       );
-      await admin
+      await db
         .from("creative_jobs")
         .update({ fal_request_id: requestId, status: "processing" })
         .eq("id", jobId);
     } catch {
-      await admin
+      await db
         .from("creative_jobs")
         .update({ status: "failed", error_message: "Refine submission failed" })
         .eq("id", jobId);
@@ -128,11 +121,5 @@ export async function POST(
     }
 
     return NextResponse.json({ jobId, creditCost: cost }, { status: 201 });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json(
-      { error: msg },
-      { status: msg === "Unauthorized" ? 401 : 500 },
-    );
-  }
-}
+  },
+);
