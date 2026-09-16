@@ -63,7 +63,14 @@ export interface ProjectProgress {
       branded: boolean;
       createdAt: string;
     }[];
-    videos: { id: string; url: string; branded: boolean; createdAt: string }[];
+    videos: {
+      id: string;
+      url: string;
+      branded: boolean;
+      /** The render carries its recipe — it can reopen as the editable ad. */
+      reopenable?: boolean;
+      createdAt: string;
+    }[];
     audio: { id: string; url: string; createdAt: string }[];
     caption: string;
     anchorId: string | null;
@@ -96,6 +103,7 @@ export function ProjectStrip({
   onStageVideo,
   onStageImage,
   onStageRenderedVideo,
+  onReopenRender,
 }: {
   progress: ProjectProgress | null;
   /** Studio's live name field — fresher than the server's copy mid-rename. */
@@ -119,9 +127,13 @@ export function ProjectStrip({
    * brand, lay type over it) instead of a 96px thumbnail in the rail.
    */
   onStageVideo?: (video: { id: string; url: string }) => void;
-  /** A finished export: staged as the background with the layers cleared
-   *  (they're already in its pixels). `hadLayers` lets the toast say so. */
+  /** A finished export WITHOUT its recipe: staged as the background with the
+   *  layers cleared (they're already in its pixels). `hadLayers` lets the
+   *  toast say so. */
   onStageRenderedVideo?: (video: { url: string; hadLayers: boolean }) => void;
+  /** A finished export WITH its recipe: reopen the ad that made it — raw
+   *  clip as background, layers back and editable. */
+  onReopenRender?: (video: { id: string }) => void;
   /** Put a still on the stage as the backdrop — the image tile's main action. */
   onStageImage?: (image: { id: string; url: string }) => void;
 }) {
@@ -446,6 +458,10 @@ export function ProjectStrip({
                       <button
                         type="button"
                         onClick={() => {
+                          if (v.branded && v.reopenable) {
+                            onReopenRender?.({ id: v.id });
+                            return;
+                          }
                           if (v.branded) {
                             onStageRenderedVideo?.({
                               url: v.url,
@@ -458,9 +474,11 @@ export function ProjectStrip({
                           onStageVideo?.({ id: v.id, url: v.url });
                         }}
                         title={
-                          v.branded
-                            ? "Put this finished render on the stage to work from it (its layers are already in the pixels)"
-                            : "Put this clip on the stage to keep working on it"
+                          v.branded && v.reopenable
+                            ? "Reopen the ad that made this render — layers back and editable"
+                            : v.branded
+                              ? "Put this finished render on the stage to work from it (its layers are already in the pixels)"
+                              : "Put this clip on the stage to keep working on it"
                         }
                         className="block h-full w-full"
                       >

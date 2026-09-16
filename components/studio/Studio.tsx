@@ -38,6 +38,7 @@ import {
   Captions,
 } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
+import { useCompositorStore } from "@/store/useCompositorStore";
 import { AdStage } from "./AdStage";
 import { WordsCanvas } from "./WordsCanvas";
 import {
@@ -47,6 +48,7 @@ import {
   stageRenderedVideoOnAd,
 } from "./adBridge";
 import { DEFAULT_TREATMENT, WORD_ZONES } from "@/lib/composition/words";
+import { compositionDocSchema } from "@/lib/composition/layers";
 import {
   resumeSection,
   remainingSteps,
@@ -605,6 +607,38 @@ export function Studio({
    * keeps the type from doubling and leaves every tool in reach; ⌘Z brings
    * the layers back if that was the wrong call.
    */
+  /**
+   * Reopen the ad a render was made from.
+   *
+   * The export route keeps the recipe on the render (`assets.metadata.doc`),
+   * so "convert this back to an edit" is a fetch and a load: the raw clip is
+   * the background again and every layer is back where it was. This is the
+   * answer to "can a finished render un-bake itself" — the MP4 can't, but the
+   * doc that made it can. Renders from before the recipe was kept fall back
+   * to staging the pixels (stageRenderedVideo).
+   */
+  const reopenRender = useCallback(
+    async ({ id }: { id: string }) => {
+      try {
+        const res = await api(`/api/assets/${id}`, { workspaceSlug });
+        if (!res.ok) throw new Error("Couldn't load that render");
+        const asset = (await res.json()) as { metadata?: { doc?: unknown } };
+        const parsed = compositionDocSchema.safeParse(asset.metadata?.doc);
+        if (!parsed.success) throw new Error("This render has no editable ad");
+        const doc = parsed.data;
+        useCompositorStore.getState().load(doc);
+        if (doc.background.kind === "video") setVideoUrl(doc.background.src);
+        else setEnhancedUrl(doc.background.src);
+        toast.success(
+          `Reopened — ${doc.layers.length} layer${doc.layers.length === 1 ? "" : "s"} back and editable`,
+        );
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Couldn't reopen that");
+      }
+    },
+    [workspaceSlug],
+  );
+
   const stageRenderedVideo = useCallback(
     ({ url, hadLayers }: { url: string; hadLayers: boolean }) => {
       setVideoUrl(url);
@@ -1907,6 +1941,10 @@ export function Studio({
             }}
             onStageRenderedVideo={(v) => {
               stageRenderedVideo(v);
+              if (section === "logo") setSection("video");
+            }}
+            onReopenRender={(v) => {
+              void reopenRender(v);
               if (section === "logo") setSection("video");
             }}
           />

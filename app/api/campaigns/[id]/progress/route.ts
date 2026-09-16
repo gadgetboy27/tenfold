@@ -41,7 +41,7 @@ interface AssetRow {
   id: string;
   url: string;
   type: string;
-  metadata: { hd?: boolean; kind?: string } | null;
+  metadata: { hd?: boolean; kind?: string; doc?: unknown } | null;
   created_at: string;
 }
 
@@ -204,11 +204,14 @@ export const GET = withWorkspace<{ id: string }>(
           branded: type === "composed_image",
           createdAt: created_at,
         })),
-        videos: videos.map(({ id, url, type, created_at }) => ({
+        videos: videos.map(({ id, url, type, metadata, created_at }) => ({
           id,
           url,
           // A composed_video is the branded export; `video` is the raw clip.
           branded: type === "composed_video",
+          // A render exported since the recipe was kept with it can reopen as
+          // the editable ad; an older one can only be staged as pixels.
+          reopenable: type === "composed_video" && !!metadata?.doc,
           createdAt: created_at,
         })),
         audio: audio.map(({ id, url, created_at }) => ({

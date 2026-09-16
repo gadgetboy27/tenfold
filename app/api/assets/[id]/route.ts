@@ -23,6 +23,25 @@ import { withWorkspace } from "@/lib/api/with-workspace";
  * (migration 0032) — deleting the picked video un-picks it, it does not
  * cascade into the campaign.
  */
+/**
+ * GET /api/assets/:id — one asset with its metadata. Exists so a render's
+ * editable recipe (`metadata.doc`, written by the export route) is fetched
+ * on the click that needs it rather than shipped inside every progress poll.
+ */
+export const GET = withWorkspace<{ id: string }>(
+  async (_req, { db, params }) => {
+    const { data: asset } = await db
+      .from("assets")
+      .select("id, campaign_id, type, url, metadata, created_at")
+      .eq("id", params.id)
+      .maybeSingle();
+    if (!asset)
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json(asset);
+  },
+  { rateLimit: false },
+);
+
 export const DELETE = withWorkspace<{ id: string }>(
   async (_req, { db, admin, session, params }) => {
     const { data: asset } = await db

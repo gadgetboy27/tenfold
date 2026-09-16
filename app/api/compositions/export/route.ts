@@ -98,7 +98,17 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
       storage_path: storagePath,
       width_px: ASPECT_DESIGN[aspect].width,
       height_px: ASPECT_DESIGN[aspect].height,
-      metadata: { aspect, format: ASPECT_TO_FORMAT[aspect] },
+      metadata: {
+        aspect,
+        format: ASPECT_TO_FORMAT[aspect],
+        // The recipe, kept WITH the render. The campaign's compositions row
+        // holds only the latest doc and every export overwrites it, so
+        // without this an older render's layers were gone the moment a newer
+        // one existed. With it, clicking any render in the strip reopens the
+        // ad that made it — raw clip as background, layers back and editable
+        // (GET /api/assets/[id] → Studio.reopenRender).
+        doc,
+      },
     });
     // Surface failures instead of returning an id for a row that doesn't exist
     // (this insert used to fail the job_id NOT NULL constraint silently).
