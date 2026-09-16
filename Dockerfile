@@ -11,7 +11,10 @@ COPY package.json package-lock.json ./
 # different ideal tree from the same lock and refuses it with "Missing … from
 # lock file" (seen 2026-09-16 after the sharp 0.35 / vitest bump). Same major
 # npm in the container as on the machine that wrote the lock, or `npm ci`
-# is not reproducible.
+# is not reproducible. (@emnapi/core + @emnapi/runtime sit in devDependencies
+# for the same reason: sharp's wasm32 fallback needs them and a macOS npm
+# won't write a wasm32-only subtree into the lock, so npm ci on Linux saw
+# them as missing. Listing them explicitly makes the lock complete.)
 RUN npm install -g npm@11
 
 # Install dependencies
