@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
-import { getSession } from "@/lib/auth/session";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { withWorkspace } from "@/lib/api/with-workspace";
 import { debitCredits } from "@/lib/credits/debit";
 import { refundCredits } from "@/lib/credits/refund";
 import {
@@ -112,11 +111,12 @@ function extractPageContent(html: string, url: string): PageContent {
   return { title, description, headings, bodyText, ogImage };
 }
 
-export async function POST(req: Request) {
+// The catch below is a user-facing error policy (friendly Zod messages, a
+// timeout code, a known-safe allowlist, Sentry for the rest), so it stays
+// inside the wrapper rather than falling through to its generic 500.
+export const POST = withWorkspace(async (req, { db, session }) => {
   try {
-    const session = await getSession(req);
     const body = schema.parse(await req.json());
-    const admin = createSupabaseAdminClient();
 
     // Fetch the target URL with a browser-like UA and timeout
     const controller = new AbortController();
@@ -193,7 +193,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { data: campaign, error: campaignErr } = await admin
+    const { data: campaign, error: campaignErr } = await db
       .from("campaigns")
       .insert({
         workspace_id: session.workspaceId,
@@ -220,7 +220,7 @@ export async function POST(req: Request) {
     // job, and the webhook that refunds a failure never fires for a job that
     // was never enqueued. Silently swallowing this error is how the charge
     // vanishes. (A bad campaignId tripping the FK is the likeliest cause.)
-    const { error: jobErr } = await admin.from("creative_jobs").insert({
+    const { error: jobErr } = await db.from("creative_jobs").insert({
       id: jobId,
       campaign_id: campaignId,
       workspace_id: session.workspaceId,
@@ -278,10 +278,9 @@ export async function POST(req: Request) {
       // Don't silently overwrite a brand kit the user has already customized
       // — auto-apply only when every color/font field is still at the
       // untouched default.
-      const { data: existingKit } = await admin
+      const { data: existingKit } = await db
         .from("brand_kits")
         .select("primary_color, secondary_color, accent_color, font_family")
-        .eq("workspace_id", session.workspaceId)
         .maybeSingle();
       const isCustomized =
         !!existingKit &&
@@ -292,7 +291,7 @@ export async function POST(req: Request) {
 
       let brandKitApplied = false;
       if (!isCustomized) {
-        await admin.from("brand_kits").upsert(
+        await db.from("brand_kits").upsert(
           {
             workspace_id: session.workspaceId,
             primary_color: proposedBrandKit.primary_color.value,
@@ -311,7 +310,7 @@ export async function POST(req: Request) {
         brandKitApplied = true;
       }
 
-      await admin
+      await db
         .from("creative_jobs")
         .update({ status: "completed" })
         .eq("id", jobId);
@@ -324,7 +323,7 @@ export async function POST(req: Request) {
       });
     } catch (e) {
       const msg = errorMessage(e, "Brand analysis failed");
-      await admin
+      await db
         .from("creative_jobs")
         .update({ status: "failed", error_message: msg })
         .eq("id", jobId);
@@ -341,8 +340,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: msg }, { status: 400 });
     }
     const msg = errorMessage(err, "Unknown error");
-    if (msg === "Unauthorized")
-      return NextResponse.json({ error: msg }, { status: 401 });
     if (msg.includes("aborted") || msg.includes("timeout")) {
       return NextResponse.json(
         { error: "The website took too long to respond." },
@@ -377,4 +374,4 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
-}
+});

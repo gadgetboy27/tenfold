@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
+import { withWorkspace } from "@/lib/api/with-workspace";
 import { z } from "zod";
-import { getSession } from "@/lib/auth/session";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { generateAdScript } from "@/lib/claude/ad-script";
 import { getLanguage } from "@/lib/fal/talking-video";
 import { getWorkspaceBrandVoice } from "@/lib/claude/brand-voice";
-import { errorMessage } from "@/lib/api/error-message";
 
 const draftSchema = z.object({
   tone: z.enum(["professional", "casual", "playful"]).default("professional"),
@@ -23,40 +22,33 @@ const draftSchema = z.object({
 // review and EDIT before committing credits. This is how the user controls the
 // spoken words: draft here, edit freely, then submit it back as `scriptOverride`.
 // Drafting is free (inference is ~$0.002) so users can iterate on the wording.
-export async function POST(req: Request) {
-  try {
-    const session = await getSession(req);
-    const body = draftSchema.parse(await req.json());
+export const POST = withWorkspace(async (req, { session }) => {
+  const body = draftSchema.parse(await req.json());
 
-    const ent = await getEntitlements(session.workspaceId);
-    if (!ent.spokesperson) {
-      return NextResponse.json(
-        {
-          error: "Spokesperson video is on the Business plan and above.",
-          upgrade: true,
-        },
-        { status: 403 },
-      );
-    }
-
-    const brandVoice = await getWorkspaceBrandVoice(session.workspaceId).catch(
-      () => null,
+  const ent = await getEntitlements(session.workspaceId);
+  if (!ent.spokesperson) {
+    return NextResponse.json(
+      {
+        error: "Spokesperson video is on the Business plan and above.",
+        upgrade: true,
+      },
+      { status: 403 },
     );
-    const result = await generateAdScript({
-      productName: body.product.name,
-      productDescription: body.product.description,
-      features: body.product.features,
-      callToAction: body.product.callToAction,
-      tone: body.tone,
-      targetSeconds: body.targetSeconds,
-      language: getLanguage(body.language).label,
-      brandVoice: brandVoice ?? undefined,
-    });
-
-    return NextResponse.json({ script: result.text });
-  } catch (err) {
-    const msg = errorMessage(err, "Unknown error");
-    const status = msg === "Unauthorized" ? 401 : 500;
-    return NextResponse.json({ error: msg }, { status });
   }
-}
+
+  const brandVoice = await getWorkspaceBrandVoice(session.workspaceId).catch(
+    () => null,
+  );
+  const result = await generateAdScript({
+    productName: body.product.name,
+    productDescription: body.product.description,
+    features: body.product.features,
+    callToAction: body.product.callToAction,
+    tone: body.tone,
+    targetSeconds: body.targetSeconds,
+    language: getLanguage(body.language).label,
+    brandVoice: brandVoice ?? undefined,
+  });
+
+  return NextResponse.json({ script: result.text });
+});

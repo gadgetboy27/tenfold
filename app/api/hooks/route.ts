@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
+import { withWorkspace } from "@/lib/api/with-workspace";
 import { z } from "zod";
-import { getSession } from "@/lib/auth/session";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { debitCredits } from "@/lib/credits/debit";
 import { refundCredits } from "@/lib/credits/refund";
 import { CREDIT_COSTS } from "@/lib/credits/costs";
@@ -20,85 +19,73 @@ const schema = z.object({
 
 // POST /api/hooks — generate N distinct ad hooks for A/B testing. Synchronous
 // (Claude), like caption generation: debit, generate, refund on failure.
-export async function POST(req: Request) {
-  try {
-    const session = await getSession(req);
-    const body = schema.parse(await req.json());
-    const admin = createSupabaseAdminClient();
+export const POST = withWorkspace(async (req, { db, session }) => {
+  const body = schema.parse(await req.json());
 
-    const jobId = uuidv4();
-    const cost = CREDIT_COSTS.hook_variants;
-    const debit = await debitCredits(
-      session.workspaceId,
-      jobId,
-      "hook_variants",
+  const jobId = uuidv4();
+  const cost = CREDIT_COSTS.hook_variants;
+  const debit = await debitCredits(session.workspaceId, jobId, "hook_variants");
+  if (!debit.success) {
+    return NextResponse.json(
+      { error: "Insufficient credits" },
+      { status: 402 },
     );
-    if (!debit.success) {
-      return NextResponse.json(
-        { error: "Insufficient credits" },
-        { status: 402 },
-      );
-    }
-
-    // Checked, and refunded on failure. supabase-js returns { error } rather
-    // than throwing, so an unchecked insert fails SILENTLY: the debit stands,
-    // fal still gets called, and the webhook then has no job row to write the
-    // result to — the customer pays and receives nothing, with no error raised
-    // anywhere. Nothing downstream can refund it either, because refundCredits
-    // keys off the job that was never created.
-    const { error: jobErr } = await admin.from("creative_jobs").insert({
-      id: jobId,
-      campaign_id: body.campaignId,
-      workspace_id: session.workspaceId,
-      type: "hook_variants",
-      status: "queued",
-      input_params: {
-        topic: body.topic,
-        platform: body.platform,
-        tone: body.tone,
-        count: body.count,
-      },
-      credits_charged: cost,
-    });
-    if (jobErr) {
-      await refundCredits(jobId);
-      return NextResponse.json(
-        { error: "Could not start the job — you have not been charged." },
-        { status: 500 },
-      );
-    }
-
-    try {
-      const brandVoice = await getWorkspaceBrandVoice(
-        session.workspaceId,
-      ).catch(() => null);
-      const result = await generateHookVariants({
-        topic: body.topic,
-        platform: body.platform,
-        tone: body.tone,
-        count: body.count,
-        brandVoice: brandVoice ?? undefined,
-      });
-      await admin
-        .from("creative_jobs")
-        .update({ status: "completed", actual_cost_usd: result.actualCostUsd })
-        .eq("id", jobId);
-      return NextResponse.json(
-        { jobId, variants: result.variants, creditCost: cost },
-        { status: 201 },
-      );
-    } catch (e) {
-      const msg = errorMessage(e, "Hook generation failed");
-      await admin
-        .from("creative_jobs")
-        .update({ status: "failed", error_message: msg })
-        .eq("id", jobId);
-      await refundCredits(jobId);
-      return NextResponse.json({ error: msg }, { status: 500 });
-    }
-  } catch (err) {
-    const msg = errorMessage(err, "Unknown error");
-    const status = msg === "Unauthorized" ? 401 : 500;
-    return NextResponse.json({ error: msg }, { status });
   }
-}
+
+  // Checked, and refunded on failure. supabase-js returns { error } rather
+  // than throwing, so an unchecked insert fails SILENTLY: the debit stands,
+  // fal still gets called, and the webhook then has no job row to write the
+  // result to — the customer pays and receives nothing, with no error raised
+  // anywhere. Nothing downstream can refund it either, because refundCredits
+  // keys off the job that was never created.
+  const { error: jobErr } = await db.from("creative_jobs").insert({
+    id: jobId,
+    campaign_id: body.campaignId,
+    workspace_id: session.workspaceId,
+    type: "hook_variants",
+    status: "queued",
+    input_params: {
+      topic: body.topic,
+      platform: body.platform,
+      tone: body.tone,
+      count: body.count,
+    },
+    credits_charged: cost,
+  });
+  if (jobErr) {
+    await refundCredits(jobId);
+    return NextResponse.json(
+      { error: "Could not start the job — you have not been charged." },
+      { status: 500 },
+    );
+  }
+
+  try {
+    const brandVoice = await getWorkspaceBrandVoice(session.workspaceId).catch(
+      () => null,
+    );
+    const result = await generateHookVariants({
+      topic: body.topic,
+      platform: body.platform,
+      tone: body.tone,
+      count: body.count,
+      brandVoice: brandVoice ?? undefined,
+    });
+    await db
+      .from("creative_jobs")
+      .update({ status: "completed", actual_cost_usd: result.actualCostUsd })
+      .eq("id", jobId);
+    return NextResponse.json(
+      { jobId, variants: result.variants, creditCost: cost },
+      { status: 201 },
+    );
+  } catch (e) {
+    const msg = errorMessage(e, "Hook generation failed");
+    await db
+      .from("creative_jobs")
+      .update({ status: "failed", error_message: msg })
+      .eq("id", jobId);
+    await refundCredits(jobId);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+});
