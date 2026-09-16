@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { withWorkspace } from "@/lib/api/with-workspace";
 import { decryptProfileTokens } from "@/lib/social/token-crypto";
 import { publishSchema } from "@/lib/validation/schemas";
 import {
@@ -144,199 +143,115 @@ function actionableError(platform: string, raw: string): string {
   return raw;
 }
 
-export async function POST(req: Request) {
-  try {
-    const session = await getSession(req);
-    const body = publishSchema.parse(await req.json());
-    const admin = createSupabaseAdminClient();
+export const POST = withWorkspace(async (req, { db, session }) => {
+  const body = publishSchema.parse(await req.json());
 
-    // Resolve asset — prefer the composition's output, but fall back to the
-    // direct assetId (the anchor) when the compositionId is stale/missing, so a
-    // leftover compositionId never hard-blocks publishing.
-    let asset: Asset | null = null;
-    let resolvedCompositionId: string | null = null;
-    // Fan-out exports tag each composed_video with its aspect; index them so
-    // each platform can post the format that matches its placement.
-    const assetsByAspect = new Map<string, Asset>();
+  // Resolve asset — prefer the composition's output, but fall back to the
+  // direct assetId (the anchor) when the compositionId is stale/missing, so a
+  // leftover compositionId never hard-blocks publishing.
+  let asset: Asset | null = null;
+  let resolvedCompositionId: string | null = null;
+  // Fan-out exports tag each composed_video with its aspect; index them so
+  // each platform can post the format that matches its placement.
+  const assetsByAspect = new Map<string, Asset>();
 
-    // "Publish the video": post the campaign's actual clip. Prefer an already
-    // mixed video; otherwise mix the latest music onto the raw clip (so the post
-    // has SOUND) and store that in Supabase — permanent even after the source
-    // music URL expires. Falls back to the raw clip if there's no music or the
-    // mix fails (e.g. the source music URL is already dead).
-    if (body.preferVideo && body.campaignId) {
-      const pick = (type: string, cols = "id, url, type") =>
-        admin
-          .from("assets")
-          .select(cols)
-          .eq("campaign_id", body.campaignId)
-          .eq("workspace_id", session.workspaceId)
-          .eq("type", type)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-      // ── The one-video checkpoint (migration 0032) ────────────────────────
-      //
-      // Everything below this used to resolve the video by "newest first",
-      // which is a guess that changes under the user. Export a variant to
-      // compare it and you have silently swapped what publishes; a campaign
-      // that got iterated on holds a dozen exports and picks the last one for
-      // reasons nobody chose.
-      //
-      // `campaigns.publish_asset_id` is the user's actual answer. When it's
-      // set, that ONE FILE goes to every platform and the per-aspect fan-out
-      // below is skipped entirely — a deliberate trade: a picked 16:9 cut
-      // reaches Stories letterboxed rather than being quietly substituted for
-      // a sibling render the user never chose. When it's absent we only
-      // auto-resolve if there is nothing to be ambiguous ABOUT (a single
-      // video); with several and no pick, refuse rather than guess.
-      const { data: campRow } = await admin
-        .from("campaigns")
-        .select("publish_asset_id")
-        .eq("id", body.campaignId)
-        .eq("workspace_id", session.workspaceId)
-        .maybeSingle();
-      const pickedId =
-        (campRow as { publish_asset_id: string | null } | null)
-          ?.publish_asset_id ?? null;
-
-      const { data: clipRows } = await admin
+  // "Publish the video": post the campaign's actual clip. Prefer an already
+  // mixed video; otherwise mix the latest music onto the raw clip (so the post
+  // has SOUND) and store that in Supabase — permanent even after the source
+  // music URL expires. Falls back to the raw clip if there's no music or the
+  // mix fails (e.g. the source music URL is already dead).
+  if (body.preferVideo && body.campaignId) {
+    const pick = (type: string, cols = "id, url, type") =>
+      db
         .from("assets")
-        .select("id, url, type, metadata, created_at")
+        .select(cols)
         .eq("campaign_id", body.campaignId)
-        .eq("workspace_id", session.workspaceId)
-        .in("type", ["video", "composed_video"])
-        .order("created_at", { ascending: false });
+        .eq("type", type)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      const resolution = resolvePublishVideo(
-        ((clipRows ?? []) as unknown as ComposedRow[]).map((r) => ({
-          ...r,
-          createdAt: r.created_at,
-        })),
-        pickedId,
+    // ── The one-video checkpoint (migration 0032) ────────────────────────
+    //
+    // Everything below this used to resolve the video by "newest first",
+    // which is a guess that changes under the user. Export a variant to
+    // compare it and you have silently swapped what publishes; a campaign
+    // that got iterated on holds a dozen exports and picks the last one for
+    // reasons nobody chose.
+    //
+    // `campaigns.publish_asset_id` is the user's actual answer. When it's
+    // set, that ONE FILE goes to every platform and the per-aspect fan-out
+    // below is skipped entirely — a deliberate trade: a picked 16:9 cut
+    // reaches Stories letterboxed rather than being quietly substituted for
+    // a sibling render the user never chose. When it's absent we only
+    // auto-resolve if there is nothing to be ambiguous ABOUT (a single
+    // video); with several and no pick, refuse rather than guess.
+    const { data: campRow } = await db
+      .from("campaigns")
+      .select("publish_asset_id")
+      .eq("id", body.campaignId)
+      .maybeSingle();
+    const pickedId =
+      (campRow as { publish_asset_id: string | null } | null)
+        ?.publish_asset_id ?? null;
+
+    const { data: clipRows } = await db
+      .from("assets")
+      .select("id, url, type, metadata, created_at")
+      .eq("campaign_id", body.campaignId)
+      .in("type", ["video", "composed_video"])
+      .order("created_at", { ascending: false });
+
+    const resolution = resolvePublishVideo(
+      ((clipRows ?? []) as unknown as ComposedRow[]).map((r) => ({
+        ...r,
+        createdAt: r.created_at,
+      })),
+      pickedId,
+    );
+    if (resolution.status === "ambiguous") {
+      return NextResponse.json(
+        {
+          error: ambiguousVideoMessage(resolution.count),
+          code: "video_pick_required",
+          videoCount: resolution.count,
+        },
+        { status: 409 },
       );
-      if (resolution.status === "ambiguous") {
-        return NextResponse.json(
-          {
-            error: ambiguousVideoMessage(resolution.count),
-            code: "video_pick_required",
-            videoCount: resolution.count,
-          },
-          { status: 409 },
-        );
-      }
-      // Only an EXPLICIT pick takes the single-file path below. A lone video
-      // resolving on its own keeps the existing fan-out/remux route, so
-      // nothing changes for campaigns that never had an ambiguity.
-      const picked =
-        resolution.status === "ok" && resolution.chosen
-          ? resolution.video
-          : null;
+    }
+    // Only an EXPLICIT pick takes the single-file path below. A lone video
+    // resolving on its own keeps the existing fan-out/remux route, so
+    // nothing changes for campaigns that never had an ambiguity.
+    const picked =
+      resolution.status === "ok" && resolution.chosen ? resolution.video : null;
 
-      if (picked) {
-        let chosen: Asset = {
-          id: picked.id,
-          url: picked.url,
-          type: picked.type,
-        };
-        // The per-platform mute (the speaker icon in PublishCanvas; LinkedIn
-        // and Pinterest start muted) is a choice the user made deliberately,
-        // and the pick must not override it into posting sound. A picked RAW
-        // clip is already silent and needs nothing; a picked branded export
-        // has the bed burnt in, so those platforms keep taking the campaign's
-        // raw clip as they always have. Same footage either way — this splits
-        // on audio, not on which video publishes.
-        if (body.noMusic && picked.type !== "video") {
-          const { data: rawVideo } = await pick("video");
-          const rv = rawVideo as unknown as Asset | null;
-          if (rv) chosen = rv;
-        }
-        // A pick still gets the late-music re-mux: choosing the clip before
-        // writing the soundtrack must not post silence (the bug the remux
-        // below exists for). The mix produces a NEW row, so move the pick onto
-        // it — otherwise the next publish re-muxes the same stale cut forever.
-        if (!body.noMusic) {
-          const { data: lateMusic } = await admin
-            .from("assets")
-            .select("url, created_at")
-            .eq("campaign_id", body.campaignId)
-            .eq("workspace_id", session.workspaceId)
-            .eq("type", "audio")
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          const lm = lateMusic as unknown as {
-            url: string;
-            created_at: string;
-          } | null;
-          if (lm && needsMusicRemux(picked.created_at, lm.created_at)) {
-            try {
-              const mix = await composeVideo({
-                videoUrl: picked.url,
-                audioUrl: lm.url,
-                captionStyle: "none", // caption rides as the post text
-                workspaceId: session.workspaceId,
-                campaignId: body.campaignId,
-              });
-              const freshId = uuidv4();
-              await admin.from("assets").insert({
-                id: freshId,
-                campaign_id: body.campaignId,
-                workspace_id: session.workspaceId,
-                type: "composed_video",
-                url: mix.url,
-                storage_path: mix.storagePath,
-                metadata: picked.metadata ?? null,
-              });
-              await admin
-                .from("campaigns")
-                .update({ publish_asset_id: freshId })
-                .eq("id", body.campaignId)
-                .eq("workspace_id", session.workspaceId);
-              chosen = { id: freshId, url: mix.url, type: "composed_video" };
-            } catch {
-              // Dead music URL or a failed FFmpeg run must not block the post
-              // — the silent cut still goes out, same as the fan-out path.
-            }
-          }
-        }
-        asset = chosen;
-        // assetsByAspect stays EMPTY on purpose: one picked file, one publish.
-        // pickForPlatform falls back to `asset` for every platform.
-        //
-        // TikTok is the one exception, resolved below into `tiktokVertical`.
-      } else if (body.noMusic) {
+    if (picked) {
+      let chosen: Asset = {
+        id: picked.id,
+        url: picked.url,
+        type: picked.type,
+      };
+      // The per-platform mute (the speaker icon in PublishCanvas; LinkedIn
+      // and Pinterest start muted) is a choice the user made deliberately,
+      // and the pick must not override it into posting sound. A picked RAW
+      // clip is already silent and needs nothing; a picked branded export
+      // has the bed burnt in, so those platforms keep taking the campaign's
+      // raw clip as they always have. Same footage either way — this splits
+      // on audio, not on which video publishes.
+      if (body.noMusic && picked.type !== "video") {
         const { data: rawVideo } = await pick("video");
-        asset = rawVideo as unknown as Asset | null;
-      } else {
-        // All fan-out formats for this campaign, newest-first (first/newest
-        // wins per aspect). Untagged mixes just don't get indexed by aspect.
-        const { data: composed } = await admin
-          .from("assets")
-          .select("id, url, type, metadata, created_at")
-          .eq("campaign_id", body.campaignId)
-          .eq("workspace_id", session.workspaceId)
-          .eq("type", "composed_video")
-          .order("created_at", { ascending: false });
-
-        // An export is a permanent snapshot of the music that existed when
-        // FFmpeg ran. Generate the soundtrack AFTER using the Compositor —
-        // which the nav has always allowed, and which the step order now
-        // actively encourages — and the export is silent. It was reused
-        // unconditionally, so the post went out with no sound and nothing
-        // said so.
-        //
-        // Re-mux onto the EXPORT, never back onto the raw clip: the export
-        // carries the overlays and brand work that rebuilding would discard.
-        // Every aspect is checked, not just the one about to be posted — each
-        // is its own render, and pickForPlatform chooses between them per
-        // network, so one stale cut is one silent platform.
-        const { data: lateMusic } = await admin
+        const rv = rawVideo as unknown as Asset | null;
+        if (rv) chosen = rv;
+      }
+      // A pick still gets the late-music re-mux: choosing the clip before
+      // writing the soundtrack must not post silence (the bug the remux
+      // below exists for). The mix produces a NEW row, so move the pick onto
+      // it — otherwise the next publish re-muxes the same stale cut forever.
+      if (!body.noMusic) {
+        const { data: lateMusic } = await db
           .from("assets")
           .select("url, created_at")
           .eq("campaign_id", body.campaignId)
-          .eq("workspace_id", session.workspaceId)
           .eq("type", "audio")
           .order("created_at", { ascending: false })
           .limit(1)
@@ -345,405 +260,402 @@ export async function POST(req: Request) {
           url: string;
           created_at: string;
         } | null;
-
-        const rows = (composed ?? []) as unknown as ComposedRow[];
-        const fresh: ComposedRow[] = [];
-        for (const r of rows) {
-          if (lm && needsMusicRemux(r.created_at, lm.created_at)) {
-            try {
-              const mix = await composeVideo({
-                videoUrl: r.url,
-                audioUrl: lm.url,
-                captionStyle: "none", // caption rides as the post text
-                workspaceId: session.workspaceId,
-                campaignId: body.campaignId,
-              });
-              const freshId = uuidv4();
-              await admin.from("assets").insert({
-                id: freshId,
-                campaign_id: body.campaignId,
-                workspace_id: session.workspaceId,
-                type: "composed_video",
-                url: mix.url,
-                storage_path: mix.storagePath,
-                // Carry the aspect tag across or the fan-out stops matching
-                // formats to platforms.
-                metadata: r.metadata ?? null,
-              });
-              fresh.push({ ...r, id: freshId, url: mix.url });
-              continue;
-            } catch {
-              // A dead music URL or a failed FFmpeg run must not block
-              // publishing — the silent export still goes out. Worse than
-              // sound, better than nothing.
-            }
-          }
-          fresh.push(r);
-        }
-
-        for (const r of fresh) {
-          const asp = r.metadata?.aspect;
-          if (asp && !assetsByAspect.has(asp)) {
-            assetsByAspect.set(asp, { id: r.id, url: r.url, type: r.type });
-          }
-        }
-
-        const existing = fresh[0] ?? null;
-        if (existing) {
-          asset = { id: existing.id, url: existing.url, type: existing.type };
-        } else {
-          const { data: rawVideo } = await pick("video");
-          const { data: music } = await pick("audio", "url");
-          const rv = rawVideo as unknown as Asset | null;
-          const mus = music as unknown as { url: string } | null;
-          if (rv && mus) {
-            try {
-              const mix = await composeVideo({
-                videoUrl: rv.url,
-                audioUrl: mus.url,
-                captionStyle: "none", // caption rides as the post text
-                workspaceId: session.workspaceId,
-                campaignId: body.campaignId,
-              });
-              const newId = uuidv4();
-              await admin.from("assets").insert({
-                id: newId,
-                campaign_id: body.campaignId,
-                workspace_id: session.workspaceId,
-                type: "composed_video",
-                url: mix.url,
-                storage_path: mix.storagePath,
-              });
-              asset = { id: newId, url: mix.url, type: "composed_video" };
-            } catch {
-              asset = rv; // music expired / mix failed → publish the raw clip
-            }
-          } else {
-            asset = rv;
-          }
-        }
-      }
-    }
-
-    // Tracks the campaign a publish resolves to, for the approval gate below —
-    // populated alongside whichever asset-resolution branch fires.
-    let resolvedCampaignId: string | null = body.campaignId ?? null;
-
-    if (!asset && body.compositionId) {
-      const { data: composition } = await admin
-        .from("compositions")
-        .select("output_asset_id, anchor_asset_id, campaign_id")
-        .eq("id", body.compositionId)
-        .eq("workspace_id", session.workspaceId)
-        .single();
-      if (composition) {
-        resolvedCompositionId = body.compositionId;
-        // anchor_asset_id is nullable since migration 0015 (layered docs have no
-        // image anchor), so the asset id can be null → fall through to assetId.
-        const comp = composition as {
-          output_asset_id: string | null;
-          anchor_asset_id: string | null;
-          campaign_id: string | null;
-        };
-        resolvedCampaignId = comp.campaign_id ?? resolvedCampaignId;
-        const assetRef = comp.output_asset_id ?? comp.anchor_asset_id;
-        if (assetRef) {
-          const { data: a } = await admin
-            .from("assets")
-            .select("id, url, type")
-            .eq("id", assetRef)
-            .single();
-          asset = a as Asset | null;
-        }
-      }
-    }
-
-    if (!asset && body.assetId) {
-      const { data: a } = await admin
-        .from("assets")
-        .select("id, url, type, campaign_id")
-        .eq("id", body.assetId)
-        .eq("workspace_id", session.workspaceId)
-        .single();
-      asset = a as Asset | null;
-      resolvedCampaignId =
-        (a as { campaign_id?: string | null } | null)?.campaign_id ??
-        resolvedCampaignId;
-    }
-
-    if (!asset)
-      return NextResponse.json({ error: "Asset not found" }, { status: 404 });
-    const resolvedAsset = asset; // non-null fallback for every platform
-
-    // Approval gate (PRODUCT_STRATEGY.md §4): a "member" can prep and submit a
-    // campaign for review, but only owner/admin (or a self-approving
-    // owner/admin) may actually publish it. Owner/admin bypass entirely — the
-    // gate restricts member-role publishing, not solo workflows. A campaign we
-    // couldn't resolve (shouldn't happen given the asset lookups above all
-    // carry campaign_id) is let through rather than blocking on an edge case
-    // the schema doesn't allow.
-    if (
-      resolvedCampaignId &&
-      session.role !== "owner" &&
-      session.role !== "admin"
-    ) {
-      const { data: campaign } = await admin
-        .from("campaigns")
-        .select("approval_status")
-        .eq("id", resolvedCampaignId)
-        .eq("workspace_id", session.workspaceId)
-        .single();
-      const approvalStatus = (campaign as { approval_status?: string } | null)
-        ?.approval_status;
-      if (approvalStatus && approvalStatus !== "approved") {
-        return NextResponse.json(
-          {
-            error:
-              "This campaign needs owner/admin approval before it can be published. Submit it for review first.",
-          },
-          { status: 403 },
-        );
-      }
-    }
-
-    /**
-     * TikTok always gets the vertical cut.
-     *
-     * Everywhere else, a picked file means ONE FILE to every platform — a
-     * deliberate refusal to substitute a sibling render the user never chose
-     * (see app/api/CLAUDE.md). TikTok is carved out of that rule because it is
-     * the one destination where the rule costs more than it protects: a 16:9
-     * cut posts as a letterboxed strip in a full-screen vertical feed, which
-     * is not "the file you picked, delivered faithfully" so much as the ad
-     * wasted.
-     *
-     * Narrow on purpose. Instagram, Snapchat and Pinterest are also 9:16 and
-     * are deliberately NOT included: substituting for them was not asked for,
-     * and each extra platform widens a hole in a rule that exists for a good
-     * reason. Only ever an addition — if no 9:16 render exists, TikTok falls
-     * back to the picked file rather than refusing to post.
-     *
-     * Skipped entirely when TikTok isn't in this publish, so the extra query
-     * only costs the publishes that can actually use it.
-     *
-     * ALSO skipped when `noMusic` is set, and that one is not an optimisation.
-     * The 9:16 renders are branded exports with the music bed BURNT IN, so
-     * substituting one into a muted publish would hand TikTok the exact audio
-     * the user just asked it not to have. The per-platform mute still wins —
-     * same rule the picked-file path already follows — and TikTok takes the
-     * raw clip in that case, vertical or not.
-     */
-    const tiktokVertical =
-      !body.platforms.includes("tiktok") || body.noMusic
-        ? null
-        : (assetsByAspect.get("9:16") ??
-          (await (async (): Promise<Asset | null> => {
-            const { data } = await admin
-              .from("assets")
-              .select("id, url, type, metadata")
-              .eq("campaign_id", body.campaignId)
-              .eq("workspace_id", session.workspaceId)
-              .in("type", ["video", "composed_video"])
-              .order("created_at", { ascending: false });
-            const rows = (data ?? []) as {
-              id: string;
-              url: string;
-              type: string;
-              metadata?: { aspect?: string } | null;
-            }[];
-            const v = rows.find((r) => r.metadata?.aspect === "9:16");
-            return v ? { id: v.id, url: v.url, type: v.type } : null;
-          })()));
-
-    // The MP4 to post to a given platform: its format's fan-out render when one
-    // exists, otherwise the single resolved asset (backward compatible).
-    const assetForPlatform = (platform: string): Asset =>
-      platform === "tiktok" && tiktokVertical
-        ? tiktokVertical
-        : pickForPlatform(platform, assetsByAspect, resolvedAsset);
-
-    // Load connected profiles for requested platforms
-    const { data: profiles } = await admin
-      .from("social_profiles")
-      .select(
-        "platform, handle, platform_page_id, platform_account_id, access_token, refresh_token, token_expires_at, metadata",
-      )
-      .eq("workspace_id", session.workspaceId)
-      .in("platform", body.platforms);
-
-    // Three publishing backends, in order of preference per platform:
-    //  • Facebook + Instagram → Meta Graph directly (free, all tiers) when the
-    //    workspace has connected that account here.
-    //  • Bluesky, Reddit, Pinterest → our own direct backend
-    //    (lib/social/direct/) — also free, no platform review, all tiers.
-    //  • Everything left (X, LinkedIn, TikTok, YouTube, …) → Ayrshare, whose
-    //    per-profile subscription is the reason the two above exist. Kept
-    //    intact but gated on AYRSHARE_ENABLED so the spend can be switched off
-    //    without deleting the integration.
-    // Decrypted at the boundary, once, so every backend below receives a real
-    // credential without needing to know storage is encrypted. Missing this
-    // would post ciphertext as a bearer token to five different networks.
-    const profileByPlatform = new Map<string, SocialProfile>(
-      (profiles ?? [])
-        .map((p) => decryptProfileTokens(p as SocialProfile))
-        .map((p) => [p.platform, p]),
-    );
-    const ayrshareEnabled = process.env.AYRSHARE_ENABLED === "true";
-
-    const { data: ws } = await admin
-      .from("workspaces")
-      .select("ayrshare_profile_key")
-      .eq("id", session.workspaceId)
-      .single();
-    const ayrshareKey =
-      (ws as { ayrshare_profile_key: string | null } | null)
-        ?.ayrshare_profile_key ?? null;
-    const ent = await getEntitlements(session.workspaceId);
-
-    const hashtags = body.hashtags.map((h) =>
-      h.startsWith("#") ? h : `#${h}`,
-    );
-    const fullCaption = hashtags.length
-      ? `${body.caption}\n\n${hashtags.join(" ")}`
-      : body.caption;
-
-    const platformResults: Record<string, string> = {};
-    // Ayrshare's own top-level post id per platform (distinct from the
-    // platform-native id in platformResults) — the analytics/post endpoint
-    // needs THIS id, not the platform's. Meta-direct platforms have none.
-    const ayrshareIds: Record<string, string> = {};
-    const errors: Record<string, string> = {};
-
-    for (const platform of body.platforms) {
-      // Per-platform AI caption when supplied (its hashtags are already tailored);
-      // otherwise the base caption + shared hashtags.
-      const platformCaption = body.platformCaptions?.[platform] ?? fullCaption;
-      const platformAsset = assetForPlatform(platform);
-      try {
-        const meta = profileByPlatform.get(platform);
-        let postId: string;
-        if (platform === "facebook" && meta) {
-          // Per-publish Page override: resolve the chosen Page's id + token from
-          // the stored managed-pages list. Falls back to the active page when no
-          // facebookPageId is sent (backward compatible).
-          let fbProfile = meta;
-          if (body.facebookPageId) {
-            const pages = meta.metadata?.facebook_pages ?? [];
-            const chosen = pages.find((p) => p.id === body.facebookPageId);
-            if (!chosen) {
-              errors.facebook =
-                "Selected Facebook Page not found — reconnect Facebook in Settings.";
-              continue;
-            }
-            fbProfile = {
-              ...meta,
-              platform_page_id: chosen.id,
-              access_token: chosen.access_token,
-            };
-          }
-          postId = await publishToFacebook(
-            fbProfile,
-            platformAsset,
-            platformCaption,
-          );
-        } else if (platform === "instagram" && meta) {
-          postId = await publishToInstagram(
-            meta,
-            platformAsset,
-            platformCaption,
-          );
-        } else if (isDirectPlatform(platform)) {
-          // Bluesky / Reddit / Pinterest / LinkedIn / TikTok / YouTube — our
-          // own code, no Ayrshare, no tier gate. A workspace that hasn't linked the account yet falls through
-          // to Ayrshare below only when that's still enabled; otherwise it gets
-          // a connect prompt rather than a silent skip.
-          if (!meta) {
-            // A direct adapter exists but this workspace hasn't connected the
-            // account. For TikTok and YouTube that is the normal state until
-            // their platform reviews clear, so the broker bridges them — this
-            // is the case shouldBroker's `hasDirectConnection` argument is for.
-            if (shouldBroker(platform, false)) {
-              const outcome = await publishBrokeredWithCredits({
-                workspaceId: session.workspaceId,
-                platform: platform as BrokerPlatform,
-                mediaUrl: platformAsset.url,
-                caption: platformCaption,
-                ...(body.scheduledAt ? { scheduledAt: body.scheduledAt } : {}),
-              });
-              if (!outcome.ok) {
-                errors[platform] = outcome.error;
-                continue;
-              }
-              platformResults[platform] = outcome.postId;
-              continue;
-            }
-            if (!ayrshareEnabled || !ayrshareKey) {
-              errors[platform] =
-                `Connect ${platform} in Settings → Social first.`;
-              continue;
-            }
-            const result = await ayrsharePost(ayrshareKey, {
-              post: platformCaption,
-              platforms: [platform],
-              mediaUrls: [platformAsset.url],
-              ...(body.scheduledAt ? { scheduleDate: body.scheduledAt } : {}),
+        if (lm && needsMusicRemux(picked.created_at, lm.created_at)) {
+          try {
+            const mix = await composeVideo({
+              videoUrl: picked.url,
+              audioUrl: lm.url,
+              captionStyle: "none", // caption rides as the post text
+              workspaceId: session.workspaceId,
+              campaignId: body.campaignId,
             });
-            postId = result.postIds?.[0]?.id ?? result.id ?? "posted";
-            if (result.id) ayrshareIds[platform] = result.id;
-            platformResults[platform] = postId;
-            continue;
+            const freshId = uuidv4();
+            await db.from("assets").insert({
+              id: freshId,
+              campaign_id: body.campaignId,
+              workspace_id: session.workspaceId,
+              type: "composed_video",
+              url: mix.url,
+              storage_path: mix.storagePath,
+              metadata: picked.metadata ?? null,
+            });
+            await db
+              .from("campaigns")
+              .update({ publish_asset_id: freshId })
+              .eq("id", body.campaignId);
+            chosen = { id: freshId, url: mix.url, type: "composed_video" };
+          } catch {
+            // Dead music URL or a failed FFmpeg run must not block the post
+            // — the silent cut still goes out, same as the fan-out path.
           }
-          // Ayrshare accepted a scheduleDate and held the post itself. The
-          // direct backend has no scheduler, so a scheduled publish here would
-          // go out IMMEDIATELY while being recorded as "scheduled" — the user
-          // would never know it fired early. Refuse instead.
-          if (body.scheduledAt) {
-            errors[platform] =
-              `Scheduling isn't available for ${platform} yet — publish it now instead.`;
+        }
+      }
+      asset = chosen;
+      // assetsByAspect stays EMPTY on purpose: one picked file, one publish.
+      // pickForPlatform falls back to `asset` for every platform.
+      //
+      // TikTok is the one exception, resolved below into `tiktokVertical`.
+    } else if (body.noMusic) {
+      const { data: rawVideo } = await pick("video");
+      asset = rawVideo as unknown as Asset | null;
+    } else {
+      // All fan-out formats for this campaign, newest-first (first/newest
+      // wins per aspect). Untagged mixes just don't get indexed by aspect.
+      const { data: composed } = await db
+        .from("assets")
+        .select("id, url, type, metadata, created_at")
+        .eq("campaign_id", body.campaignId)
+        .eq("type", "composed_video")
+        .order("created_at", { ascending: false });
+
+      // An export is a permanent snapshot of the music that existed when
+      // FFmpeg ran. Generate the soundtrack AFTER using the Compositor —
+      // which the nav has always allowed, and which the step order now
+      // actively encourages — and the export is silent. It was reused
+      // unconditionally, so the post went out with no sound and nothing
+      // said so.
+      //
+      // Re-mux onto the EXPORT, never back onto the raw clip: the export
+      // carries the overlays and brand work that rebuilding would discard.
+      // Every aspect is checked, not just the one about to be posted — each
+      // is its own render, and pickForPlatform chooses between them per
+      // network, so one stale cut is one silent platform.
+      const { data: lateMusic } = await db
+        .from("assets")
+        .select("url, created_at")
+        .eq("campaign_id", body.campaignId)
+        .eq("type", "audio")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const lm = lateMusic as unknown as {
+        url: string;
+        created_at: string;
+      } | null;
+
+      const rows = (composed ?? []) as unknown as ComposedRow[];
+      const fresh: ComposedRow[] = [];
+      for (const r of rows) {
+        if (lm && needsMusicRemux(r.created_at, lm.created_at)) {
+          try {
+            const mix = await composeVideo({
+              videoUrl: r.url,
+              audioUrl: lm.url,
+              captionStyle: "none", // caption rides as the post text
+              workspaceId: session.workspaceId,
+              campaignId: body.campaignId,
+            });
+            const freshId = uuidv4();
+            await db.from("assets").insert({
+              id: freshId,
+              campaign_id: body.campaignId,
+              workspace_id: session.workspaceId,
+              type: "composed_video",
+              url: mix.url,
+              storage_path: mix.storagePath,
+              // Carry the aspect tag across or the fan-out stops matching
+              // formats to platforms.
+              metadata: r.metadata ?? null,
+            });
+            fresh.push({ ...r, id: freshId, url: mix.url });
             continue;
+          } catch {
+            // A dead music URL or a failed FFmpeg run must not block
+            // publishing — the silent export still goes out. Worse than
+            // sound, better than nothing.
           }
-          postId = await publishDirect({
-            platform,
-            profile: meta as DirectProfile,
-            workspaceId: session.workspaceId,
-            mediaUrl: platformAsset.url,
-            isVideo: isVideoAsset(platformAsset),
-            caption: platformCaption,
-            subreddit: body.subreddit,
-            boardId: body.pinterestBoardId,
-          });
-        } else if (shouldBroker(platform, false)) {
-          // Networks with no direct adapter at all (X, Threads, GMB, Telegram).
-          // The paid broker reaches them through its own approved apps, and
-          // bills per post — so unlike every backend above, this one charges
-          // the workspace that used it.
-          const outcome = await publishBrokeredWithCredits({
-            workspaceId: session.workspaceId,
-            platform: platform as BrokerPlatform,
-            mediaUrl: platformAsset.url,
-            caption: platformCaption,
-            ...(body.scheduledAt ? { scheduledAt: body.scheduledAt } : {}),
-          });
-          if (!outcome.ok) {
-            errors[platform] = outcome.error;
-            continue;
+        }
+        fresh.push(r);
+      }
+
+      for (const r of fresh) {
+        const asp = r.metadata?.aspect;
+        if (asp && !assetsByAspect.has(asp)) {
+          assetsByAspect.set(asp, { id: r.id, url: r.url, type: r.type });
+        }
+      }
+
+      const existing = fresh[0] ?? null;
+      if (existing) {
+        asset = { id: existing.id, url: existing.url, type: existing.type };
+      } else {
+        const { data: rawVideo } = await pick("video");
+        const { data: music } = await pick("audio", "url");
+        const rv = rawVideo as unknown as Asset | null;
+        const mus = music as unknown as { url: string } | null;
+        if (rv && mus) {
+          try {
+            const mix = await composeVideo({
+              videoUrl: rv.url,
+              audioUrl: mus.url,
+              captionStyle: "none", // caption rides as the post text
+              workspaceId: session.workspaceId,
+              campaignId: body.campaignId,
+            });
+            const newId = uuidv4();
+            await db.from("assets").insert({
+              id: newId,
+              campaign_id: body.campaignId,
+              workspace_id: session.workspaceId,
+              type: "composed_video",
+              url: mix.url,
+              storage_path: mix.storagePath,
+            });
+            asset = { id: newId, url: mix.url, type: "composed_video" };
+          } catch {
+            asset = rv; // music expired / mix failed → publish the raw clip
           }
-          postId = outcome.postId;
         } else {
-          // Everything else goes through Ayrshare (Pro).
-          if (!ayrshareEnabled) {
-            errors[platform] =
-              "This network is temporarily unavailable — Facebook, Instagram, Bluesky, Reddit and Pinterest are still live.";
+          asset = rv;
+        }
+      }
+    }
+  }
+
+  // Tracks the campaign a publish resolves to, for the approval gate below —
+  // populated alongside whichever asset-resolution branch fires.
+  let resolvedCampaignId: string | null = body.campaignId ?? null;
+
+  if (!asset && body.compositionId) {
+    const { data: composition } = await db
+      .from("compositions")
+      .select("output_asset_id, anchor_asset_id, campaign_id")
+      .eq("id", body.compositionId)
+      .single();
+    if (composition) {
+      resolvedCompositionId = body.compositionId;
+      // anchor_asset_id is nullable since migration 0015 (layered docs have no
+      // image anchor), so the asset id can be null → fall through to assetId.
+      const comp = composition as {
+        output_asset_id: string | null;
+        anchor_asset_id: string | null;
+        campaign_id: string | null;
+      };
+      resolvedCampaignId = comp.campaign_id ?? resolvedCampaignId;
+      const assetRef = comp.output_asset_id ?? comp.anchor_asset_id;
+      if (assetRef) {
+        const { data: a } = await db
+          .from("assets")
+          .select("id, url, type")
+          .eq("id", assetRef)
+          .single();
+        asset = a as Asset | null;
+      }
+    }
+  }
+
+  if (!asset && body.assetId) {
+    const { data: a } = await db
+      .from("assets")
+      .select("id, url, type, campaign_id")
+      .eq("id", body.assetId)
+      .single();
+    asset = a as Asset | null;
+    resolvedCampaignId =
+      (a as { campaign_id?: string | null } | null)?.campaign_id ??
+      resolvedCampaignId;
+  }
+
+  if (!asset)
+    return NextResponse.json({ error: "Asset not found" }, { status: 404 });
+  const resolvedAsset = asset; // non-null fallback for every platform
+
+  // Approval gate (PRODUCT_STRATEGY.md §4): a "member" can prep and submit a
+  // campaign for review, but only owner/admin (or a self-approving
+  // owner/admin) may actually publish it. Owner/admin bypass entirely — the
+  // gate restricts member-role publishing, not solo workflows. A campaign we
+  // couldn't resolve (shouldn't happen given the asset lookups above all
+  // carry campaign_id) is let through rather than blocking on an edge case
+  // the schema doesn't allow.
+  if (
+    resolvedCampaignId &&
+    session.role !== "owner" &&
+    session.role !== "admin"
+  ) {
+    const { data: campaign } = await db
+      .from("campaigns")
+      .select("approval_status")
+      .eq("id", resolvedCampaignId)
+      .single();
+    const approvalStatus = (campaign as { approval_status?: string } | null)
+      ?.approval_status;
+    if (approvalStatus && approvalStatus !== "approved") {
+      return NextResponse.json(
+        {
+          error:
+            "This campaign needs owner/admin approval before it can be published. Submit it for review first.",
+        },
+        { status: 403 },
+      );
+    }
+  }
+
+  /**
+   * TikTok always gets the vertical cut.
+   *
+   * Everywhere else, a picked file means ONE FILE to every platform — a
+   * deliberate refusal to substitute a sibling render the user never chose
+   * (see app/api/CLAUDE.md). TikTok is carved out of that rule because it is
+   * the one destination where the rule costs more than it protects: a 16:9
+   * cut posts as a letterboxed strip in a full-screen vertical feed, which
+   * is not "the file you picked, delivered faithfully" so much as the ad
+   * wasted.
+   *
+   * Narrow on purpose. Instagram, Snapchat and Pinterest are also 9:16 and
+   * are deliberately NOT included: substituting for them was not asked for,
+   * and each extra platform widens a hole in a rule that exists for a good
+   * reason. Only ever an addition — if no 9:16 render exists, TikTok falls
+   * back to the picked file rather than refusing to post.
+   *
+   * Skipped entirely when TikTok isn't in this publish, so the extra query
+   * only costs the publishes that can actually use it.
+   *
+   * ALSO skipped when `noMusic` is set, and that one is not an optimisation.
+   * The 9:16 renders are branded exports with the music bed BURNT IN, so
+   * substituting one into a muted publish would hand TikTok the exact audio
+   * the user just asked it not to have. The per-platform mute still wins —
+   * same rule the picked-file path already follows — and TikTok takes the
+   * raw clip in that case, vertical or not.
+   */
+  const tiktokVertical =
+    !body.platforms.includes("tiktok") || body.noMusic
+      ? null
+      : (assetsByAspect.get("9:16") ??
+        (await (async (): Promise<Asset | null> => {
+          const { data } = await db
+            .from("assets")
+            .select("id, url, type, metadata")
+            .eq("campaign_id", body.campaignId)
+            .in("type", ["video", "composed_video"])
+            .order("created_at", { ascending: false });
+          const rows = (data ?? []) as {
+            id: string;
+            url: string;
+            type: string;
+            metadata?: { aspect?: string } | null;
+          }[];
+          const v = rows.find((r) => r.metadata?.aspect === "9:16");
+          return v ? { id: v.id, url: v.url, type: v.type } : null;
+        })()));
+
+  // The MP4 to post to a given platform: its format's fan-out render when one
+  // exists, otherwise the single resolved asset (backward compatible).
+  const assetForPlatform = (platform: string): Asset =>
+    platform === "tiktok" && tiktokVertical
+      ? tiktokVertical
+      : pickForPlatform(platform, assetsByAspect, resolvedAsset);
+
+  // Load connected profiles for requested platforms
+  const { data: profiles } = await db
+    .from("social_profiles")
+    .select(
+      "platform, handle, platform_page_id, platform_account_id, access_token, refresh_token, token_expires_at, metadata",
+    )
+    .in("platform", body.platforms);
+
+  // Three publishing backends, in order of preference per platform:
+  //  • Facebook + Instagram → Meta Graph directly (free, all tiers) when the
+  //    workspace has connected that account here.
+  //  • Bluesky, Reddit, Pinterest → our own direct backend
+  //    (lib/social/direct/) — also free, no platform review, all tiers.
+  //  • Everything left (X, LinkedIn, TikTok, YouTube, …) → Ayrshare, whose
+  //    per-profile subscription is the reason the two above exist. Kept
+  //    intact but gated on AYRSHARE_ENABLED so the spend can be switched off
+  //    without deleting the integration.
+  // Decrypted at the boundary, once, so every backend below receives a real
+  // credential without needing to know storage is encrypted. Missing this
+  // would post ciphertext as a bearer token to five different networks.
+  const profileByPlatform = new Map<string, SocialProfile>(
+    (profiles ?? [])
+      .map((p) => decryptProfileTokens(p as SocialProfile))
+      .map((p) => [p.platform, p]),
+  );
+  const ayrshareEnabled = process.env.AYRSHARE_ENABLED === "true";
+
+  const { data: ws } = await db
+    .from("workspaces")
+    .select("ayrshare_profile_key")
+    .eq("id", session.workspaceId)
+    .single();
+  const ayrshareKey =
+    (ws as { ayrshare_profile_key: string | null } | null)
+      ?.ayrshare_profile_key ?? null;
+  const ent = await getEntitlements(session.workspaceId);
+
+  const hashtags = body.hashtags.map((h) => (h.startsWith("#") ? h : `#${h}`));
+  const fullCaption = hashtags.length
+    ? `${body.caption}\n\n${hashtags.join(" ")}`
+    : body.caption;
+
+  const platformResults: Record<string, string> = {};
+  // Ayrshare's own top-level post id per platform (distinct from the
+  // platform-native id in platformResults) — the analytics/post endpoint
+  // needs THIS id, not the platform's. Meta-direct platforms have none.
+  const ayrshareIds: Record<string, string> = {};
+  const errors: Record<string, string> = {};
+
+  for (const platform of body.platforms) {
+    // Per-platform AI caption when supplied (its hashtags are already tailored);
+    // otherwise the base caption + shared hashtags.
+    const platformCaption = body.platformCaptions?.[platform] ?? fullCaption;
+    const platformAsset = assetForPlatform(platform);
+    try {
+      const meta = profileByPlatform.get(platform);
+      let postId: string;
+      if (platform === "facebook" && meta) {
+        // Per-publish Page override: resolve the chosen Page's id + token from
+        // the stored managed-pages list. Falls back to the active page when no
+        // facebookPageId is sent (backward compatible).
+        let fbProfile = meta;
+        if (body.facebookPageId) {
+          const pages = meta.metadata?.facebook_pages ?? [];
+          const chosen = pages.find((p) => p.id === body.facebookPageId);
+          if (!chosen) {
+            errors.facebook =
+              "Selected Facebook Page not found — reconnect Facebook in Settings.";
             continue;
           }
-          if (!ent.isPro) {
-            errors[platform] =
-              "Publishing beyond Facebook & Instagram is a Pro feature — upgrade to reach this network.";
+          fbProfile = {
+            ...meta,
+            platform_page_id: chosen.id,
+            access_token: chosen.access_token,
+          };
+        }
+        postId = await publishToFacebook(
+          fbProfile,
+          platformAsset,
+          platformCaption,
+        );
+      } else if (platform === "instagram" && meta) {
+        postId = await publishToInstagram(meta, platformAsset, platformCaption);
+      } else if (isDirectPlatform(platform)) {
+        // Bluesky / Reddit / Pinterest / LinkedIn / TikTok / YouTube — our
+        // own code, no Ayrshare, no tier gate. A workspace that hasn't linked the account yet falls through
+        // to Ayrshare below only when that's still enabled; otherwise it gets
+        // a connect prompt rather than a silent skip.
+        if (!meta) {
+          // A direct adapter exists but this workspace hasn't connected the
+          // account. For TikTok and YouTube that is the normal state until
+          // their platform reviews clear, so the broker bridges them — this
+          // is the case shouldBroker's `hasDirectConnection` argument is for.
+          if (shouldBroker(platform, false)) {
+            const outcome = await publishBrokeredWithCredits({
+              workspaceId: session.workspaceId,
+              platform: platform as BrokerPlatform,
+              mediaUrl: platformAsset.url,
+              caption: platformCaption,
+              ...(body.scheduledAt ? { scheduledAt: body.scheduledAt } : {}),
+            });
+            if (!outcome.ok) {
+              errors[platform] = outcome.error;
+              continue;
+            }
+            platformResults[platform] = outcome.postId;
             continue;
           }
-          if (!ayrshareKey) {
+          if (!ayrshareEnabled || !ayrshareKey) {
             errors[platform] =
-              "Connect your accounts in Settings → Social first.";
+              `Connect ${platform} in Settings → Social first.`;
             continue;
           }
           const result = await ayrsharePost(ayrshareKey, {
@@ -754,77 +666,131 @@ export async function POST(req: Request) {
           });
           postId = result.postIds?.[0]?.id ?? result.id ?? "posted";
           if (result.id) ayrshareIds[platform] = result.id;
+          platformResults[platform] = postId;
+          continue;
         }
-        platformResults[platform] = postId;
-      } catch (err) {
-        errors[platform] = actionableError(
+        // Ayrshare accepted a scheduleDate and held the post itself. The
+        // direct backend has no scheduler, so a scheduled publish here would
+        // go out IMMEDIATELY while being recorded as "scheduled" — the user
+        // would never know it fired early. Refuse instead.
+        if (body.scheduledAt) {
+          errors[platform] =
+            `Scheduling isn't available for ${platform} yet — publish it now instead.`;
+          continue;
+        }
+        postId = await publishDirect({
           platform,
-          errorMessage(err, "Unknown error"),
-        );
-        // Surface the real reason server-side — the client only shows a generic
-        // failure, so without this the actual cause (bad token, media, etc.) is
-        // invisible.
-        console.error(`[publish] ${platform} failed:`, errors[platform]);
+          profile: meta as DirectProfile,
+          workspaceId: session.workspaceId,
+          mediaUrl: platformAsset.url,
+          isVideo: isVideoAsset(platformAsset),
+          caption: platformCaption,
+          subreddit: body.subreddit,
+          boardId: body.pinterestBoardId,
+        });
+      } else if (shouldBroker(platform, false)) {
+        // Networks with no direct adapter at all (X, Threads, GMB, Telegram).
+        // The paid broker reaches them through its own approved apps, and
+        // bills per post — so unlike every backend above, this one charges
+        // the workspace that used it.
+        const outcome = await publishBrokeredWithCredits({
+          workspaceId: session.workspaceId,
+          platform: platform as BrokerPlatform,
+          mediaUrl: platformAsset.url,
+          caption: platformCaption,
+          ...(body.scheduledAt ? { scheduledAt: body.scheduledAt } : {}),
+        });
+        if (!outcome.ok) {
+          errors[platform] = outcome.error;
+          continue;
+        }
+        postId = outcome.postId;
+      } else {
+        // Everything else goes through Ayrshare (Pro).
+        if (!ayrshareEnabled) {
+          errors[platform] =
+            "This network is temporarily unavailable — Facebook, Instagram, Bluesky, Reddit and Pinterest are still live.";
+          continue;
+        }
+        if (!ent.isPro) {
+          errors[platform] =
+            "Publishing beyond Facebook & Instagram is a Pro feature — upgrade to reach this network.";
+          continue;
+        }
+        if (!ayrshareKey) {
+          errors[platform] =
+            "Connect your accounts in Settings → Social first.";
+          continue;
+        }
+        const result = await ayrsharePost(ayrshareKey, {
+          post: platformCaption,
+          platforms: [platform],
+          mediaUrls: [platformAsset.url],
+          ...(body.scheduledAt ? { scheduleDate: body.scheduledAt } : {}),
+        });
+        postId = result.postIds?.[0]?.id ?? result.id ?? "posted";
+        if (result.id) ayrshareIds[platform] = result.id;
       }
-    }
-
-    if (Object.keys(platformResults).length === 0) {
-      // Return the per-platform reasons so the UI can show WHY each failed
-      // (Pro-gate vs auth vs media) instead of a single generic message.
-      return NextResponse.json(
-        {
-          error: "All platforms failed to publish",
-          errors,
-          message: Object.entries(errors)
-            .map(([p, m]) => `${p}: ${m}`)
-            .join(" · "),
-        },
-        { status: 500 },
+      platformResults[platform] = postId;
+    } catch (err) {
+      errors[platform] = actionableError(
+        platform,
+        errorMessage(err, "Unknown error"),
       );
+      // Surface the real reason server-side — the client only shows a generic
+      // failure, so without this the actual cause (bad token, media, etc.) is
+      // invisible.
+      console.error(`[publish] ${platform} failed:`, errors[platform]);
     }
+  }
 
-    const isScheduled = !!body.scheduledAt;
-    const { data: record } = await admin
-      .from("publish_records")
-      .insert({
-        id: uuidv4(),
-        composition_id: resolvedCompositionId,
-        workspace_id: session.workspaceId,
-        platforms: body.platforms,
-        caption: body.caption,
-        hashtags: body.hashtags,
-        scheduled_at: isScheduled ? body.scheduledAt : null,
-        published_at: isScheduled ? null : new Date().toISOString(),
-        status: isScheduled ? "scheduled" : "published",
-        platform_results: platformResults as unknown as Record<string, unknown>,
-        ayrshare_post_ids: ayrshareIds as unknown as Record<string, unknown>,
-      })
-      .select()
-      .single();
-
-    if (resolvedCompositionId) {
-      await admin
-        .from("compositions")
-        .update({ status: "published" })
-        .eq("id", resolvedCompositionId);
-    }
-
+  if (Object.keys(platformResults).length === 0) {
+    // Return the per-platform reasons so the UI can show WHY each failed
+    // (Pro-gate vs auth vs media) instead of a single generic message.
     return NextResponse.json(
       {
-        record,
-        platformResults,
-        errors: Object.keys(errors).length ? errors : undefined,
+        error: "All platforms failed to publish",
+        errors,
+        message: Object.entries(errors)
+          .map(([p, m]) => `${p}: ${m}`)
+          .join(" · "),
       },
-      { status: 201 },
+      { status: 500 },
     );
-  } catch (err) {
-    const msg = errorMessage(err, "Unknown error");
-    const status =
-      msg === "Unauthorized"
-        ? 401
-        : msg === "Not a workspace member"
-          ? 403
-          : 500;
-    return NextResponse.json({ error: msg }, { status });
   }
-}
+
+  const isScheduled = !!body.scheduledAt;
+  const { data: record } = await db
+    .from("publish_records")
+    .insert({
+      id: uuidv4(),
+      composition_id: resolvedCompositionId,
+      workspace_id: session.workspaceId,
+      platforms: body.platforms,
+      caption: body.caption,
+      hashtags: body.hashtags,
+      scheduled_at: isScheduled ? body.scheduledAt : null,
+      published_at: isScheduled ? null : new Date().toISOString(),
+      status: isScheduled ? "scheduled" : "published",
+      platform_results: platformResults as unknown as Record<string, unknown>,
+      ayrshare_post_ids: ayrshareIds as unknown as Record<string, unknown>,
+    })
+    .select()
+    .single();
+
+  if (resolvedCompositionId) {
+    await db
+      .from("compositions")
+      .update({ status: "published" })
+      .eq("id", resolvedCompositionId);
+  }
+
+  return NextResponse.json(
+    {
+      record,
+      platformResults,
+      errors: Object.keys(errors).length ? errors : undefined,
+    },
+    { status: 201 },
+  );
+});

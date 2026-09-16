@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
+import { withWorkspace } from "@/lib/api/with-workspace";
 import { z } from "zod";
-import { getSession } from "@/lib/auth/session";
 import { canManageConnections, CONNECTION_FORBIDDEN } from "@/lib/social/authz";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { errorMessage } from "@/lib/api/error-message";
 import { recordSocialEvent } from "@/lib/social/audit";
 
 // Two of the direct-backend networks need a destination the caption can't
@@ -27,74 +25,62 @@ const bodySchema = z.discriminatedUnion("platform", [
   }),
 ]);
 
-export async function POST(req: Request) {
-  try {
-    const session = await getSession(req);
-    // Same gate, same reason: a subreddit or a board is WHERE the workspace's
-    // posts land. Gating who may connect an account while leaving the
-    // destination inside it open re-opens the hole one level down.
-    if (!canManageConnections(session)) {
-      return NextResponse.json(CONNECTION_FORBIDDEN, { status: 403 });
-    }
-    const parsed = bodySchema.safeParse(await req.json());
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: parsed.error.issues[0]?.message ?? "Invalid destination" },
-        { status: 400 },
-      );
-    }
-    const admin = createSupabaseAdminClient();
-
-    const { data: existing } = await admin
-      .from("social_profiles")
-      .select("metadata")
-      .eq("workspace_id", session.workspaceId)
-      .eq("platform", parsed.data.platform)
-      .maybeSingle();
-    if (!existing) {
-      return NextResponse.json(
-        { error: `Connect ${parsed.data.platform} first.` },
-        { status: 404 },
-      );
-    }
-
-    // Merge rather than replace — Pinterest's metadata also holds the cached
-    // board list, which a blind overwrite would wipe out.
-    const current =
-      (existing as { metadata: Record<string, unknown> | null }).metadata ?? {};
-    const patch =
-      parsed.data.platform === "reddit"
-        ? { default_subreddit: parsed.data.subreddit }
-        : { default_board_id: parsed.data.boardId };
-
-    const { error } = await admin
-      .from("social_profiles")
-      .update({ metadata: { ...current, ...patch } })
-      .eq("workspace_id", session.workspaceId)
-      .eq("platform", parsed.data.platform);
-    if (error) throw new Error(error.message);
-
-    // A destination is where a post actually lands. Logging the connect but
-    // not the subreddit it was re-pointed at records the door and not the room.
-    await recordSocialEvent(
-      admin,
-      { workspaceId: session.workspaceId, userId: session.userId },
-      parsed.data.platform,
-      "destination_set",
-      {
-        target:
-          parsed.data.platform === "reddit"
-            ? parsed.data.subreddit
-            : parsed.data.boardId,
-      },
-    );
-
-    return NextResponse.json({ ok: true, ...patch });
-  } catch (err) {
-    const msg = errorMessage(err, "Could not save destination");
+export const POST = withWorkspace(async (req, { db, admin, session }) => {
+  // Same gate, same reason: a subreddit or a board is WHERE the workspace's
+  // posts land. Gating who may connect an account while leaving the
+  // destination inside it open re-opens the hole one level down.
+  if (!canManageConnections(session)) {
+    return NextResponse.json(CONNECTION_FORBIDDEN, { status: 403 });
+  }
+  const parsed = bodySchema.safeParse(await req.json());
+  if (!parsed.success) {
     return NextResponse.json(
-      { error: msg },
-      { status: msg === "Unauthorized" ? 401 : 500 },
+      { error: parsed.error.issues[0]?.message ?? "Invalid destination" },
+      { status: 400 },
     );
   }
-}
+
+  const { data: existing } = await db
+    .from("social_profiles")
+    .select("metadata")
+    .eq("platform", parsed.data.platform)
+    .maybeSingle();
+  if (!existing) {
+    return NextResponse.json(
+      { error: `Connect ${parsed.data.platform} first.` },
+      { status: 404 },
+    );
+  }
+
+  // Merge rather than replace — Pinterest's metadata also holds the cached
+  // board list, which a blind overwrite would wipe out.
+  const current =
+    (existing as { metadata: Record<string, unknown> | null }).metadata ?? {};
+  const patch =
+    parsed.data.platform === "reddit"
+      ? { default_subreddit: parsed.data.subreddit }
+      : { default_board_id: parsed.data.boardId };
+
+  const { error } = await db
+    .from("social_profiles")
+    .update({ metadata: { ...current, ...patch } })
+    .eq("platform", parsed.data.platform);
+  if (error) throw new Error(error.message);
+
+  // A destination is where a post actually lands. Logging the connect but
+  // not the subreddit it was re-pointed at records the door and not the room.
+  await recordSocialEvent(
+    admin,
+    { workspaceId: session.workspaceId, userId: session.userId },
+    parsed.data.platform,
+    "destination_set",
+    {
+      target:
+        parsed.data.platform === "reddit"
+          ? parsed.data.subreddit
+          : parsed.data.boardId,
+    },
+  );
+
+  return NextResponse.json({ ok: true, ...patch });
+});

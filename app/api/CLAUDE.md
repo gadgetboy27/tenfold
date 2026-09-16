@@ -1,13 +1,14 @@
 # app/api — routing + job conventions
 
-## Routing layer — `withWorkspace` (standard for new API routes)
+## Routing layer — `withWorkspace` (every authenticated route, no exceptions)
 
 The service-role admin client (`lib/supabase/admin.ts`) bypasses RLS, so tenant
 isolation cannot rely on RLS alone — it depends on every query filtering by
-`workspace_id`. To make that automatic, **new App Router API routes use
-`withWorkspace` (`lib/api/with-workspace.ts`)** instead of calling `getSession()`
-
-- admin client by hand:
+`workspace_id`. To make that automatic, **every authenticated App Router API
+route uses `withWorkspace` (`lib/api/with-workspace.ts`)** instead of calling
+`getSession()` + admin client by hand. As of 2026-09-16 the last hand-rolled
+route is gone and `eslint.config.mjs` refuses `@/lib/auth/session` under
+`app/api/**/route.ts`, so the guarantee no longer depends on review:
 
 ```typescript
 export const GET = withWorkspace<{ id: string }>(
@@ -26,6 +27,14 @@ export const GET = withWorkspace<{ id: string }>(
   every table in `WORKSPACE_SCOPED_TABLES`. Use `ctx.admin` (raw, unscoped) only
   for webhooks / cross-table work.
 - The wrapper handles auth (401), rate-limiting (429), and the 500 fallback.
+- **The rate-limit bucket is per IP and shared across every wrapped route.**
+  A route the client polls (`GET campaigns/[id]`, `jobs/[id]`, `logo/[id]`,
+  `content/[id]/results`) or reads on every page load passes
+  `{ rateLimit: false }`, or an office behind one NAT 429s itself; a POST that
+  charges credits, uploads bytes or calls a third party keeps the default.
+- A route with a deliberate error policy of its own (`campaigns/analyze-url`,
+  `social/connect`) keeps its `try/catch` inside the handler and re-throws
+  what it doesn't map; the wrapper's generic 500 is the fallback, not the UX.
 - First-login workspace provisioning lives in one place: `getOrProvisionWorkspace`
   (`lib/auth/provisioning.ts`). Do not re-implement it inline in auth routes.
 
@@ -106,6 +115,7 @@ the user's own answer. The rule lives once, pure and tested, in
   included. Every platform added here widens a hole in a rule that exists for a
   good reason, so this list grows only when someone asks for a specific
   platform. `tests/unit/tiktok-publish.test.ts` pins that they stay out.
+
 - **No pick + several videos → 409 `video_pick_required`.** Refusing is the
   feature. `PublishCanvas` catches the code and aborts the whole publish with
   one message, rather than letting it land as one error per selected account.

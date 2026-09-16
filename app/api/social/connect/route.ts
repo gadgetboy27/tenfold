@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
+import { withWorkspace } from "@/lib/api/with-workspace";
 import { canManageConnections, CONNECTION_FORBIDDEN } from "@/lib/social/authz";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import {
   createAyrshareProfile,
@@ -9,9 +8,10 @@ import {
 } from "@/lib/ayrshare/profiles";
 import { AyrshareDisabledError } from "@/lib/ayrshare/enabled";
 
-export async function GET(req: Request) {
+// Keeps its own catch: Ayrshare being switched off is a known state (503 +
+// a flag the UI reads), not the wrapper's generic 500.
+export const GET = withWorkspace(async (req, { db, session }) => {
   try {
-    const session = await getSession(req);
     // Connecting sets where the whole workspace publishes — owner/admin only.
     // See lib/social/authz.ts for why this matches the publish approval roles.
     if (!canManageConnections(session)) {
@@ -33,9 +33,7 @@ export async function GET(req: Request) {
       );
     }
 
-    const admin = createSupabaseAdminClient();
-
-    const { data: workspace } = await admin
+    const { data: workspace } = await db
       .from("workspaces")
       .select("id, name, brand_name, ayrshare_profile_key")
       .eq("id", session.workspaceId)
@@ -62,7 +60,7 @@ export async function GET(req: Request) {
         ws.brand_name?.trim() || ws.name,
       );
       profileKey = profile.profileKey;
-      await admin
+      await db
         .from("workspaces")
         .update({ ayrshare_profile_key: profileKey })
         .eq("id", session.workspaceId);
@@ -87,8 +85,6 @@ export async function GET(req: Request) {
         { status: 503 },
       );
     }
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    const status = msg === "Unauthorized" ? 401 : 500;
-    return NextResponse.json({ error: msg }, { status });
+    throw err;
   }
-}
+});

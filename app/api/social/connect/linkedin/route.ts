@@ -1,37 +1,28 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
+import { withWorkspace } from "@/lib/api/with-workspace";
 import { canManageConnections, CONNECTION_FORBIDDEN } from "@/lib/social/authz";
 import { isPlatformConfigured } from "@/lib/social/configured";
 import { getLinkedInOAuthUrl } from "@/lib/social/direct/linkedin";
 import { signOAuthState } from "@/lib/social/oauth-state";
 
-export async function GET(req: Request) {
-  try {
-    const session = await getSession(req);
-    // Connecting sets where the whole workspace publishes — owner/admin only.
-    // See lib/social/authz.ts for why this matches the publish approval roles.
-    if (!canManageConnections(session)) {
-      return NextResponse.json(CONNECTION_FORBIDDEN, { status: 403 });
-    }
-    if (!isPlatformConfigured("linkedin")) {
-      return NextResponse.json(
-        {
-          error: "LinkedIn publishing isn't configured on this deployment yet.",
-        },
-        { status: 503 },
-      );
-    }
-    // Same signed state as the Meta and Reddit flows — carries the workspaceId
-    // through the round-trip so a forged callback can't attach an account to
-    // someone else's workspace.
-    return NextResponse.redirect(
-      getLinkedInOAuthUrl(signOAuthState(session.workspaceId, session.userId)),
-    );
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unauthorized";
+export const GET = withWorkspace(async (_req, { session }) => {
+  // Connecting sets where the whole workspace publishes — owner/admin only.
+  // See lib/social/authz.ts for why this matches the publish approval roles.
+  if (!canManageConnections(session)) {
+    return NextResponse.json(CONNECTION_FORBIDDEN, { status: 403 });
+  }
+  if (!isPlatformConfigured("linkedin")) {
     return NextResponse.json(
-      { error: msg },
-      { status: msg === "Unauthorized" ? 401 : 500 },
+      {
+        error: "LinkedIn publishing isn't configured on this deployment yet.",
+      },
+      { status: 503 },
     );
   }
-}
+  // Same signed state as the Meta and Reddit flows — carries the workspaceId
+  // through the round-trip so a forged callback can't attach an account to
+  // someone else's workspace.
+  return NextResponse.redirect(
+    getLinkedInOAuthUrl(signOAuthState(session.workspaceId, session.userId)),
+  );
+});
