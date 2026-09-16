@@ -36,6 +36,7 @@ import {
   Shirt,
   Mic,
   Captions,
+  X,
 } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { AdStage } from "./AdStage";
@@ -588,6 +589,21 @@ export function Studio({
     },
     [videoDuration],
   );
+
+  /**
+   * A finished export plays IN the stage area rather than in a new tab.
+   *
+   * It can't go on the stage as the background — the words and logo are
+   * already burnt into its pixels, so the layers would render over themselves
+   * and the next export would carry doubled type. But "see how it turned out"
+   * is exactly what someone wants from a thumbnail of a render, and a browser
+   * tab is the one place that can't lead anywhere. So it plays here, over the
+   * stage, and closes back to the ad you built it from.
+   */
+  const [previewVideo, setPreviewVideo] = useState<{
+    url: string;
+    label: string;
+  } | null>(null);
 
   /**
    * Put a still on the stage as the backdrop.
@@ -1617,7 +1633,42 @@ export function Studio({
             stage, and a rail at min(46vw,620px) — which on a phone adds up to
             more than the viewport and pushed the whole app sideways. Below lg
             they stack and the page scrolls; from lg up nothing changes. */}
-        <main className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5 lg:overflow-hidden">
+        <main className="relative min-h-0 flex-1 overflow-y-auto p-4 sm:p-5 lg:overflow-hidden">
+          {previewVideo && (
+            <div
+              className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-background/95 p-4 backdrop-blur-sm"
+              role="dialog"
+              aria-label={`Preview — ${previewVideo.label}`}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setPreviewVideo(null);
+              }}
+            >
+              <div className="flex w-full max-w-4xl items-center justify-between gap-3">
+                <span className="text-xs font-medium text-muted-foreground">
+                  {previewVideo.label} — a finished export. Click a raw clip in
+                  the strip to keep editing.
+                </span>
+                <button
+                  type="button"
+                  autoFocus
+                  onClick={() => setPreviewVideo(null)}
+                  title="Close preview (Esc)"
+                  aria-label="Close preview"
+                  className="flex h-8 w-8 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <video
+                key={previewVideo.url}
+                src={previewVideo.url}
+                controls
+                autoPlay
+                playsInline
+                className="max-h-[80%] w-full max-w-4xl rounded-lg bg-black object-contain"
+              />
+            </div>
+          )}
           <div className="flex min-h-0 flex-col gap-4 lg:h-full lg:flex-row">
             <StudioNav
               tools={tools}
@@ -1866,8 +1917,17 @@ export function Studio({
             focus={stripFocus}
             workspaceSlug={workspaceSlug}
             onChanged={onProjectAssetsChanged}
-            onStageVideo={stageVideo}
-            onStageImage={stageImage}
+            onStageVideo={(v) => {
+              stageVideo(v);
+              // The Logo editor is the one section that hides the Ad stage,
+              // so a clip staged from there would land where you can't see it.
+              if (section === "logo") setSection("video");
+            }}
+            onStageImage={(img) => {
+              stageImage(img);
+              if (section === "logo") setSection("images");
+            }}
+            onPreviewVideo={(v) => setPreviewVideo(v)}
           />
         )}
       </div>

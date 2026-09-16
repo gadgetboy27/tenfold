@@ -94,6 +94,7 @@ export function ProjectStrip({
   onChanged,
   onStageVideo,
   onStageImage,
+  onPreviewVideo,
 }: {
   progress: ProjectProgress | null;
   /** Studio's live name field — fresher than the server's copy mid-rename. */
@@ -117,6 +118,9 @@ export function ProjectStrip({
    * brand, lay type over it) instead of a 96px thumbnail in the rail.
    */
   onStageVideo?: (video: { id: string; url: string }) => void;
+  /** A finished export can't be staged (its layers are burnt in); play it
+   *  in the stage area instead. */
+  onPreviewVideo?: (video: { url: string; label: string }) => void;
   /** Put a still on the stage as the backdrop — the image tile's main action. */
   onStageImage?: (image: { id: string; url: string }) => void;
 }) {
@@ -442,17 +446,17 @@ export function ProjectStrip({
                         type="button"
                         onClick={() => {
                           if (v.branded) {
-                            toast(
-                              "That's a finished export — the stage keeps the ad you built it from.",
-                              { icon: "🎬" },
-                            );
+                            onPreviewVideo?.({
+                              url: v.url,
+                              label: "Branded export",
+                            });
                             return;
                           }
                           onStageVideo?.({ id: v.id, url: v.url });
                         }}
                         title={
                           v.branded
-                            ? "A finished export — play it full size from the corner icon"
+                            ? "A finished export — play it here on the stage"
                             : "Put this clip on the stage to keep working on it"
                         }
                         className="block h-full w-full"
