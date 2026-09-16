@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { withWorkspace } from "@/lib/api/with-workspace";
 import { getConnectedPlatforms } from "@/lib/ayrshare/profiles";
 import { isDirectPlatform } from "@/lib/social/direct";
 import { isAyrshareEnabled } from "@/lib/ayrshare/enabled";
@@ -22,17 +21,13 @@ interface OutProfile {
   availableBoards?: { id: string; name: string }[];
 }
 
-export async function GET(req: Request) {
-  try {
-    const session = await getSession(req);
-    const admin = createSupabaseAdminClient();
-
-    const { data: profiles } = await admin
+export const GET = withWorkspace(
+  async (_req, { db, session }) => {
+    const { data: profiles } = await db
       .from("social_profiles")
       .select(
         "id, platform, handle, profile_display_name, platform_page_id, metadata, connected_at",
-      )
-      .eq("workspace_id", session.workspaceId);
+      );
 
     // For Facebook, surface the managed-page list (id + name only — never tokens)
     // and which page is active, so the UI can render the Page picker.
@@ -96,7 +91,7 @@ export async function GET(req: Request) {
     // Tenfold — leaving users unsure whether the connection actually took (the
     // "did it connect or not?" limbo). Meta platforms stay native (richer data +
     // Page picker); only add Ayrshare platforms the local table doesn't cover.
-    const { data: workspace } = await admin
+    const { data: workspace } = await db
       .from("workspaces")
       .select("ayrshare_profile_key")
       .eq("id", session.workspaceId)
@@ -143,9 +138,7 @@ export async function GET(req: Request) {
       // was guessing at readiness from a checklist the user ticked themselves.
       configuredPlatforms: configuredPlatforms(),
     });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    const status = msg === "Unauthorized" ? 401 : 500;
-    return NextResponse.json({ error: msg }, { status });
-  }
-}
+  },
+  // Read on every settings-page load; exempt from the shared per-IP bucket.
+  { rateLimit: false },
+);

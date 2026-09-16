@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { Resend } from "resend";
-import { getSession } from "@/lib/auth/session";
+import { withWorkspace } from "@/lib/api/with-workspace";
 import { senderAddress } from "@/lib/email/sender";
-import { errorMessage } from "@/lib/api/error-message";
 
 let resendClient: Resend | null = null;
 function getResendClient(): Resend {
@@ -22,31 +21,25 @@ const schema = z.object({
 });
 
 // POST /api/feedback — sends user feedback to admin@prettymuch.nz via Resend.
-export async function POST(req: Request) {
-  try {
-    const session = await getSession(req);
-    const { message, email, page } = schema.parse(await req.json());
+// Each call is an outbound email, so the default per-IP limit stays on.
+export const POST = withWorkspace(async (req, { session }) => {
+  const { message, email, page } = schema.parse(await req.json());
 
-    const resend = getResendClient();
-    await resend.emails.send({
-      from: senderAddress("noreply", "PrettyMuch Feedback"),
-      to: "admin@prettymuch.nz",
-      ...(email ? { replyTo: email } : {}),
-      subject: `Feedback · ${session.workspaceSlug ?? "prettymuch"}`,
-      text: [
-        `Workspace: ${session.workspaceSlug ?? "—"}`,
-        `User ID: ${session.userId ?? "—"}`,
-        `Reply-to: ${email ?? "(not provided)"}`,
-        `Page: ${page ?? "—"}`,
-        "",
-        message,
-      ].join("\n"),
-    });
+  const resend = getResendClient();
+  await resend.emails.send({
+    from: senderAddress("noreply", "PrettyMuch Feedback"),
+    to: "admin@prettymuch.nz",
+    ...(email ? { replyTo: email } : {}),
+    subject: `Feedback · ${session.workspaceSlug ?? "prettymuch"}`,
+    text: [
+      `Workspace: ${session.workspaceSlug ?? "—"}`,
+      `User ID: ${session.userId ?? "—"}`,
+      `Reply-to: ${email ?? "(not provided)"}`,
+      `Page: ${page ?? "—"}`,
+      "",
+      message,
+    ].join("\n"),
+  });
 
-    return NextResponse.json({ ok: true }, { status: 201 });
-  } catch (err) {
-    const msg = errorMessage(err, "Unknown error");
-    const status = msg === "Unauthorized" ? 401 : 500;
-    return NextResponse.json({ error: msg }, { status });
-  }
-}
+  return NextResponse.json({ ok: true }, { status: 201 });
+});

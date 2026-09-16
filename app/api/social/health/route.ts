@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { withWorkspace } from "@/lib/api/with-workspace";
 import { decryptProfileTokens } from "@/lib/social/token-crypto";
 import {
   checkMetaConnection,
@@ -13,15 +12,11 @@ import {
  * must render its connections immediately rather than waiting on a third party
  * to answer.
  */
-export async function GET(req: Request) {
-  try {
-    const session = await getSession(req);
-    const admin = createSupabaseAdminClient();
-
-    const { data: profiles } = await admin
+export const GET = withWorkspace(
+  async (_req, { db }) => {
+    const { data: profiles } = await db
       .from("social_profiles")
       .select("platform, platform_page_id, access_token")
-      .eq("workspace_id", session.workspaceId)
       .in("platform", ["facebook", "instagram"]);
 
     // Decrypt before asking Meta anything: sending ciphertext to debug_token
@@ -53,11 +48,7 @@ export async function GET(req: Request) {
     );
 
     return NextResponse.json(health);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json(
-      { error: msg },
-      { status: msg === "Unauthorized" ? 401 : 500 },
-    );
-  }
-}
+  },
+  // Two Meta round-trips per call; keep the default per-IP limit on.
+  { rateLimit: 30 },
+);

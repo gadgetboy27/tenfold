@@ -1,35 +1,22 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { withWorkspace } from "@/lib/api/with-workspace";
 import { PLANS, PACKS } from "@/lib/billing/plans";
 import { ADDONS } from "@/lib/billing/addons";
 
-export async function GET(req: Request) {
-  try {
-    const session = await getSession(req);
-    const admin = createSupabaseAdminClient();
-
+// GET /api/billing — the workspace's subscription, balance and recent ledger.
+// Every table here is in WORKSPACE_SCOPED_TABLES, so `db` applies the tenant
+// filter the old code wrote four times by hand.
+export const GET = withWorkspace(
+  async (_req, { db }) => {
     const [subRes, accountRes, txRes, addonsRes] = await Promise.all([
-      admin
-        .from("subscriptions")
-        .select("*")
-        .eq("workspace_id", session.workspaceId)
-        .single(),
-      admin
-        .from("credit_accounts")
-        .select("cached_balance")
-        .eq("workspace_id", session.workspaceId)
-        .single(),
-      admin
+      db.from("subscriptions").select("*").single(),
+      db.from("credit_accounts").select("cached_balance").single(),
+      db
         .from("credit_transactions")
         .select("*")
-        .eq("workspace_id", session.workspaceId)
         .order("created_at", { ascending: false })
         .limit(30),
-      admin
-        .from("workspace_addons")
-        .select("addon_key, status")
-        .eq("workspace_id", session.workspaceId),
+      db.from("workspace_addons").select("addon_key, status"),
     ]);
 
     const activeAddons = (
@@ -49,9 +36,6 @@ export async function GET(req: Request) {
       addons: ADDONS,
       activeAddons,
     });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    const status = msg === "Unauthorized" ? 401 : 500;
-    return NextResponse.json({ error: msg }, { status });
-  }
-}
+  },
+  { rateLimit: false },
+);

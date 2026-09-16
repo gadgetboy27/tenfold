@@ -1,23 +1,16 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
+import { withWorkspace } from "@/lib/api/with-workspace";
 
-export async function GET(req: Request) {
-  try {
-    const session = await getSession(req);
-    return NextResponse.json({
+// GET /api/workspaces/me — the caller's active workspace + role. Read-only and
+// cheap, so it is exempt from the shared per-IP bucket; it used to return the
+// error's stack trace as `detail`, which is gone with the wrapper's uniform
+// error shape.
+export const GET = withWorkspace(
+  async (_req, { session }) =>
+    NextResponse.json({
       workspaceId: session.workspaceId,
       slug: session.workspaceSlug,
       role: session.role,
-    });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    const stack = err instanceof Error ? err.stack : undefined;
-    const status =
-      msg === "Unauthorized"
-        ? 401
-        : msg === "Not a workspace member"
-          ? 404
-          : 500;
-    return NextResponse.json({ error: msg, detail: stack }, { status });
-  }
-}
+    }),
+  { rateLimit: false },
+);

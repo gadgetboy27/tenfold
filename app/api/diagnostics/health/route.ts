@@ -1,16 +1,15 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
+import { withWorkspace } from "@/lib/api/with-workspace";
 import { checkAllApiKeys } from "@/lib/diagnostics/api-health";
 
-export async function GET(req: Request) {
-  try {
-    await getSession(req);
+// GET /api/diagnostics/health — probes every upstream API key with a live
+// call. Any workspace member may ask, but each request is five outbound
+// requests to third parties, so it gets a tight limit rather than the default.
+export const GET = withWorkspace(
+  async () => {
     const results = await checkAllApiKeys();
     const allValid = results.every((r) => r.valid);
     return NextResponse.json({ ok: allValid, services: results });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    const status = msg === "Unauthorized" ? 401 : 500;
-    return NextResponse.json({ error: msg }, { status });
-  }
-}
+  },
+  { rateLimit: 10 },
+);
