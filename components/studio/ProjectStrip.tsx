@@ -343,9 +343,9 @@ export function ProjectStrip({
                 {/* Clicking a still puts it ON THE STAGE. It used to be an
                     <a target="_blank"> — "open full size" — so the one thing
                     you cannot do in a new browser tab (edit it) was the only
-                    thing the click offered, while the video tiles next door
-                    staged their clip. Full size is still here, on the hover
-                    icon, because it IS useful — just not as the primary act.
+                    thing the click offered. The video tiles now do the same.
+                    Full size is still here, on the hover icon, because it IS
+                    useful — just not as the primary act.
 
                     A branded export is excluded from staging for the same
                     reason the video tick excludes composed_video: it is the
@@ -430,11 +430,31 @@ export function ProjectStrip({
                           : "border-border"
                       }`}
                     >
-                      <a
-                        href={v.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={`${v.branded ? "Branded export" : "Raw clip"} — open to play`}
+                      {/* Clicking a clip puts it ON THE STAGE, exactly as the
+                          image tiles do — this was an <a target="_blank">
+                          "open to play", which is the one place you can't
+                          continue working on it. Staging only ever happened as
+                          a side-effect of ticking "Publishes", so a clip you
+                          wanted to keep editing but not (yet) publish had no
+                          way onto the canvas at all. Playing it full size is
+                          still here, on the hover icon below. */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (v.branded) {
+                            toast(
+                              "That's a finished export — the stage keeps the ad you built it from.",
+                              { icon: "🎬" },
+                            );
+                            return;
+                          }
+                          onStageVideo?.({ id: v.id, url: v.url });
+                        }}
+                        title={
+                          v.branded
+                            ? "A finished export — play it full size from the corner icon"
+                            : "Put this clip on the stage to keep working on it"
+                        }
                         className="block h-full w-full"
                       >
                         {/* #t=0.1 seeks to the first frame so the tile shows the
@@ -450,6 +470,17 @@ export function ProjectStrip({
                         <span className="absolute inset-0 flex items-center justify-center bg-black/25">
                           <Play className="h-3.5 w-3.5 fill-white text-white" />
                         </span>
+                      </button>
+                      <a
+                        href={v.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={`${v.branded ? "Branded export" : "Raw clip"} — play full size`}
+                        aria-label="Play full size"
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute bottom-0 right-0 z-10 hidden rounded-tl-md bg-black/70 p-0.5 text-white group-hover:block"
+                      >
+                        <Maximize2 className="h-2.5 w-2.5" />
                       </a>
                       {v.branded && !picked && (
                         <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-primary/80 text-center text-[8px] font-semibold uppercase tracking-wide text-primary-foreground">
