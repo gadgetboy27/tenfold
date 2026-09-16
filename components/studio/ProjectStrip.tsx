@@ -507,9 +507,22 @@ export function ProjectStrip({
                       >
                         <Maximize2 className="h-2.5 w-2.5" />
                       </a>
-                      {v.branded && !picked && (
-                        <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-primary/80 text-center text-[8px] font-semibold uppercase tracking-wide text-primary-foreground">
-                          Brand
+                      {/* Every clip says which kind it is. Only the export
+                          used to be labelled ("Brand"), so the raw clip beside
+                          it was the unmarked one — and the two answer different
+                          clicks: RAW stages as-is to keep editing; RENDER
+                          reopens the ad that made it (or, for a render from
+                          before its recipe was kept, stages as pixels). The
+                          publish tick still wins the ribbon. */}
+                      {!picked && (
+                        <span
+                          className={`pointer-events-none absolute inset-x-0 bottom-0 text-center text-[8px] font-semibold uppercase tracking-wide ${
+                            v.branded
+                              ? "bg-primary/80 text-primary-foreground"
+                              : "bg-black/60 text-white"
+                          }`}
+                        >
+                          {v.branded ? "Render" : "Raw"}
                         </span>
                       )}
                       {picked && (
