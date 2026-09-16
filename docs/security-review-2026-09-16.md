@@ -61,7 +61,9 @@ generator has no image field at all so a model cannot emit a URL.
 
 ## 4. Follow-through — do these, in order
 
-1. **Watch `webhook_logs`** for a day: `select payload->>'_signature', count(*)
+1. **Verified live 2026-09-16 03:39 UTC:** a genuine fal delivery to production
+   logged `_signature: valid` (request `01a0a84c-…`). **Watch `webhook_logs`**
+   for a day: `select payload->>'_signature', count(*)
 from webhook_logs where source='fal' and received_at > now() - interval
 '1 day' group by 1`. When it reads only `valid`, set
    `FAL_WEBHOOK_STRICT=true` on the `tenfold` Railway service.
