@@ -18,6 +18,7 @@ import {
   weightOf,
 } from "@/lib/composition/layers";
 import { motionExprs, type MotionExprs } from "@/lib/composition/effects";
+import { fetchPublic } from "@/lib/net/safe-url";
 
 /**
  * Headless MP4 export of a layered CompositionDoc via FFmpeg — the server
@@ -353,7 +354,7 @@ async function download(url: string, path: string): Promise<void> {
     await writeFile(path, inline);
     return;
   }
-  const res = await fetch(url);
+  const res = await fetchPublic(url);
   if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`);
   await writeFile(path, Buffer.from(await res.arrayBuffer()));
 }

@@ -2,6 +2,7 @@ import { fal } from "./client";
 import { FAL_MODELS, FAL_QUEUE_MODELS, type FalModelKey } from "./models";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { v4 as uuidv4 } from "uuid";
+import { fetchPublic } from "@/lib/net/safe-url";
 
 interface StuckJob {
   id: string;
@@ -139,7 +140,7 @@ export async function fetchAndProcessFalJob(job: StuckJob): Promise<boolean> {
     for (const img of result.data?.images ?? []) {
       const assetId = uuidv4();
       const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.jpg`;
-      const imgRes = await fetch(img.url);
+      const imgRes = await fetchPublic(img.url);
       const buffer = await imgRes.arrayBuffer();
       // Checked, like the video and audio paths below: .upload() returns its
       // error rather than throwing, and getPublicUrl will build a URL for an
@@ -172,7 +173,7 @@ export async function fetchAndProcessFalJob(job: StuckJob): Promise<boolean> {
       let publicUrl = result.data.video.url;
       let storedPath: string | null = null;
       try {
-        const videoRes = await fetch(result.data.video.url, {
+        const videoRes = await fetchPublic(result.data.video.url, {
           signal: AbortSignal.timeout(90_000),
         });
         const buffer = await videoRes.arrayBuffer();
@@ -209,7 +210,7 @@ export async function fetchAndProcessFalJob(job: StuckJob): Promise<boolean> {
       let publicUrl = audioResult.url;
       let storedPath: string | null = null;
       try {
-        const audioRes = await fetch(audioResult.url, {
+        const audioRes = await fetchPublic(audioResult.url, {
           signal: AbortSignal.timeout(60_000),
         });
         const buffer = await audioRes.arrayBuffer();
@@ -315,7 +316,7 @@ async function fetchMultiImage(
       for (const img of result.data?.images ?? []) {
         const assetId = uuidv4();
         const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.jpg`;
-        const imgRes = await fetch(img.url);
+        const imgRes = await fetchPublic(img.url);
         const buffer = await imgRes.arrayBuffer();
         // See the note on the first image upload: unchecked, this records an
         // asset row whose URL 404s.

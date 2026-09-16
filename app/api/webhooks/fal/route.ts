@@ -3,6 +3,10 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { falWebhookPayloadSchema, isSuccessStatus } from "@/lib/fal/webhooks";
 import { SWEPT_MARKER } from "@/lib/jobs/sweep";
 import {
+  falWebhookStrict,
+  verifyFalWebhook,
+} from "@/lib/fal/webhook-signature";
+import {
   extractFalError,
   handleFailure,
   handleSuccess,
@@ -16,8 +20,23 @@ import {
 // paths must produce the identical asset.
 
 export async function POST(req: Request) {
-  const rawPayload: unknown = await req.json();
+  // Raw text first: the signature covers the exact bytes fal sent.
+  const rawText = await req.text();
+  let rawPayload: unknown;
+  try {
+    rawPayload = JSON.parse(rawText);
+  } catch {
+    return NextResponse.json({ ok: true }); // not JSON — not a fal.ai payload
+  }
   const admin = createSupabaseAdminClient();
+
+  // 0. Verify fal's signature (lib/fal/webhook-signature.ts). Strict mode
+  //    refuses anything unverified; otherwise the outcome rides on the log
+  //    row so the rollout can be watched before it is enforced.
+  const signature = await verifyFalWebhook(req.headers, rawText);
+  if (signature.status !== "valid" && falWebhookStrict()) {
+    return NextResponse.json({ error: "Unverified webhook" }, { status: 401 });
+  }
 
   // Extract request_id from raw payload before schema validation
   const requestId = (rawPayload as Record<string, unknown>)?.request_id as
@@ -30,7 +49,13 @@ export async function POST(req: Request) {
   const { error: logErr } = await admin.from("webhook_logs").insert({
     source: "fal",
     event_id: requestId,
-    payload: rawPayload as Record<string, unknown>,
+    payload: {
+      ...(rawPayload as Record<string, unknown>),
+      _signature:
+        signature.status === "invalid"
+          ? `invalid: ${signature.reason}`
+          : signature.status,
+    },
   });
 
   if (logErr) {

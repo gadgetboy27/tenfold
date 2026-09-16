@@ -15,6 +15,7 @@ import {
   type TalkingResolution,
 } from "./talking-video";
 import { v4 as uuidv4 } from "uuid";
+import { fetchPublic } from "@/lib/net/safe-url";
 
 export interface TalkingJobParams {
   presenterImageUrl: string;
@@ -192,7 +193,9 @@ async function storeTalkingAsset(
   let publicUrl = videoUrl;
   let storedPath: string | null = null;
   try {
-    const res = await fetch(videoUrl, { signal: AbortSignal.timeout(90_000) });
+    const res = await fetchPublic(videoUrl, {
+      signal: AbortSignal.timeout(90_000),
+    });
     const buffer = await res.arrayBuffer();
     const { error: upErr } = await admin.storage
       .from("assets")

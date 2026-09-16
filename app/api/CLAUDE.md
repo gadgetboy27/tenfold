@@ -29,6 +29,26 @@ export const GET = withWorkspace<{ id: string }>(
 - First-login workspace provisioning lives in one place: `getOrProvisionWorkspace`
   (`lib/auth/provisioning.ts`). Do not re-implement it inline in auth routes.
 
+## Security rules that are code, not advice (2026-09-16)
+
+`docs/security-review-2026-09-16.md` has the findings. The rules it left:
+
+- **A URL a user or third party chose is fetched with `fetchPublic`**
+  (`lib/net/safe-url.ts`), never `fetch`. It refuses private / loopback /
+  metadata addresses and re-checks each redirect. Composition sources, the
+  website importer and the fal result URLs all go through it.
+- **An upload's content type comes from `lib/uploads/content.ts`**, derived
+  from the validated extension; rasters are sniffed, SVGs scanned
+  (`assertSafeSvg`). Never `contentType: file.type`.
+- **The fal webhook verifies fal's signature** (`lib/fal/webhook-signature.ts`)
+  and records the outcome as `_signature` on the log row. `FAL_WEBHOOK_STRICT`
+  makes it a 401. A new webhook provider gets a verifier before it gets a
+  handler.
+- **Untrusted text into a model goes in delimited under a system prompt that
+  says it's untrusted; every model answer passes Zod before use** — see
+  `lib/claude/campaign-brief.ts` for the shape.
+- **Dev-only routes need the ops secret as well as `NODE_ENV`.**
+
 ## Approval state machine — `campaigns.approval_status`
 
 `campaigns.approval_status: 'draft' | 'pending_review' | 'approved'`

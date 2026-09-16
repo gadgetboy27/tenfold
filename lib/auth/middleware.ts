@@ -10,19 +10,47 @@ const CORS_ALLOWED_ORIGINS =
     : ["http://localhost:3000", "http://127.0.0.1:3000"];
 
 function getCorsHeaders(origin?: string): Record<string, string> {
-  const allowedOrigin = CORS_ALLOWED_ORIGINS.some(
-    (allowed) =>
-      allowed && origin?.includes(allowed.replace(/^https?:\/\//, "")),
-  )
-    ? origin
-    : CORS_ALLOWED_ORIGINS[0];
+  // Exact match on the origin, never a substring test: `includes("prettymuch.nz")`
+  // was true for https://prettymuch.nz.evil.example and https://notprettymuch.nz,
+  // both of which were then reflected as the allowed origin. The API is
+  // bearer-authenticated and no Allow-Credentials is sent, which is what kept
+  // that from being a data leak — but a CORS check that passes for the wrong
+  // host is not a check. An unknown origin gets our own origin back, which
+  // the browser treats as a refusal.
+  const allowedOrigin =
+    origin && CORS_ALLOWED_ORIGINS.includes(origin)
+      ? origin
+      : CORS_ALLOWED_ORIGINS[0];
 
   return {
-    "Access-Control-Allow-Origin": allowedOrigin || "*",
+    "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
     "Access-Control-Allow-Headers":
       "Content-Type,Authorization,x-workspace-slug",
+    Vary: "Origin",
   };
+}
+
+/**
+ * Browser-hardening headers, on every response — pages included. They used
+ * to be set on API routes only, which is the one place a browser never
+ * renders anything. The frame denial and referrer policy matter on the pages.
+ * (No CSP yet: the root layout injects an inline env script and structured
+ * data, so a real policy needs nonces first — see the security review.)
+ */
+function withSecurityHeaders(res: NextResponse): NextResponse {
+  res.headers.set("X-Content-Type-Options", "nosniff");
+  res.headers.set("X-Frame-Options", "DENY");
+  res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.headers.set(
+    "Permissions-Policy",
+    "camera=(), microphone=(), geolocation=(), payment=()",
+  );
+  res.headers.set(
+    "Strict-Transport-Security",
+    "max-age=31536000; includeSubDomains",
+  );
+  return res;
 }
 
 export async function proxy(request: NextRequest) {
@@ -40,15 +68,7 @@ export async function proxy(request: NextRequest) {
   if (isApiRoute) {
     const response = NextResponse.next({ request });
     Object.entries(corsHeaders).forEach(([k, v]) => response.headers.set(k, v));
-    // Security headers
-    response.headers.set("X-Content-Type-Options", "nosniff");
-    response.headers.set("X-Frame-Options", "DENY");
-    response.headers.set("X-XSS-Protection", "1; mode=block");
-    response.headers.set(
-      "Strict-Transport-Security",
-      "max-age=31536000; includeSubDomains",
-    );
-    return response;
+    return withSecurityHeaders(response);
   }
 
   // Non-API routes.
@@ -70,7 +90,7 @@ export async function proxy(request: NextRequest) {
     for (const name of stale) {
       res.cookies.set(name, "", { maxAge: 0, path: "/" });
     }
-    return res;
+    return withSecurityHeaders(res);
   };
 
   const ALWAYS_PUBLIC = new Set(["/", "/callback", "/auth/callback"]);
@@ -109,7 +129,7 @@ export async function proxy(request: NextRequest) {
       "proxy: session refresh failed, serving page without redirect",
       err,
     );
-    return NextResponse.next({ request });
+    return withSecurityHeaders(NextResponse.next({ request }));
   }
 
   // Already signed in on this browser? Don't make returning users re-authenticate
@@ -118,7 +138,9 @@ export async function proxy(request: NextRequest) {
   if (user && isAuthPage) {
     const slug = user.user_metadata?.workspace_slug as string | undefined;
     if (slug) {
-      return NextResponse.redirect(new URL(`/${slug}`, request.url));
+      return clearStale(
+        NextResponse.redirect(new URL(`/${slug}`, request.url)),
+      );
     }
   }
 

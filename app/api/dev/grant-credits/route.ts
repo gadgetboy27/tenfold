@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isOpsRequest } from "@/lib/api/ops-auth";
 import { getSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -10,6 +11,12 @@ export async function POST(req: Request) {
       { error: "Not available in production" },
       { status: 403 },
     );
+  }
+  // Second lock: even off production this mints workspaces / credits, so it
+  // takes the ops secret too. A deployment that forgot NODE_ENV is one env
+  // var from exposing it otherwise, and "one env var" is not a control.
+  if (!isOpsRequest(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {

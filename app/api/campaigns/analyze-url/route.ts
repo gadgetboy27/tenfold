@@ -12,6 +12,7 @@ import { extractBrandSignals } from "@/lib/claude/brand-scrape";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import { errorMessage } from "@/lib/api/error-message";
+import { fetchPublic } from "@/lib/net/safe-url";
 
 // Users routinely type "example.com" without a scheme — z.string().url()
 // rejects that outright ("Invalid URL"), which was surfacing as a raw Zod
@@ -125,7 +126,7 @@ export async function POST(req: Request) {
     try {
       let res: Response;
       try {
-        res = await fetch(body.url, {
+        res = await fetchPublic(body.url, {
           signal: controller.signal,
           headers: {
             "User-Agent":

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { v4 as uuidv4 } from "uuid";
+import { assertRasterMatches, IMAGE_TYPES } from "@/lib/uploads/content";
 
 // POST /api/talking-video/presenter — upload a presenter photo for the talking
 // video flow. Returns a public URL the UI passes as `presenterImageUrl`. Mirrors
@@ -34,10 +35,18 @@ export async function POST(req: Request) {
     const admin = createSupabaseAdminClient();
     const storagePath = `presenters/${session.workspaceId}/${uuidv4()}.${ext}`;
     const buffer = await file.arrayBuffer();
+    try {
+      await assertRasterMatches(buffer, ext);
+    } catch (e) {
+      return NextResponse.json(
+        { error: e instanceof Error ? e.message : "Unreadable image" },
+        { status: 400 },
+      );
+    }
 
     const { error: upErr } = await admin.storage
       .from("assets")
-      .upload(storagePath, buffer, { contentType: file.type });
+      .upload(storagePath, buffer, { contentType: IMAGE_TYPES[ext] });
     if (upErr) {
       return NextResponse.json({ error: upErr.message }, { status: 500 });
     }

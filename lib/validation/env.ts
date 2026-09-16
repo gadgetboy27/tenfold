@@ -54,6 +54,12 @@ const envSchema = z.object({
   APP_URL: z.string().url(),
   NEXT_PUBLIC_APP_URL: z.string().url(),
   CRON_SECRET: z.string().min(1).optional(),
+  // "true" → an unverified fal webhook is refused (401). Unset → verified and
+  // recorded on webhook_logs, still processed. See lib/fal/webhook-signature.ts.
+  FAL_WEBHOOK_STRICT: z.enum(["true", "false"]).optional(),
+  // Dev only (ignored in production): let server-side fetches reach private
+  // addresses, for a Supabase running on localhost. See lib/net/safe-url.ts.
+  ALLOW_PRIVATE_FETCH: z.enum(["true", "false"]).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

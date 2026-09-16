@@ -11,6 +11,11 @@ import { ensureLogoCampaign } from "@/app/api/logo/route";
 import { validateVectorizeUpload } from "@/lib/logo/upload";
 import { fitForVectorize } from "@/lib/logo/vectorize-source";
 import { resolveOwnedAsset } from "@/lib/assets/owned";
+import {
+  assertRasterMatches,
+  extensionOf,
+  IMAGE_TYPES,
+} from "@/lib/uploads/content";
 
 // POST /api/logo/vectorize — the acquisition hook: upload an old raster logo,
 // get a clean SVG back (Recraft vectorize). 1 credit. Creates a lightweight
@@ -98,7 +103,19 @@ export async function POST(req: Request) {
       }
       // Store the source raster (enlarged if it's under Recraft's minimum)
       // so vectorize can pull it from a public URL.
-      const fitted = await fitForVectorize(await file.arrayBuffer(), file.type);
+      const bytes = await file.arrayBuffer();
+      const ext = extensionOf(file.name);
+      // Bytes must be the raster the name claims; the type is ours, not
+      // file.type's (lib/uploads/content.ts).
+      try {
+        await assertRasterMatches(bytes, ext);
+      } catch (e) {
+        return NextResponse.json(
+          { error: e instanceof Error ? e.message : "Unreadable image" },
+          { status: 400 },
+        );
+      }
+      const fitted = await fitForVectorize(bytes, IMAGE_TYPES[ext]);
       sourceUrl = await storeSource(
         admin,
         session.workspaceId,

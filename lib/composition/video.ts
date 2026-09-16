@@ -19,6 +19,7 @@ export type {
   CaptionStyle,
   CaptionPreset,
 } from "@/lib/composition/caption-presets";
+import { fetchPublic } from "@/lib/net/safe-url";
 export { CAPTION_PRESETS } from "@/lib/composition/caption-presets";
 
 // drawtext filter for each style. `dur` is the clip length in seconds; commas
@@ -140,7 +141,7 @@ async function probeWidth(path: string): Promise<number> {
 }
 
 async function download(url: string, path: string): Promise<void> {
-  const res = await fetch(url);
+  const res = await fetchPublic(url);
   if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`);
   await writeFile(path, Buffer.from(await res.arrayBuffer()));
 }

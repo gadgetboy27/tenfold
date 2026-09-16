@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { v4 as uuidv4 } from "uuid";
+import { assertRasterMatches, IMAGE_TYPES } from "@/lib/uploads/content";
 
 // POST /api/uploads/image — generic authenticated image upload to the public
 // `assets` bucket. Returns a public URL for use as a fal model input (e.g. the
@@ -32,9 +33,19 @@ export async function POST(req: Request) {
     const admin = createSupabaseAdminClient();
     const storagePath = `uploads/${session.workspaceId}/${uuidv4()}.${ext}`;
     const buffer = await file.arrayBuffer();
+    // Type from the validated extension and bytes that agree with it — never
+    // from file.type, which the client chooses (lib/uploads/content.ts).
+    try {
+      await assertRasterMatches(buffer, ext);
+    } catch (e) {
+      return NextResponse.json(
+        { error: e instanceof Error ? e.message : "Unreadable image" },
+        { status: 400 },
+      );
+    }
     const { error: upErr } = await admin.storage
       .from("assets")
-      .upload(storagePath, buffer, { contentType: file.type });
+      .upload(storagePath, buffer, { contentType: IMAGE_TYPES[ext] });
     if (upErr) {
       return NextResponse.json({ error: upErr.message }, { status: 500 });
     }

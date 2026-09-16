@@ -1,5 +1,6 @@
 import sharp from "sharp";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { fetchPublic } from "@/lib/net/safe-url";
 
 interface TextOverlay {
   text: string;
@@ -51,7 +52,7 @@ export async function composeImage(opts: ComposeImageOptions): Promise<string> {
   const { width, height } =
     FORMAT_DIMENSIONS[opts.format] ?? FORMAT_DIMENSIONS.square;
 
-  const res = await fetch(opts.sourceUrl);
+  const res = await fetchPublic(opts.sourceUrl);
   if (!res.ok) throw new Error(`Failed to fetch source image: ${res.status}`);
   const buffer = Buffer.from(await res.arrayBuffer());
 

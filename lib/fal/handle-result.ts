@@ -5,6 +5,7 @@ import { recordJobCost } from "@/lib/costs/tracker";
 import { analyzeJobFailure } from "@/lib/fal/error-analyzer";
 import { concatVideos } from "@/lib/composition/concat";
 import { v4 as uuidv4 } from "uuid";
+import { fetchPublic } from "@/lib/net/safe-url";
 
 // What happens to a fal result once we have it — in whichever way we got it.
 //
@@ -119,7 +120,7 @@ export async function handleSuccess(
           : "jpg";
       const storagePath = `${job.workspace_id}/${job.campaign_id}/${assetId}.${ext}`;
 
-      const imgRes = await fetch(img.url);
+      const imgRes = await fetchPublic(img.url);
       const buffer = await imgRes.arrayBuffer();
       const { error: upErr } = await admin.storage
         .from("assets")
@@ -207,7 +208,7 @@ export async function handleSuccess(
     let publicUrl = payload.video.url;
     let storedPath: string | null = null;
     try {
-      const videoRes = await fetch(payload.video.url, {
+      const videoRes = await fetchPublic(payload.video.url, {
         signal: AbortSignal.timeout(90_000),
       });
       const buffer = await videoRes.arrayBuffer();
@@ -270,7 +271,7 @@ export async function handleSuccess(
     let publicUrl = payload.audio_file.url;
     let storedPath: string | null = null;
     try {
-      const audioRes = await fetch(payload.audio_file.url, {
+      const audioRes = await fetchPublic(payload.audio_file.url, {
         signal: AbortSignal.timeout(60_000),
       });
       const buffer = await audioRes.arrayBuffer();

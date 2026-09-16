@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { v4 as uuidv4 } from "uuid";
+import { AUDIO_TYPES } from "@/lib/uploads/content";
 
 // POST /api/uploads/audio — authenticated audio upload to the public assets
 // bucket (mirrors uploads/video). Lets a user bring their OWN music track for
@@ -50,7 +51,8 @@ export async function POST(req: Request) {
     const buffer = await file.arrayBuffer();
     const { error: upErr } = await admin.storage
       .from("assets")
-      .upload(storagePath, buffer, { contentType: file.type });
+      // Type from the validated extension, never from file.type (client-chosen).
+      .upload(storagePath, buffer, { contentType: AUDIO_TYPES[ext] });
     if (upErr) {
       return NextResponse.json({ error: upErr.message }, { status: 500 });
     }

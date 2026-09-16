@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { resolveOwnedAsset } from "@/lib/assets/owned";
+import { fetchPublic } from "@/lib/net/safe-url";
+import {
+  assertRasterMatches,
+  assertSafeSvg,
+  IMAGE_TYPES,
+} from "@/lib/uploads/content";
 
 const ALLOWED_EXT = ["png", "jpg", "jpeg", "webp", "svg"];
 
@@ -44,7 +50,7 @@ export async function POST(req: Request) {
       if (!owned) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
       }
-      const srcRes = await fetch(owned.url);
+      const srcRes = await fetchPublic(owned.url);
       if (!srcRes.ok) {
         return NextResponse.json(
           { error: "Couldn't read that image" },
@@ -60,6 +66,17 @@ export async function POST(req: Request) {
             ? "png"
             : "jpg";
       buffer = await srcRes.arrayBuffer();
+      // Same scan for a stored SVG being promoted to the brand mark.
+      if (ext === "svg") {
+        try {
+          assertSafeSvg(Buffer.from(buffer).toString("utf8"));
+        } catch (e) {
+          return NextResponse.json(
+            { error: e instanceof Error ? e.message : "Unsafe SVG" },
+            { status: 400 },
+          );
+        }
+      }
       if (buffer.byteLength > 5 * 1024 * 1024) {
         return NextResponse.json(
           { error: "Image must be under 5 MB" },
@@ -92,8 +109,23 @@ export async function POST(req: Request) {
           { status: 400 },
         );
       }
-      contentType = file.type;
       buffer = await file.arrayBuffer();
+      // Our type, from the validated extension; and the bytes must agree.
+      // SVG is XML with a script engine — a mark that scripts is refused.
+      try {
+        if (ext === "svg") {
+          assertSafeSvg(Buffer.from(buffer).toString("utf8"));
+          contentType = "image/svg+xml";
+        } else {
+          await assertRasterMatches(buffer, ext);
+          contentType = IMAGE_TYPES[ext];
+        }
+      } catch (e) {
+        return NextResponse.json(
+          { error: e instanceof Error ? e.message : "Unreadable image" },
+          { status: 400 },
+        );
+      }
     }
 
     const name = variant === "dark" ? "logo-dark" : "logo";

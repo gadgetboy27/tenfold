@@ -3,6 +3,7 @@ import { writeFile, readFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { fetchPublic } from "@/lib/net/safe-url";
 
 /**
  * Bake a static image onto a video as a title (intro) or end (outro) card — the
@@ -29,7 +30,7 @@ function run(cmd: string, args: string[]): Promise<string> {
 }
 
 async function download(url: string, path: string): Promise<void> {
-  const res = await fetch(url, { signal: AbortSignal.timeout(90_000) });
+  const res = await fetchPublic(url, { signal: AbortSignal.timeout(90_000) });
   if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`);
   await writeFile(path, Buffer.from(await res.arrayBuffer()));
 }

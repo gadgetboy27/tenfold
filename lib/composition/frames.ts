@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fetchPublic } from "@/lib/net/safe-url";
 
 /**
  * Sample still frames from a finished video so a model can look at the ad.
@@ -141,7 +142,7 @@ export async function sampleVideoFrames(
   const dir = await mkdtemp(join(tmpdir(), "tf-frames-"));
   const path = join(dir, "clip.mp4");
   try {
-    const res = await fetch(videoUrl);
+    const res = await fetchPublic(videoUrl);
     if (!res.ok) throw new Error(`Could not fetch the video (${res.status})`);
     await writeFile(path, Buffer.from(await res.arrayBuffer()));
 

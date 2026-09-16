@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import sharp from "sharp";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { fetchPublic } from "@/lib/net/safe-url";
 
 // Kling (and most fal image-to-video models) reject a start image over 10 MB
 // with `file_too_large`. FLUX Ultra anchors are routinely 10–15 MB, so the
@@ -23,7 +24,7 @@ export async function prepareVideoStartImage(
   campaignId?: string,
 ): Promise<string> {
   try {
-    const res = await fetch(sourceUrl);
+    const res = await fetchPublic(sourceUrl);
     if (!res.ok) return sourceUrl;
     const buffer = Buffer.from(await res.arrayBuffer());
     const meta = await sharp(buffer)
