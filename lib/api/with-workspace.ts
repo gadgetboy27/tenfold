@@ -49,6 +49,8 @@ export const WORKSPACE_SCOPED_TABLES = new Set<string>([
   // scope by and resolves the workspace from the page itself.
   "landing_pages",
   "page_leads",
+  // Feedback queue (migration 0036).
+  "feedback",
 ]);
 
 type AdminClient = SupabaseClient;

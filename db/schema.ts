@@ -566,3 +566,31 @@ export const logoProjects = pgTable(
     ),
   ],
 );
+
+/**
+ * User feedback, kept as a queue (migration 0036). `context` is what the
+ * widget captured at send time so a bug can be reproduced without a reply
+ * asking where it happened.
+ */
+export const feedback = pgTable("feedback", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id")
+    .notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull(),
+  userEmail: text("user_email"),
+  /** 'bug' | 'idea' | 'question' | 'other' */
+  category: text("category").notNull().default("other"),
+  message: text("message").notNull(),
+  replyTo: text("reply_to"),
+  context: jsonb("context").notNull().default("{}"),
+  /** 'new' | 'seen' | 'done' */
+  status: text("status").notNull().default("new"),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});

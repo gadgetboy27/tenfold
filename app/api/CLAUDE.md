@@ -58,6 +58,21 @@ export const GET = withWorkspace<{ id: string }>(
   `lib/claude/campaign-brief.ts` for the shape.
 - **Dev-only routes need the ops secret as well as `NODE_ENV`.**
 
+## Feedback queue — `feedback` (migration 0036)
+
+`POST /api/feedback` saves a report as a row FIRST and emails admin@ second
+(best-effort, Sentry on failure): mail was the only record and a Resend
+hiccup lost it. The Studio header's `FeedbackWidget` attaches the page,
+section, campaign, browser and viewport as `context`, and the route resolves
+the sender's email from the session — nobody types it, nobody can spoof it.
+
+Working through them is vendor-side, behind the ops bearer (`CRON_SECRET`):
+
+```
+GET   /api/ops/feedback?status=new|seen|done|all&limit=50
+PATCH /api/ops/feedback   { id, status, note? }
+```
+
 ## Approval state machine — `campaigns.approval_status`
 
 `campaigns.approval_status: 'draft' | 'pending_review' | 'approved'`

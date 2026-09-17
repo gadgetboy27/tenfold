@@ -6,7 +6,7 @@ import { useAppStore } from "@/store/useAppStore";
 import CreditMeter from "@/components/shared/CreditMeter";
 import ProBadge from "@/components/billing/ProBadge";
 import JobStatusIndicator from "@/components/shared/JobStatusIndicator";
-import FeedbackWidget from "@/components/feedback/FeedbackWidget";
+import { FeedbackWidget } from "@/components/feedback/FeedbackWidget";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import {

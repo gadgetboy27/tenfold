@@ -74,6 +74,7 @@ import { GalleryPicker } from "@/components/shared/GalleryPicker";
 import { thumbUrl } from "@/lib/images/thumb";
 import { displayVideo } from "@/lib/campaign/video-pick";
 import { UserMenu } from "@/components/studio/UserMenu";
+import { FeedbackWidget } from "@/components/feedback/FeedbackWidget";
 import { AutoRunPanel } from "@/components/studio/AutoRunPanel";
 import { BriefAgentPanel } from "@/components/studio/BriefAgentPanel";
 import {
@@ -1639,6 +1640,14 @@ export function Studio({
               <Share2 className="h-4 w-4" />
             </button>
             <CreditMeter />
+            {/* Same story as UserMenu below: the feedback widget lived in
+                TopBar, so the main site had no way to report anything. It
+                carries the section and the open project with the report. */}
+            <FeedbackWidget
+              workspaceSlug={workspaceSlug}
+              section={SECTION_LABELS[section]}
+              campaignId={campaignId}
+            />
             {/* Studio never inherited TopBar, so the main site had no sign-out
                 and no indication of which account you were using. */}
             <UserMenu />
