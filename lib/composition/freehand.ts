@@ -157,17 +157,33 @@ export interface FreehandRaster {
   height: number;
 }
 
-/** Render every stroke onto a fresh transparent canvas and export it as the
- *  PNG that becomes the ad's image layer — mirrors rasterizeSticker's shape
- *  so callers treat the two the same way. */
+/**
+ * Render every stroke onto a canvas and export it as the PNG that becomes
+ * the ad's image layer — mirrors rasterizeSticker's shape so callers treat
+ * the two the same way.
+ *
+ * `background` is undefined by default, which leaves the canvas at its
+ * native fully-transparent starting state (a `<canvas>` is never opaque
+ * until something paints it) — so a drawing lands on the ad as just its own
+ * strokes, never blocking whatever image it's placed over. Passing a colour
+ * fills the whole frame first, same "off unless asked for" shape as the
+ * Words layer's "Panel behind" scrim: here it turns the drawing into a solid
+ * banner/card background instead of leaving it invisible everywhere but the
+ * strokes themselves.
+ */
 export function rasterizeFreehand(
   strokes: Stroke[],
   size = FREEHAND_CANVAS_PX,
+  background?: string,
 ): FreehandRaster {
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext("2d")!;
+  if (background) {
+    ctx.fillStyle = background;
+    ctx.fillRect(0, 0, size, size);
+  }
   for (const stroke of strokes) drawStroke(ctx, stroke);
   return { dataUrl: canvas.toDataURL("image/png"), width: size, height: size };
 }

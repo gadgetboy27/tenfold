@@ -27,11 +27,34 @@ import { addImageToAd } from "./adBridge";
  * one component would double it for no real gain, and every other tool in
  * Wording is already one card per concern.
  */
+// Standard image-editor transparency checkerboard — shown behind the canvas
+// so "this is see-through" is something you can SEE while drawing, not just
+// a claim. A flat white edit-time background (the old default) looked
+// identical whether the export would be transparent or opaque white, which
+// is exactly the ambiguity that prompted this.
+const TRANSPARENCY_CHECKER: React.CSSProperties = {
+  backgroundImage:
+    "linear-gradient(45deg, #ddd 25%, transparent 25%), " +
+    "linear-gradient(-45deg, #ddd 25%, transparent 25%), " +
+    "linear-gradient(45deg, transparent 75%, #ddd 75%), " +
+    "linear-gradient(-45deg, transparent 75%, #ddd 75%)",
+  backgroundSize: "16px 16px",
+  backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0",
+  backgroundColor: "#fff",
+};
+
 export function FreehandCard() {
   const [brush, setBrush] = useState<BrushType>("fine");
   const [color, setColor] = useState("#1a1a1a");
   const [size, setSize] = useState(10);
   const [strokes, setStrokes] = useState<Stroke[]>([]);
+  // Off by default — the whole point is that a drawing doesn't block the
+  // image it lands on. Same "off unless asked for" shape as the Words
+  // layer's "Panel behind" scrim, just inverted in spirit: that one adds a
+  // panel for LEGIBILITY over busy footage; this one adds one so a drawing
+  // can double as a solid banner/card background when that's what's wanted.
+  const [panelBehind, setPanelBehind] = useState(false);
+  const [panelColor, setPanelColor] = useState("#ffffff");
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
@@ -88,7 +111,11 @@ export function FreehandCard() {
 
   const add = () => {
     if (strokes.length === 0) return;
-    const raster = rasterizeFreehand(strokes);
+    const raster = rasterizeFreehand(
+      strokes,
+      FREEHAND_CANVAS_PX,
+      panelBehind ? panelColor : undefined,
+    );
     const where = addImageToAd(raster.dataUrl);
     toast.success(
       where === "background"
@@ -156,7 +183,7 @@ export function FreehandCard() {
         </label>
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
         {PEN_PALETTES.map((p) => (
           <button
             key={p.label}
@@ -167,6 +194,23 @@ export function FreehandCard() {
             style={{ backgroundColor: p.color }}
           />
         ))}
+        <label className="ml-auto flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={panelBehind}
+            onChange={(e) => setPanelBehind(e.target.checked)}
+          />
+          Panel behind
+        </label>
+        {panelBehind && (
+          <input
+            type="color"
+            value={panelColor}
+            onInput={(e) => setPanelColor(e.currentTarget.value)}
+            title="Panel colour"
+            className="h-6 w-8 cursor-pointer rounded border border-border bg-background"
+          />
+        )}
       </div>
 
       <canvas
@@ -177,7 +221,10 @@ export function FreehandCard() {
         onPointerMove={pointerMove}
         onPointerUp={pointerUp}
         onPointerLeave={pointerUp}
-        className="aspect-square w-full touch-none rounded-xl border border-border bg-white"
+        style={
+          panelBehind ? { backgroundColor: panelColor } : TRANSPARENCY_CHECKER
+        }
+        className="aspect-square w-full touch-none rounded-xl border border-border"
       />
 
       <div className="flex items-center gap-2">
