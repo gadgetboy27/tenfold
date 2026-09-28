@@ -7,6 +7,7 @@ import { ensureBrandFontsLoaded } from "@/lib/composition/fonts";
 import { weightsFor } from "@/lib/composition/layers";
 import {
   DEFAULT_STICKER,
+  PEN_PALETTES,
   STICKER_EFFECTS,
   STICKER_FONTS,
   type StickerEffect,
@@ -21,7 +22,20 @@ const EFFECT_LABEL: Record<StickerEffect, string> = {
   glow: "Afterglow",
   neon: "Neon",
   outline: "Outline",
+  marker: "Marker",
+  spray: "Graffiti spray",
+  calligraphy: "Calligraphy",
 };
+
+/** Effects with a size knob worth showing — the "brush size" for the pen
+ *  effects. Glow/neon/outline/shadow keep their existing fixed proportions;
+ *  wiring effectSize into those too is a separate, riskier change to their
+ *  already-shipped look. */
+const SIZABLE_EFFECTS = new Set<StickerEffect>([
+  "marker",
+  "spray",
+  "calligraphy",
+]);
 
 const TILTS = [-15, -8, 0, 8, 15];
 
@@ -190,6 +204,58 @@ export function StickerCard() {
           </button>
         </span>
       </div>
+
+      {spec.effect !== "none" && (
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[11px] text-muted-foreground">
+            Colour palettes
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {PEN_PALETTES.map((p) => (
+              <button
+                key={p.label}
+                type="button"
+                onClick={() =>
+                  apply({ color: p.color, effectColor: p.effectColor }, true)
+                }
+                title={p.label}
+                className="flex items-center gap-1 rounded-md border border-border px-1.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+              >
+                <span className="flex h-3.5 w-3.5 overflow-hidden rounded-full border border-border/60">
+                  <span
+                    className="h-full w-1/2"
+                    style={{ backgroundColor: p.color }}
+                  />
+                  <span
+                    className="h-full w-1/2"
+                    style={{ backgroundColor: p.effectColor }}
+                  />
+                </span>
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {SIZABLE_EFFECTS.has(spec.effect) && (
+        <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          Brush size
+          <input
+            type="range"
+            min={0.5}
+            max={2}
+            step={0.1}
+            value={spec.effectSize}
+            onChange={(e) => apply({ effectSize: Number(e.target.value) })}
+            aria-label="Brush size"
+            className="min-w-0 flex-1 accent-primary"
+          />
+          <span className="w-8 shrink-0 text-right tabular-nums">
+            {spec.effectSize.toFixed(1)}×
+          </span>
+        </label>
+      )}
 
       {target ? (
         <div className="flex items-center gap-2">

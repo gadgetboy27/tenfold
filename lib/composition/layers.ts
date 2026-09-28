@@ -534,6 +534,15 @@ export const STICKER_EFFECTS = [
   "glow",
   "neon",
   "outline",
+  // Free-tier "pen" effects (2026-09-29) — canvas-2D approximations, same
+  // spirit as glow/neon above: not physical simulation, just a recipe that
+  // reads as the thing. Appended rather than reordered so existing saved
+  // stickers keep their effect index-independent meaning (this is a string
+  // enum, not an index, but keeping additions at the end is still the least
+  // surprising diff to review).
+  "marker",
+  "spray",
+  "calligraphy",
 ] as const;
 export type StickerEffect = (typeof STICKER_EFFECTS)[number];
 
@@ -543,11 +552,17 @@ export const stickerSpecSchema = z.object({
   weight: z.union([z.literal(400), z.literal(700)]).default(700),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   effect: z.enum(STICKER_EFFECTS).default("none"),
-  /** Glow / neon / outline / shadow colour. Ignored for "none". */
+  /** Glow / neon / outline / shadow / marker / spray / calligraphy colour.
+   *  Ignored for "none". */
   effectColor: z
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/)
     .default("#ff2d95"),
+  /** "Brush size" — a 0.5–2 multiplier on the effect's stroke width / blur /
+   *  grain density. Defaults to 1, which reproduces every existing effect's
+   *  look exactly, so this is additive for old sticker specs, not a
+   *  behaviour change. */
+  effectSize: z.number().min(0.5).max(2).default(1),
   flipH: z.boolean().default(false),
   flipV: z.boolean().default(false),
 });

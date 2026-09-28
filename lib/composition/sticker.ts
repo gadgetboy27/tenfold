@@ -52,9 +52,51 @@ export const DEFAULT_STICKER: StickerSpec = {
   color: "#ffffff",
   effect: "neon",
   effectColor: "#ff2d95",
+  effectSize: 1,
   flipH: false,
   flipV: false,
 };
+
+/**
+ * Curated colour pairs for the new pen effects — a quick pick alongside the
+ * raw colour inputs, not a replacement for them. Marker and calligraphy read
+ * best with a dark ink on a light fill (or vice versa); spray reads best with
+ * a saturated fill against a contrasting mist colour.
+ */
+export const PEN_PALETTES: {
+  label: string;
+  color: string;
+  effectColor: string;
+}[] = [
+  { label: "Ink", color: "#1a1a1a", effectColor: "#000000" },
+  { label: "Gold leaf", color: "#f5d67a", effectColor: "#8a6a1a" },
+  { label: "Blood orange", color: "#ff5a1f", effectColor: "#c22a00" },
+  { label: "Electric", color: "#00e5ff", effectColor: "#7a00ff" },
+  { label: "Acid", color: "#d4ff00", effectColor: "#ff00aa" },
+  { label: "Chalk", color: "#ffffff", effectColor: "#2a2a2a" },
+];
+
+/** Deterministic pseudo-random, seeded from the sticker's own text so the
+ *  same word always renders the same "organic" texture — re-rasterising on
+ *  every keystroke (Words does this live) must not make the grain flicker. */
+function hashSeed(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+function seededRandom(seed: number): () => number {
+  let a = seed || 1;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 /** Rasterised at this glyph size; the layer's `scale` does the rest. */
 export const STICKER_FONT_PX = 200;
@@ -64,7 +106,11 @@ export const STICKER_FONT_PX = 200;
  * Pure, so the padding rule — and therefore the sticker's box on the stage —
  * is testable without a canvas.
  */
-export function stickerPadding(effect: StickerEffect, fontPx: number): number {
+export function stickerPadding(
+  effect: StickerEffect,
+  fontPx: number,
+  effectSize = 1,
+): number {
   switch (effect) {
     case "glow":
       return Math.round(fontPx * 0.35);
@@ -74,6 +120,16 @@ export function stickerPadding(effect: StickerEffect, fontPx: number): number {
       return Math.round(fontPx * 0.2);
     case "outline":
       return Math.round(fontPx * 0.12);
+    // The three below scale with effectSize (up to 2×) since brush size
+    // directly changes how far the stroke/grain reaches past the glyph —
+    // clamped to effectSize's own max so this can never be under-padded.
+    case "spray":
+      // Needs room for both the overspray mist and the scattered grain dots.
+      return Math.round(fontPx * 0.3 * Math.min(effectSize, 2));
+    case "marker":
+      return Math.round(fontPx * 0.15 * Math.min(effectSize, 2));
+    case "calligraphy":
+      return Math.round(fontPx * 0.08 * Math.min(effectSize, 2));
     default:
       return Math.round(fontPx * 0.06);
   }
@@ -101,11 +157,25 @@ export interface StickerRaster {
  *   neon    — a thick stroked halo in the effect colour with a wide blur,
  *             twice, then a tight blur, then a pale core: a lit tube
  *   outline — a stroke in the effect colour under the fill
+ *   marker  — a felt-tip look: a few jittered, semi-transparent strokes
+ *             under the fill, for uneven ink coverage at the edges
+ *   spray   — a graffiti stencil look: faint overspray rings around the
+ *             glyphs plus scattered paint-grain dots
+ *   calligraphy — an ink-flow look: a soft directional shadow plus a thin
+ *             translucent stroke, suggesting nib pressure without needing a
+ *             script font
+ *
+ * marker/spray/calligraphy use a seeded pseudo-random (seeded off the
+ * sticker's own text) rather than Math.random() — Words re-rasterises on
+ * every keystroke, so true randomness would make the grain visibly flicker
+ * while typing; seeding on the text keeps it stable per word while still
+ * varying between different words.
  */
 export function rasterizeSticker(spec: StickerSpec): StickerRaster {
   const weight = stickerWeight(spec);
   const font = `${weight} ${STICKER_FONT_PX}px "${spec.font}", sans-serif`;
-  const pad = stickerPadding(spec.effect, STICKER_FONT_PX);
+  const effectSize = spec.effectSize ?? 1;
+  const pad = stickerPadding(spec.effect, STICKER_FONT_PX, effectSize);
 
   const measure = document.createElement("canvas").getContext("2d")!;
   measure.font = font;
@@ -185,6 +255,69 @@ export function rasterizeSticker(spec: StickerSpec): StickerRaster {
       ctx.lineJoin = "round";
       ctx.strokeStyle = spec.effectColor;
       ctx.lineWidth = STICKER_FONT_PX * 0.1;
+      ctx.strokeText(spec.text, x, y);
+      ctx.restore();
+      glyph();
+      break;
+    }
+    case "marker": {
+      const rand = seededRandom(hashSeed(spec.text + "marker"));
+      const w = STICKER_FONT_PX * 0.09 * effectSize;
+      ctx.save();
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.strokeStyle = spec.color;
+      ctx.globalAlpha = 0.5;
+      for (let i = 0; i < 3; i++) {
+        ctx.lineWidth = w * (0.85 + rand() * 0.3);
+        ctx.save();
+        ctx.translate((rand() - 0.5) * w * 0.3, (rand() - 0.5) * w * 0.3);
+        ctx.strokeText(spec.text, x, y);
+        ctx.restore();
+      }
+      ctx.restore();
+      glyph();
+      break;
+    }
+    case "spray": {
+      const rand = seededRandom(hashSeed(spec.text + "spray"));
+      ctx.save();
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = spec.effectColor;
+      for (let i = 0; i < 5; i++) {
+        ctx.globalAlpha = 0.08;
+        ctx.lineWidth = STICKER_FONT_PX * (0.03 + i * 0.015) * effectSize;
+        ctx.strokeText(spec.text, x, y);
+      }
+      ctx.restore();
+      glyph();
+      // Grain: scattered dots around the glyphs for a spray-can texture.
+      ctx.save();
+      ctx.fillStyle = spec.effectColor;
+      const dots = Math.round(80 * effectSize);
+      for (let i = 0; i < dots; i++) {
+        const dx = x + (rand() - 0.5) * width * 0.9;
+        const dy = pad + (rand() - 0.5) * -0.1 * height + rand() * height * 0.9;
+        ctx.globalAlpha = 0.15 + rand() * 0.2;
+        ctx.beginPath();
+        ctx.arc(dx, dy, 0.6 + rand() * 1.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+      break;
+    }
+    case "calligraphy": {
+      ctx.save();
+      ctx.shadowColor = spec.effectColor;
+      ctx.shadowBlur = STICKER_FONT_PX * 0.015 * effectSize;
+      ctx.shadowOffsetX = STICKER_FONT_PX * 0.015 * effectSize;
+      ctx.shadowOffsetY = STICKER_FONT_PX * 0.02 * effectSize;
+      glyph();
+      ctx.restore();
+      ctx.save();
+      ctx.strokeStyle = spec.effectColor;
+      ctx.lineWidth = STICKER_FONT_PX * 0.012 * effectSize;
+      ctx.globalAlpha = 0.6;
       ctx.strokeText(spec.text, x, y);
       ctx.restore();
       glyph();

@@ -61,6 +61,29 @@ describe("sticker spec", () => {
       stickerPadding("neon", 200),
     );
   });
+
+  it("scales the pen effects' padding with brush size, capped at 2×", () => {
+    expect(stickerPadding("spray", 200, 1)).toBeLessThan(
+      stickerPadding("spray", 200, 2),
+    );
+    // Capped: an out-of-range effectSize can't under-pad past the 2× case.
+    expect(stickerPadding("spray", 200, 5)).toBe(
+      stickerPadding("spray", 200, 2),
+    );
+    // Default (no third arg) reproduces the effectSize=1 case exactly, so a
+    // spec saved before effectSize existed still measures the same.
+    expect(stickerPadding("marker", 200)).toBe(
+      stickerPadding("marker", 200, 1),
+    );
+  });
+
+  it("defaults effectSize to 1, matching every effect shipped before it existed", () => {
+    const parsed = stickerSpecSchema.parse({
+      ...DEFAULT_STICKER,
+      effectSize: undefined,
+    });
+    expect(parsed.effectSize).toBe(1);
+  });
 });
 
 describe("export reads a sticker's data: URL", () => {
