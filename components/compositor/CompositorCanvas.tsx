@@ -98,6 +98,9 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
     const doc = useCompositorStore((s) => s.doc);
     const selectedLayerId = useCompositorStore((s) => s.selectedLayerId);
     const selectLayer = useCompositorStore((s) => s.selectLayer);
+    const multiSelectedIds = useCompositorStore((s) => s.multiSelectedIds);
+    const toggleMultiSelect = useCompositorStore((s) => s.toggleMultiSelect);
+    const clearMultiSelect = useCompositorStore((s) => s.clearMultiSelect);
     const updateLayer = useCompositorStore((s) => s.updateLayer);
     const removeLayer = useCompositorStore((s) => s.removeLayer);
     const patchLayout = useCompositorStore((s) => s.patchLayout);
@@ -243,6 +246,7 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
           draggingLayerId: action.current?.id ?? null,
           editingLayerId: editing?.id ?? null,
           forceOutline: hoverEdge.current || action.current?.mode === "resize",
+          multiSelectedIds,
         });
 
         // Keep the music glued to the master clock — correct only on real drift
@@ -267,6 +271,7 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
       playing,
       cleanPreview,
       selectedLayerId,
+      multiSelectedIds,
       fontsReady,
       editing,
       onTick,
@@ -408,6 +413,19 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
       const ctx = canvasRef.current?.getContext("2d");
       if (!ctx || !doc) return;
       const p = toDesign(e);
+
+      // Shift-click toggles "Combine into one panel"'s pending set — a
+      // separate, additive selection, not the primary one below. Short-
+      // circuits before any resize/move logic so a shift-click never starts
+      // a drag; a plain click always behaves exactly as it did before this
+      // existed, and also clears any pending multi-select, since it signals
+      // "back to single-layer editing".
+      if (e.shiftKey) {
+        const hit = hitTestLayer(ctx, doc, p.x, p.y, imagesRef.current);
+        if (hit) toggleMultiSelect(hit.id);
+        return;
+      }
+      if (multiSelectedIds.length > 0) clearMultiSelect();
 
       // Edge/corner of the SELECTED layer → start a resize (locked layers don't).
       const sel = doc.layers.find((l) => l.id === selectedLayerId);

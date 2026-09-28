@@ -26,6 +26,12 @@ export type LayerPatch = Partial<Omit<ImageLayer, "id" | "kind">> &
 interface CompositorState {
   doc: CompositionDoc | null;
   selectedLayerId: string | null;
+  /** "Combine into one panel"'s pending set — shift-click on the canvas adds
+   *  or removes a layer. Separate from selectedLayerId (the one "active"
+   *  layer for styling panels) on purpose: this is only ever consumed by
+   *  Combine, and conflating the two would mean styling the wrong layer the
+   *  moment more than one was marked. */
+  multiSelectedIds: string[];
   dirty: boolean;
   /** When true, canvas geometry edits (drag/resize) write to the CURRENT
    *  aspect's per-format override instead of the shared master layer. */
@@ -44,6 +50,8 @@ interface CompositorState {
   setPendingAspect: (aspect: CompositionAspect) => void;
   markSaved: () => void;
   selectLayer: (id: string | null) => void;
+  toggleMultiSelect: (id: string) => void;
+  clearMultiSelect: () => void;
   setOverrideMode: (on: boolean) => void;
 
   setAspect: (aspect: CompositionAspect) => void;
@@ -74,6 +82,10 @@ interface CompositorState {
   removeLayer: (id: string) => void;
   /** Move a layer toward the front (up) or back (down) in render order. */
   moveLayer: (id: string, dir: "up" | "down") => void;
+  /** "Combine into one panel": remove every layer in `ids` and add
+   *  `newLayer` in their place, as ONE undo step — the flattened image
+   *  replacing several independent ones is a single edit, not several. */
+  combineLayers: (ids: string[], newLayer: Layer) => void;
 
   /**
    * Undo history — snapshots of the whole doc, newest last.
@@ -125,6 +137,7 @@ function editDoc(
 export const useCompositorStore = create<CompositorState>((set) => ({
   doc: null,
   selectedLayerId: null,
+  multiSelectedIds: [],
   dirty: false,
   overrideMode: false,
   pendingAspect: "1:1",
@@ -141,6 +154,7 @@ export const useCompositorStore = create<CompositorState>((set) => ({
       selectedLayerId: doc.layers.length
         ? doc.layers[doc.layers.length - 1].id
         : null,
+      multiSelectedIds: [],
       dirty: false,
       overrideMode: false,
       // A different ad's history is not just useless, it's dangerous: undoing
@@ -152,6 +166,7 @@ export const useCompositorStore = create<CompositorState>((set) => ({
     set({
       doc: null,
       selectedLayerId: null,
+      multiSelectedIds: [],
       dirty: false,
       overrideMode: false,
       past: [],
@@ -200,6 +215,13 @@ export const useCompositorStore = create<CompositorState>((set) => ({
       };
     }),
   selectLayer: (id) => set({ selectedLayerId: id }),
+  toggleMultiSelect: (id) =>
+    set((s) => ({
+      multiSelectedIds: s.multiSelectedIds.includes(id)
+        ? s.multiSelectedIds.filter((x) => x !== id)
+        : [...s.multiSelectedIds, id],
+    })),
+  clearMultiSelect: () => set({ multiSelectedIds: [] }),
   setOverrideMode: (on) => set({ overrideMode: on }),
 
   setAspect: (aspect) => set((s) => editDoc(s, (doc) => ({ ...doc, aspect }))),
@@ -312,6 +334,16 @@ export const useCompositorStore = create<CompositorState>((set) => ({
         return { ...doc, layers };
       }),
     ),
+
+  combineLayers: (ids, newLayer) =>
+    set((s) => ({
+      ...editDoc(s, (doc) => ({
+        ...doc,
+        layers: [...doc.layers.filter((l) => !ids.includes(l.id)), newLayer],
+      })),
+      selectedLayerId: newLayer.id,
+      multiSelectedIds: [],
+    })),
 }));
 
 export type { CompositionDoc, Layer, ImageLayer, TextLayer };

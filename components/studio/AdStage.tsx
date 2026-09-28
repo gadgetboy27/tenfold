@@ -16,6 +16,7 @@ import {
   WrapText,
   Maximize2,
   X,
+  Combine,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
@@ -42,6 +43,8 @@ import type {
   CompositionDoc,
   Layer,
 } from "@/lib/composition/layers";
+import { combineLayersToImage } from "@/lib/composition/combine";
+import { v4 as uuidv4 } from "uuid";
 
 /** The three shapes with their little proportional boxes. Shared with the
  *  Compose pane so the picker reads the same on every screen. */
@@ -83,6 +86,9 @@ export function AdStage({
   const doc = useCompositorStore((s) => s.doc);
   const pendingAspect = useCompositorStore((s) => s.pendingAspect);
   const selectedLayerId = useCompositorStore((s) => s.selectedLayerId);
+  const multiSelectedIds = useCompositorStore((s) => s.multiSelectedIds);
+  const clearMultiSelect = useCompositorStore((s) => s.clearMultiSelect);
+  const combineLayers = useCompositorStore((s) => s.combineLayers);
   const load = useCompositorStore((s) => s.load);
   const reset = useCompositorStore((s) => s.reset);
   const selectLayer = useCompositorStore((s) => s.selectLayer);
@@ -171,6 +177,7 @@ export function AdStage({
   const layers = doc?.layers ?? [];
 
   const [branding, setBranding] = useState(false);
+  const [combining, setCombining] = useState(false);
 
   /* ── Transport ────────────────────────────────────────────────────────────
      The stage rendered `playing={false}` and offered no way to change it, so a
@@ -288,6 +295,39 @@ export function AdStage({
     }
   };
 
+  // "Combine into one panel" (Option A — flatten, one-way). Shift-click on
+  // the canvas builds the pending set (multiSelectedIds); this turns it into
+  // one new image layer via combineLayersToImage, which reuses the live
+  // renderer's own drawLayer so the flattened pixels can't drift from what
+  // the canvas actually showed.
+  const handleCombine = async () => {
+    if (!doc || multiSelectedIds.length < 2) return;
+    setCombining(true);
+    try {
+      const layers = doc.layers.filter((l) => multiSelectedIds.includes(l.id));
+      const result = await combineLayersToImage(layers, doc.aspect);
+      const newLayer: Layer = {
+        id: uuidv4(),
+        kind: "image",
+        src: result.dataUrl,
+        pos: { mode: "fraction", nx: result.nx, ny: result.ny },
+        scale: 1,
+        rotationDeg: 0,
+        opacity: 1,
+        blend: "normal",
+        appearAt: 0,
+        disappearAt: null,
+        fadeSec: 0,
+      };
+      combineLayers(multiSelectedIds, newLayer);
+      toast.success(`Combined ${layers.length} layers into one panel`);
+    } catch (err) {
+      toast.error((err as Error).message ?? "Couldn't combine those layers");
+    } finally {
+      setCombining(false);
+    }
+  };
+
   /**
    * Drop a prepared element straight onto the ad.
    *
@@ -344,6 +384,41 @@ export function AdStage({
             : "relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border border-border bg-card p-4"
         }
       >
+        {/* Shift-click on the canvas builds this set (amber outlines, drawn by
+            lib/composition/render.ts). Shown only while there's something to
+            do with it — a plain click elsewhere clears it (see
+            CompositorCanvas's onPointerDown), so this banner never outlives
+            its own selection. */}
+        {!fullscreen && multiSelectedIds.length > 0 && (
+          <div className="absolute inset-x-6 top-6 z-10 flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] backdrop-blur">
+            <Combine className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+            <span className="text-foreground">
+              {multiSelectedIds.length} layer
+              {multiSelectedIds.length === 1 ? "" : "s"} marked
+              {multiSelectedIds.length === 1 &&
+                " — shift-click another to combine"}
+            </span>
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              {multiSelectedIds.length >= 2 && (
+                <button
+                  type="button"
+                  onClick={() => void handleCombine()}
+                  disabled={combining}
+                  className="flex items-center gap-1.5 rounded-md bg-amber-500 px-2 py-1 font-medium text-black transition-opacity hover:opacity-90 disabled:opacity-50"
+                >
+                  {combining ? "Combining…" : "Combine into one panel"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={clearMultiSelect}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
         {fullscreen && (
           <button
             type="button"
@@ -497,7 +572,9 @@ export function AdStage({
           <span className="h-5 w-px bg-border" />
 
           <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
-            <Layers className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <span title="Shift-click layers on the ad to mark them for Combine">
+              <Layers className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            </span>
             {layers.length === 0 ? (
               <span className="text-xs text-muted-foreground">
                 {doc ? "No overlays yet" : "Nothing on the ad yet"}

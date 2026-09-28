@@ -108,7 +108,11 @@ function shadowRgba(hex: string, opacity: number): string {
   return `rgba(${r}, ${g}, ${b}, ${opacity})`;
 }
 
-function drawLayer(
+/** Exported so "Combine into one panel" (lib/composition/combine.ts) can
+ *  paint the exact same pixels this preview would, onto a canvas sized to
+ *  just the combined layers — reusing this instead of a second, parallel
+ *  draw implementation that could silently drift out of sync with it. */
+export function drawLayer(
   ctx: CanvasRenderingContext2D,
   layer: Layer,
   motion: Motion,
@@ -207,6 +211,11 @@ export interface DrawFrameInput {
    *  whenever the stage is paused. Kept so existing callers still type-check;
    *  remove with the next caller change. */
   forceOutline?: boolean;
+  /** "Combine into one panel"'s pending set (shift-click on the canvas) — a
+   *  second, additive selection distinct from selectedLayerId. Drawn in a
+   *  different colour and with no resize handles, since these aren't the
+   *  single "active" layer, just marked for the next Combine. */
+  multiSelectedIds?: string[];
 }
 
 /** True when the layer's TIMING envelope hides it at t — independent of the
@@ -285,6 +294,24 @@ export function drawFrame(
       !selected.locked,
     );
   }
+
+  // "Combine into one panel"'s pending set — amber, no handles, so it reads
+  // as distinct from the one primary (indigo, resizable) selection above.
+  if (input.paused && input.multiSelectedIds?.length) {
+    for (const id of input.multiSelectedIds) {
+      if (id === input.selectedLayerId || id === input.editingLayerId) continue;
+      const layer = input.doc.layers.find((l) => l.id === id);
+      if (!layer) continue;
+      drawSelectionOutline(
+        ctx,
+        effectiveLayer(layer, input.doc.aspect, input.doc.overrides),
+        input.doc.aspect,
+        input.images,
+        false,
+        "#f59e0b",
+      );
+    }
+  }
 }
 
 /** Handle size in design px — reads ~6px on a phone-width stage, ~12 on a
@@ -317,6 +344,7 @@ function drawSelectionOutline(
   aspect: CompositionAspect,
   images: Map<string, HTMLImageElement>,
   withHandles: boolean,
+  color = "#818cf8",
 ): void {
   const b = layerBounds(ctx, layer, images);
   const c = layerCenter(ctx, layer, aspect, images);
@@ -325,7 +353,7 @@ function drawSelectionOutline(
   ctx.save();
   ctx.translate(c.x, c.y);
   ctx.rotate((layer.rotationDeg * Math.PI) / 180);
-  ctx.strokeStyle = "#818cf8";
+  ctx.strokeStyle = color;
   ctx.lineWidth = 3;
   ctx.setLineDash([10, 8]);
   ctx.strokeRect(-halfW, -halfH, halfW * 2, halfH * 2);
