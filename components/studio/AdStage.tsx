@@ -14,6 +14,8 @@ import {
   Play,
   Stamp,
   WrapText,
+  Maximize2,
+  X,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
@@ -192,6 +194,24 @@ export function AdStage({
 
   // Undo/redo AND delete, shared with Compose — see useAdShortcuts.
   useAdShortcuts();
+
+  /* ── Fullscreen preview ──────────────────────────────────────────────────
+     The finished look with no editing chrome around it. Was Compose-only
+     (its own canvas, its own toggle); lives here now so every section gets
+     it the same way, matching the stage everywhere it appears rather than
+     being one more thing Compose did differently. Escape closes it — a
+     fullscreen overlay with no keyboard exit is a trap on a laptop with no
+     visible chrome. */
+  const [fullscreen, setFullscreen] = useState(false);
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFullscreen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fullscreen]);
+
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
   // The doc's own hint until the video element reports the file's real length.
@@ -317,7 +337,24 @@ export function AdStage({
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       {/* ── The artboard ── */}
-      <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border border-border bg-card p-4">
+      <div
+        className={
+          fullscreen
+            ? "fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-4 sm:p-8"
+            : "relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border border-border bg-card p-4"
+        }
+      >
+        {fullscreen && (
+          <button
+            type="button"
+            onClick={() => setFullscreen(false)}
+            title="Close fullscreen (Esc)"
+            aria-label="Close fullscreen"
+            className="absolute right-6 top-6 z-10 flex items-center gap-1.5 rounded-lg border border-border bg-card/90 px-2 py-1.5 text-xs text-muted-foreground backdrop-blur transition-colors hover:text-foreground"
+          >
+            <X className="h-3.5 w-3.5" /> Close
+          </button>
+        )}
         {doc ? (
           <div
             ref={stageRef}
@@ -348,6 +385,7 @@ export function AdStage({
             <LayeredCanvas
               ref={canvasRef}
               playing={playing}
+              cleanPreview={fullscreen}
               onTick={onTick}
               onEnded={onEnded}
             />
@@ -357,7 +395,7 @@ export function AdStage({
         )}
       </div>
 
-      {isVideoAd && (
+      {!fullscreen && isVideoAd && (
         <div className="flex shrink-0 items-center gap-3 rounded-2xl border border-border bg-card px-3 py-2">
           <button
             type="button"
@@ -401,164 +439,177 @@ export function AdStage({
       )}
 
       {/* ── Aspect picker + layer stack ── */}
-      <div className="flex shrink-0 flex-wrap items-center gap-3 rounded-2xl border border-border bg-card px-3 py-2">
-        <div className="flex items-center gap-1">
-          {ASPECT_CHIPS.map((a) => (
-            <button
-              key={a.id}
-              type="button"
-              onClick={() => setAdAspect(a.id)}
-              title={`${a.label} artboard`}
-              className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors ${
-                aspect === a.id
-                  ? "bg-primary/15 text-primary"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <span
-                className={`${a.box} rounded-[2px] border ${
-                  aspect === a.id
-                    ? "border-primary"
-                    : "border-muted-foreground/50"
-                }`}
-              />
-              {a.label}
-            </button>
-          ))}
-        </div>
-
-        <span className="h-5 w-px bg-border" />
-
-        {/* Undo/redo. Everything on the ad is placed by hand now — dropped,
-            dragged, restyled — and a bin per layer only covers the one action
-            that happens to be "add". This covers all of them. */}
-        <div className="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            onClick={undo}
-            disabled={!canUndo}
-            title="Undo (⌘Z)"
-            aria-label="Undo"
-            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent"
-          >
-            <Undo2 className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={redo}
-            disabled={!canRedo}
-            title="Redo (⇧⌘Z)"
-            aria-label="Redo"
-            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent"
-          >
-            <Redo2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
-
-        <span className="h-5 w-px bg-border" />
-
-        <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
-          <Layers className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          {layers.length === 0 ? (
-            <span className="text-xs text-muted-foreground">
-              {doc ? "No overlays yet" : "Nothing on the ad yet"}
-            </span>
-          ) : (
-            // Front-most first, matching how a designer reads a stack.
-            [...layers].reverse().map((l) => (
+      {!fullscreen && (
+        <div className="flex shrink-0 flex-wrap items-center gap-3 rounded-2xl border border-border bg-card px-3 py-2">
+          <div className="flex items-center gap-1">
+            {ASPECT_CHIPS.map((a) => (
               <button
-                key={l.id}
+                key={a.id}
                 type="button"
-                onClick={() => selectLayer(l.id)}
-                className={`shrink-0 rounded-md px-2 py-1 text-xs transition-colors ${
-                  selectedLayerId === l.id
+                onClick={() => setAdAspect(a.id)}
+                title={`${a.label} artboard`}
+                className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors ${
+                  aspect === a.id
                     ? "bg-primary/15 text-primary"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                {l.kind === "text" ? `“${l.text.slice(0, 14)}”` : "Image"}
+                <span
+                  className={`${a.box} rounded-[2px] border ${
+                    aspect === a.id
+                      ? "border-primary"
+                      : "border-muted-foreground/50"
+                  }`}
+                />
+                {a.label}
               </button>
-            ))
-          )}
-        </div>
+            ))}
+          </div>
 
-        {overflowing > 0 && (
-          // Only offered when there's something to fix. Text created before the
-          // sizing rules keeps its old size and runs off the frame; this is the
-          // deliberate, user-pressed repair rather than a silent rewrite of a
-          // saved composition on load.
+          <span className="h-5 w-px bg-border" />
+
+          {/* Undo/redo. Everything on the ad is placed by hand now — dropped,
+            dragged, restyled — and a bin per layer only covers the one action
+            that happens to be "add". This covers all of them. */}
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={undo}
+              disabled={!canUndo}
+              title="Undo (⌘Z)"
+              aria-label="Undo"
+              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent"
+            >
+              <Undo2 className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={redo}
+              disabled={!canRedo}
+              title="Redo (⇧⌘Z)"
+              aria-label="Redo"
+              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent"
+            >
+              <Redo2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          <span className="h-5 w-px bg-border" />
+
+          <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
+            <Layers className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            {layers.length === 0 ? (
+              <span className="text-xs text-muted-foreground">
+                {doc ? "No overlays yet" : "Nothing on the ad yet"}
+              </span>
+            ) : (
+              // Front-most first, matching how a designer reads a stack.
+              [...layers].reverse().map((l) => (
+                <button
+                  key={l.id}
+                  type="button"
+                  onClick={() => selectLayer(l.id)}
+                  className={`shrink-0 rounded-md px-2 py-1 text-xs transition-colors ${
+                    selectedLayerId === l.id
+                      ? "bg-primary/15 text-primary"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {l.kind === "text" ? `“${l.text.slice(0, 14)}”` : "Image"}
+                </button>
+              ))
+            )}
+          </div>
+
+          {overflowing > 0 && (
+            // Only offered when there's something to fix. Text created before the
+            // sizing rules keeps its old size and runs off the frame; this is the
+            // deliberate, user-pressed repair rather than a silent rewrite of a
+            // saved composition on load.
+            <button
+              type="button"
+              onClick={() => {
+                const fixed = refitAdText();
+                toast.success(
+                  fixed === 1
+                    ? "Re-fitted 1 text layer"
+                    : `Re-fitted ${fixed} text layers`,
+                );
+              }}
+              title="Shrink text that runs off the frame. Your wording and line breaks are left exactly as they are."
+              className="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs text-amber-600 transition-colors hover:bg-muted dark:text-amber-400"
+            >
+              <WrapText className="h-3.5 w-3.5" />
+              Re-fit text
+            </button>
+          )}
+
           <button
             type="button"
-            onClick={() => {
-              const fixed = refitAdText();
-              toast.success(
-                fixed === 1
-                  ? "Re-fitted 1 text layer"
-                  : `Re-fitted ${fixed} text layers`,
-              );
-            }}
-            title="Shrink text that runs off the frame. Your wording and line breaks are left exactly as they are."
-            className="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs text-amber-600 transition-colors hover:bg-muted dark:text-amber-400"
+            onClick={applyBrand}
+            disabled={!doc || branding}
+            title="Stamp your brand logo and tagline onto this ad"
+            className="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
           >
-            <WrapText className="h-3.5 w-3.5" />
-            Re-fit text
+            <Stamp className="h-3.5 w-3.5" />
+            {branding ? "Applying…" : "Brand"}
           </button>
-        )}
 
-        <button
-          type="button"
-          onClick={applyBrand}
-          disabled={!doc || branding}
-          title="Stamp your brand logo and tagline onto this ad"
-          className="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
-        >
-          <Stamp className="h-3.5 w-3.5" />
-          {branding ? "Applying…" : "Brand"}
-        </button>
+          <button
+            type="button"
+            onClick={() => setFullscreen(true)}
+            disabled={!doc}
+            title="Fullscreen preview"
+            aria-label="Fullscreen preview"
+            className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-30"
+          >
+            <Maximize2 className="h-3.5 w-3.5" />
+          </button>
 
-        {selectedLayerId && (
-          <div className="flex shrink-0 items-center gap-1">
-            <IconBtn
-              title="Bring forward"
-              onClick={() => moveLayer(selectedLayerId, "up")}
-            >
-              <ChevronUp className="h-3.5 w-3.5" />
-            </IconBtn>
-            <IconBtn
-              title="Send backward"
-              onClick={() => moveLayer(selectedLayerId, "down")}
-            >
-              <ChevronDown className="h-3.5 w-3.5" />
-            </IconBtn>
-            <IconBtn
-              title={
-                layers.find((l) => l.id === selectedLayerId)?.locked
-                  ? "Unlock layer"
-                  : "Lock layer"
-              }
-              onClick={() => {
-                const cur = layers.find((l) => l.id === selectedLayerId);
-                updateLayer(selectedLayerId, { locked: !cur?.locked });
-              }}
-            >
-              {layers.find((l) => l.id === selectedLayerId)?.locked ? (
-                <Lock className="h-3.5 w-3.5" />
-              ) : (
-                <Unlock className="h-3.5 w-3.5" />
-              )}
-            </IconBtn>
-            <IconBtn
-              title="Remove from ad"
-              onClick={() => {
-                removeLayer(selectedLayerId);
-                toast.success("Removed from the ad");
-              }}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </IconBtn>
-          </div>
-        )}
-      </div>
+          {selectedLayerId && (
+            <div className="flex shrink-0 items-center gap-1">
+              <IconBtn
+                title="Bring forward"
+                onClick={() => moveLayer(selectedLayerId, "up")}
+              >
+                <ChevronUp className="h-3.5 w-3.5" />
+              </IconBtn>
+              <IconBtn
+                title="Send backward"
+                onClick={() => moveLayer(selectedLayerId, "down")}
+              >
+                <ChevronDown className="h-3.5 w-3.5" />
+              </IconBtn>
+              <IconBtn
+                title={
+                  layers.find((l) => l.id === selectedLayerId)?.locked
+                    ? "Unlock layer"
+                    : "Lock layer"
+                }
+                onClick={() => {
+                  const cur = layers.find((l) => l.id === selectedLayerId);
+                  updateLayer(selectedLayerId, { locked: !cur?.locked });
+                }}
+              >
+                {layers.find((l) => l.id === selectedLayerId)?.locked ? (
+                  <Lock className="h-3.5 w-3.5" />
+                ) : (
+                  <Unlock className="h-3.5 w-3.5" />
+                )}
+              </IconBtn>
+              <IconBtn
+                title="Remove from ad"
+                onClick={() => {
+                  removeLayer(selectedLayerId);
+                  toast.success("Removed from the ad");
+                }}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </IconBtn>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -19,42 +19,23 @@ import {
   Download,
   Layers,
   FileText,
-  Maximize2,
-  X,
   Sparkles,
   ArrowRight,
 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { useCompositorStore, type Layer } from "@/store/useCompositorStore";
-import {
-  TRAY_MIME,
-  parseTrayItem,
-  dropToFraction,
-} from "@/lib/composition/tray";
-import {
-  dropTrayItem,
-  addVideoToAd,
-  addCaptionToAd,
-} from "@/components/studio/adBridge";
+import { addVideoToAd, addCaptionToAd } from "@/components/studio/adBridge";
 import { LayerList } from "@/components/compositor/LayerList";
 import { ElementTray } from "@/components/studio/ElementTray";
-import { useAdShortcuts } from "@/components/studio/useAdShortcuts";
 import { CaptionPresetRow } from "@/components/compositor/CaptionPresetRow";
 import { LayerControls } from "@/components/compositor/LayerControls";
-// The classic Compositor's canvas — real pointer-driven drag/resize/rotate,
-// battle-tested — reused here rather than re-implemented against the
-// DOM-mock preview this file used before. Aliased: this file's own export is
-// also named CompositorCanvas.
-import { CompositorCanvas as LayeredCanvas } from "@/components/compositor/CompositorCanvas";
-import {
-  ASPECT_DESIGN,
-  type CompositeHistoryEntry,
-  type CompositeProvenance,
-  type CompositionAspect,
-  type CompositionDoc,
+import type {
+  CompositeHistoryEntry,
+  CompositeProvenance,
+  CompositionAspect,
+  CompositionDoc,
 } from "@/lib/composition/layers";
 import { FormatRail } from "@/components/compositor/FormatRail";
-import { ASPECT_CHIPS } from "./AdStage";
 import {
   materializeDoc,
   requestExport,
@@ -245,7 +226,6 @@ export function CompositorCanvas({
   const load = useCompositorStore((s) => s.load);
   const addLayer = useCompositorStore((s) => s.addLayer);
   const removeLayer = useCompositorStore((s) => s.removeLayer);
-  const [preview, setPreview] = useState(false);
   const [railOpen, setRailOpen] = useState(false);
   const [flaggedFormats, setFlaggedFormats] = useState(0);
 
@@ -411,22 +391,8 @@ export function CompositorCanvas({
   const overrideMode = useCompositorStore((s) => s.overrideMode);
   const setOverrideMode = useCompositorStore((s) => s.setOverrideMode);
   const resetOverride = useCompositorStore((s) => s.resetOverride);
-  useEffect(() => {
-    if (!preview) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPreview(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [preview]);
-  // Same keys as the Ad stage. Compose takes the full width and the stage
-  // stands down for it, so a handler living only there covers half the places
-  // a user is looking at a canvas.
-  useAdShortcuts();
   const updateLayer = useCompositorStore((s) => s.updateLayer);
-  const reset = useCompositorStore((s) => s.reset);
 
-  const [loading, setLoading] = useState(true);
   const [activeOp, setActiveOp] = useState<CompositeOp | null>(initialOp);
   const [prompt, setPrompt] = useState("");
   const [direction, setDirection] =
@@ -443,63 +409,12 @@ export function CompositorCanvas({
   const [running, setRunning] = useState<CompositeOp | "redo" | null>(null);
   const maskInputRef = useRef<HTMLInputElement>(null);
 
-  // Load (or initialise) this campaign's composition doc.
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const campRes = await api(`/api/campaigns/${campaignId}`, {
-          workspaceSlug,
-        });
-        const camp = campRes.ok
-          ? ((await campRes.json()) as { latestCompositionId?: string | null })
-          : null;
-        if (camp?.latestCompositionId) {
-          const compRes = await api(
-            `/api/compositions/${camp.latestCompositionId}`,
-            { workspaceSlug },
-          );
-          if (compRes.ok) {
-            const row = (await compRes.json()) as {
-              id: string;
-              aspect: "9:16" | "1:1" | "16:9";
-              background: CompositionDoc["background"];
-              layers: Layer[];
-              overrides?: CompositionDoc["overrides"];
-            };
-            if (active) {
-              load({
-                id: row.id,
-                aspect: row.aspect,
-                background: row.background,
-                layers: row.layers,
-                overrides: row.overrides,
-              });
-            }
-            return;
-          }
-        }
-        if (active) {
-          load({
-            id: uuidv4(),
-            aspect: "1:1",
-            background: { kind: "image", src: anchorUrl },
-            layers: [],
-          });
-        }
-      } catch {
-        if (active) toast.error("Couldn't load the compositing canvas");
-      } finally {
-        if (active) setLoading(false);
-      }
-    })();
-    return () => {
-      active = false;
-      reset();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaignId, workspaceSlug]);
-
+  // The doc itself is loaded (and, for a brand-new campaign, bootstrapped
+  // from the anchor image) by AdStage now — it's the only thing that mounts
+  // the canvas, for every section including this one, so it's the only thing
+  // that should own fetching and autosaving it. Compose used to run its own
+  // copy of both, which raced two loaders and two debounced writers against
+  // the same row.
   const persist = async (nextDoc?: CompositionDoc) => {
     const current = nextDoc ?? useCompositorStore.getState().doc;
     if (!current) return;
@@ -509,25 +424,6 @@ export function CompositorCanvas({
       workspaceSlug,
     }).catch(() => {});
   };
-
-  // Autosave: LayeredCanvas's drag/resize/rotate writes straight to the store
-  // with no explicit save step (unlike submitOp/handleRedo, which persist
-  // themselves) — without this, moving a layer and navigating away would
-  // silently lose it. Debounced so a drag (many store updates) coalesces
-  // into one write once the user pauses. Mirrors the classic Compositor's
-  // own autosave effect.
-  const lastSavedRef = useRef<string>("");
-  useEffect(() => {
-    if (!doc || !campaignId) return;
-    const serialized = JSON.stringify(doc);
-    if (serialized === lastSavedRef.current) return;
-    const t = setTimeout(() => {
-      lastSavedRef.current = serialized;
-      void persist(doc);
-    }, 1200);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc, campaignId]);
 
   const selectedLayer = doc?.layers.find((l) => l.id === selectedLayerId);
   // The source for a new op: the selected image layer, else the background.
@@ -571,42 +467,6 @@ export function CompositorCanvas({
       if (maskPreviewUrl) URL.revokeObjectURL(maskPreviewUrl);
     };
   }, [maskPreviewUrl]);
-
-  // The mask-upload overlay needs to sit exactly over the rendered image
-  // inside LayeredCanvas's <canvas> — which is letterboxed (object-contain)
-  // within its flex wrapper, not flush with it. Measure the container and
-  // compute the same contain-fit rect the browser applies to the canvas.
-  const previewContainerRef = useRef<HTMLDivElement>(null);
-  const [containRect, setContainRect] = useState<{
-    left: number;
-    top: number;
-    width: number;
-    height: number;
-  } | null>(null);
-  const aspect = doc?.aspect;
-  useEffect(() => {
-    const el = previewContainerRef.current;
-    if (!el || !aspect) return;
-    const { width: dW, height: dH } = ASPECT_DESIGN[aspect];
-    const compute = () => {
-      const cw = el.clientWidth;
-      const ch = el.clientHeight;
-      if (!cw || !ch) return;
-      const scale = Math.min(cw / dW, ch / dH);
-      const width = dW * scale;
-      const height = dH * scale;
-      setContainRect({
-        left: (cw - width) / 2,
-        top: (ch - height) / 2,
-        width,
-        height,
-      });
-    };
-    compute();
-    const ro = new ResizeObserver(compute);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [aspect]);
 
   const resetForm = () => {
     setActiveOp(null);
@@ -807,46 +667,11 @@ export function CompositorCanvas({
     }
   };
 
-  /**
-   * Drop a tray element onto the ad at the point it was released.
-   *
-   * The fraction is measured against the MEDIA rect, not the container — the
-   * canvas is letterboxed, so measuring against the container puts every drop
-   * off by the size of the bars. See lib/composition/tray.ts.
-   */
-  const handleTrayDrop = async (e: React.DragEvent) => {
-    const item = parseTrayItem(e.dataTransfer.getData(TRAY_MIME));
-    // Not ours — a file, a URL, text from another window. Let the browser do
-    // whatever it would normally do rather than inventing a layer.
-    if (!item) return;
-    e.preventDefault();
-    const el = previewContainerRef.current;
-    if (!el || !containRect) return;
-    const box = el.getBoundingClientRect();
-    const { nx, ny } = dropToFraction(e.clientX, e.clientY, box, containRect);
-
-    // Through adBridge, not addLayer directly: it is the one supported way to
-    // put something on the ad, and a second path is how two callers end up
-    // disagreeing about what a dropped layer looks like.
-    const outcome = dropTrayItem(item, { nx, ny });
-    if (outcome.placed === "music") {
-      onPickMusic?.(outcome.src);
-      toast.success("Soundtrack set — it's baked in on the next render");
-      return;
-    }
-    if (outcome.placed === "none") {
-      toast.error("Put an image or clip on the ad first.");
-      return;
-    }
-    await persist(useCompositorStore.getState().doc ?? undefined);
-    toast.success(
-      outcome.placed === "background"
-        ? "On the stage — your layers are still on top"
-        : item.kind === "mark"
-          ? "Mark placed"
-          : "Lettering placed",
-    );
-  };
+  // Dropping a tray element onto the ad used to be handled here, against this
+  // component's own canvas rect. AdStage owns the only canvas now (and
+  // already implements this exact drop, against its own stageRef), so a drag
+  // from ElementTray in this rail lands on AdStage's handler automatically —
+  // nothing left for this component to do.
 
   const handleRedo = async (
     op: CompositeOp,
@@ -916,7 +741,7 @@ export function CompositorCanvas({
     toast.success("Reverted to a previous version");
   };
 
-  if (loading || !doc) {
+  if (!doc) {
     return (
       <div className="flex h-full items-center justify-center">
         <Spinner size={40} />
@@ -925,7 +750,11 @@ export function CompositorCanvas({
   }
 
   return (
-    <div className="mx-auto flex h-full max-w-6xl flex-col gap-3">
+    // Rail content now — no canvas here. AdStage (the shared centre pane)
+    // renders the composition for every section including this one, so
+    // Compose is a normal <aside> occupant like Wording or Music: it reads
+    // and writes the same store, it just doesn't draw the thing it's editing.
+    <div className="flex h-full flex-col gap-3">
       <GalleryPicker
         open={pickingSecond}
         onClose={() => setPickingSecond(false)}
@@ -945,33 +774,42 @@ export function CompositorCanvas({
         </div>
       </div>
 
-      {/* Canvas LEFT, controls RIGHT — matching the three-pane shell, where
-          the thing you're making is central and every control lives in the
-          right rail. This pane used to be the other way round, following the
-          old two-column Cockpit convention it was written against: the result
-          was a second tools column on the left, directly beside the nav's tools
-          column, which read as two menus competing.
-
-          The order is flipped in CSS rather than by moving the markup, so the
-          DOM keeps controls-then-canvas for reading order and nothing in the
-          canvas measuring code below has to change. */}
-      <div
-        className={`grid min-h-0 flex-1 grid-cols-1 gap-4 ${
-          // The controls are a fixed-width column, so every pixel past
-          // their needs belongs to the canvas. 320px was a third of a
-          // 1024px screen and a fifth of a 1600px one — the same column
-          // doing the same job while the ad got proportionally smaller.
-          preview ? "" : "lg:grid-cols-[1fr_300px]"
-        }`}
-      >
-        <div
-          className={`flex min-h-0 flex-col gap-3 overflow-y-auto rounded-2xl border border-border bg-card p-3 lg:order-2 ${
-            // Hidden, not unmounted: unmounting would throw away every
-            // in-progress op form — a half-filled inpaint prompt, an
-            // uploaded mask — for the sake of a preview you close again.
-            preview ? "hidden" : ""
+      {/* Master vs this-format-only. Without it every nudge made to fit a
+          Story silently moved the feed version too, which is the failure the
+          override system was built to prevent. Pure store state — no canvas
+          rect involved — so it lives in the rail rather than needing AdStage
+          to know about it. */}
+      <div className="flex items-center gap-1.5 rounded-2xl border border-border bg-card px-3 py-2">
+        <button
+          type="button"
+          onClick={() => setOverrideMode(!overrideMode)}
+          title={
+            overrideMode
+              ? `Edits apply to the ${doc.aspect} format only`
+              : "Edits apply to every format (the master design)"
+          }
+          className={`rounded-md border px-2 py-1 text-[11px] transition-colors ${
+            overrideMode
+              ? "border-amber-500/60 bg-amber-500/10 text-amber-500"
+              : "border-border text-muted-foreground hover:text-foreground"
           }`}
         >
+          {overrideMode ? `${doc.aspect} only` : "Master"}
+        </button>
+        {doc.overrides?.[doc.aspect] && (
+          <button
+            type="button"
+            onClick={() => resetOverride()}
+            title={`Revert ${doc.aspect} to the master layout`}
+            className="rounded-md border border-border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Reset {doc.aspect}
+          </button>
+        )}
+      </div>
+
+      <div className="flex min-h-0 flex-1 flex-col gap-3">
+        <div className="flex min-h-0 flex-col gap-3">
           {/* Op menu — a vertical list (not a wrapping pill row) since the
               left column has the height to spare. */}
           <nav className="flex flex-col gap-0.5">
@@ -1056,11 +894,46 @@ export function CompositorCanvas({
                 </select>
               )}
               {activeOp === "inpaint" && (
-                <p className="text-xs text-muted-foreground">
-                  {maskFile
-                    ? `Mask: ${maskFile.name} — click the canvas to replace it.`
-                    : "Click the canvas to upload a mask (white = fill, black = keep)."}
-                </p>
+                <div className="space-y-1.5">
+                  <input
+                    ref={maskInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    className="hidden"
+                    onChange={(e) => setMaskFile(e.target.files?.[0] ?? null)}
+                  />
+                  {maskPreviewUrl ? (
+                    <div className="flex items-center gap-2">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={maskPreviewUrl}
+                        alt="Mask preview"
+                        className="h-14 w-14 rounded-md border border-border object-cover"
+                      />
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-xs text-muted-foreground">
+                          White = fill, black = keep
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => maskInputRef.current?.click()}
+                          className="text-left text-xs text-primary hover:underline"
+                        >
+                          Change mask
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => maskInputRef.current?.click()}
+                      className="flex w-full items-center gap-1.5 rounded-lg border border-dashed border-primary/40 px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-primary/70 hover:text-foreground"
+                    >
+                      <Upload className="h-3.5 w-3.5" />
+                      Upload a mask (white = fill, black = keep)
+                    </button>
+                  )}
+                </div>
               )}
               {activeOp === "textureOverlay" && (
                 <>
@@ -1263,230 +1136,12 @@ export function CompositorCanvas({
           )}
           {footer}
         </div>
-
-        {/* Preview — the classic Compositor's real canvas: click to select,
-            drag to move, edge/corner handles to resize/rotate. Fills the
-            available space (canvas intrinsic size + max-w/max-h), no more
-            capped-small mock. */}
-        <div className="flex min-h-0 flex-col gap-3 lg:order-1">
-          {/* `relative` is load-bearing. The shape chips and the enlarge button
-            used to be absolute overlays inside this box, which is positioned
-            only in fullscreen (`fixed`) — so in normal use they resolved
-            against the page shell and floated up into the corners under the
-            navbar. They now live in the bar below, like every other page, and
-            the box is positioned so anything still overlaid here (the op hint,
-            the fullscreen Close) can't escape it. */}
-          <div
-            className={
-              preview
-                ? "fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-4 sm:p-8"
-                : "relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-xl border border-border bg-card p-4"
-            }
-          >
-            {/* Fullscreen preview — the finished look with no editing marks.
-              Escape closes it, because a fullscreen overlay with no keyboard
-              exit is a trap on a laptop with no visible chrome. The Close
-              button is the one overlay that belongs here: in fullscreen there
-              is no bar to put it in. */}
-            {preview && (
-              <button
-                type="button"
-                onClick={() => setPreview(false)}
-                title="Close preview (Esc)"
-                aria-label="Close preview"
-                className="absolute right-6 top-6 z-10 flex items-center gap-1.5 rounded-lg border border-border bg-card/90 px-2 py-1.5 text-xs text-muted-foreground backdrop-blur transition-colors hover:text-foreground"
-              >
-                <X className="h-3.5 w-3.5" /> Close
-              </button>
-            )}
-            {/* What the active op will actually change.
-              Reported as "you click one and nothing seems to change". The op
-              form DID say `Source: selected layer / background image`, but as
-              a small grey line in the right-hand column — nowhere near where
-              the user is looking, and the canvas itself gave no sign at all.
-              Clicking a layer to retarget already worked; it was invisible.
-              This says it on the canvas, in the op's own words. */}
-            {!preview && doc && activeOp && (
-              <div className="absolute inset-x-6 top-6 z-10 flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-[11px] backdrop-blur">
-                <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" />
-                <span className="text-foreground">
-                  <strong>{OP_META[activeOp].label}</strong> will change{" "}
-                  {selectedLayer ? (
-                    <strong>
-                      {selectedLayer.kind === "text"
-                        ? `the text “${selectedLayer.text.slice(0, 18)}”`
-                        : "the selected layer"}
-                    </strong>
-                  ) : (
-                    <strong>the background image</strong>
-                  )}
-                </span>
-                <span className="ml-auto shrink-0 text-muted-foreground">
-                  {selectedLayer
-                    ? "click the background to target that instead"
-                    : "click a layer to target it instead"}
-                </span>
-              </div>
-            )}
-
-            <div
-              ref={previewContainerRef}
-              className="relative h-full w-full"
-              onDragOver={(e) => {
-                // Only claim the drop when it's one of ours; preventDefault is
-                // what tells the browser this is a valid target at all.
-                if (e.dataTransfer.types.includes(TRAY_MIME)) {
-                  e.preventDefault();
-                  e.dataTransfer.dropEffect = "copy";
-                }
-              }}
-              onDrop={handleTrayDrop}
-            >
-              <LayeredCanvas
-                playing={false}
-                cleanPreview={preview}
-                onTick={() => {}}
-                onEnded={() => {}}
-              />
-              {activeOp === "inpaint" && containRect && (
-                <div
-                  className="absolute overflow-hidden rounded-lg"
-                  style={{
-                    left: containRect.left,
-                    top: containRect.top,
-                    width: containRect.width,
-                    height: containRect.height,
-                  }}
-                >
-                  <input
-                    ref={maskInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg"
-                    className="hidden"
-                    onChange={(e) => setMaskFile(e.target.files?.[0] ?? null)}
-                  />
-                  {maskPreviewUrl ? (
-                    <>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={maskPreviewUrl}
-                        alt="Mask preview"
-                        className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-70 mix-blend-screen"
-                      />
-                      <span className="pointer-events-none absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white">
-                        Mask preview — white = fill
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => maskInputRef.current?.click()}
-                        className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[10px] font-medium text-white hover:bg-black/80"
-                      >
-                        <Upload className="h-3 w-3" /> Change mask
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => maskInputRef.current?.click()}
-                      className="absolute inset-0 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-primary/40 bg-background/60 text-center text-sm text-muted-foreground transition-colors hover:border-primary/70 hover:text-foreground"
-                    >
-                      <Upload className="h-5 w-5" />
-                      Click to upload a mask
-                      <span className="text-xs text-muted-foreground/80">
-                        white = fill, black = keep
-                      </span>
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* The bar under the canvas — same card, same chips as the stage on
-            every other page. Shape, whose layout the edits apply to, and the
-            enlarge button. */}
-          {!preview && doc && (
-            <div className="flex shrink-0 flex-wrap items-center gap-3 rounded-2xl border border-border bg-card px-3 py-2">
-              <div className="flex items-center gap-1">
-                {/* Shape. An ad that goes to a feed and a Story is two shapes,
-                  and this was the one screen that couldn't say so — the whole
-                  multi-format system existed behind a page nothing links to. */}
-                {ASPECT_CHIPS.map((a) => (
-                  <button
-                    key={a.id}
-                    type="button"
-                    onClick={() => setAspect(a.id)}
-                    title={`${a.label} artboard`}
-                    className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors ${
-                      doc.aspect === a.id
-                        ? "bg-primary/15 text-primary"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <span
-                      className={`${a.box} rounded-[2px] border ${
-                        doc.aspect === a.id
-                          ? "border-primary"
-                          : "border-muted-foreground/50"
-                      }`}
-                    />
-                    {a.label}
-                  </button>
-                ))}
-              </div>
-
-              <span className="h-5 w-px bg-border" />
-
-              {/* Master vs this-format-only. Without it every nudge made to fit
-                a Story silently moved the feed version too, which is the
-                failure the override system was built to prevent. */}
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setOverrideMode(!overrideMode)}
-                  title={
-                    overrideMode
-                      ? `Edits apply to the ${doc.aspect} format only`
-                      : "Edits apply to every format (the master design)"
-                  }
-                  className={`rounded-md border px-2 py-1 text-[11px] transition-colors ${
-                    overrideMode
-                      ? "border-amber-500/60 bg-amber-500/10 text-amber-500"
-                      : "border-border text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {overrideMode ? `${doc.aspect} only` : "Master"}
-                </button>
-                {doc.overrides?.[doc.aspect] && (
-                  <button
-                    type="button"
-                    onClick={() => resetOverride()}
-                    title={`Revert ${doc.aspect} to the master layout`}
-                    className="rounded-md border border-border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    Reset {doc.aspect}
-                  </button>
-                )}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setPreview(true)}
-                title="Fullscreen preview"
-                aria-label="Fullscreen preview"
-                className="ml-auto flex items-center gap-1.5 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
-              >
-                <Maximize2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Render. Compose is where the ad is assembled and it had no way to
           turn the doc into a file — the only render lived in Publish's "Final
           adjustments", so the room you build the ad in couldn't produce it. */}
-      {!preview && doc && (
+      {doc && (
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -1583,7 +1238,7 @@ export function CompositorCanvas({
         </div>
       )}
 
-      {fanOut && fanOut.length > 0 && !preview && (
+      {fanOut && fanOut.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs">
           <span className="text-muted-foreground">
             {fanOut.length} formats rendered:
@@ -1620,7 +1275,7 @@ export function CompositorCanvas({
           occasionally, not continuously. The warning still reaches you
           collapsed, via the count reported up from the rail, so folding it
           away keeps the pixels AND the point. */}
-      {!preview && doc && (
+      {doc && (
         <div className="rounded-xl border border-border">
           <button
             type="button"

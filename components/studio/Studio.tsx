@@ -152,13 +152,14 @@ type RailMode = "narrow" | "wide" | "full";
 
 /**
  * "full" hides the Ad stage, which is only right when the tool actually puts
- * its own canvas there. The Compositor does — but only once it has a campaign
- * and an image to composite; without those it renders a one-line "Open
- * Compositor" link, and taking the stage away for that leaves a near-empty
- * screen with the ad nowhere to be seen.
+ * its own canvas there. Only Logo & Brand does now — it builds a different
+ * asset (a logo/brand mark), not "the ad", so it correctly stands alone with
+ * its own multi-phase flow. Compose used to be "full" too (its own canvas,
+ * hidden Ad stage) but now shares AdStage like every other section: its
+ * mask-upload overlay, drag math and zoom/fullscreen all moved onto AdStage
+ * itself, so there's no longer a second canvas to make room for.
  */
-function railModeFor(section: SectionId, canCompose: boolean): RailMode {
-  if (section === "compositor" && !canCompose) return "wide";
+function railModeFor(section: SectionId): RailMode {
   return RAIL_MODE[section];
 }
 
@@ -177,10 +178,11 @@ const RAIL_MODE: Record<SectionId, RailMode> = {
   autocaption: "narrow",
   projects: "wide",
   publish: "wide",
-  // Both are editors with their own canvas and their own control columns.
-  // The Compositor already behaved this way via a hardcoded special case;
-  // Logo needs it for the same reason and now says so in the same place.
-  compositor: "full",
+  // A browser/multi-step flow like Gallery and Publish, not an editor with
+  // its own canvas — the shared AdStage covers that now.
+  compositor: "wide",
+  // The one remaining "full" tool: its own canvas, its own control columns,
+  // building a different asset entirely (see the comment above).
   logo: "full",
 };
 
@@ -1704,17 +1706,15 @@ export function Studio({
                 as the user moves between tools — that's the whole point of the
                 three-pane shell. Every tool in the rail adds to this canvas
                 instead of replacing the screen, so the thing you're making
-                stays in front of you until it's published.
-                
-                Hidden for any tool declared "full" in RAIL_MODE. The
-                Compositor renders the SAME composition on its own canvas (its
-                inpaint mask overlay is positioned against it), so showing the
-                stage too would put two identical canvases side by side; the
-                Logo editor has its own canvas and control columns that simply
-                do not fit a rail. Both read from the same state, so nothing is
-                lost by standing down while they're open. ── */}
-            {railModeFor(section, !!campaignId && !!workingImage) !==
-              "full" && (
+                stays in front of you until it's published. Compose is one of
+                these tools now too — its mask overlay, fullscreen preview and
+                drag handling all moved onto AdStage itself.
+
+                Hidden only for Logo & Brand ("full" in RAIL_MODE): it builds a
+                different asset with its own canvas and control columns that
+                simply do not fit a rail. Both read from the same state, so
+                nothing is lost by standing down while it's open. ── */}
+            {railModeFor(section) !== "full" && (
               // Needs an explicit height when stacked: as a flex COLUMN child
               // `flex-1` gives it nothing to divide, so the stage collapsed to
               // zero and the ad vanished on mobile.
@@ -1737,10 +1737,9 @@ export function Studio({
                 for them rather than squeezing them into a column. ── */}
             <aside
               className={`no-scrollbar min-h-0 overflow-y-auto overflow-x-auto rounded-2xl border border-border bg-card/40 p-3 transition-[width] duration-200 ${
-                railModeFor(section, !!campaignId && !!workingImage) === "full"
+                railModeFor(section) === "full"
                   ? "w-full min-w-0 lg:flex-1"
-                  : railModeFor(section, !!campaignId && !!workingImage) ===
-                      "wide"
+                  : railModeFor(section) === "wide"
                     ? "w-full shrink-0 lg:w-[min(46vw,620px)]"
                     : "w-full shrink-0 lg:w-[min(32vw,400px)]"
               }`}
