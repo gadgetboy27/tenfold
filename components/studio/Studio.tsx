@@ -57,6 +57,7 @@ import {
   navRank,
   type DoneMap,
 } from "@/lib/studio/flow";
+import { ART_STYLES } from "@/lib/studio/art-styles";
 import type { LayerAnchor } from "@/lib/composition/layers";
 import { Spinner } from "@/components/brand/Spinner";
 import CreditMeter from "@/components/shared/CreditMeter";
@@ -2942,6 +2943,34 @@ function VideoInputs({
           placeholder="Slow push-in on the product, warm golden light…"
           className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm leading-relaxed outline-none focus:border-primary/50"
         />
+        {/* A nudge, not a guarantee — Kling animates the chosen image and
+            keeps its own look, so this rarely repaints a photoreal anchor
+            into anime/cartoon the way styling the ANCHOR first would. It's
+            here for someone trying it on an anchor they don't want to
+            regenerate; the reliable path is Wording's "Add an image" style
+            picker before this step. */}
+        <div className="mt-1.5 flex flex-wrap items-center gap-1">
+          <span className="text-[10px] text-muted-foreground/70">
+            Try a look:
+          </span>
+          {ART_STYLES.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              title="A nudge only — for a reliable style, generate the anchor image in this style first, in Wording's Add an image"
+              onClick={() =>
+                setDirection(
+                  direction.trim()
+                    ? `${direction.trim()}, ${s.directionHint}`
+                    : s.directionHint,
+                )
+              }
+              className="rounded-md border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
       </div>
       <button
         type="button"

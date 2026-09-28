@@ -10,6 +10,7 @@ import {
   GalleryPickButton,
 } from "@/components/shared/GalleryPicker";
 import { generateSingleImage } from "@/lib/studio/generate-image";
+import { ART_STYLES, applyArtStyle } from "@/lib/studio/art-styles";
 import { addImageToAd } from "./adBridge";
 
 /**
@@ -23,6 +24,10 @@ import { addImageToAd } from "./adBridge";
  *
  * Generate is the ONLY paid path here and is priced from CREDIT_COSTS, never
  * a literal — it's the same single-image job the rail's Create step runs.
+ * The style picker (2026-09-29) doesn't change that: it composes the SAME
+ * prompt string with a style suffix (lib/studio/art-styles.ts) before it goes
+ * to the identical `image_generation` job, so it's still one job, one price —
+ * "Styled" isn't a second, differently-priced feature bolted on.
  */
 export function AddImageCard({
   workspaceSlug,
@@ -37,6 +42,7 @@ export function AddImageCard({
   onSpent?: () => void;
 }) {
   const [prompt, setPrompt] = useState("");
+  const [style, setStyle] = useState<string | null>(null);
   const [busy, setBusy] = useState<"upload" | "generate" | null>(null);
   const [picking, setPicking] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -82,7 +88,7 @@ export function AddImageCard({
       const url = await generateSingleImage({
         workspaceSlug,
         campaignId,
-        prompt: prompt.trim(),
+        prompt: applyArtStyle(prompt, style),
         cost,
         onAccepted: onSpent,
       });
@@ -103,7 +109,8 @@ export function AddImageCard({
           <ImagePlus className="h-4 w-4" /> Add an image
         </h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          A logo, a product, a badge — bring one in or make a small one.
+          A logo, a product, a badge — bring one in or make a small one, in
+          anime, pencil, cartoon, 3D or another style if you like.
         </p>
       </div>
 
@@ -135,6 +142,37 @@ export function AddImageCard({
           onClick={() => setPicking(true)}
           disabled={busy !== null}
         />
+      </div>
+
+      <div className="flex flex-wrap gap-1">
+        <button
+          type="button"
+          onClick={() => setStyle(null)}
+          disabled={!campaignId || busy !== null}
+          className={`rounded-md border px-2 py-1 text-[11px] transition-colors disabled:opacity-40 ${
+            style === null
+              ? "border-primary text-primary"
+              : "border-border text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Photoreal
+        </button>
+        {ART_STYLES.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => setStyle(s.id)}
+            disabled={!campaignId || busy !== null}
+            title={`Generate in a ${s.label.toLowerCase()} style — same ${cost}-credit job, styled prompt`}
+            className={`rounded-md border px-2 py-1 text-[11px] transition-colors disabled:opacity-40 ${
+              style === s.id
+                ? "border-primary text-primary"
+                : "border-border text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {s.label}
+          </button>
+        ))}
       </div>
 
       <div className="flex gap-2">
