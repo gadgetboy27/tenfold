@@ -10,6 +10,7 @@ import { DEFAULT_TREATMENT } from "@/lib/composition/words";
 import { useCompositorStore } from "@/store/useCompositorStore";
 import { AddImageCard } from "./AddImageCard";
 import { StickerCard } from "./StickerCard";
+import { FreehandCard } from "./FreehandCard";
 import { TextStylePicker } from "./TextStylePicker";
 import {
   addCaptionToAd,
@@ -198,6 +199,8 @@ export function WordsCanvas({
       />
 
       <StickerCard />
+
+      <FreehandCard />
 
       <AddImageCard
         workspaceSlug={workspaceSlug}
