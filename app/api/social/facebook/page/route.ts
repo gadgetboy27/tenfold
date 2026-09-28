@@ -42,9 +42,12 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
   const decrypted = row
     ? decryptProfileTokens(row as { metadata?: unknown })
     : null;
+  const existingMetadata =
+    (decrypted as { metadata?: Record<string, unknown> } | null)?.metadata ??
+    {};
   const pages =
-    (decrypted as { metadata?: { facebook_pages?: StoredPage[] } } | null)
-      ?.metadata?.facebook_pages ?? [];
+    (existingMetadata as { facebook_pages?: StoredPage[] }).facebook_pages ??
+    [];
   const page = pages.find((p) => p.id === pageId);
   if (!page) {
     return NextResponse.json(
@@ -61,6 +64,10 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
         profile_display_name: page.name,
         platform_page_id: page.id,
         access_token: page.access_token,
+        // An explicit pick here is the one thing the OAuth callback must never
+        // silently undo on the next reconnect — see
+        // app/api/social/callback/facebook/route.ts.
+        metadata: { ...existingMetadata, page_manually_selected: true },
       }),
     )
     .eq("platform", "facebook");

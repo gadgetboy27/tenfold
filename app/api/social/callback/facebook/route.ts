@@ -74,19 +74,32 @@ export async function GET(req: Request) {
       );
     }
 
-    // Preserve the Page the user previously chose across reconnects — otherwise
-    // every re-auth silently resets the active Page back to pages[0] (which is
-    // whatever Meta returns first, often not the intended one). Only fall back
-    // to pages[0] on a genuinely new connection or if the old Page is gone.
+    // Preserve the Page the user EXPLICITLY chose (via the in-app Page picker,
+    // POST /api/social/facebook/page) across reconnects — otherwise a token
+    // refresh silently resets the active Page back to pages[0]. But an
+    // auto-picked default was never a real choice, so it must not be sticky:
+    // one Facebook login shared across several workspaces (e.g. an agency
+    // managing multiple clients' Pages) always returns the same Page in
+    // position 0, and re-asserting that "prior" pick on every reconnect made
+    // it permanently impossible to switch a workspace onto a different Page
+    // that the same grant also covers. Only a confirmed manual pick survives
+    // a reconnect; anything else re-defaults, and the picker is there to fix
+    // a wrong default without needing another round-trip through Facebook.
     const { data: existing } = await admin
       .from("social_profiles")
-      .select("platform_page_id")
+      .select("platform_page_id, metadata")
       .eq("workspace_id", workspaceId)
       .eq("platform", "facebook")
       .maybeSingle();
     const priorPageId = (existing as { platform_page_id: string | null } | null)
       ?.platform_page_id;
-    const page = pages.find((p) => p.id === priorPageId) ?? pages[0];
+    const wasManuallySelected =
+      (existing as { metadata?: { page_manually_selected?: boolean } } | null)
+        ?.metadata?.page_manually_selected === true;
+    const page =
+      (wasManuallySelected && pages.find((p) => p.id === priorPageId)) ||
+      pages[0];
+    const stillManuallySelected = wasManuallySelected && page.id === priorPageId;
     const facebook_pages = pages.map((p) => ({
       id: p.id,
       name: p.name,
@@ -113,7 +126,10 @@ export async function GET(req: Request) {
         profile_display_name: page.name,
         platform_page_id: page.id,
         access_token: page.access_token,
-        metadata: { facebook_pages },
+        metadata: {
+          facebook_pages,
+          page_manually_selected: stillManuallySelected,
+        },
         connected_at: new Date().toISOString(),
       }),
       { onConflict: "workspace_id,platform" },
