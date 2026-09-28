@@ -20,6 +20,8 @@ import type { LogoBrief as LogoBriefType } from "@/lib/logo/brief";
 import { useAppStore } from "@/store/useAppStore";
 import { GalleryPicker } from "@/components/shared/GalleryPicker";
 import { api } from "@/lib/api";
+import { tryImageOnAd } from "@/lib/studio/try-on-ad";
+import toast from "react-hot-toast";
 
 // The studio orchestrator. Holds the one piece of durable state — the project
 // id — and polls GET /api/logo/:id for assets as fal webhooks land them. Phases
@@ -129,6 +131,31 @@ export function LogoStudio() {
       })
       .catch(() => {});
   }, [workspaceSlug, setCreditBalance]);
+
+  // The campaign the user was actually building before they came in here —
+  // Logo & Brand's own project (above) is a separate, workspace-level thing.
+  // Studio mirrors this into useAppStore specifically so a component with no
+  // props from Studio (like this one) can still tell which ad is open.
+  const outerCampaignId = useAppStore((s) => s.currentCampaignId);
+  const [tryingOnAd, setTryingOnAd] = useState(false);
+  const tryOnAd = async (url: string) => {
+    setTryingOnAd(true);
+    try {
+      const outcome = await tryImageOnAd(workspaceSlug, outerCampaignId, url);
+      if (outcome.ok) {
+        toast.success("Added to your ad — switch to Compose to see it");
+      } else if (
+        outcome.reason === "no-campaign" ||
+        outcome.reason === "no-ad"
+      ) {
+        toast.error("Build your ad first, then come back and try this on it.");
+      } else {
+        toast.error("Couldn't add that to your ad — try again.");
+      }
+    } finally {
+      setTryingOnAd(false);
+    }
+  };
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const deleteProject = useCallback(
@@ -728,6 +755,8 @@ export function LogoStudio() {
           newCampaignHref={workspaceSlug ? `/${workspaceSlug}/new` : "#"}
           returnHref={returnHref}
           busy={busy}
+          onTryOnAd={outerCampaignId ? tryOnAd : undefined}
+          tryingOnAd={tryingOnAd}
         />
       </div>
     );

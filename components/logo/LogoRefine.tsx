@@ -35,6 +35,15 @@ interface LogoRefineProps {
   /** When set, the user came from the compositor — offer a trip back. */
   returnHref?: string;
   busy: boolean;
+  /**
+   * Sample a concept on the ad the user is actually building, before
+   * committing to finalize or "use as brand" — landing-page sampling, not a
+   * decision. Absent (not just disabled) when there's no campaign ad to try
+   * it on yet, same reasoning as AddImageCard hiding Generate with no
+   * campaign: a button that can only ever fail is worse than no button.
+   */
+  onTryOnAd?: (url: string) => void;
+  tryingOnAd: boolean;
 }
 
 export function LogoRefine({
@@ -57,6 +66,8 @@ export function LogoRefine({
   newCampaignHref,
   returnHref,
   busy,
+  onTryOnAd,
+  tryingOnAd,
 }: LogoRefineProps) {
   const [instruction, setInstruction] = useState("");
 
@@ -86,6 +97,15 @@ export function LogoRefine({
               Download SVG
             </a>
           </Button>
+          {onTryOnAd && (
+            <Button
+              variant="outline"
+              disabled={tryingOnAd}
+              onClick={() => onTryOnAd(finalized.url)}
+            >
+              {tryingOnAd ? "Adding…" : "Try on my ad (free)"}
+            </Button>
+          )}
         </div>
 
         {/* Phase 4 bridge: make this the brand mark, then launch a campaign. */}
@@ -215,6 +235,16 @@ export function LogoRefine({
               className="h-full w-full object-contain p-4"
             />
           </div>
+          {onTryOnAd && (
+            <button
+              type="button"
+              disabled={tryingOnAd}
+              onClick={() => onTryOnAd(anchor.url)}
+              className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
+            >
+              {tryingOnAd ? "Adding to your ad…" : "Try this on my ad"}
+            </button>
+          )}
         </div>
         {refined.length > 0 && (
           <div className="space-y-2">
@@ -235,6 +265,16 @@ export function LogoRefine({
                 className="h-full w-full object-contain p-4"
               />
             </button>
+            {onTryOnAd && (
+              <button
+                type="button"
+                disabled={tryingOnAd}
+                onClick={() => onTryOnAd(refined[refined.length - 1].url)}
+                className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
+              >
+                {tryingOnAd ? "Adding to your ad…" : "Try this on my ad"}
+              </button>
+            )}
           </div>
         )}
       </div>
