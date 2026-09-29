@@ -502,14 +502,16 @@ export function addTextBlockToAd(text: string): AddResult | null {
 export function addStickerToAd(spec: StickerSpec): string | null {
   const s = useCompositorStore.getState();
   if (!s.doc) return null;
-  const raster = rasterizeSticker(spec);
+  // A new sticker never inherits the box of one the card was editing.
+  const fresh: StickerSpec = { ...spec, boxW: undefined, boxH: undefined };
+  const raster = rasterizeSticker(fresh);
   const design = ASPECT_DESIGN[s.doc.aspect];
   const id = uuidv4();
   s.addLayer({
     ...baseLayer(id),
     kind: "image",
     src: raster.dataUrl,
-    sticker: spec,
+    sticker: fresh,
     scale: Math.min(1, (design.width * 0.4) / raster.width),
   });
   return id;

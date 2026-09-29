@@ -796,3 +796,13 @@ box the pointer describes. `t`/`b` call `fitTextToHeight` instead: the type
 size never changes, the wrap narrows to add lines as the box is pulled taller
 (and merges them as it shrinks). Pull a corner back onto itself and the text
 folds onto more lines and shrinks to stay inside. `wrapChars` is recorded so retyping keeps the shape.
+
+**Stickers have an independent box.** A sticker is rasterised text on an
+image layer, so uniform `scale` can't change one dimension. Its spec carries
+optional `boxW`/`boxH` (raster px); `rasterizeSticker` wraps the words to
+`boxW` and centres them in a `boxH`-tall canvas, never smaller than the
+wrapped text needs. Pulling `l`/`r`/`t`/`b` re-rasterises with only that
+dimension changed, keeps the OPPOSITE edge fixed (the centre moves, so the
+layer is converted to a fraction position), and leaves the type size alone.
+Corners still scale the whole sticker. `addStickerToAd` strips the box so a
+new sticker never inherits the one the card was editing.

@@ -6,6 +6,7 @@ import {
   stickerPadding,
   stickerSpecSchema,
   stickerWeight,
+  wrapToWidth,
 } from "@/lib/composition/sticker";
 import { dataUrlBytes } from "@/lib/composition/export";
 
@@ -178,5 +179,34 @@ describe("stickers on the ad", () => {
     expect(
       pickStickerTarget(useCompositorStore.getState().doc!.layers, "logo"),
     ).toBeNull();
+  });
+});
+
+describe("sticker box", () => {
+  const mono = (s: string) => s.length * 10;
+
+  it("wraps words to the box width and never splits a word", () => {
+    expect(wrapToWidth("big summer sale now", 100, mono)).toEqual([
+      "big summer",
+      "sale now",
+    ]);
+    expect(wrapToWidth("extraordinarily", 50, mono)).toEqual([
+      "extraordinarily",
+    ]);
+  });
+
+  it("keeps one line when the box is wide", () => {
+    expect(wrapToWidth("big summer sale", 1000, mono)).toEqual([
+      "big summer sale",
+    ]);
+  });
+
+  it("accepts an optional box and still parses old specs without one", () => {
+    expect(
+      stickerSpecSchema.parse({ ...DEFAULT_STICKER }).boxW,
+    ).toBeUndefined();
+    expect(
+      stickerSpecSchema.parse({ ...DEFAULT_STICKER, boxW: 300, boxH: 200 }),
+    ).toMatchObject({ boxW: 300, boxH: 200 });
   });
 });

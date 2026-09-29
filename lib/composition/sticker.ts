@@ -140,6 +140,32 @@ export function stickerWeight(spec: Pick<StickerSpec, "font" | "weight">) {
   return weightsFor(spec.font).includes(spec.weight) ? spec.weight : 400;
 }
 
+/**
+ * Greedy word wrap to a pixel width. A single word wider than `maxW` gets a
+ * line to itself and overflows rather than being split mid-word. Pure — the
+ * caller supplies the measuring function.
+ */
+export function wrapToWidth(
+  text: string,
+  maxW: number,
+  measure: (s: string) => number,
+): string[] {
+  const out: string[] = [];
+  for (const para of text.split("\n")) {
+    const words = para.split(/\s+/).filter(Boolean);
+    let line = "";
+    for (const w of words) {
+      const next = line ? `${line} ${w}` : w;
+      if (line && measure(next) > maxW) {
+        out.push(line);
+        line = w;
+      } else line = next;
+    }
+    out.push(line);
+  }
+  return out;
+}
+
 export interface StickerRaster {
   /** PNG data URL — the image layer's `src`. */
   dataUrl: string;
@@ -179,15 +205,29 @@ export function rasterizeSticker(spec: StickerSpec): StickerRaster {
 
   const measure = document.createElement("canvas").getContext("2d")!;
   measure.font = font;
-  const m = measure.measureText(spec.text);
-  const textW = Math.ceil(m.width);
+  const lines = spec.boxW
+    ? wrapToWidth(
+        spec.text,
+        spec.boxW - pad * 2,
+        (t) => measure.measureText(t).width,
+      )
+    : spec.text.split("\n");
+  const textW = Math.ceil(
+    Math.max(...lines.map((l) => measure.measureText(l).width), 1),
+  );
+  // Ascent/descent over the actual glyphs — for one line this is exactly the
+  // old measurement, so stickers without a box keep their geometry.
+  const m = measure.measureText(lines.join(""));
   const ascent = Math.ceil(m.actualBoundingBoxAscent || STICKER_FONT_PX * 0.8);
   const descent = Math.ceil(
     m.actualBoundingBoxDescent || STICKER_FONT_PX * 0.2,
   );
 
-  const width = textW + pad * 2;
-  const height = ascent + descent + pad * 2;
+  const lineH = Math.round(STICKER_FONT_PX * 1.15);
+  const blockH = (lines.length - 1) * lineH + ascent + descent;
+  // Never narrower/shorter than the wrapped text needs, so nothing clips.
+  const width = Math.max(textW + pad * 2, Math.round(spec.boxW ?? 0));
+  const height = Math.max(blockH + pad * 2, Math.round(spec.boxH ?? 0));
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -203,8 +243,11 @@ export function rasterizeSticker(spec: StickerSpec): StickerRaster {
   ctx.translate(-width / 2, -height / 2);
 
   const x = width / 2;
-  const y = pad + ascent;
-  const glyph = () => ctx.fillText(spec.text, x, y);
+  const y = (height - blockH) / 2 + ascent;
+  const glyph = () =>
+    lines.forEach((l, i) => ctx.fillText(l, x, y + i * lineH));
+  const strokeGlyph = () =>
+    lines.forEach((l, i) => ctx.strokeText(l, x, y + i * lineH));
 
   ctx.fillStyle = spec.color;
   switch (spec.effect) {
@@ -237,10 +280,10 @@ export function rasterizeSticker(spec: StickerSpec): StickerRaster {
       ctx.lineWidth = STICKER_FONT_PX * 0.06;
       ctx.shadowColor = spec.effectColor;
       ctx.shadowBlur = STICKER_FONT_PX * 0.3;
-      ctx.strokeText(spec.text, x, y);
-      ctx.strokeText(spec.text, x, y);
+      strokeGlyph();
+      strokeGlyph();
       ctx.shadowBlur = STICKER_FONT_PX * 0.08;
-      ctx.strokeText(spec.text, x, y);
+      strokeGlyph();
       ctx.restore();
       // The tube's core — the sticker colour, lit from inside.
       ctx.save();
@@ -255,7 +298,7 @@ export function rasterizeSticker(spec: StickerSpec): StickerRaster {
       ctx.lineJoin = "round";
       ctx.strokeStyle = spec.effectColor;
       ctx.lineWidth = STICKER_FONT_PX * 0.1;
-      ctx.strokeText(spec.text, x, y);
+      strokeGlyph();
       ctx.restore();
       glyph();
       break;
@@ -272,7 +315,7 @@ export function rasterizeSticker(spec: StickerSpec): StickerRaster {
         ctx.lineWidth = w * (0.85 + rand() * 0.3);
         ctx.save();
         ctx.translate((rand() - 0.5) * w * 0.3, (rand() - 0.5) * w * 0.3);
-        ctx.strokeText(spec.text, x, y);
+        strokeGlyph();
         ctx.restore();
       }
       ctx.restore();
@@ -287,7 +330,7 @@ export function rasterizeSticker(spec: StickerSpec): StickerRaster {
       for (let i = 0; i < 5; i++) {
         ctx.globalAlpha = 0.08;
         ctx.lineWidth = STICKER_FONT_PX * (0.03 + i * 0.015) * effectSize;
-        ctx.strokeText(spec.text, x, y);
+        strokeGlyph();
       }
       ctx.restore();
       glyph();
@@ -318,7 +361,7 @@ export function rasterizeSticker(spec: StickerSpec): StickerRaster {
       ctx.strokeStyle = spec.effectColor;
       ctx.lineWidth = STICKER_FONT_PX * 0.012 * effectSize;
       ctx.globalAlpha = 0.6;
-      ctx.strokeText(spec.text, x, y);
+      strokeGlyph();
       ctx.restore();
       glyph();
       break;

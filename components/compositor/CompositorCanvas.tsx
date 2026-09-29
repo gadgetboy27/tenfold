@@ -24,6 +24,7 @@ import {
   TEXT_LINE_HEIGHT,
 } from "@/lib/composition/render";
 import { wrapText } from "@/lib/composition/brand-apply";
+import { rasterizeSticker } from "@/lib/composition/sticker";
 import { fitTextToBox, fitTextToHeight } from "@/lib/composition/text-fit";
 import { ensureBrandFontsLoaded } from "@/lib/composition/fonts";
 import { useCompositorStore } from "@/store/useCompositorStore";
@@ -70,6 +71,10 @@ type PointerAction =
       /** Text: block width at drag start, held fixed by top/bottom pulls. */
       startBlockW?: number;
       lastFit?: string;
+      /** Sticker edge pull: raster size at drag start + the edge that stays. */
+      boxW0?: number;
+      boxH0?: number;
+      fixed?: number;
     };
 
 export interface CompositorCanvasHandle {
@@ -455,6 +460,20 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
           doc.aspect,
           imagesRef.current,
         );
+        let boxW0: number | undefined;
+        let boxH0: number | undefined;
+        let fixed: number | undefined;
+        if (selEff.kind === "image" && selEff.sticker) {
+          const b = layerBounds(ctx, selEff, imagesRef.current);
+          boxW0 = b.width;
+          boxH0 = b.height;
+          const hw = (b.width * selEff.scale) / 2;
+          const hh = (b.height * selEff.scale) / 2;
+          if (selZone === "r") fixed = selCentre.x - hw;
+          else if (selZone === "l") fixed = selCentre.x + hw;
+          else if (selZone === "b") fixed = selCentre.y - hh;
+          else if (selZone === "t") fixed = selCentre.y + hh;
+        }
         action.current = {
           mode: "resize",
           id: sel.id,
@@ -467,6 +486,9 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
           raw,
           avgCharW,
           startBlockW,
+          boxW0,
+          boxH0,
+          fixed,
         };
         e.currentTarget.setPointerCapture(e.pointerId);
         return;
@@ -568,6 +590,48 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
       if (!master) return;
       const layer = eff(master);
       const sideOnly = a.zone === "l" || a.zone === "r";
+      // A sticker's edges are independent: the grabbed edge moves, the
+      // opposite one stays, and the other dimension is untouched. The words
+      // keep their size and re-wrap to the new width (rasterizeSticker).
+      if (
+        layer.kind === "image" &&
+        layer.sticker &&
+        a.fixed !== undefined &&
+        a.boxW0 &&
+        a.boxH0
+      ) {
+        const st = layer.scale;
+        const horizontal = sideOnly;
+        const pull = horizontal
+          ? a.zone === "r"
+            ? p.x - a.fixed
+            : a.fixed - p.x
+          : a.zone === "b"
+            ? p.y - a.fixed
+            : a.fixed - p.y;
+        const wanted = Math.max(40, Math.round(pull / st / 4) * 4);
+        const key = `${a.zone}:${wanted}`;
+        if (key === a.lastFit) return;
+        a.lastFit = key;
+        const spec = {
+          ...layer.sticker,
+          boxW: horizontal ? wanted : (layer.sticker.boxW ?? a.boxW0),
+          boxH: horizontal ? (layer.sticker.boxH ?? a.boxH0) : wanted,
+        };
+        const raster = rasterizeSticker(spec);
+        const half = ((horizontal ? raster.width : raster.height) * st) / 2;
+        const sign = a.zone === "r" || a.zone === "b" ? 1 : -1;
+        const c = (a.fixed ?? 0) + sign * half;
+        const { width: W, height: H } = ASPECT_DESIGN[doc.aspect];
+        const at = horizontal ? { x: c, y: a.cy } : { x: a.cx, y: c };
+        updateLayer(a.id, { src: raster.dataUrl, sticker: spec });
+        // Fraction, not anchor: an anchored layer can't move along its
+        // centred axis, and an edge pull moves the centre.
+        patchLayout(a.id, {
+          pos: { mode: "fraction", nx: at.x / W, ny: at.y / H },
+        });
+        return;
+      }
       if (layer.kind === "text" && sideOnly && a.raw && a.avgCharW) {
         const targetW = Math.max(80, Math.abs(p.x - a.cx) * 2);
         const maxChars = Math.max(

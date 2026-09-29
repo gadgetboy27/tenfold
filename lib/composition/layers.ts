@@ -565,6 +565,14 @@ export const stickerSpecSchema = z.object({
   effectSize: z.number().min(0.5).max(2).default(1),
   flipH: z.boolean().default(false),
   flipV: z.boolean().default(false),
+  /**
+   * The box the user drew by pulling an edge, in raster px (at
+   * STICKER_FONT_PX). Absent = the box hugs the text, exactly as before.
+   * Width drives how the words wrap; height is free space above the
+   * minimum the wrapped text needs. Each edge sets only its own dimension.
+   */
+  boxW: z.number().min(40).max(6000).optional(),
+  boxH: z.number().min(40).max(6000).optional(),
 });
 export type StickerSpec = z.infer<typeof stickerSpecSchema>;
 
