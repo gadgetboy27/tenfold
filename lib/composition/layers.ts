@@ -616,6 +616,42 @@ export const textBackgroundSchema = z.object({
 });
 export type TextBackground = z.infer<typeof textBackgroundSchema>;
 
+/**
+ * "Read it out" — how a text block fills in over time, and what it does when
+ * it finishes. Timing is relative to the layer's `appearAt`:
+ *
+ *   appearAt ─ delaySec ─▶ reading (durationSec) ─ holdSec ─▶ end effect
+ *
+ * `typewriter` types letter by letter, `words` pops word by word, `karaoke`
+ * shows the whole line dimmed and lights it word by word. The box (scrim) and
+ * the layout stay put throughout — the words fill the box, they don't resize it.
+ */
+export const REVEAL_MODES = ["typewriter", "words", "karaoke"] as const;
+export const REVEAL_ENDS = ["none", "flash", "bump", "pulse", "shake"] as const;
+export type RevealMode = (typeof REVEAL_MODES)[number];
+export type RevealEnd = (typeof REVEAL_ENDS)[number];
+
+export const textRevealSchema = z.object({
+  mode: z.enum(REVEAL_MODES),
+  /** Pause before the reading starts (the "start" option). */
+  delaySec: z.number().min(0).max(5).default(0),
+  /** How long the whole text takes to read out. */
+  durationSec: z.number().min(0.5).max(30).default(3),
+  /** Pause after the last word before the end effect fires. */
+  holdSec: z.number().min(0).max(5).default(0),
+  end: z.enum(REVEAL_ENDS).default("none"),
+  /**
+   * Each line's width in design px at scale 1, stamped by the browser at
+   * export time (materializeDoc). FFmpeg's drawtext cannot light part of a
+   * line, so the export draws each line's growing prefix at a computed x —
+   * which needs the widths only a real font measurement can give. Absent →
+   * the export shows the finished text with no read-out (the end effect
+   * still plays).
+   */
+  lineWidths: z.array(z.number().positive()).max(80).optional(),
+});
+export type TextReveal = z.infer<typeof textRevealSchema>;
+
 export const textLayerSchema = layerBaseSchema.extend({
   kind: z.literal("text"),
   text: z.string().min(1).max(500),
@@ -661,6 +697,8 @@ export const textLayerSchema = layerBaseSchema.extend({
    * rather than snapping back to auto layout on the next keystroke.
    */
   wrapChars: z.number().int().min(4).max(200).optional(),
+  /** Read-out animation — see `textRevealSchema`. Absent = static text. */
+  reveal: textRevealSchema.optional(),
 });
 
 export const layerSchema = z.discriminatedUnion("kind", [

@@ -10,6 +10,7 @@ import {
   type Layer,
   type StickerSpec,
   type TextLayer,
+  type TextReveal,
 } from "@/lib/composition/layers";
 import { rasterizeSticker } from "@/lib/composition/sticker";
 import type { TrayItem } from "@/lib/composition/tray";
@@ -424,6 +425,16 @@ export function restyleAdText(id: string, patch: Partial<TextStyle>): boolean {
         }
       : {}),
   });
+  return true;
+}
+
+/** Set (or clear, with null) a text layer's read-out animation. Nothing
+ *  about its wording, look, position or size changes. */
+export function setTextReveal(id: string, reveal: TextReveal | null): boolean {
+  const s = useCompositorStore.getState();
+  const layer = s.doc?.layers.find((l) => l.id === id);
+  if (!layer || layer.kind !== "text") return false;
+  s.updateLayer(id, { reveal: reveal ?? undefined });
   return true;
 }
 

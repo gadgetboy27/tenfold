@@ -12,6 +12,7 @@ import { AddImageCard } from "./AddImageCard";
 import { StickerCard } from "./StickerCard";
 import { FreehandCard } from "./FreehandCard";
 import { TextStylePicker } from "./TextStylePicker";
+import { RevealCard } from "./RevealCard";
 import {
   addCaptionToAd,
   currentAdWords,
@@ -197,6 +198,8 @@ export function WordsCanvas({
             : "Style for the next words you add."
         }
       />
+
+      <RevealCard target={target} />
 
       <StickerCard />
 

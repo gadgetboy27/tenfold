@@ -5,7 +5,9 @@ import {
   compositionDocSchema,
   type CompositionAspect,
   type CompositionDoc,
+  weightOf,
 } from "@/lib/composition/layers";
+import { ensureBrandFontsLoaded } from "@/lib/composition/fonts";
 
 /**
  * Client half of the export flow: the server renderer can only fetch http(s)
@@ -71,7 +73,30 @@ export async function materializeDoc(
     ),
   );
 
-  return { ...doc, background, layers };
+  return { ...doc, background, layers: await stampRevealWidths(layers) };
+}
+
+/**
+ * Measure each read-out text's lines in the browser (the same canvas font the
+ * preview draws with) and store the widths on the layer. The server's
+ * drawtext can't light part of a line, so it places each line's growing
+ * prefix at an x computed from these; it has no way to measure them itself.
+ */
+async function stampRevealWidths(
+  layers: CompositionDoc["layers"],
+): Promise<CompositionDoc["layers"]> {
+  if (!layers.some((l) => l.kind === "text" && l.reveal)) return layers;
+  await ensureBrandFontsLoaded();
+  const ctx = document.createElement("canvas").getContext("2d");
+  if (!ctx) return layers;
+  return layers.map((l) => {
+    if (l.kind !== "text" || !l.reveal) return l;
+    ctx.font = `${weightOf(l)} ${l.sizePx}px "${l.font}", sans-serif`;
+    const lineWidths = l.text
+      .split("\n")
+      .map((line) => Math.max(1, ctx.measureText(line).width));
+    return { ...l, reveal: { ...l.reveal, lineWidths } };
+  });
 }
 
 export interface ExportOptions {

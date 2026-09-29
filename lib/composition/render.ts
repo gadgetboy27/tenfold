@@ -16,6 +16,13 @@ import {
   type Motion,
 } from "@/lib/composition/effects";
 
+import {
+  KARAOKE_DIM,
+  litCount,
+  prefixByCount,
+  revealUnitCount,
+} from "@/lib/composition/reveal";
+
 /**
  * Pure canvas drawing + hit-testing for the compositor preview. All maths is
  * in design-space pixels (ASPECT_DESIGN) — the <canvas> buffer is created at
@@ -185,9 +192,39 @@ export function drawLayer(
     // WITHIN the block rather than moving the block itself.
     const originX =
       align === "left" ? -blockW / 2 : align === "right" ? blockW / 2 : 0;
-    lines.forEach((line, i) => {
-      ctx.fillText(line, originX, (i - (lines.length - 1) / 2) * lineHeight);
-    });
+    const rv = layer.reveal;
+    if (rv && motion.reveal !== undefined) {
+      // Read-out: each line's lit prefix is drawn from the line's own left
+      // edge, so the words fill the box in place instead of re-centring as
+      // they arrive. Karaoke underlays the whole line, dimmed.
+      const total = revealUnitCount(layer.text, rv.mode);
+      const lit = prefixByCount(
+        layer.text,
+        rv.mode,
+        litCount(motion.reveal, total),
+      ).split("\n");
+      ctx.textAlign = "left";
+      lines.forEach((line, i) => {
+        const lw = ctx.measureText(line).width;
+        const left =
+          align === "left"
+            ? -blockW / 2
+            : align === "right"
+              ? blockW / 2 - lw
+              : -lw / 2;
+        const y = (i - (lines.length - 1) / 2) * lineHeight;
+        if (rv.mode === "karaoke") {
+          ctx.globalAlpha = motion.alpha * KARAOKE_DIM;
+          ctx.fillText(line, left, y);
+          ctx.globalAlpha = motion.alpha;
+        }
+        if (lit[i]) ctx.fillText(lit[i], left, y);
+      });
+    } else {
+      lines.forEach((line, i) => {
+        ctx.fillText(line, originX, (i - (lines.length - 1) / 2) * lineHeight);
+      });
+    }
   }
   ctx.restore();
 }
@@ -263,7 +300,10 @@ export function drawFrame(
     const isSelected = master.id === input.selectedLayerId;
 
     if (!hidden && motion) {
-      drawLayer(ctx, layer, motion, input.doc.aspect, input.images);
+      // Arrange mode shows the finished text so it can be placed and sized;
+      // the read-out plays only while the stage is playing.
+      const shown = input.paused ? { ...motion, reveal: undefined } : motion;
+      drawLayer(ctx, layer, shown, input.doc.aspect, input.images);
     } else if (input.paused) {
       // Arrange mode: draw the scheduled-away layer as a placeholder ghost
       // at its rest position (preview only — the export honours timing).

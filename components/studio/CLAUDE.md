@@ -806,3 +806,27 @@ dimension changed, keeps the OPPOSITE edge fixed (the centre moves, so the
 layer is converted to a fraction position), and leaves the type size alone.
 Corners still scale the whole sticker. `addStickerToAd` strips the box so a
 new sticker never inherits the one the card was editing.
+
+## Read it out — text that fills its box over time (2026-09-29)
+
+`RevealCard` (in the Wording rail) sets `TextLayer.reveal`: `typewriter` /
+`words` / `karaoke`, a start pause (`delaySec`), the read time
+(`durationSec`), an end pause (`holdSec`) and an end effect (flash / bump /
+pulse / shake). All timing rules live in `lib/composition/reveal.ts`, which the
+canvas preview and the FFmpeg export both read — don't fork them.
+
+- **Preview**: `motionAt` returns `reveal` progress; `drawLayer` draws each
+  line's lit prefix from the line's own left edge, so words fill the box in
+  place. The scrim stays full-size. Arrange mode (paused) shows the FINISHED
+  text on purpose — you can't place text that isn't drawn yet.
+- **End effects are motion only** (dx/dy/alpha) because those are the two
+  channels drawtext animates. A "bump" is therefore a hop, not a scale.
+  They ride the existing `motionAt` / `motionExprs` path.
+- **Export**: drawtext can't light part of a line, so `revealDrawPlan` emits
+  one drawtext per (line, state) at a computed x. That needs each line's
+  width, which only a browser font measurement gives — `materializeDoc`
+  stamps `reveal.lineWidths` before every export. A doc without them (e.g.
+  the ad-watch apply route) exports the finished text with no read-out; the
+  end effect still plays. The scrim is the full text drawn at `@0` so its box
+  follows fades and motion. The generated FFmpeg graph is unit-tested as
+  strings only — it has not been run through a real ffmpeg in CI.

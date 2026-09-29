@@ -10,6 +10,7 @@ import {
   ASPECT_TO_FORMAT,
   BLEND_MODES,
   effectiveLayer,
+  resolveCenter,
   type BlendMode,
   type CompositionAspect,
   type CompositionDoc,
@@ -18,6 +19,8 @@ import {
   weightOf,
 } from "@/lib/composition/layers";
 import { motionExprs, type MotionExprs } from "@/lib/composition/effects";
+import { KARAOKE_DIM, revealDrawPlan } from "@/lib/composition/reveal";
+import { TEXT_LINE_HEIGHT } from "@/lib/composition/render";
 import { fetchPublic } from "@/lib/net/safe-url";
 
 /**
@@ -81,6 +84,8 @@ const BLEND_NEUTRAL: Record<Exclude<BlendMode, "normal">, string> = {
 function ffmpegBlendMode(blend: BlendMode): string {
   return BLEND_MODES.find((b) => b.id === blend)?.ffmpeg ?? "normal";
 }
+
+const fmtT = (n: number) => `${Math.round(n * 1000) / 1000}`;
 
 function fontFileFor(font: string, weight: 400 | 700 = 400): string {
   const family = FONT_FILES[font] ?? FONT_FILES.Inter;
@@ -280,19 +285,75 @@ export function buildFilterGraph(
         ? `:box=1:boxcolor=${layer.bg.color.replace("#", "0x")}@${layer.bg.opacity}` +
           `:boxborderw=${Math.round(layer.bg.padPx * layer.scale * scale)}`
         : "";
-      const draw =
+      const mkDraw = (fontcolor: string) =>
         `drawtext=fontfile=${fontFileFor(layer.font, weightOf(layer))}:textfile=${tf}` +
-        `:fontsize=${fontSize}:fontcolor=${layer.color.replace("#", "0x")}` +
+        `:fontsize=${fontSize}:fontcolor=${fontcolor}` +
         `:line_spacing=${lineSpacing}:text_align=${alignOf(layer)}${box}` +
         `:${tx}:${ty}:alpha='${alpha}'`;
 
+      // Read-out: drawtext can't light part of a line, so each line's growing
+      // prefix is drawn as its own filter at a computed x (widths measured in
+      // the browser — see textRevealSchema.lineWidths), each gated to the
+      // window where that prefix is the current state. The scrim is the full
+      // text drawn transparent, so its box is exactly the static one and
+      // follows the same fades and motion.
+      const plan = revealDrawPlan(layer, dur);
+      const widths = layer.reveal?.lineWidths;
+      let parts: string[];
+      if (plan && widths) {
+        const n = widths.length;
+        const bwD = Math.max(...widths) * layer.scale;
+        const bhD = n * layer.sizePx * layer.scale * TEXT_LINE_HEIGHT;
+        const c = resolveCenter(layer.pos, doc.aspect, bwD / 2, bhD / 2);
+        const cx = c.x * scale;
+        const cy = c.y * scale;
+        const bw = bwD * scale;
+        const lh = fontSize * TEXT_LINE_HEIGHT;
+        const align = alignOf(layer);
+        parts = layer.bg ? [`${mkDraw("0x000000@0")}:${enable}`] : [];
+        plan.forEach((d, k) => {
+          const dtf = files.textFile.get(`${layer.id}#${k}`);
+          if (!dtf) return;
+          const lw = widths[d.line] * layer.scale * scale;
+          const left =
+            align === "left"
+              ? cx - bw / 2
+              : align === "right"
+                ? cx + bw / 2 - lw
+                : cx - lw / 2;
+          const midY = cy - (n * lh) / 2 + (d.line + 0.5) * lh;
+          const lx = fx.dx
+            ? `x='${Math.round(left)}+(${fx.dx})'`
+            : `x=${Math.round(left)}`;
+          const ly = fx.dy
+            ? `y='${Math.round(midY)}-text_h/2+(${fx.dy})'`
+            : `y=${Math.round(midY)}-text_h/2`;
+          const a = fx.alpha
+            ? `clip(${layer.opacity * (d.dim ? KARAOKE_DIM : 1)}*(${fx.alpha}),0,1)`
+            : `${layer.opacity * (d.dim ? KARAOKE_DIM : 1)}`;
+          parts.push(
+            `drawtext=fontfile=${fontFileFor(layer.font, weightOf(layer))}:textfile=${dtf}` +
+              `:fontsize=${fontSize}:fontcolor=${layer.color.replace("#", "0x")}` +
+              `:${lx}:${ly}:alpha='${a}'` +
+              `:enable='between(t,${fmtT(d.from)},${fmtT(d.to)})'`,
+          );
+        });
+      } else {
+        parts = [`${mkDraw(layer.color.replace("#", "0x"))}:${enable}`];
+      }
+
       if (layer.blend === "normal") {
-        chains.push(`[${from}]${draw}:${enable}[${to}]`);
+        chains.push(`[${from}]${parts.join(",")}[${to}]`);
       } else {
         const neutral = BLEND_NEUTRAL[layer.blend];
+        // In the neutral-canvas path the layer's own window gates the blend;
+        // the un-windowed static draw needs no enable of its own here.
+        const drawn = parts.map((p) =>
+          plan && widths ? p : p.replace(`:${enable}`, ""),
+        );
         chains.push(
           `color=c=${neutral}:s=${width}x${height}:r=30:d=${dur},format=gbrp[c${step}]`,
-          `[c${step}]${draw}[f${step}]`,
+          `[c${step}]${drawn.join(",")}[f${step}]`,
           `[${from}][f${step}]blend=all_mode=${ffmpegBlendMode(layer.blend)}:${enable}[${to}]`,
         );
       }
@@ -406,6 +467,15 @@ export async function renderComposition(
           const p = join(dir, `text-${i}.txt`);
           await writeFile(p, l.text);
           files.textFile.set(l.id, p);
+          // One file per read-out state — the same plan the graph consumes.
+          const plan = revealDrawPlan(l, dur) ?? [];
+          await Promise.all(
+            plan.map(async (d, k) => {
+              const rp = join(dir, `text-${i}-r${k}.txt`);
+              await writeFile(rp, d.text);
+              files.textFile.set(`${l.id}#${k}`, rp);
+            }),
+          );
         }),
     );
 

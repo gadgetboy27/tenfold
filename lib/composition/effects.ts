@@ -1,3 +1,9 @@
+import {
+  REVEAL_END_SEC,
+  revealEnd,
+  revealProgress,
+  revealTimes,
+} from "@/lib/composition/reveal";
 import type {
   EffectInKind,
   EffectLoopKind,
@@ -26,6 +32,9 @@ export interface Motion {
   rotDeg: number;
   /** Alpha multiplier 0..1 (multiplies layer opacity). */
   alpha: number;
+  /** Text read-out progress: -1 not started, 0..1 reading. Absent = show the
+   *  whole text (no read-out, or the arrange-mode preview). */
+  reveal?: number;
 }
 
 export interface EffectCtx {
@@ -305,6 +314,18 @@ export function motionAt(
     m.alpha *= e.alpha;
   }
 
+  if (layer.kind === "text" && layer.reveal) {
+    const r = layer.reveal;
+    m.reveal = revealProgress(start, r, t);
+    const { endStart } = revealTimes(start, r);
+    if (r.end !== "none" && t >= endStart) {
+      const e = revealEnd(r.end, (t - endStart) / REVEAL_END_SEC, ctx);
+      m.dx += e.dx;
+      m.dy += e.dy;
+      m.alpha *= e.alpha;
+    }
+  }
+
   m.alpha = Math.min(1, Math.max(0, m.alpha)) * layer.opacity;
   return m;
 }
@@ -415,6 +436,20 @@ export function motionExprs(
         outStart,
         dur,
         `gte(t,${fmt(outStart)})`,
+      );
+    }
+    if (layer.kind === "text" && layer.reveal && layer.reveal.end !== "none") {
+      const r = layer.reveal;
+      const { endStart, endEnd } = revealTimes(start, r);
+      phase(
+        (t) =>
+          pick({
+            ...REST,
+            ...revealEnd(r.end, (t - endStart) / REVEAL_END_SEC, ctx),
+          }),
+        endStart,
+        REVEAL_END_SEC,
+        `between(t,${fmt(endStart)},${fmt(endEnd)})`,
       );
     }
     if (fx.loop !== "none") {
