@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fitTextToBox } from "@/lib/composition/text-fit";
+import { fitTextToBox, fitTextToHeight } from "@/lib/composition/text-fit";
 
 // Monospace stub: 10px per char, 20px per line, at scale 1.
 const measure = (text: string) => {
@@ -42,5 +42,15 @@ describe("fitTextToBox", () => {
     const fit = fitTextToBox("hi", 10, 10, measure);
     expect(fit.wrapChars).toBeGreaterThanOrEqual(4);
     expect(fit.wrapChars).toBeLessThanOrEqual(200);
+  });
+});
+
+describe("fitTextToHeight", () => {
+  it("adds lines as the box gets taller, without rescaling", () => {
+    const short = fitTextToHeight(RAW, 40, 1, measure);
+    const tall = fitTextToHeight(RAW, 140, 1, measure);
+    expect(tall.text.split("\n").length).toBeGreaterThan(
+      short.text.split("\n").length,
+    );
   });
 });

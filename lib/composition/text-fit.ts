@@ -45,3 +45,29 @@ export function fitTextToBox(
     scale: Math.min(scaleRange.max, Math.max(scaleRange.min, fit.scale)),
   };
 }
+
+/**
+ * Fill a box HEIGHT at a fixed type size: pick the wrap whose block height is
+ * closest to `boxH`, so pulling the box taller adds lines (a narrower column)
+ * and pushing it shorter merges them, with the letters never rescaled. On a
+ * tie the wider wrap wins.
+ */
+export function fitTextToHeight(
+  raw: string,
+  boxH: number,
+  scale: number,
+  measure: (text: string) => { width: number; height: number },
+): Pick<TextFit, "text" | "wrapChars"> {
+  const source = raw.replace(/\s+/g, " ").trim();
+  const longest = Math.min(MAX_WRAP, Math.max(MIN_WRAP, source.length));
+  let best = { text: source, wrapChars: MIN_WRAP, gap: Infinity };
+  const seen = new Set<string>();
+  for (let chars = MIN_WRAP; chars <= longest; chars++) {
+    const text = wrapText(source, chars);
+    if (seen.has(text)) continue;
+    seen.add(text);
+    const gap = Math.abs(measure(text).height * scale - boxH);
+    if (gap <= best.gap) best = { text, wrapChars: chars, gap };
+  }
+  return { text: best.text, wrapChars: best.wrapChars };
+}

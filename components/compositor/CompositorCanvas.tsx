@@ -24,7 +24,7 @@ import {
   TEXT_LINE_HEIGHT,
 } from "@/lib/composition/render";
 import { wrapText } from "@/lib/composition/brand-apply";
-import { fitTextToBox } from "@/lib/composition/text-fit";
+import { fitTextToBox, fitTextToHeight } from "@/lib/composition/text-fit";
 import { ensureBrandFontsLoaded } from "@/lib/composition/fonts";
 import { useCompositorStore } from "@/store/useCompositorStore";
 
@@ -586,22 +586,29 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
         return;
       }
       const vertical = a.zone === "t" || a.zone === "b";
-      // Text pulled by a corner or top/bottom edge is fitted to the box the
-      // pointer describes: it re-wraps AND resizes, so folding the box onto
-      // itself folds the words with it, in any direction.
+      // Text pulled by a top/bottom edge keeps its size and re-wraps to fill
+      // the new height (taller = more lines); a corner fits the box the
+      // pointer describes, re-wrapping AND resizing so folding the box onto
+      // itself folds the words with it.
       if (layer.kind === "text" && a.raw && a.startBlockW) {
         const ctx = canvasRef.current?.getContext("2d");
         if (!ctx) return;
-        const boxW = vertical
-          ? a.startBlockW
-          : Math.max(40, Math.abs(p.x - a.cx) * 2);
+        const measure = (text: string) =>
+          layerBounds(ctx, { ...layer, text }, imagesRef.current);
         const boxH = Math.max(
           layer.sizePx * TEXT_LINE_HEIGHT * 0.3,
           Math.abs(p.y - a.cy) * 2,
         );
-        const fit = fitTextToBox(a.raw, boxW, boxH, (text) =>
-          layerBounds(ctx, { ...layer, text }, imagesRef.current),
-        );
+        if (vertical) {
+          const fit = fitTextToHeight(a.raw, boxH, layer.scale, measure);
+          if (fit.wrapChars !== a.lastMaxChars) {
+            a.lastMaxChars = fit.wrapChars;
+            updateLayer(a.id, { text: fit.text, wrapChars: fit.wrapChars });
+          }
+          return;
+        }
+        const boxW = Math.max(40, Math.abs(p.x - a.cx) * 2);
+        const fit = fitTextToBox(a.raw, boxW, boxH, measure);
         const key = `${fit.wrapChars}:${fit.scale.toFixed(3)}`;
         if (key !== a.lastFit) {
           a.lastFit = key;

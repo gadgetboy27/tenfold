@@ -790,8 +790,9 @@ workspace has a finished mark". That's the honest reading of the data.
 
 Dragging a text layer's box re-wraps the words from ANY edge or corner, not
 just the sides. `l`/`r` still set the wrap width at the current size. Corners
-and `t`/`b` call `fitTextToBox` (`lib/composition/text-fit.ts`), which tries
-every wrap width and keeps the one that lets the type be largest while still
-inside the box the pointer describes; `t`/`b` hold the block's width fixed.
-Pull a corner back onto itself and the text folds onto more lines and shrinks
-to stay inside. `wrapChars` is recorded so retyping keeps the shape.
+call `fitTextToBox` (`lib/composition/text-fit.ts`), which tries every wrap
+width and keeps the one that lets the type be largest while still inside the
+box the pointer describes. `t`/`b` call `fitTextToHeight` instead: the type
+size never changes, the wrap narrows to add lines as the box is pulled taller
+(and merges them as it shrinks). Pull a corner back onto itself and the text
+folds onto more lines and shrinks to stay inside. `wrapChars` is recorded so retyping keeps the shape.
