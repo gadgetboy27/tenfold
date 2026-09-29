@@ -186,11 +186,15 @@ export function AdStage({
      canvas has always supported playback (it drives the Compositor's own
      scrubber); it just had no controls here.
 
-     Shown only for a video backdrop. An image composition has a virtual clock
-     too, but scrubbing a still is a control that does nothing visible, and the
-     one thing worth animating on it — layer appear/disappear — belongs to the
-     Compositor's timeline, not to a stage this size. */
+     Shown for a video backdrop, OR for a still whose text is animated. An
+     image composition has a virtual clock too, but scrubbing a plain still is
+     a control that does nothing visible. Once a text block has a read-out
+     (Wording → "Read it out"), though, there is something to watch — and
+     without these controls the stage never plays, so the words sat there as
+     ordinary static text with no way to see the effect. */
   const isVideoAd = doc?.background.kind === "video";
+  const hasReadOut = layers.some((l) => l.kind === "text" && !!l.reveal);
+  const showTransport = isVideoAd || hasReadOut;
   const canvasRef = useRef<CompositorCanvasHandle>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -470,7 +474,7 @@ export function AdStage({
         )}
       </div>
 
-      {!fullscreen && isVideoAd && (
+      {!fullscreen && showTransport && (
         <div className="flex shrink-0 items-center gap-3 rounded-2xl border border-border bg-card px-3 py-2">
           <button
             type="button"
@@ -634,7 +638,15 @@ export function AdStage({
 
           <button
             type="button"
-            onClick={() => setFullscreen(true)}
+            onClick={() => {
+              // A read-out is only worth previewing in motion, so start it
+              // from the top rather than showing the frozen first frame.
+              if (hasReadOut) {
+                canvasRef.current?.seek(0);
+                setPlaying(true);
+              }
+              setFullscreen(true);
+            }}
             disabled={!doc}
             title="Fullscreen preview"
             aria-label="Fullscreen preview"

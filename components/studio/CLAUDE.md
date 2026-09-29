@@ -830,3 +830,8 @@ canvas preview and the FFmpeg export both read — don't fork them.
   end effect still plays. The scrim is the full text drawn at `@0` so its box
   follows fades and motion. The generated FFmpeg graph is unit-tested as
   strings only — it has not been run through a real ffmpeg in CI.
+- **Playback controls**: the stage's Play/scrub bar used to show for video
+  backdrops only, so on a still-image ad a read-out never ran — it looked
+  like plain static text. `AdStage` now also shows it when any text layer has
+  a `reveal` (`hasReadOut`), and fullscreen preview starts playing from 0 for
+  such ads. `RevealCard` warns when the reading outlasts the ad's length.

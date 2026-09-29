@@ -10,7 +10,8 @@ import {
   type TextLayer,
   type TextReveal,
 } from "@/lib/composition/layers";
-import { revealUnitCount } from "@/lib/composition/reveal";
+import { revealTimes, revealUnitCount } from "@/lib/composition/reveal";
+import { useCompositorStore } from "@/store/useCompositorStore";
 import { setTextReveal } from "./adBridge";
 
 const MODE_LABEL: Record<RevealMode, string> = {
@@ -46,6 +47,9 @@ export function RevealCard({ target }: { target: TextLayer | null }) {
   const reveal = target?.reveal;
   const text = target?.text ?? "";
   const fallbackSec = useMemo(() => defaultDuration(text), [text]);
+  const clipSec = useCompositorStore(
+    (s) => s.doc?.background.durationSec ?? 10,
+  );
 
   if (!target) return null;
 
@@ -152,6 +156,12 @@ export function RevealCard({ target }: { target: TextLayer | null }) {
               </button>
             ))}
           </div>
+          {revealTimes(target.appearAt, reveal).readEnd > clipSec && (
+            <p className="text-[11px] text-amber-500">
+              The ad is only {clipSec}s long, so the reading gets cut off —
+              shorten the wait or the read time.
+            </p>
+          )}
           {reveal.end !== "none" &&
             slider("Pause before", reveal.holdSec, 0, 5, 0.5, (v) =>
               set({ holdSec: v }),
