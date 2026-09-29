@@ -754,7 +754,15 @@ export function CompositorCanvas({
     // renders the composition for every section including this one, so
     // Compose is a normal <aside> occupant like Wording or Music: it reads
     // and writes the same store, it just doesn't draw the thing it's editing.
-    <div className="flex h-full flex-col gap-3">
+    // No h-full/flex-1 anywhere in here — the standard <aside> in Studio.tsx
+    // is already the scroll container for every section's rail content.
+    // The leftover flex-1/min-h-0 wrapper this used to have (from when
+    // Compose was a full two-column canvas+controls layout) clipped this
+    // content to whatever height it was allocated instead of letting it grow
+    // naturally, so long content (an open op form + the element tray + a
+    // full layer list) silently overflowed and overlapped the render/export
+    // row and the "Depth isn't shown..." line below it.
+    <div className="flex flex-col gap-3">
       <GalleryPicker
         open={pickingSecond}
         onClose={() => setPickingSecond(false)}
@@ -808,334 +816,330 @@ export function CompositorCanvas({
         )}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3">
-        <div className="flex min-h-0 flex-col gap-3">
-          {/* Op menu — a vertical list (not a wrapping pill row) since the
-              left column has the height to spare. */}
-          <nav className="flex flex-col gap-0.5">
-            {(
-              Object.entries(OP_META) as [
-                CompositeOp,
-                (typeof OP_META)[CompositeOp],
-              ][]
-            ).map(([op, meta]) => {
-              const Icon = meta.icon;
-              const active = activeOp === op;
-              return (
-                <button
-                  key={op}
-                  type="button"
-                  onClick={() => setActiveOp(op)}
-                  disabled={!!running}
-                  title={meta.blurb}
-                  className={`flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] font-medium transition-colors disabled:opacity-40 ${
-                    active
-                      ? "bg-primary/15 text-foreground"
-                      : "text-muted-foreground hover:bg-background hover:text-foreground"
-                  }`}
-                >
-                  <Icon className="h-4 w-4 shrink-0 opacity-90" />
-                  <span className="flex-1">{meta.label}</span>
-                </button>
-              );
-            })}
-          </nav>
+      <div className="flex flex-col gap-3">
+        {/* Op menu — a vertical list (not a wrapping pill row) since the
+            left column has the height to spare. */}
+        <nav className="flex flex-col gap-0.5">
+          {(
+            Object.entries(OP_META) as [
+              CompositeOp,
+              (typeof OP_META)[CompositeOp],
+            ][]
+          ).map(([op, meta]) => {
+            const Icon = meta.icon;
+            const active = activeOp === op;
+            return (
+              <button
+                key={op}
+                type="button"
+                onClick={() => setActiveOp(op)}
+                disabled={!!running}
+                title={meta.blurb}
+                className={`flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] font-medium transition-colors disabled:opacity-40 ${
+                  active
+                    ? "bg-primary/15 text-foreground"
+                    : "text-muted-foreground hover:bg-background hover:text-foreground"
+                }`}
+              >
+                <Icon className="h-4 w-4 shrink-0 opacity-90" />
+                <span className="flex-1">{meta.label}</span>
+              </button>
+            );
+          })}
+        </nav>
 
-          {/* Inline form for the active op */}
-          {activeOp && (
-            <div className="space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
-              <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                <InfoHint text={OP_META[activeOp].blurb} />
-                <span>{OP_META[activeOp].blurb.split(".")[0]}.</span>
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Changing{" "}
-                <span className="font-medium text-foreground">
-                  {selectedLayer
-                    ? "the selected layer"
-                    : "the background image"}
-                </span>{" "}
-                — click something on the ad to change that.
-              </p>
-              {(activeOp === "inpaint" ||
-                activeOp === "relight" ||
-                activeOp === "blend") && (
-                <textarea
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  rows={2}
-                  placeholder={
-                    activeOp === "inpaint"
-                      ? "What should fill the masked region?"
-                      : activeOp === "relight"
-                        ? "Describe the target lighting…"
-                        : "Describe how to merge the two images…"
-                  }
-                  className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary/50"
+        {/* Inline form for the active op */}
+        {activeOp && (
+          <div className="space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
+            <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-muted-foreground">
+              <InfoHint text={OP_META[activeOp].blurb} />
+              <span>{OP_META[activeOp].blurb.split(".")[0]}.</span>
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Changing{" "}
+              <span className="font-medium text-foreground">
+                {selectedLayer ? "the selected layer" : "the background image"}
+              </span>{" "}
+              — click something on the ad to change that.
+            </p>
+            {(activeOp === "inpaint" ||
+              activeOp === "relight" ||
+              activeOp === "blend") && (
+              <textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                rows={2}
+                placeholder={
+                  activeOp === "inpaint"
+                    ? "What should fill the masked region?"
+                    : activeOp === "relight"
+                      ? "Describe the target lighting…"
+                      : "Describe how to merge the two images…"
+                }
+                className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary/50"
+              />
+            )}
+            {activeOp === "relight" && (
+              <select
+                value={direction}
+                onChange={(e) =>
+                  setDirection(
+                    e.target.value as (typeof RELIGHT_DIRECTIONS)[number],
+                  )
+                }
+                className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+              >
+                {RELIGHT_DIRECTIONS.map((d) => (
+                  <option key={d} value={d}>
+                    {d === "None"
+                      ? "Auto lighting direction"
+                      : `Light from ${d}`}
+                  </option>
+                ))}
+              </select>
+            )}
+            {activeOp === "inpaint" && (
+              <div className="space-y-1.5">
+                <input
+                  ref={maskInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg"
+                  className="hidden"
+                  onChange={(e) => setMaskFile(e.target.files?.[0] ?? null)}
                 />
-              )}
-              {activeOp === "relight" && (
-                <select
-                  value={direction}
-                  onChange={(e) =>
-                    setDirection(
-                      e.target.value as (typeof RELIGHT_DIRECTIONS)[number],
-                    )
-                  }
-                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-                >
-                  {RELIGHT_DIRECTIONS.map((d) => (
-                    <option key={d} value={d}>
-                      {d === "None"
-                        ? "Auto lighting direction"
-                        : `Light from ${d}`}
-                    </option>
-                  ))}
-                </select>
-              )}
-              {activeOp === "inpaint" && (
-                <div className="space-y-1.5">
-                  <input
-                    ref={maskInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg"
-                    className="hidden"
-                    onChange={(e) => setMaskFile(e.target.files?.[0] ?? null)}
-                  />
-                  {maskPreviewUrl ? (
-                    <div className="flex items-center gap-2">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={maskPreviewUrl}
-                        alt="Mask preview"
-                        className="h-14 w-14 rounded-md border border-border object-cover"
-                      />
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-xs text-muted-foreground">
-                          White = fill, black = keep
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => maskInputRef.current?.click()}
-                          className="text-left text-xs text-primary hover:underline"
-                        >
-                          Change mask
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => maskInputRef.current?.click()}
-                      className="flex w-full items-center gap-1.5 rounded-lg border border-dashed border-primary/40 px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-primary/70 hover:text-foreground"
-                    >
-                      <Upload className="h-3.5 w-3.5" />
-                      Upload a mask (white = fill, black = keep)
-                    </button>
-                  )}
-                </div>
-              )}
-              {activeOp === "textureOverlay" && (
-                <>
-                  <select
-                    value={mode}
-                    onChange={(e) =>
-                      setMode(e.target.value as (typeof MECH_MODES)[number])
-                    }
-                    className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-                  >
-                    {MECH_MODES.map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
+                {maskPreviewUrl ? (
                   <div className="flex items-center gap-2">
-                    <input
-                      type="range"
-                      min={0}
-                      max={1}
-                      step={0.05}
-                      value={mechOpacity}
-                      onChange={(e) => setMechOpacity(+e.target.value)}
-                      className="flex-1"
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={maskPreviewUrl}
+                      alt="Mask preview"
+                      className="h-14 w-14 rounded-md border border-border object-cover"
                     />
-                    <span className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-                      {Math.round(mechOpacity * 100)}%
-                    </span>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-xs text-muted-foreground">
+                        White = fill, black = keep
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => maskInputRef.current?.click()}
+                        className="text-left text-xs text-primary hover:underline"
+                      >
+                        Change mask
+                      </button>
+                    </div>
                   </div>
-                </>
-              )}
-              {activeOp === "gradientMerge" && (
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => maskInputRef.current?.click()}
+                    className="flex w-full items-center gap-1.5 rounded-lg border border-dashed border-primary/40 px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-primary/70 hover:text-foreground"
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    Upload a mask (white = fill, black = keep)
+                  </button>
+                )}
+              </div>
+            )}
+            {activeOp === "textureOverlay" && (
+              <>
                 <select
-                  value={mechDirection}
+                  value={mode}
                   onChange={(e) =>
-                    setMechDirection(
-                      e.target.value as (typeof MECH_DIRECTIONS)[number],
-                    )
+                    setMode(e.target.value as (typeof MECH_MODES)[number])
                   }
                   className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
                 >
-                  {MECH_DIRECTIONS.map((d) => (
-                    <option key={d} value={d}>
-                      {d}
+                  {MECH_MODES.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
                     </option>
                   ))}
                 </select>
-              )}
-              {activeOp === "softGlow" && (
                 <div className="flex items-center gap-2">
                   <input
                     type="range"
                     min={0}
-                    max={40}
-                    step={1}
-                    value={sigma}
-                    onChange={(e) => setSigma(+e.target.value)}
+                    max={1}
+                    step={0.05}
+                    value={mechOpacity}
+                    onChange={(e) => setMechOpacity(+e.target.value)}
                     className="flex-1"
                   />
-                  <span className="w-8 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-                    {sigma}
+                  <span className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                    {Math.round(mechOpacity * 100)}%
                   </span>
                 </div>
-              )}
-              {NEEDS_SECOND_IMAGE.has(activeOp) &&
-                (secondImage ? (
-                  <div className="flex items-center gap-2">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={secondImage.url}
-                      alt="Second image"
-                      className="h-10 w-10 rounded-md object-cover"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setSecondImage(null)}
-                      className="text-xs text-muted-foreground hover:text-foreground"
-                    >
-                      Change
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <GalleryPickButton
-                      onClick={() => setPickingSecond(true)}
-                      label="Pick from gallery"
-                    />
-                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground">
-                      <Upload className="h-3.5 w-3.5" />
-                      {uploadingSecond ? "Uploading…" : "Upload a file"}
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp"
-                        className="hidden"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) void uploadSecondImage(f);
-                          e.target.value = "";
-                        }}
-                      />
-                    </label>
-                  </div>
+              </>
+            )}
+            {activeOp === "gradientMerge" && (
+              <select
+                value={mechDirection}
+                onChange={(e) =>
+                  setMechDirection(
+                    e.target.value as (typeof MECH_DIRECTIONS)[number],
+                  )
+                }
+                className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+              >
+                {MECH_DIRECTIONS.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
                 ))}
-              <div className="flex items-center gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={submitOp}
-                  disabled={running === activeOp}
-                  className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-1.5 text-sm font-semibold text-primary-foreground disabled:opacity-40"
-                >
-                  {running === activeOp ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Sparkles className="h-3.5 w-3.5" />
-                  )}
-                  Generate
-                </button>
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="text-xs text-muted-foreground hover:text-foreground"
-                >
-                  Cancel
-                </button>
+              </select>
+            )}
+            {activeOp === "softGlow" && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  min={0}
+                  max={40}
+                  step={1}
+                  value={sigma}
+                  onChange={(e) => setSigma(+e.target.value)}
+                  className="flex-1"
+                />
+                <span className="w-8 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                  {sigma}
+                </span>
               </div>
+            )}
+            {NEEDS_SECOND_IMAGE.has(activeOp) &&
+              (secondImage ? (
+                <div className="flex items-center gap-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={secondImage.url}
+                    alt="Second image"
+                    className="h-10 w-10 rounded-md object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setSecondImage(null)}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Change
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2">
+                  <GalleryPickButton
+                    onClick={() => setPickingSecond(true)}
+                    label="Pick from gallery"
+                  />
+                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground">
+                    <Upload className="h-3.5 w-3.5" />
+                    {uploadingSecond ? "Uploading…" : "Upload a file"}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) void uploadSecondImage(f);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                </div>
+              ))}
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={submitOp}
+                disabled={running === activeOp}
+                className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-1.5 text-sm font-semibold text-primary-foreground disabled:opacity-40"
+              >
+                {running === activeOp ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5" />
+                )}
+                Generate
+              </button>
+              <button
+                type="button"
+                onClick={resetForm}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                Cancel
+              </button>
             </div>
-          )}
+          </div>
+        )}
 
-          <div className="border-t border-border" />
+        <div className="border-t border-border" />
 
-          {/* Layer stack + properties */}
-          {/* Cinema mix presets — fade / lower third / crawl.
+        {/* Layer stack + properties */}
+        {/* Cinema mix presets — fade / lower third / crawl.
               These were wired ONLY into the classic /[workspace]/compositor
               page, so they were stranded there when Studio became the main
               site: the styles existed, worked, and were reachable by nobody
               following the normal flow. Same shape as the four Pro panels and
               the publish UI before them. */}
-          {caption && (
-            <div className="border-t border-border pt-3">
-              <CaptionPresetRow
-                caption={caption}
-                onUpgrade={() => onUpgrade?.()}
-              />
-            </div>
-          )}
-
-          {/* Placeable elements, above the layer list: the tray is where a
-              layer COMES FROM, so it reads top-to-bottom as make-it →
-              drop-it → it's in the list. */}
+        {caption && (
           <div className="border-t border-border pt-3">
-            <ElementTray
-              workspaceSlug={workspaceSlug}
-              campaignId={campaignId}
-              onStageVideo={(v) => addVideoToAd(v.url)}
-              onPickMusic={(url) => onPickMusic?.(url)}
-              onPlaceCaption={() => {
-                if (caption) addCaptionToAd(caption);
-              }}
-              musicUrl={musicUrl}
+            <CaptionPresetRow
+              caption={caption}
+              onUpgrade={() => onUpgrade?.()}
             />
           </div>
+        )}
 
-          <LayerList />
-          {selectedLayer && (
-            <div className="border-t border-border pt-3">
-              <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                {selectedLayer.locked ? (
-                  <Lock className="h-3.5 w-3.5" />
-                ) : (
-                  <LockOpen className="h-3.5 w-3.5" />
-                )}
-                {selectedLayer.locked ? "Locked" : "Unlocked"} — selected layer
-                {/* The one-press delete. It was two or three actions before:
+        {/* Placeable elements, above the layer list: the tray is where a
+              layer COMES FROM, so it reads top-to-bottom as make-it →
+              drop-it → it's in the list. */}
+        <div className="border-t border-border pt-3">
+          <ElementTray
+            workspaceSlug={workspaceSlug}
+            campaignId={campaignId}
+            onStageVideo={(v) => addVideoToAd(v.url)}
+            onPickMusic={(url) => onPickMusic?.(url)}
+            onPlaceCaption={() => {
+              if (caption) addCaptionToAd(caption);
+            }}
+            musicUrl={musicUrl}
+          />
+        </div>
+
+        <LayerList />
+        {selectedLayer && (
+          <div className="border-t border-border pt-3">
+            <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              {selectedLayer.locked ? (
+                <Lock className="h-3.5 w-3.5" />
+              ) : (
+                <LockOpen className="h-3.5 w-3.5" />
+              )}
+              {selectedLayer.locked ? "Locked" : "Unlocked"} — selected layer
+              {/* The one-press delete. It was two or three actions before:
                     find the layer's row in the list and hit its bin, or select
                     the text and delete the characters — which leaves an empty
                     text layer behind and doesn't remove anything at all.
                     Undo covers the mistake, which is what makes an unconfirmed
                     destructive button reasonable here; a confirm on every
                     delete is what trains people to stop reading confirms. */}
-                <button
-                  type="button"
-                  onClick={() => removeLayer(selectedLayer.id)}
-                  title="Delete this layer (Del)"
-                  aria-label="Delete this layer"
-                  className="ml-auto flex items-center gap-1 rounded-md px-1.5 py-1 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-400"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  <span className="text-[10px]">Del</span>
-                </button>
-                <InfoHint text="Locking a layer freezes it so later operations build on top instead of replacing it. Unlock to edit its settings or regenerate it." />
-              </div>
-              <LayerControls
-                layer={selectedLayer}
-                onRedo={handleRedo}
-                redoing={running === "redo"}
-                onRevertHistory={handleRevertHistory}
-              />
+              <button
+                type="button"
+                onClick={() => removeLayer(selectedLayer.id)}
+                title="Delete this layer (Del)"
+                aria-label="Delete this layer"
+                className="ml-auto flex items-center gap-1 rounded-md px-1.5 py-1 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-400"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span className="text-[10px]">Del</span>
+              </button>
+              <InfoHint text="Locking a layer freezes it so later operations build on top instead of replacing it. Unlock to edit its settings or regenerate it." />
             </div>
-          )}
-          {footer}
-        </div>
+            <LayerControls
+              layer={selectedLayer}
+              onRedo={handleRedo}
+              redoing={running === "redo"}
+              onRevertHistory={handleRevertHistory}
+            />
+          </div>
+        )}
+        {footer}
       </div>
 
       {/* Render. Compose is where the ad is assembled and it had no way to
