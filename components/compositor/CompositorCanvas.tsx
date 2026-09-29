@@ -21,8 +21,10 @@ import {
   layerCenter,
   OUTLINE_PAD,
   scaledHalfExtents,
+  TEXT_LINE_HEIGHT,
 } from "@/lib/composition/render";
 import { wrapText } from "@/lib/composition/brand-apply";
+import { fitTextToBox } from "@/lib/composition/text-fit";
 import { ensureBrandFontsLoaded } from "@/lib/composition/fonts";
 import { useCompositorStore } from "@/store/useCompositorStore";
 
@@ -65,6 +67,9 @@ type PointerAction =
       raw?: string;
       avgCharW?: number;
       lastMaxChars?: number;
+      /** Text: block width at drag start, held fixed by top/bottom pulls. */
+      startBlockW?: number;
+      lastFit?: string;
     };
 
 export interface CompositorCanvasHandle {
@@ -434,12 +439,15 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
         const selEff = eff(sel);
         let raw: string | undefined;
         let avgCharW: number | undefined;
+        let startBlockW: number | undefined;
         if (selEff.kind === "text") {
           raw = selEff.text.replace(/\n/g, " ");
           ctx.save();
           ctx.font = `${selEff.sizePx}px "${selEff.font}", sans-serif`;
           avgCharW = ctx.measureText(raw).width / Math.max(1, raw.length);
           ctx.restore();
+          startBlockW =
+            layerBounds(ctx, selEff, imagesRef.current).width * selEff.scale;
         }
         const selCentre = layerCenter(
           ctx,
@@ -458,6 +466,7 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
           startScale: selEff.scale,
           raw,
           avgCharW,
+          startBlockW,
         };
         e.currentTarget.setPointerCapture(e.pointerId);
         return;
@@ -577,6 +586,30 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
         return;
       }
       const vertical = a.zone === "t" || a.zone === "b";
+      // Text pulled by a corner or top/bottom edge is fitted to the box the
+      // pointer describes: it re-wraps AND resizes, so folding the box onto
+      // itself folds the words with it, in any direction.
+      if (layer.kind === "text" && a.raw && a.startBlockW) {
+        const ctx = canvasRef.current?.getContext("2d");
+        if (!ctx) return;
+        const boxW = vertical
+          ? a.startBlockW
+          : Math.max(40, Math.abs(p.x - a.cx) * 2);
+        const boxH = Math.max(
+          layer.sizePx * TEXT_LINE_HEIGHT * 0.3,
+          Math.abs(p.y - a.cy) * 2,
+        );
+        const fit = fitTextToBox(a.raw, boxW, boxH, (text) =>
+          layerBounds(ctx, { ...layer, text }, imagesRef.current),
+        );
+        const key = `${fit.wrapChars}:${fit.scale.toFixed(3)}`;
+        if (key !== a.lastFit) {
+          a.lastFit = key;
+          updateLayer(a.id, { text: fit.text, wrapChars: fit.wrapChars });
+          patchLayout(a.id, { scale: fit.scale });
+        }
+        return;
+      }
       const f = sideOnly
         ? Math.abs(p.x - a.cx) / Math.max(1, Math.abs(a.startX - a.cx))
         : vertical

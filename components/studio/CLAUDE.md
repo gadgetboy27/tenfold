@@ -785,3 +785,13 @@ fetches (which `continue`) still gets a message. Studio's image `poll()` and
 `done.logo` is **workspace-level, not per-campaign**: logo projects hang off the
 shared "Logos" holding campaign (`app/api/logo/route.ts`), so it means "this
 workspace has a finished mark". That's the honest reading of the data.
+
+## Text boxes reflow from every handle (2026-09-29)
+
+Dragging a text layer's box re-wraps the words from ANY edge or corner, not
+just the sides. `l`/`r` still set the wrap width at the current size. Corners
+and `t`/`b` call `fitTextToBox` (`lib/composition/text-fit.ts`), which tries
+every wrap width and keeps the one that lets the type be largest while still
+inside the box the pointer describes; `t`/`b` hold the block's width fixed.
+Pull a corner back onto itself and the text folds onto more lines and shrinks
+to stay inside. `wrapChars` is recorded so retyping keeps the shape.
