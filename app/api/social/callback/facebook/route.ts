@@ -5,7 +5,8 @@ import { recordSocialEvent } from "@/lib/social/audit";
 import {
   exchangeCodeForToken,
   getLongLivedUserToken,
-  getUserPages,
+  discoverPages,
+  describeMetaGrant,
   getInstagramAccount,
 } from "@/lib/social/meta";
 import { verifyOAuthState } from "@/lib/social/oauth-state";
@@ -59,7 +60,7 @@ export async function GET(req: Request) {
     const userToken = await getLongLivedUserToken(shortToken);
 
     // 3. Discover all Facebook Pages this user manages
-    const pages = await getUserPages(userToken);
+    const pages = await discoverPages(userToken);
     // Diagnostic (ids/names only, never tokens): if this logs fewer Pages than
     // the user ticked in Facebook, the grant didn't propagate — a Meta-side
     // caching / Business-Manager scope issue, not our storage.
@@ -69,6 +70,13 @@ export async function GET(req: Request) {
       pages.map((p) => `${p.name}(${p.id})`).join(", "),
     );
     if (pages.length === 0) {
+      // Say WHY, in the log: which permissions Facebook granted and which
+      // Pages they were scoped to. Zero Pages is decided entirely on Meta's
+      // side and is otherwise undiagnosable from here.
+      console.error(
+        "[Meta OAuth] no pages —",
+        await describeMetaGrant(userToken),
+      );
       return NextResponse.redirect(
         `${process.env.APP_URL}/${slug}/settings/social?error=facebook_no_pages`,
       );
@@ -99,7 +107,8 @@ export async function GET(req: Request) {
     const page =
       (wasManuallySelected && pages.find((p) => p.id === priorPageId)) ||
       pages[0];
-    const stillManuallySelected = wasManuallySelected && page.id === priorPageId;
+    const stillManuallySelected =
+      wasManuallySelected && page.id === priorPageId;
     const facebook_pages = pages.map((p) => ({
       id: p.id,
       name: p.name,

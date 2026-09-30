@@ -10,6 +10,14 @@ export function getMetaOAuthUrl(state: string): string {
       "pages_show_list",
       "pages_manage_posts",
       "pages_read_engagement",
+      // Pages owned by a Business portfolio (Meta Business Suite) usually don't
+      // appear in /me/accounts at all — they are only listed under the
+      // business. Reading that list needs this scope. Opt-in, because asking a
+      // live app for a permission it hasn't been approved for makes the
+      // consent dialog error for everyone who isn't an app admin/tester.
+      ...(process.env.META_BUSINESS_SCOPE === "true"
+        ? ["business_management"]
+        : []),
     ].join(","),
     state,
     response_type: "code",
@@ -89,6 +97,150 @@ export async function getUserPages(userToken: string): Promise<FbPage[]> {
     url = data.paging?.next;
   }
   return pages;
+}
+
+interface BusinessPagesResponse {
+  data?: Partial<FbPage>[];
+  paging?: { next?: string };
+  error?: { message: string };
+}
+
+/**
+ * Pages reachable through the user's Business portfolios — both ones the
+ * business OWNS and ones it manages for a client. Needs `business_management`;
+ * without it Meta answers with an error, which is swallowed here (the caller
+ * still has /me/accounts) but logged so the reason is visible.
+ *
+ * A listed Page doesn't always carry its own access token, so any that lack
+ * one are read individually with the user token (which works when the user has
+ * a role on that Page through the business).
+ */
+export async function getBusinessPages(userToken: string): Promise<FbPage[]> {
+  const out = new Map<string, FbPage>();
+  const get = async <T>(url: string): Promise<T | null> => {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+      return (await res.json()) as T;
+    } catch {
+      return null;
+    }
+  };
+
+  const biz = await get<{
+    data?: { id: string; name?: string }[];
+    error?: { message: string };
+  }>(
+    `${META_API}/me/businesses?fields=id,name&limit=50&access_token=${userToken}`,
+  );
+  if (!biz || biz.error) {
+    console.error(
+      "[Meta OAuth] /me/businesses unavailable:",
+      biz?.error?.message ?? "no response",
+    );
+    return [];
+  }
+
+  for (const b of biz.data ?? []) {
+    for (const edge of ["owned_pages", "client_pages"]) {
+      let url: string | undefined =
+        `${META_API}/${b.id}/${edge}?fields=id,name,access_token,category&limit=100&access_token=${userToken}`;
+      while (url) {
+        const page: BusinessPagesResponse | null =
+          await get<BusinessPagesResponse>(url);
+        if (!page || page.error) {
+          console.error(
+            `[Meta OAuth] ${edge} of business ${b.id} failed:`,
+            page?.error?.message ?? "no response",
+          );
+          break;
+        }
+        for (const p of page.data ?? []) {
+          if (!p.id || out.has(p.id)) continue;
+          let token = p.access_token;
+          let name = p.name;
+          let category = p.category;
+          if (!token) {
+            const one = await get<Partial<FbPage> & { error?: unknown }>(
+              `${META_API}/${p.id}?fields=id,name,category,access_token&access_token=${userToken}`,
+            );
+            token = one?.access_token;
+            name = name ?? one?.name;
+            category = category ?? one?.category;
+          }
+          // A Page we cannot get a token for cannot be published to — leave it
+          // out rather than offering a Page that fails at the first post.
+          if (token)
+            out.set(p.id, {
+              id: p.id,
+              name: name ?? p.id,
+              access_token: token,
+              category: category ?? "",
+            });
+        }
+        url = page.paging?.next;
+      }
+    }
+  }
+  return [...out.values()];
+}
+
+/** Every Page this login can publish to: the personal list plus the
+ *  business-owned ones, de-duplicated by id (personal entry wins). */
+export async function discoverPages(userToken: string): Promise<FbPage[]> {
+  const personal = await getUserPages(userToken);
+  const seen = new Set(personal.map((p) => p.id));
+  const business = await getBusinessPages(userToken);
+  return [...personal, ...business.filter((p) => !seen.has(p.id))];
+}
+
+/**
+ * One log line describing what Facebook actually granted this login — for the
+ * "connected but zero Pages" case, where the cause is entirely on Meta's side
+ * (which permissions were ticked, which Pages they were scoped to, whether the
+ * Pages sit under a business). Never contains a token.
+ */
+export async function describeMetaGrant(userToken: string): Promise<string> {
+  const bits: string[] = [];
+  const get = async (url: string) => {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(8_000) });
+      return (await res.json()) as Record<string, unknown>;
+    } catch (e) {
+      return { error: { message: e instanceof Error ? e.message : "fetch" } };
+    }
+  };
+  if (process.env.META_APP_ID && process.env.META_APP_SECRET) {
+    const appToken = `${process.env.META_APP_ID}|${process.env.META_APP_SECRET}`;
+    const dbg = (await get(
+      `${META_API}/debug_token?input_token=${encodeURIComponent(userToken)}&access_token=${encodeURIComponent(appToken)}`,
+    )) as {
+      data?: {
+        is_valid?: boolean;
+        type?: string;
+        scopes?: string[];
+        granular_scopes?: { scope: string; target_ids?: string[] }[];
+      };
+      error?: { message: string };
+    };
+    if (dbg.data) {
+      bits.push(
+        `token valid=${dbg.data.is_valid} type=${dbg.data.type} scopes=[${(dbg.data.scopes ?? []).join(",")}]`,
+        `granular=[${(dbg.data.granular_scopes ?? []).map((g) => `${g.scope}:${g.target_ids?.length ?? "all"}`).join(",")}]`,
+      );
+    } else bits.push(`debug_token error: ${dbg.error?.message}`);
+  }
+  const perms = (await get(
+    `${META_API}/me/permissions?access_token=${userToken}`,
+  )) as {
+    data?: { permission: string; status: string }[];
+    error?: { message: string };
+  };
+  bits.push(
+    perms.data
+      ? `permissions=[${perms.data.map((p) => `${p.permission}:${p.status}`).join(",")}]`
+      : `permissions error: ${perms.error?.message}`,
+  );
+  return bits.join(" | ");
 }
 
 export interface IgAccount {

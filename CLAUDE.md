@@ -287,6 +287,16 @@ broker _could_ serve, not a claim about how they publish today.
 
 Per-network notes worth knowing before touching `lib/social/direct/`:
 
+- **Facebook Pages** come from `discoverPages` (`lib/social/meta.ts`):
+  `/me/accounts` PLUS the user's Business portfolios (`/me/businesses` →
+  `owned_pages` / `client_pages`). Pages owned through a Business are often
+  absent from `/me/accounts` entirely — that was the "connected but zero
+  Pages" (`facebook_no_pages`) failure. Reading the business list needs
+  `business_management`, requested only when `META_BUSINESS_SCOPE=true` (a
+  live app asking for an unapproved scope breaks the consent dialog for
+  non-admins). On zero Pages the callback logs `describeMetaGrant` — granted
+  permissions and their Page scoping, never a token — so the cause is
+  readable in Railway logs. One login → many Pages → the in-app Page picker.
 - **Bluesky** has no developer app at all. The user pastes a handle + app
   password; it lives in `social_profiles.access_token` and never expires
   (revoked, not aged out — hence `token_expires_at = null`). Blobs are capped
