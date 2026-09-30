@@ -1,4 +1,5 @@
 import { canonicalMediaUrl } from "@/lib/social/media-url";
+import type { TikTokPostOptions } from "@/lib/social/tiktok-options";
 
 const TIKTOK_AUTH = "https://www.tiktok.com/v2/auth/authorize/";
 const TIKTOK_API = "https://open.tiktokapis.com/v2";
@@ -251,6 +252,9 @@ export function resolvePrivacy(
 export function interactionFlags(
   info: TikTokCreatorInfo | null,
   privacy: TikTokPrivacy,
+  /** What the user ticked on the posting screen. Absent = legacy callers,
+   *  who get the creator's own settings and nothing more permissive. */
+  allow?: { comment: boolean; duet: boolean; stitch: boolean },
 ): {
   disable_comment: boolean;
   disable_duet: boolean;
@@ -264,10 +268,13 @@ export function interactionFlags(
       disable_stitch: true,
     };
   }
+  // The user's choice can only ever TIGHTEN what the creator permits: an
+  // unticked box disables the feature, a ticked one never overrides the
+  // account's own "off".
   return {
-    disable_comment: info.commentDisabled,
-    disable_duet: info.duetDisabled || isPrivate,
-    disable_stitch: info.stitchDisabled || isPrivate,
+    disable_comment: info.commentDisabled || allow?.comment === false,
+    disable_duet: info.duetDisabled || isPrivate || allow?.duet === false,
+    disable_stitch: info.stitchDisabled || isPrivate || allow?.stitch === false,
   };
 }
 
@@ -287,6 +294,8 @@ export async function publishToTikTok(params: {
   isVideo: boolean;
   caption: string;
   privacy?: TikTokPrivacy;
+  /** The posting-screen choices. Without them the legacy defaults apply. */
+  options?: TikTokPostOptions;
 }): Promise<{ publishId: string; privacy: TikTokPrivacy }> {
   if (!params.isVideo) {
     // TikTok photo posts go through /post/publish/content/init/ with its own
@@ -299,7 +308,16 @@ export async function publishToTikTok(params: {
 
   // Ask what this account may do before telling it what to do.
   const info = await getTikTokCreatorInfo(params.accessToken);
-  const privacy = resolvePrivacy(params.privacy, info);
+  const opts = params.options;
+  const privacy = resolvePrivacy(opts?.privacy ?? params.privacy, info);
+  const brand = opts?.commercial;
+  // TikTok forbids a private branded-content post; catch it here with a
+  // sentence rather than letting the API reject it with a guidelines link.
+  if (brand?.enabled && brand.brandedContent && privacy === "SELF_ONLY") {
+    throw new Error(
+      "TikTok doesn't allow branded content to be private — choose who can view it.",
+    );
+  }
 
   // PULL_FROM_URL only accepts a domain verified in TikTok's portal, and 302
   // of this project's assets predate the custom domain — see media-url.ts.
@@ -315,7 +333,24 @@ export async function publishToTikTok(params: {
       post_info: {
         title: params.caption.slice(0, MAX_TITLE),
         privacy_level: privacy,
-        ...interactionFlags(info, privacy),
+        ...interactionFlags(
+          info,
+          privacy,
+          opts && {
+            comment: opts.allowComment,
+            duet: opts.allowDuet,
+            stitch: opts.allowStitch,
+          },
+        ),
+        // Commercial-content disclosure. Only sent when the user turned it
+        // on; `brand_organic_toggle` = promoting their own brand,
+        // `brand_content_toggle` = a paid partnership.
+        ...(brand?.enabled
+          ? {
+              brand_organic_toggle: brand.yourBrand,
+              brand_content_toggle: brand.brandedContent,
+            }
+          : {}),
       },
       source_info: {
         source: "PULL_FROM_URL",

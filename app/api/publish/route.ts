@@ -687,6 +687,7 @@ export const POST = withWorkspace(async (req, { db, session }) => {
           caption: platformCaption,
           subreddit: body.subreddit,
           boardId: body.pinterestBoardId,
+          tiktok: body.tiktok,
         });
       } else if (shouldBroker(platform, false)) {
         // Networks with no direct adapter at all (X, Threads, GMB, Telegram).

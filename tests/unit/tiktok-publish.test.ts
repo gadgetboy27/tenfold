@@ -252,3 +252,36 @@ describe("the media is checked before a platform is asked to fetch it", () => {
     }
   });
 });
+
+describe("posting-screen choices", () => {
+  const info = {
+    nickname: "Brand",
+    privacyOptions: ["PUBLIC_TO_EVERYONE", "SELF_ONLY"] as never,
+    maxDurationSec: 600,
+    commentDisabled: false,
+    duetDisabled: false,
+    stitchDisabled: true,
+  };
+
+  it("an unticked box disables the feature; a ticked one never overrides the creator", () => {
+    const f = interactionFlags(info, "PUBLIC_TO_EVERYONE", {
+      comment: false,
+      duet: true,
+      stitch: true,
+    });
+    expect(f.disable_comment).toBe(true); // user left it off
+    expect(f.disable_duet).toBe(false); // user allowed, creator allows
+    expect(f.disable_stitch).toBe(true); // creator has it off — user can't re-enable
+  });
+
+  it("a private video can never allow duet or stitch, whatever was ticked", () => {
+    const f = interactionFlags(info, "SELF_ONLY", {
+      comment: true,
+      duet: true,
+      stitch: true,
+    });
+    expect(f.disable_duet).toBe(true);
+    expect(f.disable_stitch).toBe(true);
+    expect(f.disable_comment).toBe(false);
+  });
+});

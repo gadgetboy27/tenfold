@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 // NOTE: This is a starting template, not legal advice. Have it reviewed and
 // tailored to your entity, jurisdiction, and actual data practices before
 // relying on it. Keep the subprocessor list in sync with the services you use.
-const LAST_UPDATED = "22 June 2026";
+const LAST_UPDATED = "1 October 2026";
 const CONTACT_EMAIL = "support@prettymuch.nz";
 
 export default function PrivacyPage() {
@@ -93,7 +93,12 @@ export default function PrivacyPage() {
               <strong>Anthropic</strong> — AI text/script generation
             </li>
             <li>
-              <strong>Ayrshare &amp; Meta</strong> — social media publishing
+              <strong>Meta &amp; TikTok</strong> — publishing to the social
+              accounts you connect
+            </li>
+            <li>
+              <strong>Ayrshare</strong> — publishing to networks we do not yet
+              connect to directly
             </li>
             <li>
               <strong>Stripe</strong> — payment processing
@@ -119,6 +124,29 @@ export default function PrivacyPage() {
             information. We access these accounts only to perform actions you
             request. You can disconnect an account at any time, which revokes
             our access going forward.
+          </p>
+          <h3 className="mt-4 font-semibold">TikTok</h3>
+          <p>
+            If you connect TikTok, we use TikTok&apos;s Login Kit and Content
+            Posting API. With your permission we receive your TikTok display
+            name and account identifier, and the access and refresh tokens
+            TikTok issues, which we store encrypted. We use the{" "}
+            <code>user.info.basic</code> and <code>video.publish</code>{" "}
+            permissions for one purpose only: to post a video that you create
+            and choose to publish, using the privacy, comment, Duet, Stitch and
+            commercial-content settings you select, and to show you which
+            account you are posting as.
+          </p>
+          <p>
+            We do not read your TikTok videos, followers, messages or feed. We
+            do not post anything you have not reviewed and confirmed, and we do
+            not sell TikTok data, use it for advertising, or use it to train AI
+            models. You can disconnect TikTok at any time in Settings → Social,
+            which revokes our access with TikTok and deletes the tokens we hold.
+            You can also remove our access from TikTok under Settings and
+            privacy → Security &amp; permissions → Apps and services. Videos
+            already posted remain on your TikTok account until you delete them
+            there.
           </p>
         </section>
 

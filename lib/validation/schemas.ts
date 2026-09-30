@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { tiktokPostSchema } from "@/lib/social/tiktok-options";
 import { backgroundSchema, layerSchema } from "@/lib/composition/layers";
 
 export const createCampaignSchema = z.object({
@@ -146,6 +147,9 @@ export const publishSchema = z.object({
   // (lib/social/direct/). Both fall back to the connection's stored default.
   subreddit: z.string().max(50).optional(),
   pinterestBoardId: z.string().max(64).optional(),
+  // What the user chose on the TikTok posting screen (privacy, interactions,
+  // commercial disclosure) — see lib/social/tiktok-options.ts.
+  tiktok: tiktokPostSchema.optional(),
 });
 
 export const purchaseCreditsSchema = z.object({

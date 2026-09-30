@@ -10,6 +10,7 @@ import {
   refreshTikTokToken,
   awaitTikTokAcceptance,
 } from "./tiktok";
+import type { TikTokPostOptions } from "@/lib/social/tiktok-options";
 import { publishToYouTube, refreshYouTubeToken } from "./youtube";
 
 /**
@@ -100,6 +101,8 @@ export interface DirectPublishParams {
    *  other than the connection's stored default. */
   subreddit?: string;
   boardId?: string;
+  /** TikTok posting-screen choices (privacy, interactions, disclosure). */
+  tiktok?: TikTokPostOptions;
 }
 
 // Refresh a little before the real expiry: a token that dies mid-publish
@@ -121,7 +124,7 @@ function isExpired(tokenExpiresAt: string | null): boolean {
  * writing the new one back every publish would burn a refresh round-trip and
  * eventually hit Reddit's rate limit on the token endpoint.
  */
-async function freshAccessToken(
+export async function freshAccessToken(
   platform: DirectPlatform,
   profile: DirectProfile,
   workspaceId: string,
@@ -258,6 +261,7 @@ export async function publishDirect(
       mediaUrl,
       isVideo,
       caption,
+      options: params.tiktok,
     });
     // TikTok accepts for processing rather than publishing synchronously, so
     // the id alone means "queued", not "live". Give it a few seconds to reject

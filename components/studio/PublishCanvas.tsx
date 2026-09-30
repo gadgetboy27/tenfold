@@ -47,6 +47,13 @@ import { thumbUrl } from "@/lib/images/thumb";
 import { CREDIT_COSTS } from "@/lib/credits/costs";
 import { useCompositorStore } from "@/store/useCompositorStore";
 import { stillLayers, uploadStill } from "@/lib/composition/still";
+import {
+  EMPTY_TIKTOK_DRAFT,
+  tiktokDraftProblem,
+  tiktokOptionsFromDraft,
+  type TikTokDraft,
+} from "@/lib/social/tiktok-options";
+import { TikTokPostCard } from "./TikTokPostCard";
 import { InfoHint } from "@/components/ui/info-hint";
 import { platformDefaults } from "@/lib/social/platform-defaults";
 import { LandingPagePanel } from "@/components/landing/LandingPagePanel";
@@ -366,6 +373,9 @@ export function PublishCanvas({
   const [hashtagInput, setHashtagInput] = useState("");
   const [facebookPageId, setFacebookPageId] = useState("");
   const [scheduleMode, setScheduleMode] = useState<"now" | "later">("now");
+  // TikTok's posting screen — see TikTokPostCard. Privacy starts unchosen.
+  const [tiktokDraft, setTiktokDraft] =
+    useState<TikTokDraft>(EMPTY_TIKTOK_DRAFT);
   const [scheduledAt, setScheduledAt] = useState("");
   const [publishing, setPublishing] = useState(false);
   const [results, setResults] = useState<PostResult[] | null>(null);
@@ -793,6 +803,13 @@ export function PublishCanvas({
       toast.error("Select at least one platform");
       return;
     }
+    if (platforms.includes("tiktok")) {
+      const problem = tiktokDraftProblem(tiktokDraft);
+      if (problem) {
+        toast.error(problem);
+        return;
+      }
+    }
     if (notLockedIn && !rawAck) {
       setRawAck(true);
       toast.error(
@@ -857,6 +874,10 @@ export function PublishCanvas({
             .map((p) => [p, platformCaptions[p]]),
         );
         if (Object.keys(tailored).length) body.platformCaptions = tailored;
+        if (list.includes("tiktok")) {
+          const tiktok = tiktokOptionsFromDraft(tiktokDraft);
+          if (tiktok) body.tiktok = tiktok;
+        }
         if (list.includes("facebook") && facebookPageId)
           body.facebookPageId = facebookPageId;
         if (scheduledIso) body.scheduledAt = scheduledIso;
@@ -1685,6 +1706,15 @@ export function PublishCanvas({
             />
           </div>
         </div>
+
+        {platforms.includes("tiktok") && (
+          <TikTokPostCard
+            workspaceSlug={workspaceSlug}
+            videoUrl={target === "video" ? (appliedUrl ?? videoUrl) : null}
+            draft={tiktokDraft}
+            onChange={setTiktokDraft}
+          />
+        )}
 
         <div>
           <label className="mb-1.5 block text-xs font-medium text-muted-foreground">

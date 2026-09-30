@@ -302,6 +302,16 @@ Per-network notes worth knowing before touching `lib/social/direct/`:
   (revoked, not aged out — hence `token_expires_at = null`). Blobs are capped
   at 1MB, so images get re-encoded down (`fitImageForBlob`) rather than
   rejected, and text is 300 _graphemes_.
+- **TikTok posting screen** (`TikTokPostCard` in Publish, 2026-10-01) exists
+  because TikTok only approves Direct Post for apps whose UI follows its
+  content-sharing rules: creator nickname, a privacy choice built from
+  `creator_info` and NOT pre-selected, comment/duet/stitch off until ticked
+  (and unavailable where the account has them off or the video is private),
+  commercial-content disclosure (branded content can't be private), a preview,
+  and the Music Usage / Branded Content consent line. The choices travel as
+  `publishSchema.tiktok` → `publishToTikTok({ options })`; a choice can only
+  TIGHTEN what the creator permits, never widen it. The shared shape and its
+  validation live in `lib/social/tiktok-options.ts`.
 - **Reddit** posts `kind=link` at the asset's public Storage URL, not a native
   image upload — see the rationale in `reddit.ts`. It needs a **title**, not a
   caption, and it reports failures inside a **200** response body, so `res.ok`
