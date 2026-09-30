@@ -272,3 +272,18 @@ campaign exists yet (as `analyze-url` does), create a lightweight campaign
 row to hang the job off rather than skipping this — see that route for the
 pattern: debit → insert `creative_jobs` (queued) → do the work → mark
 completed/failed → `refundCredits(jobId)` on failure.
+
+## Publishing the composed ad, not the bare asset (2026-10-01)
+
+`/api/publish` posts a FILE (`assetId` / `campaigns.publish_asset_id`), and the
+stage's text and overlays live in `compositions`, so neither reaches a network
+on its own. Two paths put them in the file:
+
+- **Photo**: `PublishCanvas` flattens the stage to a JPEG in the browser
+  (`lib/composition/still.ts`, reusing the canvas `drawLayer`), posts it to
+  `POST /api/compositions/still` (asset type `composed_image`), and publishes
+  that asset id. Failure aborts the publish rather than posting a textless
+  image. JPEG because Instagram's Graph API refuses anything else.
+- **Video**: still the manual "Render final cut" (FFmpeg). `PublishCanvas`
+  warns "nothing is locked in" — and blocks the first Publish press — while
+  the stage has overlays newer than the last render.

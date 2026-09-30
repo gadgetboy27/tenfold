@@ -46,6 +46,7 @@ import { PLATFORM_GUIDE } from "@/lib/social/caption-guide";
 import { thumbUrl } from "@/lib/images/thumb";
 import { CREDIT_COSTS } from "@/lib/credits/costs";
 import { useCompositorStore } from "@/store/useCompositorStore";
+import { stillLayers, uploadStill } from "@/lib/composition/still";
 import { InfoHint } from "@/components/ui/info-hint";
 import { platformDefaults } from "@/lib/social/platform-defaults";
 import { LandingPagePanel } from "@/components/landing/LandingPagePanel";
@@ -195,6 +196,24 @@ export function PublishCanvas({
     (st) => st.doc?.background.kind === "video",
   );
   const [rendering, setRendering] = useState(false);
+  /**
+   * "Is anything locked in?" For a video, the stage's text and overlays only
+   * reach a network once they're rendered into the clip ("Render final cut").
+   * Until then the post would be the raw clip and the ad would NOT look like
+   * what's on the stage. We remember which edit state was last rendered — by
+   * reference, because the store replaces these on any change and comparing
+   * references is free where stringifying sticker data-URLs every render is
+   * not — and call the ad unlocked when the stage has moved on, or was never
+   * rendered in this session.
+   */
+  const adOverrides = useCompositorStore((st) => st.doc?.overrides);
+  const [lockedIn, setLockedIn] = useState<{
+    layers: unknown;
+    overrides: unknown;
+  } | null>(null);
+  // Set after the first blocked publish: a second press is a deliberate
+  // "yes, post the raw clip".
+  const [rawAck, setRawAck] = useState(false);
   const [target, setTarget] = useState<"video" | "image">(
     hasVideo ? "video" : "image",
   );
@@ -651,6 +670,11 @@ export function PublishCanvas({
           "Rendered, but couldn't make it the one that publishes — tick it in the strip below.",
         );
 
+      setLockedIn({
+        layers: useCompositorStore.getState().doc?.layers,
+        overrides: useCompositorStore.getState().doc?.overrides,
+      });
+      setRawAck(false);
       toast.success("Rendered — this cut is what publishes");
       onFinalCut?.();
     } catch (err) {
@@ -664,6 +688,14 @@ export function PublishCanvas({
 
   const isReviewer = role === "owner" || role === "admin";
   const canPublish = isReviewer || approvalStatus === "approved";
+  // True when a video is about to go out without the stage's overlays in it.
+  const notLockedIn =
+    target === "video" &&
+    adIsVideo &&
+    overlayCount > 0 &&
+    (lockedIn === null ||
+      lockedIn.layers !== layers ||
+      lockedIn.overrides !== adOverrides);
 
   /**
    * What still has to be true before a landing page can be written.
@@ -761,6 +793,14 @@ export function PublishCanvas({
       toast.error("Select at least one platform");
       return;
     }
+    if (notLockedIn && !rawAck) {
+      setRawAck(true);
+      toast.error(
+        "Nothing is locked in yet — your text and overlays aren't in this video, so the published ad won't look like the stage. Render the final cut first, or press Publish again to post the raw clip.",
+        { duration: 9000 },
+      );
+      return;
+    }
     if (scheduleMode === "later" && !scheduledAt) {
       toast.error("Pick a date and time to schedule");
       return;
@@ -771,6 +811,28 @@ export function PublishCanvas({
         scheduleMode === "later"
           ? new Date(scheduledAt).toISOString()
           : undefined;
+
+      // A photo post publishes the ad the user SEES. The bare anchor has none
+      // of the stage's overlays, so flatten the composition first. If that
+      // fails the publish stops: quietly posting the textless image is the
+      // exact bug this exists to fix.
+      let stillAssetId: string | null = null;
+      if (target === "image" && campaignId) {
+        const stageDoc = useCompositorStore.getState().doc;
+        if (
+          stageDoc &&
+          stageDoc.background.kind === "image" &&
+          stillLayers(stageDoc).length > 0
+        ) {
+          stillAssetId = await uploadStill(stageDoc, campaignId, (form) =>
+            api("/api/compositions/still", {
+              method: "POST",
+              body: form,
+              workspaceSlug,
+            }),
+          );
+        }
+      }
 
       const send = async (
         list: string[],
@@ -786,8 +848,8 @@ export function PublishCanvas({
           body.preferVideo = true;
           body.campaignId = campaignId;
           body.noMusic = noMusic;
-        } else if (anchorId) {
-          body.assetId = anchorId;
+        } else if (stillAssetId ?? anchorId) {
+          body.assetId = stillAssetId ?? anchorId;
         }
         const tailored = Object.fromEntries(
           list
@@ -854,6 +916,7 @@ export function PublishCanvas({
       toast.error((err as Error).message ?? "Publish failed");
     } finally {
       setPublishing(false);
+      setRawAck(false);
     }
   };
 
@@ -1144,19 +1207,15 @@ export function PublishCanvas({
               <p className="text-[11px] text-muted-foreground">
                 Goes out to every selected account with the caption below.
               </p>
-              {/* Publishing an image posts the ANCHOR asset, not the composed
-                  ad: /api/publish prefers a composition's output, but that
-                  output only exists for video — the export pipeline renders
-                  layered docs to MP4 via FFmpeg and there is no still-image
-                  equivalent yet. So overlays built on the stage are silently
-                  dropped from a photo post. Say so rather than let someone
-                  publish believing their layers went with it. */}
+              {/* A photo post flattens the composed ad (background + every
+                  overlay) into one JPEG at publish time — see
+                  lib/composition/still.ts. A video post still needs "Render
+                  final cut" below, because the export pipeline that bakes
+                  layers into a clip is FFmpeg on the server. */}
               {target === "image" && overlayCount > 0 && (
-                <p className="text-[11px] text-amber-600 dark:text-amber-400">
-                  {overlayCount} overlay{overlayCount === 1 ? "" : "s"} on your
-                  ad {overlayCount === 1 ? "is" : "are"} not included — a photo
-                  post sends this image on its own. Make it a video to publish
-                  the composed ad.
+                <p className="text-[11px] text-muted-foreground">
+                  Your {overlayCount} overlay{overlayCount === 1 ? "" : "s"}{" "}
+                  will be baked into the image when you publish.
                 </p>
               )}
               <a
@@ -1272,6 +1331,13 @@ export function PublishCanvas({
               brand on it, lay type over it. None of that goes out until you
               render it here.
             </p>
+            {notLockedIn && (
+              <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] leading-snug text-amber-600 dark:text-amber-400">
+                Nothing is locked in yet. Your text and overlays aren&apos;t in
+                the video, so what publishes may not match the stage — render
+                the final cut below first.
+              </p>
+            )}
 
             <div className="flex flex-wrap items-center gap-1">
               {(["9:16", "1:1", "16:9"] as const).map((a) => {
