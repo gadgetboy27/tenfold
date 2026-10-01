@@ -1,18 +1,30 @@
 "use client";
 
 import { v4 as uuidv4 } from "uuid";
+import toast from "react-hot-toast";
 import { useCompositorStore } from "@/store/useCompositorStore";
 import {
   ASPECT_DESIGN,
   CAPTION_LAYER_ID,
+  effectiveLayer,
   type CompositionAspect,
   type ImageLayer,
   type Layer,
+  type LayerOverride,
   type StickerSpec,
   type TextLayer,
   type TextReveal,
 } from "@/lib/composition/layers";
 import { rasterizeSticker } from "@/lib/composition/sticker";
+import { ensureBrandFontsLoaded } from "@/lib/composition/fonts";
+import {
+  fitInto,
+  isOutside,
+  safeRect,
+  type FitInput,
+} from "@/lib/composition/fit";
+import { layerBounds, layerCenter } from "@/lib/composition/render";
+import { rotatedHalfExtents } from "@/lib/composition/layers";
 import type { TrayItem } from "@/lib/composition/tray";
 import { wrapText } from "@/lib/composition/brand-apply";
 import {
@@ -256,7 +268,154 @@ export function addCaptionToAd(text: string): AddResult | null {
 export function setAdAspect(aspect: CompositionAspect) {
   const s = useCompositorStore.getState();
   s.setPendingAspect(aspect);
-  if (s.doc) s.setAspect(aspect);
+  if (!s.doc) return;
+  const changed = s.doc.aspect !== aspect;
+  s.setAspect(aspect);
+  // A new shape is exactly when lettering runs off the edge (a headline laid
+  // out for 1920 wide is wider than a 1080 frame). Fit it now, automatically,
+  // rather than leaving the user to find and press a button — and say so.
+  if (changed) {
+    void fitTextToFrame().then((r) => {
+      if (r.resized + r.moved === 0) return;
+      toast.success(
+        `Fitted ${r.resized + r.moved} text box${r.resized + r.moved === 1 ? "" : "es"} to ${aspect}`,
+      );
+      if (r.tooSmall > 0) {
+        toast(
+          `${r.tooSmall} had to shrink a lot to fit — shorter wording would read better in ${aspect}.`,
+          { icon: "⚠️", duration: 7000 },
+        );
+      }
+    });
+  }
+}
+
+// ── Keeping lettering inside the frame ───────────────────────────────────────
+
+/** Below this fraction of its size a fitted box is flagged as "had to shrink a lot". */
+const TOO_SMALL = 0.45;
+
+interface FitTarget {
+  id: string;
+  input: FitInput;
+  anchored: boolean;
+}
+
+function loadImage(src: string): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+/**
+ * Measure every piece of lettering (text blocks AND stickers, which are words
+ * drawn as pictures) as it currently renders in this shape: its real size from
+ * the same measuring the canvas uses, panel padding included, and its resolved
+ * centre. Async because stickers' sizes come from their pixels.
+ */
+async function measureLettering(): Promise<FitTarget[]> {
+  const doc = useCompositorStore.getState().doc;
+  if (!doc || typeof document === "undefined") return [];
+  await ensureBrandFontsLoaded();
+  const ctx = document.createElement("canvas").getContext("2d");
+  if (!ctx) return [];
+
+  const images = new Map<string, HTMLImageElement>();
+  const out: FitTarget[] = [];
+  for (const master of doc.layers) {
+    const isText = master.kind === "text";
+    const isSticker = master.kind === "image" && !!master.sticker;
+    if (!isText && !isSticker) continue;
+    const layer = effectiveLayer(master, doc.aspect, doc.overrides);
+    if (layer.kind === "image") {
+      const img = await loadImage(layer.src);
+      if (!img) continue;
+      images.set(layer.src, img);
+    } else if (!layer.text.trim()) continue;
+
+    const b = layerBounds(ctx, layer, images);
+    const pad = layer.kind === "text" && layer.bg ? layer.bg.padPx : 0;
+    let unitHalfW = b.width / 2 + pad;
+    let unitHalfH = b.height / 2 + pad;
+    if (layer.kind === "image") {
+      ({ halfW: unitHalfW, halfH: unitHalfH } = rotatedHalfExtents(
+        unitHalfW,
+        unitHalfH,
+        layer.rotationDeg,
+      ));
+    }
+    const c = layerCenter(ctx, layer, doc.aspect, images);
+    out.push({
+      id: layer.id,
+      anchored: layer.pos.mode === "anchor",
+      input: { cx: c.x, cy: c.y, unitHalfW, unitHalfH, scale: layer.scale },
+    });
+  }
+  return out;
+}
+
+/** How many pieces of lettering have any part outside the safe margin. */
+export async function countOutsideSafeArea(): Promise<number> {
+  const doc = useCompositorStore.getState().doc;
+  if (!doc) return 0;
+  const rect = safeRect(doc.aspect);
+  return (await measureLettering()).filter((t) => isOutside(t.input, rect))
+    .length;
+}
+
+/**
+ * Resize and nudge lettering so all of it sits inside the safe margin of the
+ * CURRENT shape. Written as this shape's per-format adjustment, not onto the
+ * shared master — so 9:16 gets smaller type without 16:9 changing, and
+ * switching back restores exactly what was there. Wording is never touched.
+ * One batch, so a single undo reverts the lot.
+ */
+export async function fitTextToFrame(): Promise<{
+  resized: number;
+  moved: number;
+  tooSmall: number;
+}> {
+  const s = useCompositorStore.getState();
+  const doc = s.doc;
+  const none = { resized: 0, moved: 0, tooSmall: 0 };
+  if (!doc || s.locked) return none;
+  const rect = safeRect(doc.aspect);
+
+  const patch: Record<string, LayerOverride> = {};
+  let resized = 0;
+  let moved = 0;
+  let tooSmall = 0;
+  for (const t of await measureLettering()) {
+    if (!isOutside(t.input, rect)) continue;
+    const r = fitInto(t.input, rect);
+    if (!r.resized && !r.moved) continue;
+    const { width, height } = ASPECT_DESIGN[doc.aspect];
+    patch[t.id] = {
+      ...(r.resized ? { scale: r.scale } : {}),
+      // Anchored layers re-derive their centre from margins and would drift
+      // after a resize, so pin them to where the fit decided they belong.
+      ...(r.moved || (r.resized && t.anchored)
+        ? {
+            pos: {
+              mode: "fraction" as const,
+              nx: r.cx / width,
+              ny: r.cy / height,
+            },
+          }
+        : {}),
+    };
+    if (r.resized) {
+      resized++;
+      if (r.scale / t.input.scale < TOO_SMALL) tooSmall++;
+    } else moved++;
+  }
+  if (Object.keys(patch).length > 0) {
+    useCompositorStore.getState().setFormatOverrides(doc.aspect, patch);
+  }
+  return { resized, moved, tooSmall };
 }
 
 /** True once the ad has a real, persistable composition behind it. */

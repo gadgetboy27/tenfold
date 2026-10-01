@@ -34,8 +34,8 @@ import { useCompositorStore } from "@/store/useCompositorStore";
 import {
   setAdAspect,
   applyBrandKitToAd,
-  refitAdText,
-  countOverflowingText,
+  fitTextToFrame,
+  countOutsideSafeArea,
 } from "./adBridge";
 import { api } from "@/lib/api";
 import type {
@@ -314,10 +314,25 @@ export function AdStage({
     setDuration(doc?.background.durationSec ?? 10);
   }
 
-  // Recomputed from the doc on every render, so the action appears the moment
-  // an overflowing layer exists and disappears once it's been fixed. Cheap —
-  // it's a character count over at most twenty layers.
-  const overflowing = doc ? countOverflowingText() : 0;
+  // How many text boxes / stickers have any part outside the safe margin of
+  // this shape. Measured for real (fonts, scale, position, panel padding), so
+  // it is async and debounced: dragging changes the doc every frame. Switching
+  // shape already fits everything automatically (setAdAspect); this catches the
+  // rest — a box the user dragged to the edge, or new wording that grew.
+  const [outsideSafe, setOutsideSafe] = useState(0);
+  useEffect(() => {
+    if (!doc) return;
+    let live = true;
+    const t = setTimeout(async () => {
+      const n = await countOutsideSafeArea();
+      if (live) setOutsideSafe(n);
+    }, 500);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [doc]);
+  const overflowing = doc ? outsideSafe : 0;
 
   // Stamp the workspace's logo and tagline onto the ad. The machinery has
   // always existed (brandKitLayers) but was only reachable from the classic
@@ -671,25 +686,26 @@ export function AdStage({
           </div>
 
           {overflowing > 0 && (
-            // Only offered when there's something to fix. Text created before the
-            // sizing rules keeps its old size and runs off the frame; this is the
-            // deliberate, user-pressed repair rather than a silent rewrite of a
-            // saved composition on load.
+            // A warning that is also the fix: lettering outside the safe margin
+            // gets clipped on some screens and looks cramped on all of them.
             <button
               type="button"
-              onClick={() => {
-                const fixed = refitAdText();
+              disabled={adLocked}
+              onClick={async () => {
+                const r = await fitTextToFrame();
+                const n = r.resized + r.moved;
+                setOutsideSafe(await countOutsideSafeArea());
                 toast.success(
-                  fixed === 1
-                    ? "Re-fitted 1 text layer"
-                    : `Re-fitted ${fixed} text layers`,
+                  n === 0
+                    ? "Nothing needed moving"
+                    : `Fitted ${n} text box${n === 1 ? "" : "es"} inside the safe area`,
                 );
               }}
-              title="Shrink text that runs off the frame. Your wording and line breaks are left exactly as they are."
-              className="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs text-amber-600 transition-colors hover:bg-muted dark:text-amber-400"
+              title="Some text sits outside the safe area and may be cut off. This shrinks and nudges it inside, for this shape only. Your wording is left exactly as it is."
+              className="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs text-amber-600 transition-colors hover:bg-muted disabled:opacity-40 dark:text-amber-400"
             >
               <WrapText className="h-3.5 w-3.5" />
-              Re-fit text
+              {overflowing} outside the safe area — fit
             </button>
           )}
 

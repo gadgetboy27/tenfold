@@ -21,7 +21,11 @@ import {
 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { useCompositorStore, type Layer } from "@/store/useCompositorStore";
-import { addVideoToAd, addCaptionToAd } from "@/components/studio/adBridge";
+import {
+  addVideoToAd,
+  addCaptionToAd,
+  setAdAspect,
+} from "@/components/studio/adBridge";
 import { LayerList } from "@/components/compositor/LayerList";
 import { ElementTray } from "@/components/studio/ElementTray";
 import { CaptionPresetRow } from "@/components/compositor/CaptionPresetRow";
@@ -254,7 +258,6 @@ export function CompositorCanvas({
   // on the Publish page (RenderLockCard) — one place, so a render made here
   // could never be confused with the one that publishes.
 
-  const setAspect = useCompositorStore((s) => s.setAspect);
   const overrideMode = useCompositorStore((s) => s.overrideMode);
   const setOverrideMode = useCompositorStore((s) => s.setOverrideMode);
   const resetOverride = useCompositorStore((s) => s.resetOverride);
@@ -1035,7 +1038,7 @@ export function CompositorCanvas({
               doc={doc}
               formats={rail}
               activeAspect={doc.aspect}
-              onPick={(a: CompositionAspect) => setAspect(a)}
+              onPick={(a: CompositionAspect) => setAdAspect(a)}
               campaignId={campaignId}
               workspaceSlug={workspaceSlug}
               onFlaggedCount={setFlaggedFormats}

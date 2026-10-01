@@ -858,3 +858,27 @@ its look lives in the toolbox. Styling is per selected layer — styling words
 *inside* a block differently (mixed styles in one box) is not built; it would
 need spans in the text layer, in the canvas draw, in the FFmpeg export and in the
 read-out, so it is a separate piece of work.
+
+## Lettering stays inside the frame (2026-10-02)
+
+Switching shape used to push text off the screen (a headline laid out for 1920
+wide is wider than a 1080 frame). Now:
+
+- **Automatic**: `setAdAspect` (the only shape-change path — Compose's shape picker
+  uses it too) calls `fitTextToFrame()` after the change and toasts what it did.
+- **Real measuring**: `measureLettering` uses the canvas's own `layerBounds` /
+  `layerCenter` (fonts, scale, position, panel padding) for text AND stickers,
+  never the old character-count estimate (`textOverflows`, now only used by the
+  Words sizing code). Stickers are measured from their pixels, so their glow/neon
+  padding counts toward the edge.
+- **Safe area** = a margin of 5% of the SHORTER side, so it's the same pixels in
+  every shape (`lib/composition/fit.ts`). Pure maths, tested.
+- **Per-shape, never destructive**: the result is written as THIS shape's override
+  (`setFormatOverrides`, one undo step), not the shared layer — 9:16 gets smaller
+  type, 16:9 is untouched, and switching back restores it. Wording and line breaks
+  are never changed; a box only ever shrinks or slides, never grows.
+- **Warning that is also the fix**: the stage shows "N outside the safe area — fit"
+  whenever lettering is outside the margin (e.g. dragged to the edge), debounced
+  because dragging changes the doc every frame. Locked ads can't be fitted.
+- Boxes that must shrink below ~45% are flagged ("shorter wording would read
+  better") — shrinking can make a long line unreadably small.
