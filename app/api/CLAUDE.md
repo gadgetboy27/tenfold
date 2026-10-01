@@ -273,17 +273,33 @@ row to hang the job off rather than skipping this — see that route for the
 pattern: debit → insert `creative_jobs` (queued) → do the work → mark
 completed/failed → `refundCredits(jobId)` on failure.
 
-## Publishing the composed ad, not the bare asset (2026-10-01)
+## Publishing the composed ad, not the bare asset (2026-10-01, reworked 2026-10-02)
 
 `/api/publish` posts a FILE (`assetId` / `campaigns.publish_asset_id`), and the
 stage's text and overlays live in `compositions`, so neither reaches a network
-on its own. Two paths put them in the file:
+on its own. **The Publish page is the one place an ad is rendered and locked**
+(`RenderLockCard`); shape, layers, words and brand are adjusted on the other
+pages. Two paths put the stage into the file:
 
 - **Photo**: `PublishCanvas` flattens the stage to a JPEG in the browser
   (`lib/composition/still.ts`, reusing the canvas `drawLayer`), posts it to
   `POST /api/compositions/still` (asset type `composed_image`), and publishes
   that asset id. Failure aborts the publish rather than posting a textless
   image. JPEG because Instagram's Graph API refuses anything else.
-- **Video**: still the manual "Render final cut" (FFmpeg). `PublishCanvas`
-  warns "nothing is locked in" — and blocks the first Publish press — while
-  the stage has overlays newer than the last render.
+- **Video**: "Render & lock" calls `renderAndLock` (export-client) — upload
+  local-file sources, render, stamp the stage's fingerprint
+  (`lib/composition/signature.ts`) on the asset as `metadata.docSig`, and make
+  that render `publish_asset_id`. Compose's own Render button uses the same
+  function, so a render made on either page is the one that publishes.
+  `GET /api/campaigns/:id/render-lock` returns the picked render's `docSig`;
+  the card compares it with the stage and shows locked / out of date / not
+  rendered, and Publish is held until it is locked (or the user explicitly
+  chooses the original clip). A render from before fingerprints existed reads
+  as "not rendered", which is the safe answer.
+
+**Layer sources the export accepts** (`lib/composition/sources.ts`): http(s)
+URLs and inline raster `data:` pictures (stickers, drawings, combined panels
+are rasterised in the browser). It used to demand http(s) for every layer, so
+any project containing a sticker failed with "All layer sources must be
+uploaded before export". `blob:` is still refused — `materializeDoc` uploads
+those first.

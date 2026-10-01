@@ -8,6 +8,7 @@ import {
   weightOf,
 } from "@/lib/composition/layers";
 import { ensureBrandFontsLoaded } from "@/lib/composition/fonts";
+import { docSignature } from "@/lib/composition/signature";
 
 /**
  * Client half of the export flow: the server renderer can only fetch http(s)
@@ -107,13 +108,15 @@ export interface ExportOptions {
   /** Output resolution multiplier (1–3). Resamples the design space; it does
    *  not add detail a source photo never had. */
   scale?: number;
+  /** Fingerprint of the stage doc being rendered — see signature.ts. */
+  docSig?: string;
 }
 
 export async function requestExport(
   doc: CompositionDoc,
   workspaceSlug?: string,
   options: ExportOptions = {},
-): Promise<{ url: string; durationSec: number }> {
+): Promise<{ url: string; assetId: string | null; durationSec: number }> {
   const res = await api("/api/compositions/export", {
     method: "POST",
     body: JSON.stringify({
@@ -121,16 +124,62 @@ export async function requestExport(
       campaignId: options.campaignId ?? null,
       audioUrl: options.audioUrl ?? null,
       ...(options.scale && options.scale !== 1 ? { scale: options.scale } : {}),
+      ...(options.docSig ? { docSig: options.docSig } : {}),
     }),
     workspaceSlug,
   });
   const data = (await res.json().catch(() => ({}))) as {
     url?: string;
+    assetId?: string | null;
     durationSec?: number;
     error?: string;
   };
   if (!res.ok || !data.url) throw new Error(data.error ?? "Export failed");
-  return { url: data.url, durationSec: data.durationSec ?? 0 };
+  return {
+    url: data.url,
+    assetId: data.assetId ?? null,
+    durationSec: data.durationSec ?? 0,
+  };
+}
+
+/**
+ * Render the finished cut AND lock it in — the one render path the whole
+ * product uses. Uploads any local-file sources, renders (stamping the stage's
+ * fingerprint on the result), then makes that render the file that publishes.
+ *
+ * It used to be two separate things: Compose rendered but never chose the
+ * result, Publish chose it but never uploaded local files, so a render made on
+ * one page was not the one the other page published and the user could not
+ * tell which was which.
+ */
+export async function renderAndLock(
+  doc: CompositionDoc,
+  workspaceSlug: string | undefined,
+  options: { campaignId: string; audioUrl?: string | null; scale?: number },
+): Promise<{ url: string; assetId: string; materialized: CompositionDoc }> {
+  const docSig = docSignature(doc);
+  const materialized = await materializeDoc(doc, workspaceSlug);
+  const { url, assetId } = await requestExport(materialized, workspaceSlug, {
+    ...options,
+    docSig,
+  });
+  // A render with no assetId means the file exists but its row didn't land.
+  if (!assetId) {
+    throw new Error(
+      "Rendered, but it wasn't saved to this project — try again.",
+    );
+  }
+  const patch = await api(`/api/campaigns/${options.campaignId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ publish_asset_id: assetId }),
+    workspaceSlug,
+  });
+  if (!patch.ok) {
+    throw new Error(
+      "Rendered, but couldn't make it the one that publishes — tick it in the project strip.",
+    );
+  }
+  return { url, assetId, materialized };
 }
 
 /**

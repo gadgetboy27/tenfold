@@ -38,6 +38,7 @@ import type {
 import { FormatRail } from "@/components/compositor/FormatRail";
 import {
   materializeDoc,
+  renderAndLock,
   requestExport,
   requestFanOutExport,
   type FanOutOutput,
@@ -302,13 +303,26 @@ export function CompositorCanvas({
         current.background.src,
         ...current.layers.map((l) => (l.kind === "image" ? l.src : "")),
       ].some((s) => s.startsWith("blob:"));
-      const materialized = await materializeDoc(current, workspaceSlug);
-      if (hadLocal) load(materialized);
-      const { url } = await requestExport(materialized, workspaceSlug, {
-        campaignId,
-        audioUrl: musicUrl ?? null,
-        scale: renderScale,
-      });
+      // With a project, the render is also LOCKED as the file that publishes
+      // (same path as the Publish page). Without one it is a plain export.
+      let url: string;
+      if (campaignId) {
+        const out = await renderAndLock(current, workspaceSlug, {
+          campaignId,
+          audioUrl: musicUrl ?? null,
+          scale: renderScale,
+        });
+        url = out.url;
+        if (hadLocal) load(out.materialized);
+      } else {
+        const materialized = await materializeDoc(current, workspaceSlug);
+        if (hadLocal) load(materialized);
+        ({ url } = await requestExport(materialized, workspaceSlug, {
+          campaignId,
+          audioUrl: musicUrl ?? null,
+          scale: renderScale,
+        }));
+      }
       setExportUrl(url);
       toast.success("Rendered — every layer baked in.");
     } catch (err) {

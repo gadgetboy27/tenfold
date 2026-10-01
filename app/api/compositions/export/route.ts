@@ -9,6 +9,7 @@ import {
   type CompositionAspect,
 } from "@/lib/composition/layers";
 import { renderComposition, renderFanOut } from "@/lib/composition/export";
+import { sourcesRenderable } from "@/lib/composition/sources";
 
 // POST /api/compositions/export — headless FFmpeg render of a layered
 // composition to MP4. Free (composes assets the workspace already owns).
@@ -35,9 +36,14 @@ const bodySchema = z.object({
    * a 4× 9:16 render is a 4320×7680 MP4 nobody asked for.
    */
   scale: z.number().min(1).max(3).optional(),
+  /**
+   * Fingerprint of the stage doc this render was made from
+   * (lib/composition/signature.ts), stored on the asset so the Publish page can
+   * tell whether the picked render still matches what is on the stage.
+   * Advisory — it only ever drives a "re-render" prompt.
+   */
+  docSig: z.string().max(32).optional(),
 });
-
-const isHttp = (u: string) => /^https?:\/\//i.test(u);
 
 export const POST = withWorkspace(async (req, { db, admin, session }) => {
   const parsed = bodySchema.safeParse(await req.json());
@@ -47,7 +53,8 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
       { status: 400 },
     );
   }
-  const { doc, campaignId, compositionId, audioUrl, aspects } = parsed.data;
+  const { doc, campaignId, compositionId, audioUrl, aspects, docSig } =
+    parsed.data;
 
   // When persisting to a campaign, verify it belongs to this workspace (scoped
   // db client) before writing asset/composition rows — tenant isolation, and it
@@ -68,12 +75,10 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
 
   // Every source must be fetchable by the server — a blob: URL only ever
   // existed in the user's browser tab.
-  const srcs = [
-    doc.background.src,
-    ...doc.layers.flatMap((l) => (l.kind === "image" ? [l.src] : [])),
-    ...(audioUrl ? [audioUrl] : []),
-  ];
-  if (!srcs.every(isHttp)) {
+  const layerSrcs = doc.layers.flatMap((l) =>
+    l.kind === "image" ? [l.src] : [],
+  );
+  if (!sourcesRenderable(doc.background.src, layerSrcs, audioUrl)) {
     return NextResponse.json(
       { error: "All layer sources must be uploaded before export." },
       { status: 400 },
@@ -101,6 +106,9 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
       metadata: {
         aspect,
         format: ASPECT_TO_FORMAT[aspect],
+        // Only a single render is "the ad on the stage"; a fan-out's
+        // per-aspect files are siblings of it, not matches for it.
+        ...(docSig && !aspects ? { docSig } : {}),
         // The recipe, kept WITH the render. The campaign's compositions row
         // holds only the latest doc and every export overwrites it, so
         // without this an older render's layers were gone the moment a newer

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { readProfilesResponse } from "@/lib/social/profiles-response";
@@ -30,7 +30,6 @@ import {
   ShieldCheck,
   Eye,
   Undo2,
-  Clapperboard,
   Globe,
 } from "lucide-react";
 import { api } from "@/lib/api";
@@ -40,7 +39,6 @@ import {
   isPlatformId,
   type PlatformId,
 } from "@/lib/composition/formats";
-import { setAdAspect } from "@/components/studio/adBridge";
 import type { CompositionAspect } from "@/lib/composition/layers";
 import { PLATFORM_GUIDE } from "@/lib/social/caption-guide";
 import { thumbUrl } from "@/lib/images/thumb";
@@ -54,6 +52,7 @@ import {
   type TikTokDraft,
 } from "@/lib/social/tiktok-options";
 import { TikTokPostCard } from "./TikTokPostCard";
+import { RenderLockCard, type LockStatus } from "./RenderLockCard";
 import { InfoHint } from "@/components/ui/info-hint";
 import { platformDefaults } from "@/lib/social/platform-defaults";
 import { LandingPagePanel } from "@/components/landing/LandingPagePanel";
@@ -169,7 +168,7 @@ export function PublishCanvas({
   anchorId: string | null;
   workingImage: string | null;
   videoUrl: string | null;
-  /** The campaign's music, baked into a final cut — see renderFinalCut. */
+  /** The campaign's music, baked into a final cut — see RenderLockCard. */
   musicUrl?: string | null;
   /** Caption generated in the Caption section, if the user made one. */
   initialCaption?: string;
@@ -199,28 +198,9 @@ export function PublishCanvas({
    * anything derived inside a selector must already be a stable value.
    */
   const adAspect = useCompositorStore((st) => st.doc?.aspect ?? null);
-  const adIsVideo = useCompositorStore(
-    (st) => st.doc?.background.kind === "video",
-  );
-  const [rendering, setRendering] = useState(false);
-  /**
-   * "Is anything locked in?" For a video, the stage's text and overlays only
-   * reach a network once they're rendered into the clip ("Render final cut").
-   * Until then the post would be the raw clip and the ad would NOT look like
-   * what's on the stage. We remember which edit state was last rendered — by
-   * reference, because the store replaces these on any change and comparing
-   * references is free where stringifying sticker data-URLs every render is
-   * not — and call the ad unlocked when the stage has moved on, or was never
-   * rendered in this session.
-   */
-  const adOverrides = useCompositorStore((st) => st.doc?.overrides);
-  const [lockedIn, setLockedIn] = useState<{
-    layers: unknown;
-    overrides: unknown;
-  } | null>(null);
-  // Set after the first blocked publish: a second press is a deliberate
-  // "yes, post the raw clip".
-  const [rawAck, setRawAck] = useState(false);
+  // Reported by RenderLockCard: does the picked render match the stage?
+  const [lockStatus, setLockStatus] = useState<LockStatus>("checking");
+  const lockCardRef = useRef<HTMLDivElement>(null);
   const [target, setTarget] = useState<"video" | "image">(
     hasVideo ? "video" : "image",
   );
@@ -619,94 +599,8 @@ export function PublishCanvas({
     }
   };
 
-  /**
-   * Render the ad exactly as it stands on the stage, and make THAT the video
-   * that publishes.
-   *
-   * Without this, everything the publish step invites you to do is theatre.
-   * The stage re-shapes the clip for the platform, stamps the brand kit on it
-   * and lays type over it — but /api/publish posts
-   * `campaigns.publish_asset_id`, which is the RAW pick from the strip. So the
-   * adjustments lived in `compositions` and never reached a network. This is
-   * the one step that turns the doc into a file: the same free FFmpeg export
-   * the Compositor uses, then a PATCH moving the pick onto the new cut.
-   *
-   * The music is passed through deliberately, and it is not optional. The
-   * export bakes audio in at render time, and publish's late-music remux only
-   * fires when the track is NEWER than the export
-   * (lib/composition/late-music.ts) — a cut rendered now is newer than every
-   * existing track, so omitting this would post permanent silence with
-   * nothing anywhere saying why.
-   *
-   * Sends the campaign nowhere near `approved`: re-rendering the advert is a
-   * change to what goes out, and the approval gate already covers that.
-   */
-  const renderFinalCut = async () => {
-    const doc = useCompositorStore.getState().doc;
-    if (!doc || !campaignId || rendering) return;
-    setRendering(true);
-    try {
-      const res = await api("/api/compositions/export", {
-        method: "POST",
-        workspaceSlug,
-        body: JSON.stringify({
-          doc,
-          campaignId,
-          compositionId: doc.id,
-          audioUrl: musicUrl,
-        }),
-      });
-      const data = (await res.json().catch(() => null)) as {
-        url?: string;
-        assetId?: string;
-        error?: string;
-      } | null;
-      if (!res.ok) throw new Error(data?.error ?? "Couldn't render the cut");
-      // A render with no assetId means the campaign check passed but the row
-      // didn't land. The file exists, so say what happened rather than
-      // claiming success — the strip can still name it once it appears.
-      if (!data?.assetId)
-        throw new Error(
-          "Rendered, but it wasn't saved to this project — try again.",
-        );
-
-      const patch = await api(`/api/campaigns/${campaignId}`, {
-        method: "PATCH",
-        workspaceSlug,
-        body: JSON.stringify({ publish_asset_id: data.assetId }),
-      });
-      if (!patch.ok)
-        throw new Error(
-          "Rendered, but couldn't make it the one that publishes — tick it in the strip below.",
-        );
-
-      setLockedIn({
-        layers: useCompositorStore.getState().doc?.layers,
-        overrides: useCompositorStore.getState().doc?.overrides,
-      });
-      setRawAck(false);
-      toast.success("Rendered — this cut is what publishes");
-      onFinalCut?.();
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Couldn't render the cut",
-      );
-    } finally {
-      setRendering(false);
-    }
-  };
-
   const isReviewer = role === "owner" || role === "admin";
   const canPublish = isReviewer || approvalStatus === "approved";
-  // True when a video is about to go out without the stage's overlays in it.
-  const notLockedIn =
-    target === "video" &&
-    adIsVideo &&
-    overlayCount > 0 &&
-    (lockedIn === null ||
-      lockedIn.layers !== layers ||
-      lockedIn.overrides !== adOverrides);
-
   /**
    * What still has to be true before a landing page can be written.
    *
@@ -810,16 +704,23 @@ export function PublishCanvas({
         return;
       }
     }
-    if (notLockedIn && !rawAck) {
-      setRawAck(true);
+    // Nothing goes out until the file that publishes matches the stage.
+    if (
+      target === "video" &&
+      (lockStatus === "none" ||
+        lockStatus === "stale" ||
+        lockStatus === "checking")
+    ) {
       toast.error(
-        "Nothing is locked in yet — your text and overlays aren't in this video, so the published ad won't look like the stage. Render the final cut first, or press Publish again to post the raw clip.",
-        { duration: 9000 },
+        lockStatus === "checking"
+          ? "Still checking your render — one moment."
+          : "Render & lock your ad first — what's on the stage isn't in the video yet.",
+        { duration: 7000 },
       );
-      return;
-    }
-    if (scheduleMode === "later" && !scheduledAt) {
-      toast.error("Pick a date and time to schedule");
+      lockCardRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
       return;
     }
     setPublishing(true);
@@ -937,7 +838,6 @@ export function PublishCanvas({
       toast.error((err as Error).message ?? "Publish failed");
     } finally {
       setPublishing(false);
-      setRawAck(false);
     }
   };
 
@@ -1331,108 +1231,22 @@ export function PublishCanvas({
           )}
         </div>
 
-        {/* ── Final adjustments ──────────────────────────────────────────────
-            The last gap in the flow. Ticking a clip in the strip puts it on
-            the stage, where the aspect picker re-shapes it, Brand stamps the
-            logo on it and the Words tool letters it — and none of that reached
-            a network, because publish posts the picked FILE and those edits
-            live in `compositions`. This is where the doc becomes a file.
-
-            Only for a video ad: an image post sends the anchor, and the export
-            pipeline renders layered docs to MP4 with no still-image equivalent
-            (the amber note above says so). */}
-        {target === "video" && adIsVideo && adAspect && (
-          <div className="flex flex-col gap-2 rounded-xl border border-border bg-background p-3">
-            <p className="flex items-center gap-1.5 text-xs font-medium">
-              <Clapperboard className="h-3.5 w-3.5 text-muted-foreground" />
-              Final adjustments
-            </p>
-            <p className="text-[11px] leading-snug text-muted-foreground">
-              The clip is on the stage — shape it for the platform, stamp your
-              brand on it, lay type over it. None of that goes out until you
-              render it here.
-            </p>
-            {notLockedIn && (
-              <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] leading-snug text-amber-600 dark:text-amber-400">
-                Nothing is locked in yet. Your text and overlays aren&apos;t in
-                the video, so what publishes may not match the stage — render
-                the final cut below first.
-              </p>
-            )}
-
-            <div className="flex flex-wrap items-center gap-1">
-              {(["9:16", "1:1", "16:9"] as const).map((a) => {
-                const wanted = aspectWants.get(a);
-                return (
-                  <button
-                    key={a}
-                    type="button"
-                    onClick={() => setAdAspect(a)}
-                    title={
-                      wanted
-                        ? `${wanted.join(", ")} want ${a}`
-                        : `Re-shape the ad to ${a}`
-                    }
-                    className={`rounded-md border px-2 py-1 text-[11px] transition-colors ${
-                      adAspect === a
-                        ? "border-primary bg-primary/15 text-primary"
-                        : "border-border text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {a}
-                    {wanted && (
-                      <span className="ml-1 text-[10px] opacity-70">
-                        {wanted.length === 1
-                          ? wanted[0]
-                          : `${wanted.length} platforms`}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* A pick publishes ONE file to every platform — the fan-out is
-                skipped on purpose (see /api/publish's one-video checkpoint),
-                so two platforms wanting different shapes is a real trade the
-                user has to make, not something to paper over. */}
-            {aspectWants.size > 1 && (
-              <p className="text-[11px] leading-snug text-amber-600 dark:text-amber-400">
-                Your accounts want different shapes. One cut can&apos;t be both
-                — the ones that don&apos;t match get it letterboxed, or publish
-                them in two passes.
-              </p>
-            )}
-            {aspectWants.size > 0 && !aspectWants.has(adAspect) && (
-              <p className="text-[11px] leading-snug text-amber-600 dark:text-amber-400">
-                Nothing you&apos;ve selected posts in {adAspect}.
-              </p>
-            )}
-
-            <button
-              type="button"
-              onClick={renderFinalCut}
-              disabled={rendering || !campaignId}
-              className="flex items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-medium text-primary transition-colors hover:bg-primary/15 disabled:opacity-50"
-            >
-              {rendering ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Rendering…
-                </>
-              ) : (
-                <>
-                  <Clapperboard className="h-3.5 w-3.5" />
-                  Render this cut
-                  {overlayCount > 0
-                    ? ` (${overlayCount} overlay${overlayCount === 1 ? "" : "s"})`
-                    : ""}
-                </>
-              )}
-            </button>
-            <p className="text-[10px] leading-snug text-muted-foreground">
-              Free — it composes files you already own. The new cut becomes the
-              one that publishes.
-            </p>
+        {/* ── Render & lock ──────────────────────────────────────────────────
+            The ONE place an ad is rendered and locked before it goes out.
+            Shape, layers, words and brand are adjusted on the other pages;
+            this page only turns the stage into the file that publishes and
+            holds Publish until that file matches the stage. */}
+        {campaignId && adAspect && (
+          <div ref={lockCardRef}>
+            <RenderLockCard
+              workspaceSlug={workspaceSlug}
+              campaignId={campaignId}
+              target={target}
+              musicUrl={musicUrl}
+              platformWants={aspectWants}
+              onStatus={setLockStatus}
+              onRendered={onFinalCut}
+            />
           </div>
         )}
 
