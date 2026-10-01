@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import type {
   CompositionAspect,
+  BackdropTreatment,
   CompositionBackground,
   CompositionDoc,
   ImageLayer,
@@ -65,6 +66,8 @@ interface CompositorState {
 
   setAspect: (aspect: CompositionAspect) => void;
   setBackground: (background: CompositionBackground) => void;
+  /** Look / grain / vignette / camera move / pulse for the backdrop. */
+  setTreatment: (treatment: BackdropTreatment | undefined) => void;
   /**
    * Swap the background AND drop every layer, as ONE undo step. For staging a
    * finished render: its words and logo are already in the pixels, so the
@@ -238,6 +241,13 @@ export const useCompositorStore = create<CompositorState>((set) => ({
 
   setAspect: (aspect) => set((s) => editDoc(s, (doc) => ({ ...doc, aspect }))),
 
+  setTreatment: (treatment) =>
+    set((s) =>
+      editDoc(s, (doc) => ({
+        ...doc,
+        background: { ...doc.background, treatment },
+      })),
+    ),
   setBackground: (background) =>
     set((s) => editDoc(s, (doc) => ({ ...doc, background }))),
 

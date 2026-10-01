@@ -1,6 +1,7 @@
 import {
   alignOf,
   ASPECT_DESIGN,
+  type BackdropTreatment,
   blendToCanvas,
   effectiveLayer,
   resolveCenter,
@@ -16,6 +17,11 @@ import {
   type Motion,
 } from "@/lib/composition/effects";
 
+import {
+  backdropMotion,
+  isNeutral,
+  LOOK_CANVAS_FILTER,
+} from "@/lib/composition/treatment";
 import {
   KARAOKE_DIM,
   litCount,
@@ -264,6 +270,95 @@ function timingHidden(motion: Motion | null, opacity: number): boolean {
   return envelope <= 0.08;
 }
 
+let grainTile: HTMLCanvasElement | null = null;
+/** A small tile of grey noise, built once and tiled for film grain. */
+function getGrainTile(): HTMLCanvasElement {
+  if (grainTile) return grainTile;
+  const tile = document.createElement("canvas");
+  tile.width = tile.height = 256;
+  const tctx = tile.getContext("2d")!;
+  const img = tctx.createImageData(256, 256);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const v = Math.random() * 255;
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+    img.data[i + 3] = 255;
+  }
+  tctx.putImageData(img, 0, 0);
+  grainTile = tile;
+  return tile;
+}
+
+/**
+ * Draw the backdrop (cover-fit) with its treatment: camera move + pulse, a
+ * colour look, grain and a vignette. The same maths the export builds as ffmpeg
+ * expressions (treatment.ts) — and the one place a flattened still calls too, so
+ * a photo post carries the look the preview showed.
+ */
+export function drawBackdrop(
+  ctx: CanvasRenderingContext2D,
+  bg: HTMLVideoElement | HTMLImageElement,
+  width: number,
+  height: number,
+  treatment: BackdropTreatment | undefined,
+  time: number,
+  dur: number,
+): void {
+  const srcW = bg instanceof HTMLVideoElement ? bg.videoWidth : bg.naturalWidth;
+  const srcH =
+    bg instanceof HTMLVideoElement ? bg.videoHeight : bg.naturalHeight;
+  if (!(srcW > 0 && srcH > 0)) return;
+  const r = coverRect(srcW, srcH, width, height);
+  if (isNeutral(treatment) || !treatment) {
+    ctx.drawImage(bg, r.x, r.y, r.width, r.height);
+    return;
+  }
+
+  const m = backdropMotion(treatment, time, dur);
+  ctx.save();
+  if (treatment.look !== "none")
+    ctx.filter = LOOK_CANVAS_FILTER[treatment.look];
+  if (m.zoom !== 1 || m.panX !== 0) {
+    // Zoom about the centre, then slide across the room the zoom created.
+    const slack = ((m.zoom - 1) * width) / 2;
+    ctx.translate(width / 2 - m.panX * slack, height / 2);
+    ctx.scale(m.zoom, m.zoom);
+    ctx.translate(-width / 2, -height / 2);
+  }
+  ctx.drawImage(bg, r.x, r.y, r.width, r.height);
+  ctx.restore();
+
+  if (treatment.grain > 0) {
+    ctx.save();
+    ctx.globalAlpha = treatment.grain * 0.3;
+    ctx.globalCompositeOperation = "overlay";
+    const pattern = ctx.createPattern(getGrainTile(), "repeat");
+    if (pattern) {
+      ctx.fillStyle = pattern;
+      // A new offset each frame so the grain shimmers rather than sitting still.
+      const f = Math.floor(time * 24);
+      ctx.translate((f * 53) % 256, (f * 97) % 256);
+      ctx.fillRect(-256, -256, width + 512, height + 512);
+    }
+    ctx.restore();
+  }
+  if (treatment.vignette > 0) {
+    const g = ctx.createRadialGradient(
+      width / 2,
+      height / 2,
+      Math.min(width, height) * 0.35,
+      width / 2,
+      height / 2,
+      Math.hypot(width, height) / 2,
+    );
+    g.addColorStop(0, "rgba(0,0,0,0)");
+    g.addColorStop(1, `rgba(0,0,0,${treatment.vignette * 0.75})`);
+    ctx.save();
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, width, height);
+    ctx.restore();
+  }
+}
+
 /** Draw one full frame: background (cover-fit) then layers back-to-front. */
 export function drawFrame(
   ctx: CanvasRenderingContext2D,
@@ -275,16 +370,16 @@ export function drawFrame(
   ctx.fillStyle = "#000000";
   ctx.fillRect(0, 0, width, height);
 
-  const bg = input.background;
-  if (bg) {
-    const srcW =
-      bg instanceof HTMLVideoElement ? bg.videoWidth : bg.naturalWidth;
-    const srcH =
-      bg instanceof HTMLVideoElement ? bg.videoHeight : bg.naturalHeight;
-    if (srcW > 0 && srcH > 0) {
-      const r = coverRect(srcW, srcH, width, height);
-      ctx.drawImage(bg, r.x, r.y, r.width, r.height);
-    }
+  if (input.background) {
+    drawBackdrop(
+      ctx,
+      input.background,
+      width,
+      height,
+      input.doc.background.treatment,
+      input.t,
+      input.clipDuration,
+    );
   }
 
   const effectCtx: EffectCtx = { W: width, H: height };

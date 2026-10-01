@@ -45,6 +45,7 @@ import { thumbUrl } from "@/lib/images/thumb";
 import { CREDIT_COSTS } from "@/lib/credits/costs";
 import { useCompositorStore } from "@/store/useCompositorStore";
 import { stillLayers, uploadStill } from "@/lib/composition/still";
+import { isNeutral } from "@/lib/composition/treatment";
 import {
   EMPTY_TIKTOK_DRAFT,
   tiktokDraftProblem,
@@ -741,7 +742,8 @@ export function PublishCanvas({
         if (
           stageDoc &&
           stageDoc.background.kind === "image" &&
-          stillLayers(stageDoc).length > 0
+          (stillLayers(stageDoc).length > 0 ||
+            !isNeutral(stageDoc.background.treatment))
         ) {
           stillAssetId = await uploadStill(stageDoc, campaignId, (form) =>
             api("/api/compositions/still", {

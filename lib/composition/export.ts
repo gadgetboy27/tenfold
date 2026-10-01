@@ -20,6 +20,7 @@ import {
 } from "@/lib/composition/layers";
 import { motionExprs, type MotionExprs } from "@/lib/composition/effects";
 import { KARAOKE_DIM, revealDrawPlan } from "@/lib/composition/reveal";
+import { backdropFilterChain } from "@/lib/composition/treatment";
 import { TEXT_LINE_HEIGHT } from "@/lib/composition/render";
 import { fetchPublic } from "@/lib/net/safe-url";
 
@@ -218,11 +219,21 @@ export function buildFilterGraph(
   const base = ASPECT_DESIGN[doc.aspect];
   const width = Math.round(base.width * scale);
   const height = Math.round(base.height * scale);
+  const backdropChain = backdropFilterChain(
+    doc.background.treatment,
+    dur,
+    width,
+    height,
+  );
   const chains: string[] = [
     // Cover-fit the background into the design space; gbrp keeps the chain in
     // planar RGB so blend maths matches the canvas (yuv blending drifts).
     `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,` +
-      `crop=${width}:${height},fps=30,format=gbrp[m0]`,
+      `crop=${width}:${height},fps=30,format=gbrp` +
+      // Look / grain / vignette / camera move / pulse — on the backdrop only,
+      // so layers are drawn over it untouched (treatment.ts).
+      (backdropChain ? `,${backdropChain}` : "") +
+      `[m0]`,
   ];
 
   let step = 0;

@@ -252,7 +252,11 @@ export function AdStage({
      ordinary static text with no way to see the effect. */
   const isVideoAd = doc?.background.kind === "video";
   const hasReadOut = layers.some((l) => l.kind === "text" && !!l.reveal);
-  const showTransport = isVideoAd || hasReadOut;
+  // A camera move or pulse on the backdrop also needs the clock to be seen.
+  const fx = doc?.background.treatment;
+  const hasBackdropMotion = !!fx && (fx.camera !== "none" || !!fx.pulse);
+  const hasMotion = hasReadOut || hasBackdropMotion;
+  const showTransport = isVideoAd || hasMotion;
   const canvasRef = useRef<CompositorCanvasHandle>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -725,7 +729,7 @@ export function AdStage({
             onClick={() => {
               // A read-out is only worth previewing in motion, so start it
               // from the top rather than showing the frozen first frame.
-              if (hasReadOut) {
+              if (hasMotion) {
                 canvasRef.current?.seek(0);
                 setPlaying(true);
               }

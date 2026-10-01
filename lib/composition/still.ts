@@ -5,7 +5,7 @@ import {
   type Layer,
 } from "@/lib/composition/layers";
 import { ensureBrandFontsLoaded } from "./fonts";
-import { coverRect, drawLayer } from "./render";
+import { drawBackdrop, drawLayer } from "./render";
 
 /**
  * Flatten the composed ad into one JPEG — what a photo post should publish.
@@ -64,8 +64,18 @@ export async function renderStillJpeg(doc: CompositionDoc): Promise<Blob> {
   // JPEG has no alpha — start from black, as drawFrame does.
   ctx.fillStyle = "#000000";
   ctx.fillRect(0, 0, width, height);
-  const r = coverRect(bg.naturalWidth, bg.naturalHeight, width, height);
-  ctx.drawImage(bg, r.x, r.y, r.width, r.height);
+  // The look, grain and vignette carry into a photo; a camera move and pulse
+  // have no meaning without a timeline, so they're switched off.
+  const t = doc.background.treatment;
+  drawBackdrop(
+    ctx,
+    bg,
+    width,
+    height,
+    t ? { ...t, camera: "none", pulse: undefined } : undefined,
+    0,
+    1,
+  );
 
   for (const layer of layers) {
     drawLayer(

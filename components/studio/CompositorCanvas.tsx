@@ -27,6 +27,7 @@ import {
   setAdAspect,
 } from "@/components/studio/adBridge";
 import { LayerList } from "@/components/compositor/LayerList";
+import { BackdropFxCard } from "@/components/studio/BackdropFxCard";
 import { ElementTray } from "@/components/studio/ElementTray";
 import { CaptionPresetRow } from "@/components/compositor/CaptionPresetRow";
 import { LayerControls } from "@/components/compositor/LayerControls";
@@ -995,6 +996,8 @@ export function CompositorCanvas({
         )}
         {footer}
       </div>
+
+      <BackdropFxCard />
 
       {/* Live per-platform previews of the SAME master doc, each reflowed to
           that platform's aspect. The safe-zone guides are the point: a ⚠ lights

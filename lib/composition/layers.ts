@@ -787,11 +787,49 @@ export function effectiveLayer(
 
 // ── Composition document ─────────────────────────────────────────────────────
 
+/**
+ * How the backdrop itself looks and moves — a colour look, grain, vignette, a
+ * camera move and an optional pulse. Applied to the BACKGROUND only (layers sit
+ * on top untouched), in both the canvas preview and the FFmpeg export; the
+ * maths lives in treatment.ts so the two cannot drift. Stored inside
+ * `background` so it persists with the composition and needs no migration.
+ */
+export const LOOKS = ["none", "warm", "teal", "noir", "vivid", "film"] as const;
+export const CAMERAS = [
+  "none",
+  "zoom-in",
+  "zoom-out",
+  "drift-left",
+  "drift-right",
+  "punch",
+] as const;
+export type Look = (typeof LOOKS)[number];
+export type Camera = (typeof CAMERAS)[number];
+
+export const backdropTreatmentSchema = z.object({
+  look: z.enum(LOOKS).default("none"),
+  grain: z.number().min(0).max(1).default(0),
+  vignette: z.number().min(0).max(1).default(0),
+  camera: z.enum(CAMERAS).default("none"),
+  /** How far the camera moves, as extra zoom (0.15 = 15%). */
+  cameraAmount: z.number().min(0.05).max(0.4).default(0.15),
+  /** A zoom pulse on a steady beat. Set by BPM — not audio beat detection. */
+  pulse: z
+    .object({
+      bpm: z.number().min(60).max(180).default(120),
+      strength: z.number().min(0.01).max(0.15).default(0.05),
+    })
+    .optional(),
+});
+export type BackdropTreatment = z.infer<typeof backdropTreatmentSchema>;
+
 export const backgroundSchema = z.object({
   kind: z.enum(["video", "image"]),
   src: z.string().url(),
   /** Known clip length; images use a virtual clock of this many seconds. */
   durationSec: z.number().positive().max(600).optional(),
+  /** Look / grain / vignette / camera move / pulse for the backdrop. */
+  treatment: backdropTreatmentSchema.optional(),
 });
 
 export type CompositionBackground = z.infer<typeof backgroundSchema>;

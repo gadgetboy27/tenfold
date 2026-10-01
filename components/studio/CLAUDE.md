@@ -882,3 +882,28 @@ wide is wider than a 1080 frame). Now:
   because dragging changes the doc every frame. Locked ads can't be fitted.
 - Boxes that must shrink below ~45% are flagged ("shorter wording would read
   better") — shrinking can make a long line unreadably small.
+
+## Look & motion — backdrop treatment (2026-10-02)
+
+`BackdropFxCard` (Compose rail) sets `doc.background.treatment`: a colour **look**
+(warm / teal / noir / vivid / film), **grain**, **vignette**, a **camera move**
+(zoom in/out, drift, punch-in) and a **pulse** on a BPM the user sets. Stored
+inside `background` (jsonb) so it persists with no migration, and it is in the
+render fingerprint, so changing it makes a locked render read as out of date.
+
+- **Backdrop only.** Layers draw on top untouched, in the preview
+  (`drawBackdrop` in render.ts) and the export (`backdropFilterChain` spliced
+  into the first chain of `buildFilterGraph`, after the cover-fit, in gbrp).
+- **One set of maths** in `lib/composition/treatment.ts`: the preview calls
+  `backdropMotion`, the export builds the same motion as ffmpeg expressions
+  (`zoomExpr`/`panExpr`, `scale…eval=frame` then `crop`). Motion is exact;
+  colour looks are APPROXIMATE across the two (CSS filters ≠ ffmpeg eq/colorbalance).
+- **Camera on a still = a moving ad for free.** The stage shows its Play controls
+  whenever a camera/pulse or read-out exists, and a flattened PHOTO keeps look,
+  grain and vignette but drops camera and pulse (no timeline).
+- **The pulse is not beat detection.** It fires on a fixed tempo; detecting beats
+  in the actual music is a separate, bigger piece of work.
+- A treatment counts as content for the Render & lock card: a look with no
+  layers is not "nothing to lock".
+- The filter strings were run through a real ffmpeg (gbrp) when added; there is no
+  ffmpeg in CI, so `tests/unit/treatment.test.ts` pins the graph shape as strings.

@@ -21,6 +21,7 @@ import {
 } from "@/components/compositor/export-client";
 import { renderStillJpeg } from "@/lib/composition/still";
 import { docSignature } from "@/lib/composition/signature";
+import { isNeutral } from "@/lib/composition/treatment";
 import { downloadCampaignPdf } from "@/lib/compositor/campaign-pdf";
 import type { CompositionAspect } from "@/lib/composition/layers";
 import { useCompositorStore } from "@/store/useCompositorStore";
@@ -76,7 +77,12 @@ export function RenderLockCard({
     (s) => s.doc?.background.kind === "video",
   );
   const locked = useCompositorStore((s) => s.locked);
-  const overlayCount = layers?.length ?? 0;
+  // Anything that changes what the ad looks like needs rendering: layers AND a
+  // look/camera on the backdrop (a treatment alone is still not "nothing").
+  const hasFx = useCompositorStore(
+    (s) => !isNeutral(s.doc?.background.treatment),
+  );
+  const overlayCount = (layers?.length ?? 0) + (hasFx ? 1 : 0);
 
   const [status, setStatus] = useState<LockStatus>("checking");
   const [bypass, setBypass] = useState(false);
