@@ -70,7 +70,7 @@ made that much better; it did not make it _guaranteed_. This does.
   from the same tool — upload, gallery, or a small generated one via the
   ordinary `image_generation` job (`lib/studio/generate-image.ts`), priced from
   `CREDIT_COSTS`.
-- **One row of pickers for every text** (`TextStylePicker`). `CaptionCanvas`
+- **One toolbox for every kind of lettering** (`StyleToolbox`, 2026-10-02 — replaced `TextStylePicker` and the sticker card's own pickers). `CaptionCanvas`
   is gone; "Write a caption for me" lives in the Words card, runs the same
   `script_generation` job, and drops the result on the ad as the
   `CAPTION_LAYER_ID` block (then selects it). The font/weight/colour/panel
@@ -835,3 +835,26 @@ canvas preview and the FFmpeg export both read — don't fork them.
   like plain static text. `AdStage` now also shows it when any text layer has
   a `reveal` (`hasReadOut`), and fullscreen preview starts playing from 0 for
   such ads. `RevealCard` warns when the reading outlasts the ad's length.
+
+## Slogan + one Style toolbox (2026-10-02)
+
+**Slogan** (`SloganCard`, inside the Words card): the user describes what they
+are promoting and `POST /api/jobs` (`script_generation`, `params.kind:
+"slogan"`) returns three one-sentence lines — same one-credit charge, refund
+and rate limit as a caption, different product. `lib/claude/slogan.ts` asks
+for a JSON array and `normalizeSlogans` enforces the shape: at most 12 words,
+one sentence (short fragments like "Fresh. Fast. Yours." are allowed), no
+numbering/quotes, no repeats; overlong lines are DROPPED, never trimmed
+mid-thought. The first option goes straight into the Words box; the others swap
+in on tap. A slogan is NOT a caption: don't merge the two prompts.
+
+**One Style toolbox** (`StyleToolbox`, shared rows in `StyleRows`) styles
+whatever is selected on the stage — a headline, the caption or a sticker — and
+only that. Selected sticker → sticker controls (face, effect, colours, palettes,
+brush size, flips, tilt); selected text → text controls (face, weight, colour,
+panel); nothing selected → the user picks Words / Sticker and it sets the look of
+the NEXT one. `StickerCard` now owns only what a sticker SAYS and the Add button;
+its look lives in the toolbox. Styling is per selected layer — styling words
+*inside* a block differently (mixed styles in one box) is not built; it would
+need spans in the text layer, in the canvas draw, in the FFmpeg export and in the
+read-out, so it is a separate piece of work.

@@ -1,115 +1,57 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { FlipHorizontal2, FlipVertical2, Plus, Sparkles } from "lucide-react";
+import { useRef } from "react";
+import { Plus, Sparkles } from "lucide-react";
 import toast from "react-hot-toast";
 import { ensureBrandFontsLoaded } from "@/lib/composition/fonts";
-import { weightsFor } from "@/lib/composition/layers";
-import {
-  DEFAULT_STICKER,
-  PEN_PALETTES,
-  STICKER_EFFECTS,
-  STICKER_FONTS,
-  type StickerEffect,
-  type StickerSpec,
-} from "@/lib/composition/sticker";
+import type { StickerSpec } from "@/lib/composition/sticker";
+import type { ImageLayer } from "@/lib/composition/layers";
 import { useCompositorStore } from "@/store/useCompositorStore";
-import { addStickerToAd, pickStickerTarget, restyleSticker } from "./adBridge";
-
-const EFFECT_LABEL: Record<StickerEffect, string> = {
-  none: "Plain",
-  shadow: "Shadow",
-  glow: "Afterglow",
-  neon: "Neon",
-  outline: "Outline",
-  marker: "Marker",
-  spray: "Graffiti spray",
-  calligraphy: "Calligraphy",
-};
-
-/** Effects with a size knob worth showing — the "brush size" for the pen
- *  effects. Glow/neon/outline/shadow keep their existing fixed proportions;
- *  wiring effectSize into those too is a separate, riskier change to their
- *  already-shipped look. */
-const SIZABLE_EFFECTS = new Set<StickerEffect>([
-  "marker",
-  "spray",
-  "calligraphy",
-]);
-
-const TILTS = [-15, -8, 0, 8, 15];
+import { addStickerToAd, restyleSticker } from "./adBridge";
 
 /**
- * Sticker — the other kind of type. A "SALE" burst, a price, a stamp: its
- * own faces (display first), an effect, a tilt, a flip. Deliberately NOT the
- * Words block and NOT the shared style row: a headline is the brand's voice
- * in the brand's face; a sticker is a thing stuck on top, and the two would
- * fight over one set of controls. Live like Words — with a sticker selected
- * on the stage this card edits it; otherwise Add makes a new one.
+ * Sticker — the words on a sticker, and the Add button. Its LOOK (face,
+ * effect, colour, flips, tilt) is set in the Style toolbox above, which edits
+ * whatever is selected; this card only owns what the sticker SAYS. Live like
+ * Words: with a sticker selected on the stage, typing here edits it; with
+ * nothing selected, Add makes a new one in the look the toolbox is set to.
  */
-export function StickerCard() {
-  const [spec, setSpec] = useState<StickerSpec>(DEFAULT_STICKER);
-  const [fontsReady, setFontsReady] = useState(false);
-  const target = useCompositorStore((s) =>
-    pickStickerTarget(s.doc?.layers, s.selectedLayerId),
-  );
+export function StickerCard({
+  draft,
+  onDraft,
+  target,
+}: {
+  draft: StickerSpec;
+  onDraft: (patch: Partial<StickerSpec>) => void;
+  target: (ImageLayer & { sticker: StickerSpec }) | null;
+}) {
   const hasDoc = useCompositorStore((s) => s.doc !== null);
-  const patchLayout = useCompositorStore((s) => s.patchLayout);
+  const value = target ? target.sticker.text : draft.text;
 
-  useEffect(() => {
-    void ensureBrandFontsLoaded().then(() => setFontsReady(true));
-  }, []);
-
-  // Selecting a sticker on the stage loads its spec into the card — once per
-  // selection, not on every store change, or typing would fight itself.
-  const loadedFor = useRef<string | null>(null);
-  useEffect(() => {
-    if (target && loadedFor.current !== target.id) {
-      loadedFor.current = target.id;
-      setSpec(target.sticker);
-    }
-    if (!target) loadedFor.current = null;
-  }, [target]);
-
-  // Re-rasterising on every keystroke is fine for chips; for typing it is a
-  // PNG per character. A short debounce keeps it live without the churn.
+  // A PNG is re-drawn per change; a short debounce keeps typing live without
+  // rasterising once per character.
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const apply = (patch: Partial<StickerSpec>, immediate = false) => {
-    const next = { ...spec, ...patch };
-    if (patch.font && !weightsFor(patch.font).includes(next.weight)) {
-      next.weight = 400;
-    }
-    setSpec(next);
-    if (!target) return;
+  const edit = (text: string) => {
+    const next = text.slice(0, 60);
+    onDraft({ text: next });
+    if (!target || !next.trim()) return;
     if (pending.current) clearTimeout(pending.current);
-    const run = () => void restyleSticker(target.id, next);
-    if (immediate) run();
-    else pending.current = setTimeout(run, 150);
+    const spec = { ...target.sticker, text: next };
+    pending.current = setTimeout(
+      () => void restyleSticker(target.id, spec),
+      150,
+    );
   };
 
-  const add = () => {
-    if (!spec.text.trim()) return;
-    if (!fontsReady) {
-      toast.error("Fonts are still loading — one moment.");
-      return;
-    }
-    if (addStickerToAd({ ...spec, text: spec.text.trim() }) === null) {
+  const add = async () => {
+    if (!draft.text.trim()) return;
+    await ensureBrandFontsLoaded();
+    if (addStickerToAd({ ...draft, text: draft.text.trim() }) === null) {
       toast.error(
         "Add an image to your ad first — a sticker needs something to sit on.",
       );
     }
   };
-
-  const tilt = (deg: number) => {
-    if (target) patchLayout(target.id, { rotationDeg: deg });
-  };
-
-  const chip = (on: boolean) =>
-    `rounded-md border px-2 py-1 text-xs transition-colors ${
-      on
-        ? "border-primary text-primary"
-        : "border-border text-muted-foreground hover:text-foreground"
-    }`;
 
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4">
@@ -119,173 +61,25 @@ export function StickerCard() {
         </h2>
         <p className="mt-1 text-xs text-muted-foreground">
           {target
-            ? "Editing the selected sticker — changes show as you make them."
-            : "A SALE burst, a price, a stamp — its own faces and effects. Tilt, flip and mirror it; drag it anywhere."}
+            ? "Editing the selected sticker — its words here, its look in Style above."
+            : "A SALE burst, a price, a stamp. Set its look in Style above, then add it and drag it anywhere."}
         </p>
       </div>
-
       <input
-        value={spec.text}
-        onChange={(e) => apply({ text: e.target.value.slice(0, 60) })}
+        value={value}
+        onChange={(e) => edit(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && !target) add();
+          if (e.key === "Enter" && !target) void add();
         }}
         maxLength={60}
         placeholder="SALE · 50% OFF · NEW"
         className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary/60"
       />
-
-      <label className="text-[11px] text-muted-foreground">Face</label>
-      <div className="flex flex-wrap gap-1">
-        {STICKER_FONTS.map((f) => (
-          <button
-            key={f}
-            type="button"
-            onClick={() => apply({ font: f }, true)}
-            style={{ fontFamily: `"${f}", sans-serif` }}
-            className={chip(spec.font === f)}
-          >
-            {f}
-          </button>
-        ))}
-      </div>
-
-      <label className="text-[11px] text-muted-foreground">Effect</label>
-      <div className="flex flex-wrap items-center gap-1">
-        {STICKER_EFFECTS.map((e) => (
-          <button
-            key={e}
-            type="button"
-            onClick={() => apply({ effect: e }, true)}
-            className={chip(spec.effect === e)}
-          >
-            {EFFECT_LABEL[e]}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          Colour
-          <input
-            type="color"
-            value={spec.color}
-            onInput={(e) => apply({ color: e.currentTarget.value })}
-            className="h-7 w-10 cursor-pointer rounded border border-border bg-background"
-          />
-        </label>
-        {spec.effect !== "none" && (
-          <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            {EFFECT_LABEL[spec.effect]} colour
-            <input
-              type="color"
-              value={spec.effectColor}
-              onInput={(e) => apply({ effectColor: e.currentTarget.value })}
-              className="h-7 w-10 cursor-pointer rounded border border-border bg-background"
-            />
-          </label>
-        )}
-        <span className="ml-auto flex gap-1">
-          <button
-            type="button"
-            onClick={() => apply({ flipH: !spec.flipH }, true)}
-            title="Mirror left–right"
-            className={chip(spec.flipH)}
-          >
-            <FlipHorizontal2 className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => apply({ flipV: !spec.flipV }, true)}
-            title="Flip top–bottom"
-            className={chip(spec.flipV)}
-          >
-            <FlipVertical2 className="h-3.5 w-3.5" />
-          </button>
-        </span>
-      </div>
-
-      {spec.effect !== "none" && (
-        <div className="flex flex-col gap-1.5">
-          <label className="text-[11px] text-muted-foreground">
-            Colour palettes
-          </label>
-          <div className="flex flex-wrap gap-1.5">
-            {PEN_PALETTES.map((p) => (
-              <button
-                key={p.label}
-                type="button"
-                onClick={() =>
-                  apply({ color: p.color, effectColor: p.effectColor }, true)
-                }
-                title={p.label}
-                className="flex items-center gap-1 rounded-md border border-border px-1.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
-              >
-                <span className="flex h-3.5 w-3.5 overflow-hidden rounded-full border border-border/60">
-                  <span
-                    className="h-full w-1/2"
-                    style={{ backgroundColor: p.color }}
-                  />
-                  <span
-                    className="h-full w-1/2"
-                    style={{ backgroundColor: p.effectColor }}
-                  />
-                </span>
-                {p.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {SIZABLE_EFFECTS.has(spec.effect) && (
-        <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
-          Brush size
-          <input
-            type="range"
-            min={0.5}
-            max={2}
-            step={0.1}
-            value={spec.effectSize}
-            onChange={(e) => apply({ effectSize: Number(e.target.value) })}
-            aria-label="Brush size"
-            className="min-w-0 flex-1 accent-primary"
-          />
-          <span className="w-8 shrink-0 text-right tabular-nums">
-            {spec.effectSize.toFixed(1)}×
-          </span>
-        </label>
-      )}
-
-      {target ? (
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] text-muted-foreground">Tilt</span>
-          {TILTS.map((d) => (
-            <button
-              key={d}
-              type="button"
-              onClick={() => tilt(d)}
-              className={chip(target.rotationDeg === d)}
-            >
-              {d > 0 ? `+${d}°` : `${d}°`}
-            </button>
-          ))}
-          <input
-            type="range"
-            min={-45}
-            max={45}
-            step={1}
-            value={target.rotationDeg}
-            onChange={(e) => tilt(Number(e.target.value))}
-            aria-label="Tilt"
-            className="min-w-0 flex-1 accent-primary"
-          />
-        </div>
-      ) : (
+      {!target && (
         <button
           type="button"
-          onClick={add}
-          disabled={!spec.text.trim() || !hasDoc}
+          onClick={() => void add()}
+          disabled={!draft.text.trim() || !hasDoc}
           className="flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           <Plus className="h-3.5 w-3.5" /> Add sticker

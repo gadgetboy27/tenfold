@@ -11,14 +11,19 @@ import { useCompositorStore } from "@/store/useCompositorStore";
 import { AddImageCard } from "./AddImageCard";
 import { StickerCard } from "./StickerCard";
 import { FreehandCard } from "./FreehandCard";
-import { TextStylePicker } from "./TextStylePicker";
+import { StyleToolbox, type ToolboxSubject } from "./StyleToolbox";
+import { SloganCard } from "./SloganCard";
 import { RevealCard } from "./RevealCard";
+import { DEFAULT_STICKER, type StickerSpec } from "@/lib/composition/sticker";
+import { weightsFor } from "@/lib/composition/layers";
 import {
   addCaptionToAd,
   currentAdWords,
   restyleAdText,
   retypeAdWords,
   pickTextTarget,
+  pickStickerTarget,
+  restyleSticker,
   textStyleOf,
   WORDS_LAYER_ID,
   type TextStyle,
@@ -80,6 +85,52 @@ export function WordsCanvas({
         : target
           ? "the selected text"
           : null;
+
+  // ── The Style toolbox follows the stage selection ─────────────────────────
+  // A selected sticker → sticker controls; a selected text block → text
+  // controls; nothing selected → the user picks which kind of lettering to
+  // set up for the next one they add.
+  const stickerTarget = useCompositorStore((s) =>
+    pickStickerTarget(s.doc?.layers, s.selectedLayerId),
+  );
+  const selectedKind = useCompositorStore(
+    (s) => s.doc?.layers.find((l) => l.id === s.selectedLayerId)?.kind ?? null,
+  );
+  const patchLayout = useCompositorStore((s) => s.patchLayout);
+  const [stickerDraft, setStickerDraft] =
+    useState<StickerSpec>(DEFAULT_STICKER);
+  const [nextKind, setNextKind] = useState<ToolboxSubject>("text");
+  const subject: ToolboxSubject = stickerTarget
+    ? "sticker"
+    : selectedKind === "text"
+      ? "text"
+      : nextKind;
+  const stickerSpec = stickerTarget ? stickerTarget.sticker : stickerDraft;
+
+  const pendingSticker = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const applySticker = (patch: Partial<StickerSpec>, immediate = false) => {
+    const next = { ...stickerSpec, ...patch };
+    if (patch.font && !weightsFor(patch.font).includes(next.weight)) {
+      next.weight = 400;
+    }
+    // The next sticker follows the last look used, but never inherits the
+    // words of the one being edited.
+    setStickerDraft({ ...next, text: stickerDraft.text });
+    if (!stickerTarget) return;
+    if (pendingSticker.current) clearTimeout(pendingSticker.current);
+    const run = () => void restyleSticker(stickerTarget.id, next);
+    if (immediate) run();
+    else pendingSticker.current = setTimeout(run, 150);
+  };
+
+  const toolboxLegend =
+    subject === "sticker"
+      ? stickerTarget
+        ? "Styling the selected sticker — changes show as you make them."
+        : "Style for the next sticker you add."
+      : targetName
+        ? `Styling ${targetName} — click any text or sticker on the ad to switch.`
+        : "Style for the next words you add.";
 
   // Sync on change, never on mount: mounting must not rewrite a block the
   // canvas may have re-wrapped or the user may have resized.
@@ -172,6 +223,13 @@ export function WordsCanvas({
             Add an image to your ad first — type needs something to sit on.
           </p>
         )}
+        <SloganCard
+          workspaceSlug={workspaceSlug}
+          campaignId={campaignId}
+          topic={topic}
+          onPick={setText}
+          onSpent={onSpent}
+        />
         <button
           type="button"
           onClick={() => void writeCaption()}
@@ -189,19 +247,29 @@ export function WordsCanvas({
         </button>
       </div>
 
-      <TextStylePicker
-        style={style}
-        onChange={apply}
-        legend={
-          targetName
-            ? `Styling ${targetName} — click any text on the ad to switch.`
-            : "Style for the next words you add."
-        }
+      <StyleToolbox
+        subject={subject}
+        canSwitch={!stickerTarget && selectedKind !== "text"}
+        onSubject={setNextKind}
+        legend={toolboxLegend}
+        text={{ style, onChange: apply }}
+        sticker={{
+          spec: stickerSpec,
+          onChange: applySticker,
+          tilt: stickerTarget ? stickerTarget.rotationDeg : null,
+          onTilt: (deg) =>
+            stickerTarget &&
+            patchLayout(stickerTarget.id, { rotationDeg: deg }),
+        }}
       />
 
       <RevealCard target={target} />
 
-      <StickerCard />
+      <StickerCard
+        draft={stickerDraft}
+        onDraft={(patch) => setStickerDraft((d) => ({ ...d, ...patch }))}
+        target={stickerTarget}
+      />
 
       <FreehandCard />
 

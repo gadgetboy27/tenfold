@@ -7,6 +7,7 @@ import { CREDIT_COSTS, type CreditCostKey } from "@/lib/credits/costs";
 import { enqueueJob, enqueueFirstOf } from "@/lib/fal/queue";
 import { getMusicModel } from "@/lib/fal/models";
 import { generateScript } from "@/lib/claude/script";
+import { generateSlogans } from "@/lib/claude/slogan";
 import {
   getWorkspaceBrandVoice,
   getWorkspaceBrandName,
@@ -100,6 +101,35 @@ export const POST = withWorkspace(async (req, { db, session }) => {
   if (body.type === "script_generation") {
     try {
       const brandVoice = await getWorkspaceBrandVoice(session.workspaceId);
+      // Slogan mode: same job type, same one-credit charge, refund-on-failure
+      // and rate limits as a caption — but a different, much shorter product
+      // (three one-sentence lines to choose from). `result` carries the first
+      // so older callers still get a string; `options` carries all of them.
+      if (body.params.kind === "slogan") {
+        const slogan = await generateSlogans({
+          description: String(body.params.description ?? "").slice(0, 400),
+          businessName: await getWorkspaceBrandName(session.workspaceId),
+          brandVoice,
+          captionModel: body.params.captionModel as string | undefined,
+        });
+        await db
+          .from("creative_jobs")
+          .update({
+            status: "completed",
+            actual_cost_usd: slogan.actualCostUsd,
+          })
+          .eq("id", jobId);
+        return NextResponse.json(
+          {
+            jobId,
+            creditCost: cost,
+            status: "ready",
+            result: slogan.slogans[0],
+            options: slogan.slogans,
+          },
+          { status: 201 },
+        );
+      }
       // Resolved SERVER-side from the workspace, never from the request body.
       // Studio was sending the campaign's auto-generated project name here
       // ("Bright Canvas"), which the model wrote into the copy as the
