@@ -265,23 +265,37 @@ export const useCompositorStore = create<CompositorState>((set) => ({
   patchLayout: (id, patch) =>
     set((s) => {
       if (!s.doc) return {};
-      // Default: edit the shared master layer (affects every format via reflow).
-      if (!s.overrideMode) {
-        return editDoc(s, (doc) => ({
-          ...doc,
-          layers: doc.layers.map((l) =>
-            l.id === id ? ({ ...l, ...patch } as Layer) : l,
-          ),
-        }));
-      }
-      // Override mode: merge the delta into this aspect's override only.
       const aspect = s.doc.aspect;
+      const existing = s.doc.overrides?.[aspect]?.[id];
+      // Which layer of the layout does each edited field live in?
+      //  - override mode: the user asked to edit THIS shape only → override;
+      //  - otherwise the shared master — EXCEPT a field this shape already
+      //    overrides. The override sits on top of the master when rendering,
+      //    so writing the master would change nothing on screen: the box
+      //    would refuse to move. That is exactly what auto-fit (which writes
+      //    per-shape overrides) did to a freshly fitted box. An edit goes to
+      //    whichever layer currently wins, so a drag always takes effect.
+      const toOverride: LayerOverride = {};
+      const toMaster: LayerOverride = {};
+      for (const [key, value] of Object.entries(patch)) {
+        const target =
+          s.overrideMode || (existing && key in existing)
+            ? toOverride
+            : toMaster;
+        (target as Record<string, unknown>)[key] = value;
+      }
       return editDoc(s, (doc) => {
+        const layers = Object.keys(toMaster).length
+          ? doc.layers.map((l) =>
+              l.id === id ? ({ ...l, ...toMaster } as Layer) : l,
+            )
+          : doc.layers;
+        if (Object.keys(toOverride).length === 0) return { ...doc, layers };
         const overrides = { ...(doc.overrides ?? {}) };
         const forAspect = { ...(overrides[aspect] ?? {}) };
-        forAspect[id] = { ...(forAspect[id] ?? {}), ...patch };
+        forAspect[id] = { ...(forAspect[id] ?? {}), ...toOverride };
         overrides[aspect] = forAspect;
-        return { ...doc, overrides };
+        return { ...doc, layers, overrides };
       });
     }),
 

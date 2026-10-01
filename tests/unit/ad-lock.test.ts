@@ -83,3 +83,44 @@ describe("a locked ad is frozen", () => {
     expect(useCompositorStore.getState().locked).toBe(false);
   });
 });
+
+describe("moving a box that has a per-shape adjustment", () => {
+  it("a drag takes effect instead of being overridden (auto-fit regression)", async () => {
+    const { effectiveLayer } = await import("@/lib/composition/layers");
+    start();
+    const s = useCompositorStore.getState();
+    // What auto-fit leaves behind: a per-shape position + scale override.
+    s.setFormatOverrides("1:1", {
+      a: { pos: { mode: "fraction", nx: 0.1, ny: 0.1 }, scale: 0.5 },
+    });
+    // The user drags it and resizes it — writes through patchLayout.
+    s.patchLayout("a", {
+      pos: { mode: "fraction", nx: 0.7, ny: 0.8 },
+      scale: 0.9,
+    });
+    const doc = useCompositorStore.getState().doc!;
+    const shown = effectiveLayer(doc.layers[0], doc.aspect, doc.overrides);
+    expect(shown.pos).toEqual({ mode: "fraction", nx: 0.7, ny: 0.8 });
+    expect(shown.scale).toBe(0.9);
+  });
+
+  it("fields without an override still edit the shared master", () => {
+    start();
+    const s = useCompositorStore.getState();
+    s.setFormatOverrides("1:1", { a: { scale: 0.5 } });
+    s.patchLayout("a", { rotationDeg: 10 });
+    const doc = useCompositorStore.getState().doc!;
+    expect(doc.layers[0].rotationDeg).toBe(10); // master
+    expect(doc.overrides?.["1:1"]?.a).toEqual({ scale: 0.5 }); // untouched
+  });
+
+  it("override mode still edits only this shape", () => {
+    start();
+    const s = useCompositorStore.getState();
+    s.setOverrideMode(true);
+    s.patchLayout("a", { rotationDeg: 20 });
+    const doc = useCompositorStore.getState().doc!;
+    expect(doc.layers[0].rotationDeg).toBe(0);
+    expect(doc.overrides?.["1:1"]?.a?.rotationDeg).toBe(20);
+  });
+});
