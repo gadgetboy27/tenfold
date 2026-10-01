@@ -2704,6 +2704,57 @@ function CockpitCreate({
         )}
       </div>
 
+      {/* ── Make it a video ──────────────────────────────────────────────────
+           Video animates the still picked above, so it lives HERE, in Create,
+           for as long as there is a picked image. An earlier cleanup merged
+           Video into Create and deleted its menu entry, but the video panel
+           only rendered when the section was literally "video" — which nothing
+           selected any more except a one-off "what's next" suggestion that
+           vanished once other steps were done. So for most projects there was
+           no way to generate (or re-generate) a clip at all. ── */}
+      {isCreate && anchorId && (
+        <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-3">
+          <h2 className="flex items-center gap-2 text-sm font-semibold">
+            <Play className="h-4 w-4" /> Make it a video
+          </h2>
+          <VideoInputs
+            hasAnchor
+            hasExisting={!!videoUrl}
+            duration={videoDuration}
+            setDuration={setVideoDuration}
+            style={videoStyle}
+            setStyle={setVideoStyle}
+            direction={videoDirection}
+            setDirection={setVideoDirection}
+            generating={videoGenerating}
+            onGenerate={onGenerateVideo}
+          />
+          {(videoGenerating || videoUrl) && (
+            <div className="flex flex-col items-center gap-3">
+              <VideoResult
+                generating={videoGenerating}
+                stage={videoStage}
+                url={videoUrl}
+                stillUrl={workingImage}
+              />
+              {videoUrl && !videoGenerating && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    addVideoToAd(videoUrl);
+                    toast.success("Your ad now runs on this clip");
+                  }}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Use as ad backdrop
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── The results panel. Sits UNDER the controls in the rail now, not
            beside them — and like them it must not be its own scroll container
            (see the note on the wrapper above). ── */}
