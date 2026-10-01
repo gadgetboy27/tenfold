@@ -36,6 +36,15 @@ interface CompositorState {
   /** When true, canvas geometry edits (drag/resize) write to the CURRENT
    *  aspect's per-format override instead of the shared master layer. */
   overrideMode: boolean;
+  /**
+   * The ad is frozen. Set when it is locked on the Publish page and cleared
+   * only by Unlock there. Every edit funnels through `editDoc` (and undo/redo),
+   * all of which refuse while this is true — so nothing outside Publish can
+   * change a locked ad, whichever section or shortcut tries. Not part of the
+   * doc: it is read from the server (compositions.status) when a project opens.
+   */
+  locked: boolean;
+  setLocked: (locked: boolean) => void;
 
   load: (doc: CompositionDoc) => void;
   reset: () => void;
@@ -125,7 +134,7 @@ function editDoc(
   state: CompositorState,
   mutate: (doc: CompositionDoc) => CompositionDoc,
 ): Partial<CompositorState> {
-  if (!state.doc) return {};
+  if (!state.doc || state.locked) return {};
   return {
     doc: mutate(state.doc),
     dirty: true,
@@ -140,6 +149,8 @@ export const useCompositorStore = create<CompositorState>((set) => ({
   multiSelectedIds: [],
   dirty: false,
   overrideMode: false,
+  locked: false,
+  setLocked: (locked) => set({ locked }),
   pendingAspect: "1:1",
   past: [],
   future: [],
@@ -169,6 +180,7 @@ export const useCompositorStore = create<CompositorState>((set) => ({
       multiSelectedIds: [],
       dirty: false,
       overrideMode: false,
+      locked: false,
       past: [],
       future: [],
     }),
@@ -188,7 +200,7 @@ export const useCompositorStore = create<CompositorState>((set) => ({
   undo: () =>
     set((s) => {
       const previous = s.past[s.past.length - 1];
-      if (!previous || !s.doc) return {};
+      if (!previous || !s.doc || s.locked) return {};
       return {
         doc: previous,
         past: s.past.slice(0, -1),
@@ -203,7 +215,7 @@ export const useCompositorStore = create<CompositorState>((set) => ({
   redo: () =>
     set((s) => {
       const next = s.future[0];
-      if (!next || !s.doc) return {};
+      if (!next || !s.doc || s.locked) return {};
       return {
         doc: next,
         past: [...s.past, s.doc].slice(-HISTORY_LIMIT),

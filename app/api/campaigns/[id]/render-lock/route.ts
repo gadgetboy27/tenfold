@@ -24,6 +24,16 @@ export const GET = withWorkspace<{ id: string }>(
         { status: 404 },
       );
     }
+    // Whether the ad is frozen (compositions.status = "locked") — independent
+    // of whether a render exists, so Unlock works even before any render.
+    const { data: comp } = await db
+      .from("compositions")
+      .select("status")
+      .eq("campaign_id", params.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const locked = (comp as { status?: string } | null)?.status === "locked";
     const pickedId =
       (campaign as { publish_asset_id: string | null }).publish_asset_id ??
       null;
@@ -32,6 +42,7 @@ export const GET = withWorkspace<{ id: string }>(
         pickedAssetId: null,
         type: null,
         docSig: null,
+        locked,
       });
     }
     const { data: asset } = await db
@@ -44,6 +55,7 @@ export const GET = withWorkspace<{ id: string }>(
       pickedAssetId: pickedId,
       type: a?.type ?? null,
       docSig: a?.docSig ?? null,
+      locked,
     });
   },
   { rateLimit: false },

@@ -45,6 +45,8 @@ function hash53(str: string): string {
 
 export function docSignature(
   doc: Pick<CompositionDoc, "aspect" | "background" | "layers" | "overrides">,
+  /** Things outside the doc that are baked into the render — the music. */
+  audioUrl?: string | null,
 ): string {
   return hash53(
     canonical({
@@ -52,6 +54,7 @@ export function docSignature(
       background: doc.background,
       layers: doc.layers,
       overrides: doc.overrides ?? {},
+      audio: audioUrl ?? null,
     }),
   );
 }

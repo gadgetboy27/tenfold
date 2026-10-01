@@ -422,6 +422,8 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
     const onPointerDown = (e: React.PointerEvent) => {
       const ctx = canvasRef.current?.getContext("2d");
       if (!ctx || !doc) return;
+      // A locked ad can't be dragged, resized or re-lettered from the stage.
+      if (useCompositorStore.getState().locked) return;
       const p = toDesign(e);
 
       // Shift-click toggles "Combine into one panel"'s pending set — a
@@ -710,6 +712,7 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
     const onDoubleClick = (e: React.MouseEvent) => {
       const ctx = canvasRef.current?.getContext("2d");
       if (!ctx || !doc) return;
+      if (useCompositorStore.getState().locked) return;
       const p = toDesign(e);
       const hit = hitTestLayer(ctx, doc, p.x, p.y, imagesRef.current);
       if (hit?.kind === "text") beginEdit(hit.id);

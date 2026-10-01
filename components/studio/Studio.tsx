@@ -362,6 +362,10 @@ export function Studio({
       return null;
     }
   };
+  // Frozen ad: every section but Gallery and Publish is read-only.
+  const adLocked = useCompositorStore((st) => st.locked);
+  const railLocked =
+    adLocked && section !== "projects" && section !== "publish";
   const setSection = (s: SectionId) => {
     if (s !== "compositor") setCompositorInitialOp(null);
     if (section !== "projects" && section !== s) setLastWorkSection(section);
@@ -1745,184 +1749,206 @@ export function Studio({
                     : "w-full shrink-0 lg:w-[min(32vw,400px)]"
               }`}
             >
-              {section === "projects" ? (
-                <ProjectsCanvas
-                  workspaceSlug={workspaceSlug}
-                  onOpen={openProject}
-                  onNew={newProject}
-                  onReuseImage={reuseGalleryImage}
-                  hasActiveProject={!!campaignId}
-                  backLabel={SECTION_LABELS[lastWorkSection]}
-                  onBack={() => setSection(lastWorkSection)}
-                />
-              ) : section === "music" ? (
-                <MusicCanvas
-                  genre={musicGenre}
-                  setGenre={setMusicGenre}
-                  model={musicModel}
-                  setModel={setMusicModel}
-                  lyrics={musicLyrics}
-                  setLyrics={setMusicLyrics}
-                  direction={musicDirection}
-                  setDirection={setMusicDirection}
-                  durationSec={videoDuration}
-                  hasVideo={!!videoUrl}
-                  campaignId={campaignId}
-                  generating={musicGenerating}
-                  stage={musicStage}
-                  url={musicUrl}
-                  onGenerate={generateMusic}
-                  onBack={() => setSection("video")}
-                  onContinue={() => setSection("compositor")}
-                />
-              ) : section === "words" || section === "caption" ? (
-                /* Wording — one screen, in the order the work happens.
+              {railLocked && (
+                <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+                  <Lock className="h-3.5 w-3.5 shrink-0" />
+                  <span className="flex-1">
+                    This ad is locked, so it can&apos;t be edited here. Unlock
+                    it on the Publish page to make changes.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSection("publish")}
+                    className="shrink-0 rounded-md border border-amber-500/40 px-2 py-1 font-medium hover:bg-amber-500/15"
+                  >
+                    Go to Publish
+                  </button>
+                </div>
+              )}
+              {/* Locked = read-only everywhere but Publish. A disabled fieldset
+                  greys every native control in the rail at once, so no tool has
+                  to know about the lock; the store refuses the edits that don't
+                  go through a control. */}
+              <fieldset disabled={railLocked} className="contents">
+                {section === "projects" ? (
+                  <ProjectsCanvas
+                    workspaceSlug={workspaceSlug}
+                    onOpen={openProject}
+                    onNew={newProject}
+                    onReuseImage={reuseGalleryImage}
+                    hasActiveProject={!!campaignId}
+                    backLabel={SECTION_LABELS[lastWorkSection]}
+                    onBack={() => setSection(lastWorkSection)}
+                  />
+                ) : section === "music" ? (
+                  <MusicCanvas
+                    genre={musicGenre}
+                    setGenre={setMusicGenre}
+                    model={musicModel}
+                    setModel={setMusicModel}
+                    lyrics={musicLyrics}
+                    setLyrics={setMusicLyrics}
+                    direction={musicDirection}
+                    setDirection={setMusicDirection}
+                    durationSec={videoDuration}
+                    hasVideo={!!videoUrl}
+                    campaignId={campaignId}
+                    generating={musicGenerating}
+                    stage={musicStage}
+                    url={musicUrl}
+                    onGenerate={generateMusic}
+                    onBack={() => setSection("video")}
+                    onContinue={() => setSection("compositor")}
+                  />
+                ) : section === "words" || section === "caption" ? (
+                  /* Wording — one screen, in the order the work happens.
                    Caption asks Claude what the words SAY; Words asks how the
                    type should LOOK. Inverses, not halves, which is exactly why
                    they belong together: write it, then style it. `caption`
                    still resolves here so the "what's next" prompts and any old
                    deep link keep working. */
-                <WordsCanvas
-                  workspaceSlug={workspaceSlug}
-                  campaignId={campaignId}
-                  campaignName={campaignName}
-                  topic={prompt}
-                  onCaption={setCaption}
-                  onSpent={refreshBalance}
-                />
-              ) : section === "productshot" ? (
-                <div className="mx-auto h-full max-w-3xl">
-                  <ProductShotPanel />
-                </div>
-              ) : section === "tryon" ? (
-                <div className="mx-auto h-full max-w-3xl">
-                  <VirtualTryOnPanel />
-                </div>
-              ) : section === "talking" ? (
-                <div className="mx-auto h-full max-w-3xl">
-                  <TalkingVideoPanel />
-                </div>
-              ) : section === "autocaption" ? (
-                <div className="mx-auto h-full max-w-3xl">
-                  <AutoCaptionPanel />
-                </div>
-              ) : section === "logo" && logoEnabled ? (
-                // The full world-class Logo & Brand studio, delivered into the big
-                // canvas — its own multi-phase flow (brief → concepts → refine →
-                // vectorize → brand kit), same engine as the classic page.
-                // No max-width: this is a "full" tool now, and capping it at
-                // 1024px would re-create the squeeze it was widened to escape.
-                <div className="h-full min-w-0">
-                  <LogoStudio />
-                </div>
-              ) : section === "compositor" && campaignId && workingImage ? (
-                // Each compositing op (cutout/inpaint/relight/blend) becomes a real,
-                // lockable layer in the SAME layer system the classic Compositor
-                // uses — reused, not forked.
-                //
-                // The project strip used to be mounted here and on Publish only;
-                // it's now pinned below <main> for every section instead.
-                // The Compositor renders its own full-width canvas rather than
-                // going through CockpitCreate, so it misses the rail's
-                // done-footer. It's a flow step like any other and was the one
-                // remaining dead end — mounted explicitly here.
-                <CompositorCanvas
-                  workspaceSlug={workspaceSlug}
-                  campaignId={campaignId}
-                  anchorUrl={workingImage}
-                  caption={caption}
-                  onUpgrade={() => setShowUpgrade(true)}
-                  onPickMusic={setMusicUrl}
-                  musicUrl={musicUrl}
-                  initialOp={compositorInitialOp}
-                  // Inside the controls column, not after the pane: this
-                  // component is h-full, so a sibling lands below the fold.
-                  footer={
-                    <StepStatus
-                      section="compositor"
-                      doneMap={(progress?.done ?? {}) as DoneMap}
-                      onGo={setSection}
-                    />
-                  }
-                />
-              ) : section === "publish" ? (
-                <PublishCanvas
-                  workspaceSlug={workspaceSlug}
-                  campaignId={campaignId}
-                  anchorId={anchorId}
-                  workingImage={workingImage}
-                  videoUrl={videoUrl}
-                  musicUrl={musicUrl}
-                  initialCaption={caption}
-                  onFinalCut={onProjectAssetsChanged}
-                />
-              ) : (
-                <CockpitCreate
-                  tools={tools}
-                  section={section}
-                  setSection={setSection}
-                  workspaceSlug={workspaceSlug}
-                  createMode={createMode}
-                  setCreateMode={setCreateMode}
-                  websiteAnalysis={websiteAnalysis}
-                  onWebsiteAnalysis={setWebsiteAnalysis}
-                  onChooseWebsiteAngle={chooseWebsiteAngle}
-                  prompt={prompt}
-                  setPrompt={setPrompt}
-                  adWords={adWords}
-                  setAdWords={setAdWords}
-                  adWordsZone={adWordsZone}
-                  setAdWordsZone={setAdWordsZone}
-                  variety={variety}
-                  varietyAllowed={varietyAllowed}
-                  setVariety={setVariety}
-                  onGenerate={generate}
-                  onReset={() => {
-                    setPrompt("");
-                    setAssets([]);
-                    setAnchorId(null);
-                    setVideoUrl(null);
-                    setMusicUrl(null);
-                    setReferenceUrl(null);
-                    setCampaignName(freshName());
-                    setSection("brief");
-                  }}
-                  referenceUrl={referenceUrl}
-                  refUploading={refUploading}
-                  onUploadReference={uploadReference}
-                  briefAgentEnabled={briefAgentEnabled}
-                  foremanEnabled={foremanEnabled}
-                  campaignId={campaignId}
-                  onHandover={(sec) => setSection(sec as SectionId)}
-                  onPickReference={() => setPickingReference(true)}
-                  onClearReference={() => setReferenceUrl(null)}
-                  generating={generating}
-                  stage={stage}
-                  assets={assets}
-                  anchorId={anchorId}
-                  onPick={pickAnchor}
-                  doneMap={(progress?.done ?? {}) as DoneMap}
-                  videoDuration={videoDuration}
-                  setVideoDuration={setVideoDuration}
-                  videoStyle={videoStyle}
-                  setVideoStyle={setVideoStyle}
-                  videoDirection={videoDirection}
-                  setVideoDirection={setVideoDirection}
-                  videoGenerating={videoGenerating}
-                  videoStage={videoStage}
-                  videoUrl={videoUrl}
-                  onGenerateVideo={generateVideo}
-                  workingImage={workingImage}
-                  allowedEffects={ent?.proEffects ?? []}
-                  onUpgrade={() => setShowUpgrade(true)}
-                  bgBusy={bgBusy}
-                  onRemoveBg={removeBg}
-                  onOpenCompositorOp={(op) => {
-                    setCompositorInitialOp(op);
-                    setSection("compositor");
-                  }}
-                />
-              )}
+                  <WordsCanvas
+                    workspaceSlug={workspaceSlug}
+                    campaignId={campaignId}
+                    campaignName={campaignName}
+                    topic={prompt}
+                    onCaption={setCaption}
+                    onSpent={refreshBalance}
+                  />
+                ) : section === "productshot" ? (
+                  <div className="mx-auto h-full max-w-3xl">
+                    <ProductShotPanel />
+                  </div>
+                ) : section === "tryon" ? (
+                  <div className="mx-auto h-full max-w-3xl">
+                    <VirtualTryOnPanel />
+                  </div>
+                ) : section === "talking" ? (
+                  <div className="mx-auto h-full max-w-3xl">
+                    <TalkingVideoPanel />
+                  </div>
+                ) : section === "autocaption" ? (
+                  <div className="mx-auto h-full max-w-3xl">
+                    <AutoCaptionPanel />
+                  </div>
+                ) : section === "logo" && logoEnabled ? (
+                  // The full world-class Logo & Brand studio, delivered into the big
+                  // canvas — its own multi-phase flow (brief → concepts → refine →
+                  // vectorize → brand kit), same engine as the classic page.
+                  // No max-width: this is a "full" tool now, and capping it at
+                  // 1024px would re-create the squeeze it was widened to escape.
+                  <div className="h-full min-w-0">
+                    <LogoStudio />
+                  </div>
+                ) : section === "compositor" && campaignId && workingImage ? (
+                  // Each compositing op (cutout/inpaint/relight/blend) becomes a real,
+                  // lockable layer in the SAME layer system the classic Compositor
+                  // uses — reused, not forked.
+                  //
+                  // The project strip used to be mounted here and on Publish only;
+                  // it's now pinned below <main> for every section instead.
+                  // The Compositor renders its own full-width canvas rather than
+                  // going through CockpitCreate, so it misses the rail's
+                  // done-footer. It's a flow step like any other and was the one
+                  // remaining dead end — mounted explicitly here.
+                  <CompositorCanvas
+                    workspaceSlug={workspaceSlug}
+                    campaignId={campaignId}
+                    anchorUrl={workingImage}
+                    caption={caption}
+                    onUpgrade={() => setShowUpgrade(true)}
+                    onPickMusic={setMusicUrl}
+                    musicUrl={musicUrl}
+                    initialOp={compositorInitialOp}
+                    // Inside the controls column, not after the pane: this
+                    // component is h-full, so a sibling lands below the fold.
+                    footer={
+                      <StepStatus
+                        section="compositor"
+                        doneMap={(progress?.done ?? {}) as DoneMap}
+                        onGo={setSection}
+                      />
+                    }
+                  />
+                ) : section === "publish" ? (
+                  <PublishCanvas
+                    workspaceSlug={workspaceSlug}
+                    campaignId={campaignId}
+                    anchorId={anchorId}
+                    workingImage={workingImage}
+                    videoUrl={videoUrl}
+                    musicUrl={musicUrl}
+                    initialCaption={caption}
+                    onFinalCut={onProjectAssetsChanged}
+                  />
+                ) : (
+                  <CockpitCreate
+                    tools={tools}
+                    section={section}
+                    setSection={setSection}
+                    workspaceSlug={workspaceSlug}
+                    createMode={createMode}
+                    setCreateMode={setCreateMode}
+                    websiteAnalysis={websiteAnalysis}
+                    onWebsiteAnalysis={setWebsiteAnalysis}
+                    onChooseWebsiteAngle={chooseWebsiteAngle}
+                    prompt={prompt}
+                    setPrompt={setPrompt}
+                    adWords={adWords}
+                    setAdWords={setAdWords}
+                    adWordsZone={adWordsZone}
+                    setAdWordsZone={setAdWordsZone}
+                    variety={variety}
+                    varietyAllowed={varietyAllowed}
+                    setVariety={setVariety}
+                    onGenerate={generate}
+                    onReset={() => {
+                      setPrompt("");
+                      setAssets([]);
+                      setAnchorId(null);
+                      setVideoUrl(null);
+                      setMusicUrl(null);
+                      setReferenceUrl(null);
+                      setCampaignName(freshName());
+                      setSection("brief");
+                    }}
+                    referenceUrl={referenceUrl}
+                    refUploading={refUploading}
+                    onUploadReference={uploadReference}
+                    briefAgentEnabled={briefAgentEnabled}
+                    foremanEnabled={foremanEnabled}
+                    campaignId={campaignId}
+                    onHandover={(sec) => setSection(sec as SectionId)}
+                    onPickReference={() => setPickingReference(true)}
+                    onClearReference={() => setReferenceUrl(null)}
+                    generating={generating}
+                    stage={stage}
+                    assets={assets}
+                    anchorId={anchorId}
+                    onPick={pickAnchor}
+                    doneMap={(progress?.done ?? {}) as DoneMap}
+                    videoDuration={videoDuration}
+                    setVideoDuration={setVideoDuration}
+                    videoStyle={videoStyle}
+                    setVideoStyle={setVideoStyle}
+                    videoDirection={videoDirection}
+                    setVideoDirection={setVideoDirection}
+                    videoGenerating={videoGenerating}
+                    videoStage={videoStage}
+                    videoUrl={videoUrl}
+                    onGenerateVideo={generateVideo}
+                    workingImage={workingImage}
+                    allowedEffects={ent?.proEffects ?? []}
+                    onUpgrade={() => setShowUpgrade(true)}
+                    bgBusy={bgBusy}
+                    onRemoveBg={removeBg}
+                    onOpenCompositorOp={(op) => {
+                      setCompositorInitialOp(op);
+                      setSection("compositor");
+                    }}
+                  />
+                )}
+              </fieldset>
             </aside>
           </div>
         </main>

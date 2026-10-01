@@ -16,9 +16,6 @@ import {
   Loader2,
   Trash2,
   ChevronRight,
-  Download,
-  Layers,
-  FileText,
   Sparkles,
   ArrowRight,
 } from "lucide-react";
@@ -33,22 +30,9 @@ import type {
   CompositeHistoryEntry,
   CompositeProvenance,
   CompositionAspect,
-  CompositionDoc,
 } from "@/lib/composition/layers";
 import { FormatRail } from "@/components/compositor/FormatRail";
-import {
-  materializeDoc,
-  renderAndLock,
-  requestExport,
-  requestFanOutExport,
-  type FanOutOutput,
-} from "@/components/compositor/export-client";
-import { downloadCampaignPdf } from "@/lib/compositor/campaign-pdf";
-import {
-  railFormats,
-  formatsForPlatforms,
-  distinctAspects,
-} from "@/lib/composition/formats";
+import { railFormats } from "@/lib/composition/formats";
 import { readProfilesResponse } from "@/lib/social/profiles-response";
 import { Spinner } from "@/components/brand/Spinner";
 import { InfoHint } from "@/components/ui/info-hint";
@@ -224,7 +208,6 @@ export function CompositorCanvas({
 }) {
   const doc = useCompositorStore((s) => s.doc);
   const selectedLayerId = useCompositorStore((s) => s.selectedLayerId);
-  const load = useCompositorStore((s) => s.load);
   const addLayer = useCompositorStore((s) => s.addLayer);
   const removeLayer = useCompositorStore((s) => s.removeLayer);
   const [railOpen, setRailOpen] = useState(false);
@@ -267,139 +250,9 @@ export function CompositorCanvas({
     () => railFormats(connectedPlatforms),
     [connectedPlatforms],
   );
-  const [exporting, setExporting] = useState(false);
-  /**
-   * Output resolution. 1× is the design space (1080-class); 2× is for handing
-   * a file to a designer or putting it on a website.
-   *
-   * Honest about its ceiling in the UI, because "2×" invites the belief that
-   * it adds detail. It resamples: text and vector marks are redrawn at the
-   * output size and genuinely resharpen, a background photo cannot exceed its
-   * source and just becomes a bigger copy of the same pixels.
-   */
-  const [renderScale, setRenderScale] = useState<1 | 2>(1);
-  const [exportingAll, setExportingAll] = useState(false);
-  const [exportUrl, setExportUrl] = useState<string | null>(null);
-  const [fanOut, setFanOut] = useState<FanOutOutput[] | null>(null);
-
-  /**
-   * Render the finished cut.
-   *
-   * Compose is where the ad is assembled, and it had no way to turn the doc
-   * into a file — the only render lived in Publish's "Final adjustments". So
-   * the room you build the ad in couldn't produce it.
-   *
-   * `materializeDoc` first: the server renderer can only fetch http(s), so a
-   * blob: URL from a local upload has to be uploaded before it can be drawn.
-   * When anything WAS local the materialised doc is loaded back, or the next
-   * render re-uploads the same files.
-   */
-  const exportMp4 = async () => {
-    const current = useCompositorStore.getState().doc;
-    if (!current) return;
-    setExporting(true);
-    try {
-      const hadLocal = [
-        current.background.src,
-        ...current.layers.map((l) => (l.kind === "image" ? l.src : "")),
-      ].some((s) => s.startsWith("blob:"));
-      // With a project, the render is also LOCKED as the file that publishes
-      // (same path as the Publish page). Without one it is a plain export.
-      let url: string;
-      if (campaignId) {
-        const out = await renderAndLock(current, workspaceSlug, {
-          campaignId,
-          audioUrl: musicUrl ?? null,
-          scale: renderScale,
-        });
-        url = out.url;
-        if (hadLocal) load(out.materialized);
-      } else {
-        const materialized = await materializeDoc(current, workspaceSlug);
-        if (hadLocal) load(materialized);
-        ({ url } = await requestExport(materialized, workspaceSlug, {
-          campaignId,
-          audioUrl: musicUrl ?? null,
-          scale: renderScale,
-        }));
-      }
-      setExportUrl(url);
-      toast.success("Rendered — every layer baked in.");
-    } catch (err) {
-      toast.error((err as Error).message ?? "Export failed");
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  /**
-   * Every connected platform at once.
-   *
-   * The fan-out renders one file per ASPECT — safe zones change the ⚠ overlay,
-   * not the pixels — but a person doesn't think in aspects, they think "the
-   * TikTok one". So we render by aspect (no wasted work) and LABEL by platform,
-   * which is the same file described in the words the user is holding it for.
-   *
-   * Two platforms sharing a shape share a file, and the label says so rather
-   * than implying two renders happened.
-   */
-  const platformFormats = formatsForPlatforms(connectedPlatforms);
-  const fanAspects =
-    platformFormats.length > 0
-      ? distinctAspects(platformFormats)
-      : Array.from(new Set(rail.map((r) => r.aspect)));
-  const platformsForAspect = (a: CompositionAspect) =>
-    platformFormats.filter((f) => f.aspect === a).map((f) => f.label);
-  const exportAllFormats = async () => {
-    const current = useCompositorStore.getState().doc;
-    if (!current) return;
-    setExportingAll(true);
-    setFanOut(null);
-    try {
-      const hadLocal = [
-        current.background.src,
-        ...current.layers.map((l) => (l.kind === "image" ? l.src : "")),
-      ].some((s) => s.startsWith("blob:"));
-      const materialized = await materializeDoc(current, workspaceSlug);
-      if (hadLocal) load(materialized);
-      const outputs = await requestFanOutExport(
-        materialized,
-        workspaceSlug,
-        fanAspects,
-        { campaignId, audioUrl: musicUrl ?? null, scale: renderScale },
-      );
-      setFanOut(outputs);
-      toast.success(
-        `Rendered ${outputs.length} format${outputs.length > 1 ? "s" : ""}.`,
-      );
-    } catch (err) {
-      toast.error((err as Error).message ?? "Export failed");
-    } finally {
-      setExportingAll(false);
-    }
-  };
-
-  /**
-   * The campaign one-pager — the ad, its caption and the brand mark on a page
-   * you can send to a client. Free and entirely client-side (pdf-lib), so it
-   * costs nothing and works with no render queue.
-   */
-  const [pdfBusy, setPdfBusy] = useState(false);
-  const makePdf = async () => {
-    setPdfBusy(true);
-    try {
-      await downloadCampaignPdf({
-        imageUrl: exportUrl ?? anchorUrl,
-        caption: caption ?? "",
-        logoUrl: null,
-        brandName: null,
-      });
-    } catch {
-      toast.error("Couldn't build the PDF — try again.");
-    } finally {
-      setPdfBusy(false);
-    }
-  };
+  // Compose only EDITS. Rendering, locking, exporting and unlocking all live
+  // on the Publish page (RenderLockCard) — one place, so a render made here
+  // could never be confused with the one that publishes.
 
   const setAspect = useCompositorStore((s) => s.setAspect);
   const overrideMode = useCompositorStore((s) => s.overrideMode);
@@ -423,22 +276,10 @@ export function CompositorCanvas({
   const [running, setRunning] = useState<CompositeOp | "redo" | null>(null);
   const maskInputRef = useRef<HTMLInputElement>(null);
 
-  // The doc itself is loaded (and, for a brand-new campaign, bootstrapped
-  // from the anchor image) by AdStage now — it's the only thing that mounts
-  // the canvas, for every section including this one, so it's the only thing
-  // that should own fetching and autosaving it. Compose used to run its own
-  // copy of both, which raced two loaders and two debounced writers against
-  // the same row.
-  const persist = async (nextDoc?: CompositionDoc) => {
-    const current = nextDoc ?? useCompositorStore.getState().doc;
-    if (!current) return;
-    await api("/api/compositions/save", {
-      method: "POST",
-      body: JSON.stringify({ doc: current, campaignId }),
-      workspaceSlug,
-    }).catch(() => {});
-  };
-
+  // The doc is loaded and autosaved by AdStage (the only thing that mounts the
+  // canvas, for every section). Nothing here saves: edits land in the store and
+  // the stage's invisible working-copy autosave keeps them; Publish is where an
+  // ad is rendered and locked.
   const selectedLayer = doc?.layers.find((l) => l.id === selectedLayerId);
   // The source for a new op: the selected image layer, else the background.
   const sourceImageUrl =
@@ -644,7 +485,6 @@ export function CompositorCanvas({
             .getState()
             .setBackground({ kind: "image", src: url });
         }
-        await persist(useCompositorStore.getState().doc ?? undefined);
         toast.success(`${OP_META[activeOp].label} applied`, { id: t });
       } else {
         const newLayer: Layer = {
@@ -665,7 +505,6 @@ export function CompositorCanvas({
           producedBy: provenance,
         };
         addLayer(newLayer);
-        await persist(useCompositorStore.getState().doc ?? undefined);
         toast.success(
           `${OP_META[activeOp].label} done — added as a new layer`,
           {
@@ -727,7 +566,6 @@ export function CompositorCanvas({
         producedBy: { op, params },
         history,
       });
-      await persist(useCompositorStore.getState().doc ?? undefined);
       toast.success(`${OP_META[op].label} updated`, { id: t });
     } catch (err) {
       toast.error((err as Error).message ?? "Redo failed", { id: t });
@@ -751,7 +589,6 @@ export function CompositorCanvas({
       producedBy: entry.producedBy,
       history,
     });
-    await persist(useCompositorStore.getState().doc ?? undefined);
     toast.success("Reverted to a previous version");
   };
 
@@ -1155,133 +992,6 @@ export function CompositorCanvas({
         )}
         {footer}
       </div>
-
-      {/* Render. Compose is where the ad is assembled and it had no way to
-          turn the doc into a file — the only render lived in Publish's "Final
-          adjustments", so the room you build the ad in couldn't produce it. */}
-      {doc && (
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={exportMp4}
-            disabled={exporting || exportingAll}
-            title="Render this cut with every layer and your music baked in"
-            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-40"
-          >
-            {exporting ? (
-              <Spinner size={14} />
-            ) : (
-              <Download className="h-3.5 w-3.5" />
-            )}
-            {exporting ? "Rendering…" : "Render this cut"}
-          </button>
-
-          {/* Only when there's more than one shape to render — a single-format
-              "export all" is the same button twice. */}
-          {fanAspects.length > 1 && (
-            <button
-              type="button"
-              onClick={exportAllFormats}
-              disabled={exporting || exportingAll}
-              title={
-                platformFormats.length
-                  ? `One file per shape, covering ${platformFormats.map((f) => f.label).join(", ")}`
-                  : `Render all ${fanAspects.length} formats at once, each with its own overrides`
-              }
-              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
-            >
-              {exportingAll ? (
-                <Spinner size={14} />
-              ) : (
-                <Layers className="h-3.5 w-3.5" />
-              )}
-              {exportingAll
-                ? "Rendering all…"
-                : platformFormats.length
-                  ? `Render for ${platformFormats.map((f) => f.label).join(", ")}`
-                  : `Render all ${fanAspects.length} formats`}
-            </button>
-          )}
-
-          {/* Resolution. Two options, not a slider: 1× is what publishes, 2× is
-              what you hand over. Offering 3× would mostly produce enormous
-              files from the same source pixels. */}
-          <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
-            {([1, 2] as const).map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setRenderScale(s)}
-                title={
-                  s === 1
-                    ? "Design size — 1080-class, what publishes"
-                    : "Double size for handover. Type and marks resharpen; a background photo can't exceed its source."
-                }
-                className={`rounded-md px-2 py-1 text-[11px] transition-colors ${
-                  renderScale === s
-                    ? "bg-primary/15 text-primary"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {s}×
-              </button>
-            ))}
-          </div>
-
-          <button
-            type="button"
-            onClick={makePdf}
-            disabled={pdfBusy}
-            title="A one-page PDF of the ad and its caption, to send to a client"
-            className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
-          >
-            {pdfBusy ? (
-              <Spinner size={14} />
-            ) : (
-              <FileText className="h-3.5 w-3.5" />
-            )}
-            {pdfBusy ? "Building…" : "One-pager PDF"}
-          </button>
-
-          {exportUrl && (
-            <a
-              href={exportUrl}
-              target="_blank"
-              rel="noopener"
-              className="text-xs text-primary hover:underline"
-            >
-              ↓ Download your MP4
-            </a>
-          )}
-        </div>
-      )}
-
-      {fanOut && fanOut.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs">
-          <span className="text-muted-foreground">
-            {fanOut.length} formats rendered:
-          </span>
-          {fanOut.map((o) => {
-            const names = platformsForAspect(o.aspect);
-            return (
-              <a
-                key={o.aspect}
-                href={o.url}
-                target="_blank"
-                rel="noopener"
-                title={
-                  names.length
-                    ? `${names.join(" + ")} — ${o.aspect}`
-                    : `${o.aspect} render`
-                }
-                className="rounded-full border border-border px-2 py-0.5 text-primary hover:border-primary/50"
-              >
-                {names.length ? names.join(" + ") : o.aspect} ↓
-              </a>
-            );
-          })}
-        </div>
-      )}
 
       {/* Live per-platform previews of the SAME master doc, each reflowed to
           that platform's aspect. The safe-zone guides are the point: a ⚠ lights

@@ -9,6 +9,7 @@ import {
 } from "@/lib/composition/layers";
 import { ensureBrandFontsLoaded } from "@/lib/composition/fonts";
 import { docSignature } from "@/lib/composition/signature";
+import { useCompositorStore } from "@/store/useCompositorStore";
 
 /**
  * Client half of the export flow: the server renderer can only fetch http(s)
@@ -157,8 +158,10 @@ export async function renderAndLock(
   workspaceSlug: string | undefined,
   options: { campaignId: string; audioUrl?: string | null; scale?: number },
 ): Promise<{ url: string; assetId: string; materialized: CompositionDoc }> {
-  const docSig = docSignature(doc);
   const materialized = await materializeDoc(doc, workspaceSlug);
+  // Fingerprint the doc as it will be SAVED (local files already uploaded), so
+  // it still matches after a reload, when the stage holds the uploaded URLs.
+  const docSig = docSignature(materialized, options.audioUrl);
   const { url, assetId } = await requestExport(materialized, workspaceSlug, {
     ...options,
     docSig,
@@ -179,7 +182,46 @@ export async function renderAndLock(
       "Rendered, but couldn't make it the one that publishes — tick it in the project strip.",
     );
   }
+  // Rendering IS locking: freeze the stage so what was rendered can't drift
+  // from what is on screen. Unlock lives on the Publish page, and only there.
+  await setAdLocked(options.campaignId, true, workspaceSlug);
   return { url, assetId, materialized };
+}
+
+/**
+ * Freeze or re-open the ad. Saves the current doc first when locking, so the
+ * saved copy is exactly the one being frozen — the autosave is debounced and
+ * must not be the thing deciding what a lock captured.
+ */
+export async function setAdLocked(
+  campaignId: string,
+  locked: boolean,
+  workspaceSlug: string | undefined,
+  docToSave?: CompositionDoc | null,
+): Promise<void> {
+  if (locked && docToSave) {
+    const saved = await api("/api/compositions/save", {
+      method: "POST",
+      body: JSON.stringify({ doc: docToSave, campaignId }),
+      workspaceSlug,
+    });
+    if (!saved.ok && saved.status !== 409) {
+      throw new Error("Couldn't save your ad before locking it — try again.");
+    }
+  }
+  const res = await api("/api/compositions/lock", {
+    method: "POST",
+    body: JSON.stringify({ campaignId, locked }),
+    workspaceSlug,
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(
+      body.error ??
+        (locked ? "Couldn't lock the ad" : "Couldn't unlock the ad"),
+    );
+  }
+  useCompositorStore.getState().setLocked(locked);
 }
 
 /**

@@ -303,3 +303,26 @@ are rasterised in the browser). It used to demand http(s) for every layer, so
 any project containing a sticker failed with "All layer sources must be
 uploaded before export". `blob:` is still refused — `materializeDoc` uploads
 those first.
+
+## One place to save, render, lock — Publish (2026-10-02)
+
+**Publish is the only section that renders, locks or unlocks an ad.** Every other
+section only edits; there are no Save / Render / Export buttons outside Publish
+(Compose's single render, all-shapes render and PDF one-pager moved into
+`RenderLockCard`). The only writer outside Publish is the stage's invisible
+working-copy autosave (`AdStage` → `POST /api/compositions/save`), which exists
+so a reload doesn't lose unfinished edits and is not a "save" the user performs.
+
+- **Lock** = `compositions.status = "locked"` (no migration), set by
+  `POST /api/compositions/lock`, read back by `GET /api/campaigns/:id/render-lock`
+  (`locked` + the picked render's `docSig`). Rendering locks (`renderAndLock`);
+  photos have a plain "Lock this ad".
+- **Locked is hard.** The store refuses every edit and undo/redo
+  (`locked` in `useCompositorStore`, checked in `editDoc`), the stage ignores
+  pointer edits and drops, the rail sections but Gallery/Publish render inside a
+  disabled `<fieldset>`, autosave stops, and `/api/compositions/save` answers 409
+  for a locked ad. **Do not clear `locked` in `load()`** — AdStage sets it just
+  before loading, and a test pins that.
+- **Unlock** only exists on the Publish card. Edit elsewhere, return, lock again.
+- Publish stays disabled until the ad is locked (and, for video, the picked render
+  matches the stage — fingerprint includes the music).

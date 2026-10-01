@@ -704,17 +704,18 @@ export function PublishCanvas({
         return;
       }
     }
-    // Nothing goes out until the file that publishes matches the stage.
+    // Nothing goes out until the ad is rendered and locked on this page.
     if (
-      target === "video" &&
-      (lockStatus === "none" ||
-        lockStatus === "stale" ||
-        lockStatus === "checking")
+      lockStatus === "none" ||
+      lockStatus === "stale" ||
+      lockStatus === "checking"
     ) {
       toast.error(
         lockStatus === "checking"
-          ? "Still checking your render — one moment."
-          : "Render & lock your ad first — what's on the stage isn't in the video yet.",
+          ? "Still checking your ad — one moment."
+          : target === "video"
+            ? "Render & lock your ad first — what's on the stage isn't in the video yet."
+            : "Lock your ad first — it's frozen and finished before it goes out.",
         { duration: 7000 },
       );
       lockCardRef.current?.scrollIntoView({
@@ -1244,6 +1245,8 @@ export function PublishCanvas({
               target={target}
               musicUrl={musicUrl}
               platformWants={aspectWants}
+              workingImage={workingImage}
+              caption={caption}
               onStatus={setLockStatus}
               onRendered={onFinalCut}
             />

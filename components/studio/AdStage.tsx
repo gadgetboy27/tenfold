@@ -131,7 +131,25 @@ export function AdStage({
           layers: Layer[];
           overrides?: CompositionDoc["overrides"];
         };
+        // Is this ad frozen? Read BEFORE loading so no edit can slip in
+        // between the doc appearing and the lock arriving.
+        let isLocked = false;
+        try {
+          const lockRes = await api(
+            `/api/campaigns/${campaignId}/render-lock`,
+            {
+              workspaceSlug,
+            },
+          );
+          if (lockRes.ok) {
+            isLocked =
+              ((await lockRes.json()) as { locked?: boolean }).locked === true;
+          }
+        } catch {
+          // Unknown reads as unlocked; the save route still refuses a locked ad.
+        }
         if (active) {
+          useCompositorStore.getState().setLocked(isLocked);
           load({
             id: row.id,
             aspect: row.aspect,
@@ -163,11 +181,13 @@ export function AdStage({
   // (rate limit, validation, a payload too big for the proxy) meant the layers
   // were never stored and nothing ever retried — the ad reopened without its
   // text. Now a failure is retried with backoff and said out loud once.
+  const adLocked = useCompositorStore((s) => s.locked);
   const lastSavedRef = useRef<string>("");
   const saveFailedRef = useRef(false);
   const [saveRetry, setSaveRetry] = useState(0);
   useEffect(() => {
-    if (!doc || !campaignId) return;
+    // A locked ad is frozen — nothing here may write it; Publish's lock saved it.
+    if (!doc || !campaignId || adLocked) return;
     const serialized = JSON.stringify(doc);
     if (serialized === lastSavedRef.current) return;
     let cancelled = false;
@@ -209,7 +229,7 @@ export function AdStage({
       cancelled = true;
       clearTimeout(t);
     };
-  }, [doc, campaignId, workspaceSlug, saveRetry]);
+  }, [doc, campaignId, workspaceSlug, saveRetry, adLocked]);
 
   const aspect = doc?.aspect ?? pendingAspect;
   const layers = doc?.layers ?? [];
@@ -387,6 +407,10 @@ export function AdStage({
     const item = parseTrayItem(e.dataTransfer.getData(TRAY_MIME));
     if (!item) return; // not ours — let the browser do whatever it would
     e.preventDefault();
+    if (useCompositorStore.getState().locked) {
+      toast.error("This ad is locked — unlock it in Publish to edit.");
+      return;
+    }
     const media = stageRef.current
       ?.querySelector("canvas")
       ?.getBoundingClientRect();
@@ -499,6 +523,12 @@ export function AdStage({
             }}
             onDrop={handleStageDrop}
           >
+            {adLocked && !fullscreen && (
+              <div className="pointer-events-none absolute left-2 top-2 z-10 flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-card/90 px-2 py-1 text-[11px] text-amber-600 backdrop-blur dark:text-amber-400">
+                <Lock className="h-3 w-3" /> Locked — unlock it in Publish to
+                edit
+              </div>
+            )}
             <LayeredCanvas
               ref={canvasRef}
               playing={playing}
