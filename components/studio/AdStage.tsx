@@ -157,21 +157,59 @@ export function AdStage({
   // Autosave. The rail mutates the doc from outside this component (addLayer),
   // and the canvas writes drag/resize straight to the store, so there is no
   // single "save" moment to hook — debounce on the doc itself instead.
+  //
+  // A doc counts as saved only once the server says so. This used to record it
+  // as saved BEFORE the request and discard any failure, so one rejected save
+  // (rate limit, validation, a payload too big for the proxy) meant the layers
+  // were never stored and nothing ever retried — the ad reopened without its
+  // text. Now a failure is retried with backoff and said out loud once.
   const lastSavedRef = useRef<string>("");
+  const saveFailedRef = useRef(false);
+  const [saveRetry, setSaveRetry] = useState(0);
   useEffect(() => {
     if (!doc || !campaignId) return;
     const serialized = JSON.stringify(doc);
     if (serialized === lastSavedRef.current) return;
-    const t = setTimeout(() => {
-      lastSavedRef.current = serialized;
-      void api("/api/compositions/save", {
-        method: "POST",
-        body: JSON.stringify({ doc, campaignId }),
-        workspaceSlug,
-      }).catch(() => {});
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      let problem: string | null = null;
+      try {
+        const res = await api("/api/compositions/save", {
+          method: "POST",
+          body: JSON.stringify({ doc, campaignId }),
+          workspaceSlug,
+        });
+        if (res.ok) {
+          lastSavedRef.current = serialized;
+          if (saveFailedRef.current) {
+            saveFailedRef.current = false;
+            toast.success("Your ad is saved again");
+          }
+          return;
+        }
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        problem =
+          res.status === 429
+            ? "Too many saves at once"
+            : (body.error ?? `Save failed (${res.status})`);
+      } catch {
+        problem = "Couldn't reach the server";
+      }
+      if (cancelled) return;
+      if (!saveFailedRef.current) {
+        saveFailedRef.current = true;
+        toast.error(
+          `Your latest changes aren't saved yet — ${problem}. Retrying…`,
+        );
+      }
+      // Back off, then run this effect again for the same doc.
+      setTimeout(() => !cancelled && setSaveRetry((n) => n + 1), 5000);
     }, 1200);
-    return () => clearTimeout(t);
-  }, [doc, campaignId, workspaceSlug]);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [doc, campaignId, workspaceSlug, saveRetry]);
 
   const aspect = doc?.aspect ?? pendingAspect;
   const layers = doc?.layers ?? [];

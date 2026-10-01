@@ -17,69 +17,81 @@ const bodySchema = z.object({
   campaignId: z.string().uuid(),
 });
 
-export const POST = withWorkspace(async (req, { db, admin, session }) => {
-  const parsed = bodySchema.safeParse(await req.json());
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Invalid save request" },
-      { status: 400 },
-    );
-  }
-  const { doc, campaignId } = parsed.data;
+export const POST = withWorkspace(
+  async (req, { db, admin, session }) => {
+    const parsed = bodySchema.safeParse(await req.json());
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: "Invalid save request",
+          // Say which field, or a rejected save is undiagnosable from the client.
+          issues: parsed.error.issues
+            .slice(0, 3)
+            .map((i) => `${i.path.join(".")}: ${i.message}`),
+        },
+        { status: 400 },
+      );
+    }
+    const { doc, campaignId } = parsed.data;
 
-  // Tenant check via the workspace-scoped client before writing.
-  const { data: campaign } = await db
-    .from("campaigns")
-    .select("id")
-    .eq("id", campaignId)
-    .maybeSingle();
-  if (!campaign) {
-    return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
-  }
+    // Tenant check via the workspace-scoped client before writing.
+    const { data: campaign } = await db
+      .from("campaigns")
+      .select("id")
+      .eq("id", campaignId)
+      .maybeSingle();
+    if (!campaign) {
+      return NextResponse.json(
+        { error: "Campaign not found" },
+        { status: 404 },
+      );
+    }
 
-  const row = {
-    format: ASPECT_TO_FORMAT[doc.aspect],
-    background: doc.background,
-    layers: doc.layers,
-    overrides: doc.overrides ?? {},
-    updated_at: new Date().toISOString(),
-  };
+    const row = {
+      format: ASPECT_TO_FORMAT[doc.aspect],
+      background: doc.background,
+      layers: doc.layers,
+      overrides: doc.overrides ?? {},
+      updated_at: new Date().toISOString(),
+    };
 
-  // Reuse the campaign's latest composition row (export uses the same one), so
-  // there's a single source of truth per campaign rather than a new row each save.
-  const { data: existing } = await admin
-    .from("compositions")
-    .select("id")
-    .eq("campaign_id", campaignId)
-    .eq("workspace_id", session.workspaceId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const targetId = (existing as { id: string } | null)?.id ?? null;
-
-  if (targetId) {
-    const { error } = await admin
+    // Reuse the campaign's latest composition row (export uses the same one), so
+    // there's a single source of truth per campaign rather than a new row each save.
+    const { data: existing } = await admin
       .from("compositions")
-      .update(row)
-      .eq("id", targetId)
-      .eq("workspace_id", session.workspaceId);
+      .select("id")
+      .eq("campaign_id", campaignId)
+      .eq("workspace_id", session.workspaceId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const targetId = (existing as { id: string } | null)?.id ?? null;
+
+    if (targetId) {
+      const { error } = await admin
+        .from("compositions")
+        .update(row)
+        .eq("id", targetId)
+        .eq("workspace_id", session.workspaceId);
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+      return NextResponse.json({ compositionId: targetId });
+    }
+
+    const newId = uuidv4();
+    const { error } = await admin.from("compositions").insert({
+      id: newId,
+      campaign_id: campaignId,
+      workspace_id: session.workspaceId,
+      anchor_asset_id: null,
+      status: "draft",
+      ...row,
+    });
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
-    return NextResponse.json({ compositionId: targetId });
-  }
-
-  const newId = uuidv4();
-  const { error } = await admin.from("compositions").insert({
-    id: newId,
-    campaign_id: campaignId,
-    workspace_id: session.workspaceId,
-    anchor_asset_id: null,
-    status: "draft",
-    ...row,
-  });
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-  return NextResponse.json({ compositionId: newId });
-});
+    return NextResponse.json({ compositionId: newId });
+  },
+  { rateLimit: 300 },
+);
