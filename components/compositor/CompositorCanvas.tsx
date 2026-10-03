@@ -2,6 +2,7 @@
 
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useRef,
@@ -126,6 +127,12 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
     const lastTickAt = useRef(0);
     const action = useRef<PointerAction | null>(null);
     const hoverEdge = useRef(false);
+    // Asks the render loop for one more frame. The loop only runs while the
+    // clock is moving (see below); anything that changes what's on screen
+    // WITHOUT changing the doc — an image or video frame finishing loading, a
+    // scrub, a hover — calls this. Null while no loop is mounted.
+    const drawRequest = useRef<(() => void) | null>(null);
+    const requestDraw = useCallback(() => drawRequest.current?.(), []);
     const wrapperRef = useRef<HTMLDivElement>(null);
     const [fontsReady, setFontsReady] = useState(false);
     // Inline text editing overlay (display-space position + font size).
@@ -153,11 +160,13 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
       } else {
         const img = new Image();
         img.crossOrigin = "anonymous";
+        img.onload = requestDraw;
         img.src = bgSrc;
         bgImageRef.current = img;
         virtualT.current = 0;
       }
-    }, [bgSrc, isVideo]);
+      requestDraw();
+    }, [bgSrc, isVideo, requestDraw]);
 
     // Keep layer images cached (drawImage only — never through a model).
     useEffect(() => {
@@ -169,6 +178,7 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
         if (!cache.has(layer.src)) {
           const img = new Image();
           img.crossOrigin = "anonymous";
+          img.onload = requestDraw;
           img.src = layer.src;
           cache.set(layer.src, img);
         }
@@ -179,7 +189,7 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
       for (const key of cache.keys()) {
         if (key.startsWith("data:") && !live.has(key)) cache.delete(key);
       }
-    }, [doc?.layers]);
+    }, [doc?.layers, requestDraw]);
 
     // Play/pause the master clock — and the preview music alongside it.
     useEffect(() => {
@@ -209,17 +219,30 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
         else virtualT.current = t;
         const audio = audioEl.current;
         if (audio && audio.duration) audio.currentTime = t % audio.duration;
+        requestDraw();
       },
     }));
 
-    // The render loop.
+    // The render loop — on demand.
+    //
+    // It used to reschedule itself unconditionally, redrawing the whole ad 60
+    // times a second forever, even with nothing changing. On a laptop that is a
+    // permanently busy GPU for as long as the tab is visible, and the backdrop
+    // look (grain, filters) makes every one of those frames heavier. Now a frame
+    // is drawn when something changed (this effect re-runs on every dep below,
+    // and `requestDraw` covers the changes that aren't deps) and the loop keeps
+    // going ONLY while the clock is running.
     useEffect(() => {
       let raf = 0;
       const loop = (stamp: number) => {
-        raf = requestAnimationFrame(loop);
+        raf = 0;
         const canvas = canvasRef.current;
         const ctx = canvas?.getContext("2d");
-        if (!canvas || !ctx || !doc) return;
+        if (!canvas || !ctx) {
+          raf = requestAnimationFrame(loop); // not mounted yet — try again
+          return;
+        }
+        if (!doc) return;
 
         const duration =
           (isVideo ? videoRef.current?.duration : doc.background.durationSec) ||
@@ -268,13 +291,24 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
             audio.currentTime = target;
         }
 
-        if (stamp - lastTickAt.current > 100) {
+        // Playing: report ~10×/s. Not playing, this frame was asked for (a video
+        // finished loading, a scrub) — always report, or the stage keeps a stale
+        // clip length until the next play.
+        if (!playing || stamp - lastTickAt.current > 100) {
           lastTickAt.current = stamp;
           onTick(t, duration);
         }
+        if (playing) raf = requestAnimationFrame(loop);
       };
-      raf = requestAnimationFrame(loop);
-      return () => cancelAnimationFrame(raf);
+      const kick = () => {
+        if (!raf) raf = requestAnimationFrame(loop);
+      };
+      drawRequest.current = kick;
+      kick();
+      return () => {
+        drawRequest.current = null;
+        cancelAnimationFrame(raf);
+      };
     }, [
       doc,
       isVideo,
@@ -731,6 +765,9 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
       >
         {isVideo && (
           <video
+            onLoadedData={requestDraw}
+            onLoadedMetadata={requestDraw}
+            onSeeked={requestDraw}
             ref={videoRef}
             src={doc.background.src}
             crossOrigin="anonymous"
@@ -754,10 +791,22 @@ export const CompositorCanvas = forwardRef<CompositorCanvasHandle, Props>(
           ref={canvasRef}
           width={width}
           height={height}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerLeave={onPointerLeave}
+          onPointerDown={(e) => {
+            onPointerDown(e);
+            requestDraw();
+          }}
+          onPointerMove={(e) => {
+            onPointerMove(e);
+            requestDraw();
+          }}
+          onPointerUp={() => {
+            onPointerUp();
+            requestDraw();
+          }}
+          onPointerLeave={() => {
+            onPointerLeave();
+            requestDraw();
+          }}
           onDoubleClick={onDoubleClick}
           className="max-h-full max-w-full rounded-lg border border-border bg-black object-contain"
         />
