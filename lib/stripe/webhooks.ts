@@ -169,6 +169,34 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
       break;
     }
 
+    case "invoice.payment_failed": {
+      // A declined renewal. Stripe moves the subscription to past_due (and
+      // later canceled/unpaid) and also sends customer.subscription.updated,
+      // but event order isn't guaranteed — so this records the subscription's
+      // CURRENT status from Stripe rather than assuming "past_due", which means
+      // a late or replayed failure can't mark a since-recovered subscription as
+      // failing. Status only: tier and credits are left to the existing
+      // subscription.updated / .deleted handlers and the invoice grant.
+      const invoice = event.data.object as Stripe.Invoice;
+      const ref = invoice.parent?.subscription_details?.subscription;
+      const subscriptionId = typeof ref === "string" ? ref : ref?.id;
+      if (!subscriptionId) break;
+
+      const current = await stripe.subscriptions.retrieve(subscriptionId);
+
+      // Matched by subscription id so the tier row and an add-on row on the
+      // same customer can never clobber each other; only one of these matches.
+      await admin
+        .from("subscriptions")
+        .update({ status: current.status })
+        .eq("stripe_subscription_id", subscriptionId);
+      await admin
+        .from("workspace_addons")
+        .update({ status: current.status })
+        .eq("stripe_subscription_id", subscriptionId);
+      break;
+    }
+
     case "customer.subscription.created":
     case "customer.subscription.updated": {
       const stripeSub = event.data.object as Stripe.Subscription;

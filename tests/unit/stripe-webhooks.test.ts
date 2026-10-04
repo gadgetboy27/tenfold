@@ -341,6 +341,97 @@ describe("invoice.payment_succeeded — renewals", () => {
   });
 });
 
+describe("invoice.payment_failed — declined renewals", () => {
+  const failed = (over: Record<string, unknown> = {}) =>
+    ev("invoice.payment_failed", {
+      id: "in_9",
+      customer: "cus_1",
+      parent: { subscription_details: { subscription: "sub_1" } },
+      ...over,
+    });
+
+  it("records the subscription's current Stripe status on the tier row", async () => {
+    const { handleStripeEvent } = await load();
+    subRetrieve.mockResolvedValue({ status: "past_due" });
+    await handleStripeEvent(failed());
+    expect(subRetrieve).toHaveBeenCalledWith("sub_1");
+    expect(calls).toContainEqual({
+      table: "subscriptions",
+      op: "update",
+      values: { status: "past_due" },
+      filters: [["stripe_subscription_id", "sub_1"]],
+    });
+  });
+
+  it("also targets add-on rows by subscription id, so only the failing one changes", async () => {
+    const { handleStripeEvent } = await load();
+    subRetrieve.mockResolvedValue({ status: "past_due" });
+    await handleStripeEvent(failed());
+    expect(calls).toContainEqual({
+      table: "workspace_addons",
+      op: "update",
+      values: { status: "past_due" },
+      filters: [["stripe_subscription_id", "sub_1"]],
+    });
+    // never keyed on customer — that is how a tier and an add-on would clobber each other
+    expect(calls.flatMap((c) => c.filters.map((f) => f[0]))).not.toContain(
+      "stripe_customer_id",
+    );
+  });
+
+  it("writes what Stripe says now, not a hardcoded past_due (late/replayed failure after recovery)", async () => {
+    const { handleStripeEvent } = await load();
+    subRetrieve.mockResolvedValue({ status: "active" });
+    await handleStripeEvent(failed());
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.every((c) => c.values.status === "active")).toBe(true);
+  });
+
+  it("records a terminal status when Stripe has given up", async () => {
+    const { handleStripeEvent } = await load();
+    subRetrieve.mockResolvedValue({ status: "unpaid" });
+    await handleStripeEvent(failed());
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.every((c) => c.values.status === "unpaid")).toBe(true);
+  });
+
+  it("accepts an expanded subscription object", async () => {
+    const { handleStripeEvent } = await load();
+    subRetrieve.mockResolvedValue({ status: "past_due" });
+    await handleStripeEvent(
+      failed({
+        parent: { subscription_details: { subscription: { id: "sub_x" } } },
+      }),
+    );
+    expect(subRetrieve).toHaveBeenCalledWith("sub_x");
+  });
+
+  it("changes neither tier, credits nor the ledger", async () => {
+    const { handleStripeEvent } = await load();
+    subRetrieve.mockResolvedValue({ status: "past_due" });
+    await handleStripeEvent(failed());
+    expect(rpc).not.toHaveBeenCalled();
+    for (const c of calls) expect(Object.keys(c.values)).toEqual(["status"]);
+  });
+
+  it.each([
+    ["a one-off invoice with no subscription", { parent: null }],
+    ["no subscription_details", { parent: { subscription_details: null } }],
+  ])("does nothing for %s", async (_name, over) => {
+    const { handleStripeEvent } = await load();
+    await handleStripeEvent(failed(over));
+    expect(subRetrieve).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
+  });
+
+  it("lets a Stripe lookup failure throw so the route records it and Stripe retries", async () => {
+    const { handleStripeEvent } = await load();
+    subRetrieve.mockRejectedValue(new Error("stripe down"));
+    await expect(handleStripeEvent(failed())).rejects.toThrow(/stripe down/);
+    expect(calls).toEqual([]);
+  });
+});
+
 describe("customer.subscription.created / updated", () => {
   it.each(["customer.subscription.created", "customer.subscription.updated"])(
     "%s writes tier, status, allowance and period onto the customer's row",
