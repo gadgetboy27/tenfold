@@ -16,7 +16,7 @@ export async function POST(req: Request) {
 
   const admin = createSupabaseAdminClient();
 
-  // Log first for idempotency — duplicate events are silently dropped
+  // Log first for idempotency — clean duplicates are acknowledged, not reprocessed
   const { error: logErr } = await admin.from("webhook_logs").insert({
     source: "stripe",
     event_id: event.id,
@@ -24,8 +24,19 @@ export async function POST(req: Request) {
   });
 
   if (logErr) {
-    if (logErr.code === "23505") return NextResponse.json({ ok: true });
-    return NextResponse.json({ error: logErr.message }, { status: 500 });
+    if (logErr.code !== "23505") {
+      return NextResponse.json({ error: logErr.message }, { status: 500 });
+    }
+    // Seen before. Only a CLEAN earlier run is a true duplicate; a row that
+    // recorded an error means Stripe is retrying a failure we asked it to
+    // retry, so process again (every handler is idempotent).
+    const { data: prior } = await admin
+      .from("webhook_logs")
+      .select("processed, error")
+      .eq("event_id", event.id)
+      .maybeSingle();
+    const p = prior as { processed: boolean; error: string | null } | null;
+    if (!p || (p.processed && !p.error)) return NextResponse.json({ ok: true });
   }
 
   let processingError: string | undefined;
