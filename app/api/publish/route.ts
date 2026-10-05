@@ -463,23 +463,32 @@ export const POST = withWorkspace(async (req, { db, session }) => {
   // Approval gate (PRODUCT_STRATEGY.md §4): a "member" can prep and submit a
   // campaign for review, but only owner/admin (or a self-approving
   // owner/admin) may actually publish it. Owner/admin bypass entirely — the
-  // gate restricts member-role publishing, not solo workflows. A campaign we
-  // couldn't resolve (shouldn't happen given the asset lookups above all
-  // carry campaign_id) is let through rather than blocking on an edge case
-  // the schema doesn't allow.
+  // gate restricts member-role publishing, not solo workflows. A publish that
+  // resolves no campaign at all can't happen (assets and compositions both
+  // carry a NOT NULL campaign_id), so that case isn't gated; a campaign we
+  // resolve but can't READ is refused below.
   if (
     resolvedCampaignId &&
     session.role !== "owner" &&
     session.role !== "admin"
   ) {
-    const { data: campaign } = await db
+    const { data: campaign, error: approvalErr } = await db
       .from("campaigns")
       .select("approval_status")
       .eq("id", resolvedCampaignId)
       .single();
     const approvalStatus = (campaign as { approval_status?: string } | null)
       ?.approval_status;
-    if (approvalStatus && approvalStatus !== "approved") {
+    // Fail CLOSED: a status we couldn't read (a transient DB error, a row that
+    // vanished) must not be treated as "approved" — that would let a member
+    // publish an unapproved campaign whenever this one read hiccups.
+    if (approvalErr || !approvalStatus) {
+      return NextResponse.json(
+        { error: "Couldn't verify this campaign's approval. Try again." },
+        { status: 503 },
+      );
+    }
+    if (approvalStatus !== "approved") {
       return NextResponse.json(
         {
           error:

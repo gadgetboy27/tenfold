@@ -219,7 +219,7 @@ describe("POST /api/publish approval gate (structural)", () => {
     "utf8",
   );
   const start = src.indexOf("Approval gate (PRODUCT_STRATEGY.md");
-  const gate = src.slice(start, start + 1400);
+  const gate = src.slice(start, start + 2200);
 
   it("exists", () => {
     expect(start).toBeGreaterThan(-1);
@@ -233,6 +233,20 @@ describe("POST /api/publish approval gate (structural)", () => {
   it("blocks anything other than 'approved' with a 403", () => {
     expect(gate).toContain('approvalStatus !== "approved"');
     expect(gate).toContain("status: 403");
+  });
+
+  it("fails closed when the status can't be read (error or no row), not open", () => {
+    expect(gate).toMatch(/error:\s*approvalErr/);
+    expect(gate).toMatch(/approvalErr\s*\|\|\s*!approvalStatus/);
+    // the unreadable-status branch must refuse, before the 403 for non-approved
+    const unreadable = gate.indexOf("approvalErr ||");
+    const refusal = gate.indexOf("status: 503", unreadable);
+    expect(refusal).toBeGreaterThan(unreadable);
+    expect(refusal).toBeLessThan(gate.indexOf('approvalStatus !== "approved"'));
+  });
+
+  it("no longer lets an undefined status through (the old `status &&` short-circuit)", () => {
+    expect(gate).not.toMatch(/if\s*\(\s*approvalStatus\s*&&/);
   });
 
   it("reads the status from campaigns, not from the request body", () => {
