@@ -30,13 +30,22 @@ export async function POST(req: Request) {
     // Seen before. Only a CLEAN earlier run is a true duplicate; a row that
     // recorded an error means Stripe is retrying a failure we asked it to
     // retry, so process again (every handler is idempotent).
-    const { data: prior } = await admin
+    const { data: prior, error: priorErr } = await admin
       .from("webhook_logs")
       .select("processed, error")
+      .eq("source", "stripe")
       .eq("event_id", event.id)
       .maybeSingle();
-    const p = prior as { processed: boolean; error: string | null } | null;
-    if (!p || (p.processed && !p.error)) return NextResponse.json({ ok: true });
+    // A lookup we can't trust must not be read as "already handled" — that
+    // would drop the event for good. 500 so Stripe retries the whole thing.
+    if (priorErr || !prior) {
+      return NextResponse.json(
+        { error: priorErr?.message ?? "Could not read the earlier attempt" },
+        { status: 500 },
+      );
+    }
+    const p = prior as { processed: boolean; error: string | null };
+    if (p.processed && !p.error) return NextResponse.json({ ok: true });
   }
 
   let processingError: string | undefined;

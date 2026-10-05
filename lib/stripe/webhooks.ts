@@ -14,6 +14,38 @@ export function verifyStripeWebhook(
   );
 }
 
+/**
+ * workspace_addons.status is CHECK-constrained to active | past_due | canceled
+ * (migration 0024), but Stripe reports more states than that. A raw write of
+ * "unpaid" or "incomplete" is rejected by the database, so collapse Stripe's
+ * set onto ours. Anything not entitled maps to "canceled", which
+ * hasActiveAddon() denies; only past_due keeps its grace period.
+ */
+export function addonStatusFor(
+  stripeStatus: string,
+): "active" | "past_due" | "canceled" {
+  if (stripeStatus === "active" || stripeStatus === "trialing") return "active";
+  if (stripeStatus === "past_due") return "past_due";
+  return "canceled";
+}
+
+/**
+ * supabase-js returns { error } rather than throwing, so an unchecked write
+ * looks like success: the event is marked processed and Stripe never retries.
+ * Throwing here makes the route record the failure and answer non-200.
+ */
+async function write(
+  op: PromiseLike<{ error: { message: string } | null }>,
+  what: string,
+): Promise<void> {
+  const { error } = await op;
+  if (error) throw new Error(`${what} failed: ${error.message}`);
+}
+
+function isMissingResource(err: unknown): boolean {
+  return (err as { code?: string } | null)?.code === "resource_missing";
+}
+
 function creditGrantForPack(priceId: string): number | undefined {
   const map: Record<string, number> = {
     [process.env.STRIPE_PRICE_25CR!]: 25,
@@ -112,15 +144,18 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
             : session.customer?.id;
         if (!subscriptionId) break;
 
-        await admin.from("workspace_addons").upsert(
-          {
-            workspace_id: workspaceId,
-            addon_key: addon.key,
-            status: "active",
-            stripe_subscription_id: subscriptionId,
-            stripe_customer_id: customerId ?? null,
-          },
-          { onConflict: "workspace_id,addon_key" },
+        await write(
+          admin.from("workspace_addons").upsert(
+            {
+              workspace_id: workspaceId,
+              addon_key: addon.key,
+              status: "active",
+              stripe_subscription_id: subscriptionId,
+              stripe_customer_id: customerId ?? null,
+            },
+            { onConflict: "workspace_id,addon_key" },
+          ),
+          "add-on activation",
         );
       }
       break;
@@ -178,22 +213,45 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
       // failing. Status only: tier and credits are left to the existing
       // subscription.updated / .deleted handlers and the invoice grant.
       const invoice = event.data.object as Stripe.Invoice;
-      const ref = invoice.parent?.subscription_details?.subscription;
+      // Webhook payloads use the ENDPOINT's API version, not the SDK's: the
+      // subscription id is under parent.subscription_details on 2025-03-31+
+      // and on the invoice itself before that. Read both, or an older endpoint
+      // silently never matches.
+      const legacy = (
+        invoice as unknown as { subscription?: string | { id: string } | null }
+      ).subscription;
+      const ref =
+        invoice.parent?.subscription_details?.subscription ?? legacy ?? null;
       const subscriptionId = typeof ref === "string" ? ref : ref?.id;
       if (!subscriptionId) break;
 
-      const current = await stripe.subscriptions.retrieve(subscriptionId);
+      let current: Stripe.Subscription;
+      try {
+        current = await stripe.subscriptions.retrieve(subscriptionId);
+      } catch (err) {
+        // Gone from Stripe (deleted, or another account/mode): nothing to
+        // record, and customer.subscription.deleted owns that transition.
+        // Throwing would 500 and make Stripe retry a permanent miss for days.
+        if (isMissingResource(err)) break;
+        throw err;
+      }
 
       // Matched by subscription id so the tier row and an add-on row on the
       // same customer can never clobber each other; only one of these matches.
-      await admin
-        .from("subscriptions")
-        .update({ status: current.status })
-        .eq("stripe_subscription_id", subscriptionId);
-      await admin
-        .from("workspace_addons")
-        .update({ status: current.status })
-        .eq("stripe_subscription_id", subscriptionId);
+      await write(
+        admin
+          .from("subscriptions")
+          .update({ status: current.status })
+          .eq("stripe_subscription_id", subscriptionId),
+        "subscription status",
+      );
+      await write(
+        admin
+          .from("workspace_addons")
+          .update({ status: addonStatusFor(current.status) })
+          .eq("stripe_subscription_id", subscriptionId),
+        "add-on status",
+      );
       break;
     }
 
@@ -218,15 +276,18 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
       // the tier branch below uses and would otherwise clobber).
       const addon = priceId ? addonForPriceId(priceId) : undefined;
       if (addon) {
-        await admin
-          .from("workspace_addons")
-          .update({
-            status: stripeSub.status,
-            current_period_end: firstItem.current_period_end
-              ? new Date(firstItem.current_period_end * 1000).toISOString()
-              : null,
-          })
-          .eq("stripe_subscription_id", stripeSub.id);
+        await write(
+          admin
+            .from("workspace_addons")
+            .update({
+              status: addonStatusFor(stripeSub.status),
+              current_period_end: firstItem.current_period_end
+                ? new Date(firstItem.current_period_end * 1000).toISOString()
+                : null,
+            })
+            .eq("stripe_subscription_id", stripeSub.id),
+          "add-on update",
+        );
         break;
       }
 
@@ -240,21 +301,24 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
         : undefined;
       if (!tierResult) break;
 
-      await admin
-        .from("subscriptions")
-        .update({
-          stripe_subscription_id: stripeSub.id,
-          tier: tierResult.tier,
-          status: stripeSub.status,
-          credits_per_period: tierResult.credits,
-          current_period_start: firstItem.current_period_start
-            ? new Date(firstItem.current_period_start * 1000).toISOString()
-            : null,
-          current_period_end: firstItem.current_period_end
-            ? new Date(firstItem.current_period_end * 1000).toISOString()
-            : null,
-        })
-        .eq("stripe_customer_id", customerId);
+      await write(
+        admin
+          .from("subscriptions")
+          .update({
+            stripe_subscription_id: stripeSub.id,
+            tier: tierResult.tier,
+            status: stripeSub.status,
+            credits_per_period: tierResult.credits,
+            current_period_start: firstItem.current_period_start
+              ? new Date(firstItem.current_period_start * 1000).toISOString()
+              : null,
+            current_period_end: firstItem.current_period_end
+              ? new Date(firstItem.current_period_end * 1000).toISOString()
+              : null,
+          })
+          .eq("stripe_customer_id", customerId),
+        "subscription update",
+      );
       break;
     }
 
@@ -268,17 +332,23 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
 
       const addon = priceId ? addonForPriceId(priceId) : undefined;
       if (addon) {
-        await admin
-          .from("workspace_addons")
-          .update({ status: "canceled" })
-          .eq("stripe_subscription_id", stripeSub.id);
+        await write(
+          admin
+            .from("workspace_addons")
+            .update({ status: "canceled" })
+            .eq("stripe_subscription_id", stripeSub.id),
+          "add-on cancellation",
+        );
         break;
       }
 
-      await admin
-        .from("subscriptions")
-        .update({ tier: "payg", status: "canceled", credits_per_period: 0 })
-        .eq("stripe_customer_id", customerId);
+      await write(
+        admin
+          .from("subscriptions")
+          .update({ tier: "payg", status: "canceled", credits_per_period: 0 })
+          .eq("stripe_customer_id", customerId),
+        "subscription cancellation",
+      );
       break;
     }
   }

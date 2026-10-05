@@ -12,6 +12,7 @@ const insert = vi.fn();
 const eqUpdate = vi.fn();
 const update = vi.fn(() => ({ eq: eqUpdate }));
 const maybeSingle = vi.fn();
+const lookupFilters: Array<[string, unknown]> = [];
 const order: string[] = [];
 
 vi.mock("@/lib/stripe/webhooks", () => ({
@@ -23,7 +24,16 @@ vi.mock("@/lib/supabase/admin", () => ({
     from: () => ({
       insert,
       update,
-      select: () => ({ eq: () => ({ maybeSingle }) }),
+      select: () => {
+        const chain = {
+          eq: (col: string, val: unknown) => {
+            lookupFilters.push([col, val]);
+            return chain;
+          },
+          maybeSingle,
+        };
+        return chain;
+      },
     }),
   }),
 }));
@@ -38,11 +48,15 @@ const post = (body = '{"id":"evt_1"}') =>
 beforeEach(() => {
   vi.clearAllMocks();
   order.length = 0;
+  lookupFilters.length = 0;
   verify.mockReturnValue({ id: "evt_1", type: "x" });
   insert.mockImplementation(async () => (order.push("log"), { error: null }));
   handle.mockImplementation(async () => void order.push("handle"));
   eqUpdate.mockResolvedValue({ error: null });
-  maybeSingle.mockResolvedValue({ data: { processed: true, error: null } });
+  maybeSingle.mockResolvedValue({
+    data: { processed: true, error: null },
+    error: null,
+  });
 });
 
 describe("POST /api/webhooks/stripe", () => {
@@ -102,6 +116,43 @@ describe("POST /api/webhooks/stripe", () => {
     const { POST } = await import("@/app/api/webhooks/stripe/route");
     await POST(post());
     expect(handle).toHaveBeenCalledTimes(1);
+  });
+
+  it("looks the earlier attempt up by source AND event id", async () => {
+    insert.mockResolvedValue({
+      error: { code: "23505", message: "duplicate" },
+    });
+    const { POST } = await import("@/app/api/webhooks/stripe/route");
+    await POST(post());
+    expect(lookupFilters).toEqual([
+      ["source", "stripe"],
+      ["event_id", "evt_1"],
+    ]);
+  });
+
+  it("answers 500, not 200, when the earlier attempt can't be read — a dropped event is never retried", async () => {
+    insert.mockResolvedValue({
+      error: { code: "23505", message: "duplicate" },
+    });
+    maybeSingle.mockResolvedValue({
+      data: null,
+      error: { message: "conn reset" },
+    });
+    const { POST } = await import("@/app/api/webhooks/stripe/route");
+    const res = await POST(post());
+    expect(res.status).toBe(500);
+    expect(handle).not.toHaveBeenCalled();
+  });
+
+  it("answers 500 when the duplicate's row is gone, so Stripe retries and it is re-logged", async () => {
+    insert.mockResolvedValue({
+      error: { code: "23505", message: "duplicate" },
+    });
+    maybeSingle.mockResolvedValue({ data: null, error: null });
+    const { POST } = await import("@/app/api/webhooks/stripe/route");
+    const res = await POST(post());
+    expect(res.status).toBe(500);
+    expect(handle).not.toHaveBeenCalled();
   });
 
   it("answers 500 when the log insert fails for any other reason, without processing", async () => {

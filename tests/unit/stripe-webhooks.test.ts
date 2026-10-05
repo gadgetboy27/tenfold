@@ -22,12 +22,13 @@ interface Call {
 }
 let calls: Call[] = [];
 let subscriptionRow: unknown = null;
+let writeError: { message: string } | null = null;
 
 function from(table: string) {
   return {
     upsert(values: Record<string, unknown>, opts?: unknown) {
       calls.push({ table, op: "upsert", values, opts, filters: [] });
-      return Promise.resolve({ error: null });
+      return Promise.resolve({ error: writeError });
     },
     update(values: Record<string, unknown>) {
       const call: Call = { table, op: "update", values, filters: [] };
@@ -35,7 +36,7 @@ function from(table: string) {
       return {
         eq(col: string, val: unknown) {
           call.filters.push([col, val]);
-          return Promise.resolve({ error: null });
+          return Promise.resolve({ error: writeError });
         },
       };
     },
@@ -115,6 +116,7 @@ beforeEach(() => {
   vi.unstubAllEnvs();
   calls = [];
   subscriptionRow = null;
+  writeError = null;
   rpc.mockResolvedValue({ error: null });
 });
 
@@ -387,12 +389,46 @@ describe("invoice.payment_failed — declined renewals", () => {
     expect(calls.every((c) => c.values.status === "active")).toBe(true);
   });
 
-  it("records a terminal status when Stripe has given up", async () => {
+  it("records a terminal status on the tier, and 'canceled' on the add-on (which can't hold 'unpaid')", async () => {
     const { handleStripeEvent } = await load();
     subRetrieve.mockResolvedValue({ status: "unpaid" });
     await handleStripeEvent(failed());
+    const byTable = Object.fromEntries(
+      calls.map((c) => [c.table, c.values.status]),
+    );
+    expect(byTable).toEqual({
+      subscriptions: "unpaid",
+      workspace_addons: "canceled",
+    });
+  });
+
+  it("falls back to the legacy invoice.subscription field on an older API version", async () => {
+    const { handleStripeEvent } = await load();
+    subRetrieve.mockResolvedValue({ status: "past_due" });
+    await handleStripeEvent(
+      failed({ parent: undefined, subscription: "sub_old" }),
+    );
+    expect(subRetrieve).toHaveBeenCalledWith("sub_old");
     expect(calls.length).toBeGreaterThan(0);
-    expect(calls.every((c) => c.values.status === "unpaid")).toBe(true);
+  });
+
+  it("is a no-op, not a retry loop, when the subscription no longer exists in Stripe", async () => {
+    const { handleStripeEvent } = await load();
+    subRetrieve.mockRejectedValue(
+      Object.assign(new Error("No such subscription"), {
+        code: "resource_missing",
+      }),
+    );
+    await expect(handleStripeEvent(failed())).resolves.toBeUndefined();
+    expect(calls).toEqual([]);
+  });
+
+  it("still rethrows any other Stripe error", async () => {
+    const { handleStripeEvent } = await load();
+    subRetrieve.mockRejectedValue(
+      Object.assign(new Error("rate limited"), { code: "rate_limit" }),
+    );
+    await expect(handleStripeEvent(failed())).rejects.toThrow(/rate limited/);
   });
 
   it("accepts an expanded subscription object", async () => {
@@ -549,4 +585,108 @@ describe("event types we do not handle", () => {
     expect(calls).toEqual([]);
     expect(rpc).not.toHaveBeenCalled();
   });
+});
+
+describe("addonStatusFor — Stripe's states onto workspace_addons' allowed three", () => {
+  it.each([
+    ["active", "active"],
+    ["trialing", "active"],
+    ["past_due", "past_due"],
+    ["unpaid", "canceled"],
+    ["canceled", "canceled"],
+    ["incomplete", "canceled"],
+    ["incomplete_expired", "canceled"],
+    ["paused", "canceled"],
+  ])("%s → %s", async (stripeStatus, expected) => {
+    const { addonStatusFor } = await load();
+    expect(addonStatusFor(stripeStatus)).toBe(expected);
+  });
+
+  it("only ever returns a value the table's CHECK constraint accepts", async () => {
+    const { addonStatusFor } = await load();
+    const allowed = ["active", "past_due", "canceled"];
+    for (const st of [
+      "active",
+      "trialing",
+      "past_due",
+      "unpaid",
+      "incomplete",
+      "paused",
+      "weird",
+    ]) {
+      expect(allowed).toContain(addonStatusFor(st));
+    }
+  });
+
+  it("subscription.updated on an add-on writes the mapped status, never a raw one", async () => {
+    const { handleStripeEvent } = await load();
+    await handleStripeEvent(
+      ev(
+        "customer.subscription.updated",
+        subscription("price_blend", { status: "unpaid" }),
+      ),
+    );
+    expect(calls[0]).toMatchObject({
+      table: "workspace_addons",
+      values: { status: "canceled" },
+    });
+  });
+});
+
+describe("a failed database write is an error, not a silent success", () => {
+  const cases: Array<[string, () => Stripe.Event, () => void]> = [
+    [
+      "add-on activation (checkout)",
+      () =>
+        checkout({
+          mode: "subscription",
+          metadata: { workspaceId: "ws-1", priceId: "price_blend" },
+          subscription: "sub_a",
+          customer: "cus_1",
+        }),
+      () => {},
+    ],
+    [
+      "tier update (subscription.updated)",
+      () => ev("customer.subscription.updated", subscription("price_creator")),
+      () => {},
+    ],
+    [
+      "add-on update (subscription.updated)",
+      () => ev("customer.subscription.updated", subscription("price_blend")),
+      () => {},
+    ],
+    [
+      "tier cancellation",
+      () => ev("customer.subscription.deleted", subscription("price_creator")),
+      () => {},
+    ],
+    [
+      "add-on cancellation",
+      () => ev("customer.subscription.deleted", subscription("price_blend")),
+      () => {},
+    ],
+    [
+      "payment_failed status write",
+      () =>
+        ev("invoice.payment_failed", {
+          id: "in_1",
+          customer: "cus_1",
+          parent: { subscription_details: { subscription: "sub_1" } },
+        }),
+      () => subRetrieve.mockResolvedValue({ status: "past_due" }),
+    ],
+  ];
+
+  it.each(cases)(
+    "%s throws so the route records it and Stripe retries",
+    async (_n, build, arrange) => {
+      const { handleStripeEvent } = await load();
+      arrange();
+      writeError = { message: "violates check constraint" };
+      await expect(handleStripeEvent(build())).rejects.toThrow(
+        /violates check constraint/,
+      );
+    },
+  );
 });
