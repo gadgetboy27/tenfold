@@ -23,6 +23,11 @@ import { KARAOKE_DIM, revealDrawPlan } from "@/lib/composition/reveal";
 import { backdropFilterChain } from "@/lib/composition/treatment";
 import { TEXT_LINE_HEIGHT } from "@/lib/composition/render";
 import { fetchPublic } from "@/lib/net/safe-url";
+import {
+  planPixelFx,
+  type ExportLayerExtras,
+  type FxSequence,
+} from "@/lib/composition/fx/export-plan";
 
 /**
  * Headless MP4 export of a layered CompositionDoc via FFmpeg — the server
@@ -193,6 +198,29 @@ export interface GraphFiles {
   imageInputIdx: Map<string, number>;
   /** temp textfile path per text layer id (avoids quoting user text). */
   textFile: Map<string, string>;
+  /** Image layers whose input is a numbered frame sequence (a pixel effect),
+   *  not a still — see lib/composition/fx/export-plan.ts. */
+  sequence?: Map<string, FxSequence>;
+}
+
+/**
+ * The overlay/blend `enable` for a layer: its own appear/disappear window, and
+ * — for the two halves of a sticker with a pixel effect — only the stretches
+ * it's meant to be drawn in. Intervals are half-open so a frame on a boundary
+ * is drawn by one layer, not both.
+ */
+function enableFor(
+  from: number,
+  to: number,
+  intervals: Array<[number, number]> | undefined,
+): string {
+  const window = `between(t,${fmtT(from)},${fmtT(to)})`;
+  if (!intervals) return `enable='${window}'`;
+  if (intervals.length === 0) return `enable='0'`;
+  const parts = intervals
+    .map(([a, b]) => `gte(t,${fmtT(a)})*lt(t,${fmtT(b)})`)
+    .join("+");
+  return `enable='${window}*(${parts})'`;
 }
 
 /** Build the full -filter_complex graph. Exported for unit tests. */
@@ -244,7 +272,11 @@ export function buildFilterGraph(
     const to = `m${step + 1}`;
     const A = layer.appearAt;
     const E = layer.disappearAt ?? dur;
-    const enable = `enable='between(t,${A},${E})'`;
+    const enable = enableFor(
+      A,
+      E,
+      (layer as Layer & ExportLayerExtras).showIntervals,
+    );
     // Effect motion (entrances/exits/ambient) as expressions in t — sampled
     // from the same curves the canvas preview evaluates.
     const fx = motionExprs(layer, dur, { W: width, H: height });
@@ -253,7 +285,13 @@ export function buildFilterGraph(
       const idx = files.imageInputIdx.get(layer.id);
       if (idx === undefined) continue;
       const lbl = `l${step}`;
-      chains.push(`[${idx}:v]${imageLayerChain(layer, fx, scale)}[${lbl}]`);
+      // A frame sequence starts at t=0 like any input; shift it to where its
+      // first frame belongs on the master clock.
+      const seq = files.sequence?.get(layer.id);
+      const shift = seq ? `setpts=PTS+${fmtT(seq.startSec)}/TB,` : "";
+      chains.push(
+        `[${idx}:v]${shift}${imageLayerChain(layer, fx, scale)}[${lbl}]`,
+      );
       const pos = overlayPos(layer, fx, width, height);
 
       if (layer.blend === "normal") {
@@ -420,15 +458,16 @@ export function dataUrlBytes(url: string): Buffer | null {
     : Buffer.from(decodeURIComponent(m[3]), "utf8");
 }
 
-async function download(url: string, path: string): Promise<void> {
+async function loadBytes(url: string): Promise<Buffer> {
   const inline = dataUrlBytes(url);
-  if (inline) {
-    await writeFile(path, inline);
-    return;
-  }
+  if (inline) return inline;
   const res = await fetchPublic(url);
   if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`);
-  await writeFile(path, Buffer.from(await res.arrayBuffer()));
+  return Buffer.from(await res.arrayBuffer());
+}
+
+async function download(url: string, path: string): Promise<void> {
+  await writeFile(path, await loadBytes(url));
 }
 
 export interface RenderCompositionInput {
@@ -462,17 +501,27 @@ export async function renderComposition(
         ? await probeDuration(bgPath)
         : (doc.background.durationSec ?? 10);
 
-    const files: GraphFiles = { imageInputIdx: new Map(), textFile: new Map() };
-    const imageLayers = doc.layers.filter((l) => l.kind === "image");
+    // A sticker with a pixel effect becomes a still plus a frame sequence
+    // (lib/composition/fx/export-plan.ts); from here on the plan's doc is the
+    // one that gets drawn.
+    const fxPlan = await planPixelFx(doc, dur, dir, loadBytes);
+    const exportDoc = fxPlan.doc;
+
+    const files: GraphFiles = {
+      imageInputIdx: new Map(),
+      textFile: new Map(),
+      sequence: fxPlan.sequences,
+    };
+    const imageLayers = exportDoc.layers.filter((l) => l.kind === "image");
     await Promise.all(
       imageLayers.map(async (l, i) => {
-        const p = join(dir, `layer-${i}.img`);
-        await download(l.src, p);
         files.imageInputIdx.set(l.id, i + 1); // background is input 0
+        if (fxPlan.sequences.has(l.id)) return; // frames are already on disk
+        await download(l.src, join(dir, `layer-${i}.img`));
       }),
     );
     await Promise.all(
-      doc.layers
+      exportDoc.layers
         .filter((l) => l.kind === "text")
         .map(async (l, i) => {
           const p = join(dir, `text-${i}.txt`);
@@ -497,6 +546,11 @@ export async function renderComposition(
       args.push("-loop", "1", "-t", `${dur}`);
     args.push("-i", bgPath);
     for (let i = 0; i < imageLayers.length; i++) {
+      const seq = fxPlan.sequences.get(imageLayers[i].id);
+      if (seq) {
+        args.push("-framerate", `${seq.fps}`, "-i", seq.pattern);
+        continue;
+      }
       args.push(
         "-loop",
         "1",
@@ -517,7 +571,7 @@ export async function renderComposition(
     }
 
     const { graph, outLabel } = buildFilterGraph(
-      doc,
+      exportDoc,
       dur,
       files,
       input.scale ?? 1,

@@ -10,6 +10,7 @@ import { DEFAULT_TREATMENT } from "@/lib/composition/words";
 import { useCompositorStore } from "@/store/useCompositorStore";
 import { AddImageCard } from "./AddImageCard";
 import { StickerCard } from "./StickerCard";
+import { StickerFxCard } from "./StickerFxCard";
 import { FreehandCard } from "./FreehandCard";
 import { StyleToolbox, type ToolboxSubject } from "./StyleToolbox";
 import { SloganCard } from "./SloganCard";
@@ -115,7 +116,7 @@ export function WordsCanvas({
     }
     // The next sticker follows the last look used, but never inherits the
     // words of the one being edited.
-    setStickerDraft({ ...next, text: stickerDraft.text });
+    setStickerDraft({ ...next, fx: undefined, text: stickerDraft.text });
     if (!stickerTarget) return;
     if (pendingSticker.current) clearTimeout(pendingSticker.current);
     const run = () => void restyleSticker(stickerTarget.id, next);
@@ -270,6 +271,8 @@ export function WordsCanvas({
         onDraft={(patch) => setStickerDraft((d) => ({ ...d, ...patch }))}
         target={stickerTarget}
       />
+
+      <StickerFxCard target={stickerTarget} />
 
       <FreehandCard />
 

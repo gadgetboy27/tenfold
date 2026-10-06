@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { pixelFxSchema } from "./fx/types";
 
 /**
  * Layered-compositor data model — single source of truth, shared by the client
@@ -573,6 +574,13 @@ export const stickerSpecSchema = z.object({
    */
   boxW: z.number().min(40).max(6000).optional(),
   boxH: z.number().min(40).max(6000).optional(),
+  /**
+   * An animation on the letters themselves — crumble, slice, lightning…
+   * (lib/composition/fx). Rides on the spec but is NOT part of the raster: the
+   * PNG is drawn without it, and the effect plays over that still in the
+   * preview and the export. Absent = a sticker that just sits there.
+   */
+  fx: pixelFxSchema.optional(),
 });
 export type StickerSpec = z.infer<typeof stickerSpecSchema>;
 

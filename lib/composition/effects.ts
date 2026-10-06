@@ -1,3 +1,4 @@
+import { fxPhaseAt, type FxPhase } from "./fx/timing";
 import {
   REVEAL_END_SEC,
   revealEnd,
@@ -35,6 +36,9 @@ export interface Motion {
   /** Text read-out progress: -1 not started, 0..1 reading. Absent = show the
    *  whole text (no read-out, or the arrange-mode preview). */
   reveal?: number;
+  /** Where a sticker's pixel effect is (lib/composition/fx). Absent = no
+   *  effect, or the arrange-mode preview, which shows the finished sticker. */
+  pixelFx?: FxPhase;
 }
 
 export interface EffectCtx {
@@ -312,6 +316,10 @@ export function motionAt(
     m.dy += e.dy;
     m.rotDeg += e.rotDeg;
     m.alpha *= e.alpha;
+  }
+
+  if (layer.kind === "image" && layer.sticker?.fx) {
+    m.pixelFx = fxPhaseAt(layer.sticker.fx, clipDurationSec, t);
   }
 
   if (layer.kind === "text" && layer.reveal) {

@@ -702,6 +702,55 @@ pixels, which is the parity rule this codebase keeps.
 - Tilt is the layer's ordinary `rotationDeg` (via `patchLayout`), so it is
   per-format-overridable like any rotation and already exported.
 
+## Sticker effects — crumble, slice, dust, electric, glitch, shine (2026-10-07)
+
+"Make it move" (`StickerFxCard`): an animation on a sticker's LETTERS, timed as
+a **percentage of the clip**, not seconds — nobody knows whether the ad will run
+10, 15 or 30s. Different from the layer effects suite (`effects.ts`), which only
+moves/scales/fades a layer whole; these change pixels. Free, no credits.
+
+The engine is `lib/composition/fx/` and is **general on purpose**: nothing in it
+knows what a sticker is. It takes the size of a still picture and a progress.
+Today only `stickerSpecSchema.fx` attaches one; another section would add a field
+and a call site, not touch the effects.
+
+- **An effect is a pure function from progress to a SCENE** (`effects.ts`): pieces
+  (a rectangle of the source, moved/turned/scaled/faded, optionally clipped or
+  colourised), a wash, a glint, and stroked lines. It draws nothing. The canvas
+  preview (`canvas.ts`) and the server (`frames.ts`, Sharp) each carry the same
+  scene out — that is the preview/export parity guarantee, and it is why the
+  effects are tested without a canvas. Halos are stacked strokes, not blurs, for
+  the same reason: no shared blur filter to drift.
+- **Two families** (`catalog.ts`): *transitions* (crumble/slice/dust) go whole→gone
+  ("breaks apart") or gone→whole ("builds up" — the same motion played backwards,
+  `q = 1 - p`, not a second animation); *pulses* (electric/glitch/shine) leave the
+  picture whole either side and can repeat. Add an effect = a builder + a catalog
+  entry + a margin; the invariant tests (starts whole, ends right, stays inside its
+  margin, deterministic) then cover it.
+- **Timing** (`timing.ts`): `startPct` resolves against the real clip length — in
+  the preview from the stage's clip, at export from the probed video. The effect
+  always plays in full (100% starts it as late as it can still finish). The
+  sticker is drawn plain only when the effect ISN'T on (`staticVisible`).
+- **Export** (`export-plan.ts`): a sticker with an effect becomes TWO ordinary
+  image layers — the still, shown only outside the effect (`showIntervals`,
+  half-open so a boundary frame is drawn once), and the rendered frames as an
+  image-sequence input shown only during it, carrying the same
+  position/scale/rotation/opacity/blend/effects. Nothing new in the filter graph
+  beyond `setpts` + the interval `enable`. The frame is the picture plus the
+  effect's margin on every side so the picture stays centred; an edge-anchored
+  sticker's effect is pinned to the still's own centre. Frames are cached per
+  sticker+effect (a fan-out renders them once, not once per aspect).
+- **The effect belongs to the layer, not the look.** `restyleSticker` always
+  keeps the layer's own `fx` (a stale debounced spec can't wipe it), and
+  `addStickerToAd` / the toolbox draft strip it (one sticker's effect must not
+  become the next one's). Only `setStickerFx` sets it.
+- **Arrange mode, Combine and still posts show the plain sticker** — `pixelFx` is
+  cleared when paused, and `still.ts`/`combine.ts` pass no motion state.
+- **Cost:** frames are PNGs rendered per export. Roughly 5s crumble, 10s dust, 2s
+  slice/electric, <1s glitch/shine (4-core laptop). Budget: ≤120 frames per
+  sticker (fps drops for long repeated pulses).
+- Layer entrance/exit/loop effects still apply to a sticker with a pixel effect.
+
 ## Nothing is `absolute` inside an unpositioned box (2026-09-15)
 
 The Compose pane's shape chips and enlarge button spent a week in the page's

@@ -22,6 +22,9 @@ import {
   isNeutral,
   LOOK_CANVAS_FILTER,
 } from "@/lib/composition/treatment";
+import { drawFxScene } from "@/lib/composition/fx/canvas";
+import { fxMargin, fxSceneFor } from "@/lib/composition/fx/effects";
+import { staticVisible } from "@/lib/composition/fx/timing";
 import {
   KARAOKE_DIM,
   litCount,
@@ -164,7 +167,22 @@ export function drawLayer(
     const img = images.get(layer.src);
     // drawImage only — brand assets are never re-rendered by a model.
     if (img?.complete && img.naturalWidth > 0) {
-      ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+      const fx = layer.sticker?.fx;
+      const phase = motion.pixelFx;
+      if (fx && phase?.phase === "active") {
+        // A sticker mid-effect: the lettering is drawn from the effect's
+        // scene, not as the still (lib/composition/fx).
+        const size = { w: img.naturalWidth, h: img.naturalHeight };
+        drawFxScene(
+          ctx,
+          img,
+          size,
+          fxMargin(fx.kind, size.w, size.h),
+          fxSceneFor(fx, size, layer.sticker?.text ?? "", phase.progress),
+        );
+      } else if (!fx || !phase || staticVisible(fx, phase.phase)) {
+        ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+      }
     }
   } else {
     ctx.font = `${weightOf(layer)} ${layer.sizePx}px "${layer.font}", sans-serif`;
@@ -397,7 +415,9 @@ export function drawFrame(
     if (!hidden && motion) {
       // Arrange mode shows the finished text so it can be placed and sized;
       // the read-out plays only while the stage is playing.
-      const shown = input.paused ? { ...motion, reveal: undefined } : motion;
+      const shown = input.paused
+        ? { ...motion, reveal: undefined, pixelFx: undefined }
+        : motion;
       drawLayer(ctx, layer, shown, input.doc.aspect, input.images);
     } else if (input.paused) {
       // Arrange mode: draw the scheduled-away layer as a placeholder ghost

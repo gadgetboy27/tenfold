@@ -4,6 +4,7 @@ import {
   type StickerEffect,
   type StickerSpec,
 } from "./layers";
+import { hashSeed, seededRandom } from "./fx/rand";
 
 export { STICKER_EFFECTS, stickerSpecSchema } from "./layers";
 export type { StickerEffect, StickerSpec } from "./layers";
@@ -75,28 +76,6 @@ export const PEN_PALETTES: {
   { label: "Acid", color: "#d4ff00", effectColor: "#ff00aa" },
   { label: "Chalk", color: "#ffffff", effectColor: "#2a2a2a" },
 ];
-
-/** Deterministic pseudo-random, seeded from the sticker's own text so the
- *  same word always renders the same "organic" texture — re-rasterising on
- *  every keystroke (Words does this live) must not make the grain flicker. */
-function hashSeed(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-function seededRandom(seed: number): () => number {
-  let a = seed || 1;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
 
 /** Rasterised at this glyph size; the layer's `scale` does the rest. */
 export const STICKER_FONT_PX = 200;

@@ -16,6 +16,7 @@ import {
   type TextReveal,
 } from "@/lib/composition/layers";
 import { rasterizeSticker } from "@/lib/composition/sticker";
+import type { PixelFx } from "@/lib/composition/fx/types";
 import { ensureBrandFontsLoaded } from "@/lib/composition/fonts";
 import {
   fitInto,
@@ -673,7 +674,13 @@ export function addStickerToAd(spec: StickerSpec): string | null {
   const s = useCompositorStore.getState();
   if (!s.doc) return null;
   // A new sticker never inherits the box of one the card was editing.
-  const fresh: StickerSpec = { ...spec, boxW: undefined, boxH: undefined };
+  // ...nor the effect: that is chosen per sticker, after it is on the ad.
+  const fresh: StickerSpec = {
+    ...spec,
+    boxW: undefined,
+    boxH: undefined,
+    fx: undefined,
+  };
   const raster = rasterizeSticker(fresh);
   const design = ASPECT_DESIGN[s.doc.aspect];
   const id = uuidv4();
@@ -698,7 +705,26 @@ export function restyleSticker(id: string, spec: StickerSpec): boolean {
   const layer = s.doc?.layers.find((l) => l.id === id);
   if (!layer || layer.kind !== "image" || !layer.sticker) return false;
   const raster = rasterizeSticker(spec);
-  s.updateLayer(id, { src: raster.dataUrl, sticker: spec });
+  // The effect isn't part of the picture, so a restyle never carries it: the
+  // layer's own is kept, whatever (possibly stale) spec the caller built.
+  s.updateLayer(id, {
+    src: raster.dataUrl,
+    sticker: { ...spec, fx: layer.sticker.fx },
+  });
+  return true;
+}
+
+/**
+ * Set, change or clear a sticker's pixel effect (crumble, slice, lightning…).
+ * The effect is not part of the picture — it plays over it — so the PNG is
+ * left alone and nothing is re-rasterised; only the spec riding on the layer
+ * changes. `null` removes it.
+ */
+export function setStickerFx(id: string, fx: PixelFx | null): boolean {
+  const s = useCompositorStore.getState();
+  const layer = s.doc?.layers.find((l) => l.id === id);
+  if (!layer || layer.kind !== "image" || !layer.sticker) return false;
+  s.updateLayer(id, { sticker: { ...layer.sticker, fx: fx ?? undefined } });
   return true;
 }
 
