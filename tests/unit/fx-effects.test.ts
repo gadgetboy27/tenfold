@@ -70,41 +70,52 @@ describe("every effect", () => {
     },
   );
 
+  // These sweep thousands of values per effect, so each collects what breaks
+  // the rule and asserts once — an expect() per value is slow enough to time
+  // out when the whole suite runs in parallel.
   it.each(PIXEL_FX_KINDS)("%s produces only finite numbers", (k) => {
+    const bad: number[] = [];
     for (const intensity of [0.5, 1, 2]) {
       for (const p of GRID) {
         for (const n of numbers(scene(make(k, { intensity }), p))) {
-          expect(Number.isFinite(n)).toBe(true);
+          if (!Number.isFinite(n)) bad.push(n);
         }
       }
     }
+    expect(bad).toEqual([]);
   });
 
   it.each(PIXEL_FX_KINDS)(
     "%s keeps every piece inside the picture's source",
     (k) => {
+      const bad: string[] = [];
       for (const p of GRID) {
         for (const pc of scene(make(k), p).pieces) {
-          expect(pc.sx).toBeGreaterThanOrEqual(0);
-          expect(pc.sy).toBeGreaterThanOrEqual(0);
-          expect(pc.sx + pc.sw).toBeLessThanOrEqual(SIZE.w);
-          expect(pc.sy + pc.sh).toBeLessThanOrEqual(SIZE.h);
-          expect(Number.isInteger(pc.sx + pc.sy + pc.sw + pc.sh)).toBe(true);
+          const ok =
+            pc.sx >= 0 &&
+            pc.sy >= 0 &&
+            pc.sx + pc.sw <= SIZE.w &&
+            pc.sy + pc.sh <= SIZE.h &&
+            Number.isInteger(pc.sx + pc.sy + pc.sw + pc.sh);
+          if (!ok) bad.push(`p=${p} ${JSON.stringify(pc)}`);
         }
       }
+      expect(bad).toEqual([]);
     },
   );
 
   it.each(PIXEL_FX_KINDS)("%s never moves a piece beyond its margin", (k) => {
     const m = fxMargin(k, SIZE.w, SIZE.h);
+    const bad: string[] = [];
     for (const intensity of [0.5, 2]) {
       for (const p of GRID) {
         for (const pc of scene(make(k, { intensity }), p).pieces) {
-          expect(Math.abs(pc.dx)).toBeLessThanOrEqual(m.x + 1e-6);
-          expect(Math.abs(pc.dy)).toBeLessThanOrEqual(m.y + 1e-6);
+          if (Math.abs(pc.dx) > m.x + 1e-6 || Math.abs(pc.dy) > m.y + 1e-6)
+            bad.push(`p=${p} i=${intensity} dx=${pc.dx} dy=${pc.dy}`);
         }
       }
     }
+    expect(bad).toEqual([]);
   });
 
   it.each(PIXEL_FX_KINDS)("%s survives a tiny picture", (k) => {

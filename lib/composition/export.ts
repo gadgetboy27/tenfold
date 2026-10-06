@@ -23,6 +23,7 @@ import { KARAOKE_DIM, revealDrawPlan } from "@/lib/composition/reveal";
 import { backdropFilterChain } from "@/lib/composition/treatment";
 import { TEXT_LINE_HEIGHT } from "@/lib/composition/render";
 import { fetchPublic } from "@/lib/net/safe-url";
+import { isSvg, svgToPng } from "@/lib/composition/svg-raster";
 import {
   planPixelFx,
   type ExportLayerExtras,
@@ -470,6 +471,16 @@ async function download(url: string, path: string): Promise<void> {
   await writeFile(path, await loadBytes(url));
 }
 
+/** An image layer's file, ready for FFmpeg — which cannot read SVG, so a
+ *  vector is rasterised first (lib/composition/svg-raster.ts). */
+export async function downloadLayerImage(
+  url: string,
+  path: string,
+): Promise<void> {
+  const bytes = await loadBytes(url);
+  await writeFile(path, isSvg(bytes) ? await svgToPng(bytes) : bytes);
+}
+
 export interface RenderCompositionInput {
   doc: CompositionDoc;
   workspaceId: string;
@@ -517,7 +528,7 @@ export async function renderComposition(
       imageLayers.map(async (l, i) => {
         files.imageInputIdx.set(l.id, i + 1); // background is input 0
         if (fxPlan.sequences.has(l.id)) return; // frames are already on disk
-        await download(l.src, join(dir, `layer-${i}.img`));
+        await downloadLayerImage(l.src, join(dir, `layer-${i}.img`));
       }),
     );
     await Promise.all(
