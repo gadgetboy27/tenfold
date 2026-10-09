@@ -190,6 +190,7 @@ describe("the menu and the flow agree", () => {
     const lastFlow = NAV_ORDER.lastIndexOf("publish");
     for (const extra of [
       "logo",
+      "series",
       "productshot",
       "tryon",
       "talking",

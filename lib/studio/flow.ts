@@ -102,6 +102,7 @@ export const NAV_ORDER: readonly SectionId[] = [
   "brief",
   ...STUDIO_FLOW,
   "logo",
+  "series",
   "productshot",
   "tryon",
   "talking",

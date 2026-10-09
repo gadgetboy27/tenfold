@@ -165,6 +165,8 @@ export const GET = withWorkspace<{ id: string }>(
       // Keyed by Studio's SectionId so the nav can read it directly.
       done: {
         images: !!camp.anchor_asset_id,
+        // A Series is ordinary image-variation jobs, so one finished one counts.
+        series: completedTypes.has("image_variation"),
         productshot: completedTypes.has("product_shot"),
         tryon: completedTypes.has("virtual_tryon"),
         video: videos.length > 0,

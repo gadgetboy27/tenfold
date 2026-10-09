@@ -36,6 +36,7 @@ import {
   Shirt,
   Mic,
   Captions,
+  GalleryHorizontalEnd,
 } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { useCompositorStore } from "@/store/useCompositorStore";
@@ -90,6 +91,7 @@ import {
 } from "@/components/studio/BrandImportPanel";
 import { BrandAnalysisResults } from "@/components/studio/BrandAnalysisResults";
 import { ProductShotPanel } from "@/components/scene/ProductShotPanel";
+import { SeriesPanel } from "@/components/scene/SeriesPanel";
 import { VirtualTryOnPanel } from "@/components/tryon/VirtualTryOnPanel";
 import { TalkingVideoPanel } from "@/components/talking/TalkingVideoPanel";
 import { AutoCaptionPanel } from "@/components/captions/AutoCaptionPanel";
@@ -118,6 +120,7 @@ export type SectionId =
   | "music"
   | "caption"
   | "words"
+  | "series"
   | "productshot"
   | "tryon"
   | "talking"
@@ -173,6 +176,7 @@ const RAIL_MODE: Record<SectionId, RailMode> = {
   // long scroll where wide shows both without hunting.
   caption: "wide",
   words: "wide",
+  series: "narrow",
   productshot: "narrow",
   tryon: "narrow",
   talking: "narrow",
@@ -195,6 +199,7 @@ const SECTION_LABELS: Record<SectionId, string> = {
   music: "Music",
   caption: "Wording",
   words: "Wording",
+  series: "Series",
   productshot: "Product shot",
   tryon: "Virtual try-on",
   talking: "Spokesperson",
@@ -214,6 +219,7 @@ const SECTION_FOCUS: Record<SectionId, StripFocus> = {
   caption: "caption",
   // Words is drawn onto the ad itself, not a produced asset — no strip group.
   words: null,
+  series: "images",
   productshot: "images",
   tryon: "images",
   talking: "video",
@@ -1473,6 +1479,16 @@ export function Studio({
     // there's a real campaign to attribute the spend to (matching each panel's
     // own `validCampaign` guard, which would otherwise disable the button
     // *inside* an already-opened screen).
+    // Not Pro: credits only. Several scenes around one picture of the user's
+    // own, each billed as an ordinary image variation.
+    {
+      id: "series",
+      label: "Series",
+      icon: GalleryHorizontalEnd,
+      done: !!progress?.done.series,
+      disabled: !campaignId,
+      disabledTitle: needsProjectTitle,
+    },
     {
       id: "productshot",
       label: "Product shot",
@@ -1815,6 +1831,10 @@ export function Studio({
                     onCaption={setCaption}
                     onSpent={refreshBalance}
                   />
+                ) : section === "series" ? (
+                  <div className="mx-auto h-full max-w-3xl">
+                    <SeriesPanel />
+                  </div>
                 ) : section === "productshot" ? (
                   <div className="mx-auto h-full max-w-3xl">
                     <ProductShotPanel />

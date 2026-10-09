@@ -45,6 +45,7 @@ export interface ProjectProgress {
   approvalStatus: string | null;
   done: {
     images: boolean;
+    series: boolean;
     productshot: boolean;
     tryon: boolean;
     video: boolean;

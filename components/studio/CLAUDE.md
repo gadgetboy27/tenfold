@@ -660,17 +660,18 @@ A review found nine places touching "caption"/text. They are not duplicates,
 and each is now named for what it does so the app doesn't read as repeating
 itself. Keep these distinct:
 
-| Where | Label | What it is |
-| --- | --- | --- |
-| Create step | **Save a space for your headline** | Words + keep-clear zone → shapes the *image* |
-| Wording | **Words on the ad** / **Write a caption for me** | The on-ad text layer; Claude's caption dropped on as a layer |
-| Wording | Style row | The one picker for every text on the ad |
-| Compose tray | **Caption · from Wording** | That same caption as a drag chip |
-| Compose tray | **Another text block** | A separate, additional text layer |
-| Wording | **Sticker** | Rasterised text as an image layer — tilt, flip, glow, neon (§ below) |
-| Compose | **Caption motion** | Fade / lower-third / crawl on video |
-| Publish | **Post text** | The words that go out *with* the post — not on the image |
-| Subtitles | Subtitles | Speech-to-text burnt in |
+| Where        | Label                                            | What it is                                                           |
+| ------------ | ------------------------------------------------ | -------------------------------------------------------------------- |
+| Create step  | **Save a space for your headline**               | Words + keep-clear zone → shapes the _image_                         |
+| Wording      | **Words on the ad** / **Write a caption for me** | The on-ad text layer; Claude's caption dropped on as a layer         |
+| Wording      | Style row                                        | The one picker for every text on the ad                              |
+| Compose tray | **Caption · from Wording**                       | That same caption as a drag chip                                     |
+| Compose tray | **Another text block**                           | A separate, additional text layer                                    |
+| Wording      | **Sticker**                                      | Rasterised text as an image layer — tilt, flip, glow, neon (§ below) |
+| Compose      | **Caption motion**                               | Fade / lower-third / crawl on video                                  |
+| Publish      | **Post text**                                    | The words that go out _with_ the post — not on the image             |
+| Subtitles    | Subtitles                                        | Speech-to-text burnt in                                              |
+
 - Marks are read from the two places a workspace's marks actually live: the
   brand kit (`logo_url` / `logo_dark_url`) and finished Logo Studio projects.
   Both fetches fail quietly — an empty tray is a tray, but an error banner over
@@ -702,6 +703,36 @@ pixels, which is the parity rule this codebase keeps.
 - Tilt is the layer's ordinary `rotationDeg` (via `patchLayout`), so it is
   per-format-overridable like any rotation and already exported.
 
+## Series — one subject, several scenes (2026-10-10)
+
+`SeriesPanel` (`components/scene/`, Studio section `series`): the user picks ONE
+photo (their upload, a gallery image, or the project's current image), Claude
+drafts where it appears, and each scene comes back as its own image in the
+project — a set that reads as one campaign. Credits only, not Pro; drafting the
+scenes is free (a Haiku call, rate-limited to 12/min instead of metered).
+
+- **One `image_variation` job PER SCENE, not one shared job** (`lib/series/start.ts`).
+  Each scene is then an ordinary single-image job, so its debit, its refund, the
+  fal webhook, the stuck-job sweep and cost tracking all work with NO change. A
+  shared multi-image job (the logo-mockups shape) would have refunded nothing when
+  only some scenes failed, and needed a new credit key, rate and parity entry.
+  Order per scene is the usual one: debit → insert the job (refund if that fails)
+  → enqueue (fail the job and refund if that fails). The whole series is checked
+  against the balance BEFORE any job exists.
+- **The subject must be this workspace's own picture** (`subject-url.ts`): a public
+  Storage object whose path carries the workspace id, on the configured host or
+  raw `<ref>.supabase.co`. fal fetches the URL, so anything else would be an open
+  proxy or another tenant's image. Matches whole path segments (`ws-12` ≠ `ws-1`).
+- **The scene prompt names what must NOT change first** (`buildScenePrompt`) —
+  Kontext edits the reference, so "keep the subject exactly" comes before "now in
+  this setting". Scene text is cleaned of control characters/newlines first.
+- **Not built (deliberately):** a second reference (setting/style) — the multi-image
+  endpoint needs live verification and has its own gating; a "keep my exact product"
+  mode (would call `/api/product-shot` per scene, Pro); saved brand subjects (needs
+  a migration). Consistency quality of Kontext itself has NOT been measured on real
+  product photos — judge it by eye before promoting the feature.
+- Marked done in the nav when any `image_variation` job completes for the campaign.
+
 ## Sticker effects — crumble, slice, dust, electric, glitch, shine (2026-10-07)
 
 "Make it move" (`StickerFxCard`): an animation on a sticker's LETTERS, timed as
@@ -721,9 +752,9 @@ and a call site, not touch the effects.
   scene out — that is the preview/export parity guarantee, and it is why the
   effects are tested without a canvas. Halos are stacked strokes, not blurs, for
   the same reason: no shared blur filter to drift.
-- **Two families** (`catalog.ts`): *transitions* (crumble/slice/dust) go whole→gone
+- **Two families** (`catalog.ts`): _transitions_ (crumble/slice/dust) go whole→gone
   ("breaks apart") or gone→whole ("builds up" — the same motion played backwards,
-  `q = 1 - p`, not a second animation); *pulses* (electric/glitch/shine) leave the
+  `q = 1 - p`, not a second animation); _pulses_ (electric/glitch/shine) leave the
   picture whole either side and can repeat. Add an effect = a builder + a catalog
   entry + a margin; the invariant tests (starts whole, ends right, stays inside its
   margin, deterministic) then cover it.
@@ -904,7 +935,7 @@ brush size, flips, tilt); selected text → text controls (face, weight, colour,
 panel); nothing selected → the user picks Words / Sticker and it sets the look of
 the NEXT one. `StickerCard` now owns only what a sticker SAYS and the Add button;
 its look lives in the toolbox. Styling is per selected layer — styling words
-*inside* a block differently (mixed styles in one box) is not built; it would
+_inside_ a block differently (mixed styles in one box) is not built; it would
 need spans in the text layer, in the canvas draw, in the FFmpeg export and in the
 read-out, so it is a separate piece of work.
 
