@@ -703,6 +703,43 @@ pixels, which is the parity rule this codebase keeps.
 - Tilt is the layer's ordinary `rotationDeg` (via `patchLayout`), so it is
   per-format-overridable like any rotation and already exported.
 
+## Render quality — Standard and High (2026-10-11)
+
+`QualityPicker` in Render & lock: **Standard** (1080p-class, what social posts
+need — platforms recompress to ~1080p) or **High** (2×, e.g. 2160×3840, for print,
+websites and YouTube). The picker shows the real pixel size. **High is Pro**
+(`hdExport`, the same entitlement as the single-image HD upscale) and is
+**enforced on the server** (`/api/compositions/export` → 403 + `upgrade`), because
+it multiplies FFmpeg's work; the button only mirrors that. Only 1 and 2 are
+accepted: the route used to take any 1–3× from anyone signed in, and 3× was never
+offered (9× the pixels of Standard, no audience). A Standard render pays for no
+extra entitlement lookup.
+
+**A bigger render is not automatically sharper.** FFmpeg draws text at the output
+size, so it is crisp; pictures are enlarged, so they are not. High fixes the two
+kinds of picture we draw ourselves, and cannot fix the third:
+
+- **Stickers** are redrawn at 2× in the browser (`rasterizeSticker(spec, density)`,
+  every size follows `density`; `sticker-density.test.ts` pins that no fixed size
+  slips back in) and their `scale` halved (`lib/composition/hires.ts`), so they
+  land at the same size with 2× the pixels. Pixel effects render from that
+  picture, so their frames are 4× the pixels: ~1.2–2.5× slower (dust ~15s, crumble
+  ~10s, electric ~8s on a laptop; cached across a fan-out).
+- **Vector logos** are rasterised on the server at 2× (`svg-raster.ts`) and
+  listed in `GraphFiles.crisp`, so the graph does NOT scale them a second time.
+- **A background photo** gains nothing: it can't hold detail it never had. Run it
+  through the single-image HD upscale first if print needs more from it.
+
+**The doc RENDERED differs from the doc SAVED.** The sharp doc travels as
+`renderDoc`; `doc` stays the render's saved recipe. Saving the sharp one would make
+a reopened render's stickers shrink to half size the moment their text was edited.
+`width_px`/`height_px` on the asset are the real output size, and `metadata.scale`
+records High.
+
+**Print-quality image** (More exports): the same canvas code that makes photo posts
+(`renderStill`, scale 2, PNG), drawn in the browser — free to everyone, since it
+costs us nothing, and photo ads only. Posts themselves stay Standard JPEG.
+
 ## Series — one subject, several scenes (2026-10-10)
 
 `SeriesPanel` (`components/scene/`, Studio section `series`): the user picks ONE
@@ -778,8 +815,9 @@ and a call site, not touch the effects.
 - **Arrange mode, Combine and still posts show the plain sticker** — `pixelFx` is
   cleared when paused, and `still.ts`/`combine.ts` pass no motion state.
 - **Cost:** frames are PNGs rendered per export. Roughly 5s crumble, 10s dust, 2s
-  slice/electric, <1s glitch/shine (4-core laptop). Budget: ≤120 frames per
-  sticker (fps drops for long repeated pulses).
+  slice/electric, <1s glitch/shine at Standard (4-core laptop; ~1.2–2.5× that at
+  High — see Render quality). Budget: ≤120 frames per sticker (fps drops for long
+  repeated pulses).
 - Layer entrance/exit/loop effects still apply to a sticker with a pixel effect.
 
 ## Nothing is `absolute` inside an unpositioned box (2026-09-15)

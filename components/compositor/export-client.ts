@@ -1,5 +1,7 @@
 "use client";
 
+import { hiResDoc } from "@/lib/composition/hires";
+import { rasterizeSticker } from "@/lib/composition/sticker";
 import { api } from "@/lib/api";
 import {
   compositionDocSchema,
@@ -101,13 +103,28 @@ async function stampRevealWidths(
   });
 }
 
+/** The `renderDoc` field for a render at `scale`: stickers drawn at that size
+ *  so a High render is sharp all over (lib/composition/hires.ts). Sent
+ *  ALONGSIDE `doc`, which stays the saved recipe — the stage's own doc is never
+ *  changed. Empty when there's nothing to redraw. */
+async function renderDocField(
+  doc: CompositionDoc,
+  scale: number | undefined,
+): Promise<{ renderDoc?: CompositionDoc }> {
+  if (!scale || scale <= 1) return {};
+  await ensureBrandFontsLoaded();
+  const hi = hiResDoc(doc, scale, rasterizeSticker);
+  return hi === doc ? {} : { renderDoc: hi };
+}
+
 export interface ExportOptions {
   /** Persist the MP4 as a campaign asset so the publish flow picks it up. */
   campaignId?: string | null;
   /** Music track layered under the film (replaces clip audio). */
   audioUrl?: string | null;
-  /** Output resolution multiplier (1–3). Resamples the design space; it does
-   *  not add detail a source photo never had. */
+  /** Output resolution multiplier: 1 (Standard) or 2 (High, a Pro feature).
+   *  Resamples the design space; it does not add detail a source photo never
+   *  had — text, stickers and vector logos are redrawn sharp, a photo is not. */
   scale?: number;
   /** Fingerprint of the stage doc being rendered — see signature.ts. */
   docSig?: string;
@@ -122,6 +139,7 @@ export async function requestExport(
     method: "POST",
     body: JSON.stringify({
       doc,
+      ...(await renderDocField(doc, options.scale)),
       campaignId: options.campaignId ?? null,
       audioUrl: options.audioUrl ?? null,
       ...(options.scale && options.scale !== 1 ? { scale: options.scale } : {}),
@@ -281,6 +299,7 @@ export async function requestFanOutExport(
     method: "POST",
     body: JSON.stringify({
       doc,
+      ...(await renderDocField(doc, options.scale)),
       aspects,
       campaignId: options.campaignId ?? null,
       audioUrl: options.audioUrl ?? null,

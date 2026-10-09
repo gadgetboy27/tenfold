@@ -19,12 +19,20 @@ import {
   setAdLocked,
   type FanOutOutput,
 } from "@/components/compositor/export-client";
-import { renderStillJpeg } from "@/lib/composition/still";
+import {
+  renderStill,
+  renderStillJpeg,
+  saveBlob,
+} from "@/lib/composition/still";
+import { sizeLabel } from "@/lib/composition/quality";
 import { docSignature } from "@/lib/composition/signature";
 import { isNeutral } from "@/lib/composition/treatment";
 import { downloadCampaignPdf } from "@/lib/compositor/campaign-pdf";
 import type { CompositionAspect } from "@/lib/composition/layers";
+import type { RenderScale } from "@/lib/composition/quality";
 import { useCompositorStore } from "@/store/useCompositorStore";
+import { useEntitlements } from "@/lib/billing/useEntitlements";
+import { QualityPicker } from "./QualityPicker";
 
 /**
  * The Publish page's single place for saving, rendering, locking and
@@ -87,9 +95,12 @@ export function RenderLockCard({
   const [status, setStatus] = useState<LockStatus>("checking");
   const [bypass, setBypass] = useState(false);
   const [busy, setBusy] = useState<
-    "render" | "lock" | "unlock" | "fan" | "pdf" | null
+    "render" | "lock" | "unlock" | "fan" | "pdf" | "print" | null
   >(null);
-  const [scale, setScale] = useState<1 | 2>(1);
+  const [scale, setScale] = useState<RenderScale>(1);
+  // High multiplies the server's render work, so it is a plan feature; the
+  // server enforces it, this only keeps the button honest.
+  const hdAllowed = useEntitlements()?.hdExport ?? false;
   const [renderUrl, setRenderUrl] = useState<string | null>(null);
   const [fanOut, setFanOut] = useState<FanOutOutput[] | null>(null);
   const [recheck, setRecheck] = useState(0);
@@ -249,6 +260,18 @@ export function RenderLockCard({
       );
       setFanOut(outputs);
       toast.success(`Rendered ${outputs.length} shapes`);
+    });
+
+  // A print-quality picture of the ad — drawn in the browser, so it costs us
+  // nothing and is free to everyone. Photo ads only: a video ad has no single
+  // picture to flatten.
+  const printImage = () =>
+    run("print", async () => {
+      const doc = useCompositorStore.getState().doc;
+      if (!doc) return;
+      const blob = await renderStill(doc, { scale: 2, format: "png" });
+      saveBlob(blob, `ad-${sizeLabel(doc.aspect, 2)}.png`);
+      toast.success(`Saved ${sizeLabel(doc.aspect, 2)} image`);
     });
 
   const onePager = () =>
@@ -423,16 +446,13 @@ export function RenderLockCard({
             </button>
           )}
           {unlockButton}
-          <select
+          <QualityPicker
             value={scale}
-            onChange={(e) => setScale(Number(e.target.value) as 1 | 2)}
+            aspect={aspect ?? "9:16"}
+            hdAllowed={hdAllowed}
             disabled={!!busy}
-            aria-label="Render quality"
-            className="rounded-md border border-border bg-background px-2 py-1.5 text-xs"
-          >
-            <option value={1}>Standard</option>
-            <option value={2}>High (2×)</option>
-          </select>
+            onChange={setScale}
+          />
           {renderUrl && (
             <a
               href={renderUrl}
@@ -488,6 +508,22 @@ export function RenderLockCard({
           )}
           One-pager PDF
         </button>
+        {!isVideoAd && aspect && (
+          <button
+            type="button"
+            onClick={printImage}
+            disabled={!!busy}
+            title="A sharp, large PNG of this ad — for print, posters and websites"
+            className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-[11px] hover:border-primary/50 disabled:opacity-50"
+          >
+            {busy === "print" ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <ImageIcon className="h-3 w-3" />
+            )}
+            Print-quality image ({sizeLabel(aspect, 2)})
+          </button>
+        )}
       </div>
       {fanOut && fanOut.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 text-[11px]">

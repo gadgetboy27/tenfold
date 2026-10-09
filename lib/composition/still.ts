@@ -5,6 +5,9 @@ import {
   type Layer,
 } from "@/lib/composition/layers";
 import { ensureBrandFontsLoaded } from "./fonts";
+import { hiResDoc } from "./hires";
+import type { RenderScale } from "./quality";
+import { rasterizeSticker } from "./sticker";
 import { drawBackdrop, drawLayer } from "./render";
 
 /**
@@ -39,11 +42,30 @@ async function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-export async function renderStillJpeg(doc: CompositionDoc): Promise<Blob> {
-  if (doc.background.kind !== "image") {
+export interface StillOptions {
+  /** 1 = the design size (what a post needs); 2 = twice that, for print. */
+  scale?: RenderScale;
+  /** JPEG for a post; PNG for print (no compression loss, no alpha needed). */
+  format?: "jpeg" | "png";
+}
+
+/**
+ * Flatten the ad to one picture. At scale 2 everything the canvas DRAWS —
+ * text, vector logos — is drawn at the larger size, and stickers are redrawn at
+ * it (hires.ts), so the result is genuinely sharp rather than a bigger copy.
+ * A background photo can't gain detail it never had; run it through the
+ * single-image HD upscale first if print needs more from it.
+ */
+export async function renderStill(
+  source: CompositionDoc,
+  options: StillOptions = {},
+): Promise<Blob> {
+  if (source.background.kind !== "image") {
     throw new Error("Only a photo ad can be flattened to a still");
   }
+  const k = options.scale ?? 1;
   await ensureBrandFontsLoaded();
+  const doc = hiResDoc(source, k, rasterizeSticker);
   const { width, height } = ASPECT_DESIGN[doc.aspect];
 
   const layers = stillLayers(doc);
@@ -56,14 +78,17 @@ export async function renderStillJpeg(doc: CompositionDoc): Promise<Blob> {
   }
 
   const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
+  canvas.width = width * k;
+  canvas.height = height * k;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Couldn't start the renderer");
 
   // JPEG has no alpha — start from black, as drawFrame does.
   ctx.fillStyle = "#000000";
-  ctx.fillRect(0, 0, width, height);
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // Everything below is drawn in design space; this puts it on the bigger
+  // canvas, with text and shapes redrawn at the larger size.
+  ctx.scale(k, k);
   // The look, grain and vignette carry into a photo; a camera move and pulse
   // have no meaning without a timeline, so they're switched off.
   const t = doc.background.treatment;
@@ -87,13 +112,30 @@ export async function renderStillJpeg(doc: CompositionDoc): Promise<Blob> {
     );
   }
 
+  const mime = options.format === "png" ? "image/png" : "image/jpeg";
   return new Promise((resolve, reject) =>
     canvas.toBlob(
       (b) => (b ? resolve(b) : reject(new Error("Couldn't encode the image"))),
-      "image/jpeg",
-      0.92,
+      mime,
+      options.format === "png" ? undefined : 0.92,
     ),
   );
+}
+
+/** The JPEG a photo post publishes — design size, as it always was. */
+export const renderStillJpeg = (doc: CompositionDoc): Promise<Blob> =>
+  renderStill(doc, { format: "jpeg" });
+
+/** Save a blob to the user's device. */
+export function saveBlob(blob: Blob, filename: string): void {
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 10_000);
 }
 
 /** Flatten and store it as a campaign asset; returns the new asset id. */

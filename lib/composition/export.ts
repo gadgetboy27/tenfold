@@ -109,13 +109,15 @@ function imageLayerChain(
   layer: Extract<Layer, { kind: "image" }>,
   fx: MotionExprs,
   canvasScale = 1,
+  /** The file is already at output resolution — see GraphFiles.crisp. */
+  crisp = false,
 ): string {
   // `iw` is the LAYER's own width, not the canvas — so an image at scale 1
   // renders at its native pixel size whatever the output resolution is.
   // Doubling the canvas without doubling this would render every mark and
   // cutout at half its intended size on the page. The trap only shows up at
   // scale > 1, which is exactly where nobody looks.
-  const s = layer.scale * canvasScale;
+  const s = layer.scale * (crisp ? 1 : canvasScale);
   const parts = ["format=rgba", `scale=iw*${s}:ih*${s}`];
 
   const staticRad = (layer.rotationDeg * Math.PI) / 180;
@@ -202,6 +204,10 @@ export interface GraphFiles {
   /** Image layers whose input is a numbered frame sequence (a pixel effect),
    *  not a still — see lib/composition/fx/export-plan.ts. */
   sequence?: Map<string, FxSequence>;
+  /** Image layers whose file was already drawn at the output resolution (a
+   *  vector rasterised at 2x for a High render). Their size is the layer's own
+   *  scale — multiplying by the canvas scale again would double it. */
+  crisp?: Set<string>;
 }
 
 /**
@@ -291,7 +297,7 @@ export function buildFilterGraph(
       const seq = files.sequence?.get(layer.id);
       const shift = seq ? `setpts=PTS+${fmtT(seq.startSec)}/TB,` : "";
       chains.push(
-        `[${idx}:v]${shift}${imageLayerChain(layer, fx, scale)}[${lbl}]`,
+        `[${idx}:v]${shift}${imageLayerChain(layer, fx, scale, files.crisp?.has(layer.id))}[${lbl}]`,
       );
       const pos = overlayPos(layer, fx, width, height);
 
@@ -472,13 +478,18 @@ async function download(url: string, path: string): Promise<void> {
 }
 
 /** An image layer's file, ready for FFmpeg — which cannot read SVG, so a
- *  vector is rasterised first (lib/composition/svg-raster.ts). */
+ *  vector is rasterised first (lib/composition/svg-raster.ts), at `density`
+ *  times its size so a High render is sharp. Returns true when it did, i.e. the
+ *  file is ALREADY at output resolution and must not be scaled up again. */
 export async function downloadLayerImage(
   url: string,
   path: string,
-): Promise<void> {
+  density = 1,
+): Promise<boolean> {
   const bytes = await loadBytes(url);
-  await writeFile(path, isSvg(bytes) ? await svgToPng(bytes) : bytes);
+  const vector = isSvg(bytes);
+  await writeFile(path, vector ? await svgToPng(bytes, density) : bytes);
+  return vector && density > 1;
 }
 
 export interface RenderCompositionInput {
@@ -522,13 +533,19 @@ export async function renderComposition(
       imageInputIdx: new Map(),
       textFile: new Map(),
       sequence: fxPlan.sequences,
+      crisp: new Set<string>(),
     };
     const imageLayers = exportDoc.layers.filter((l) => l.kind === "image");
     await Promise.all(
       imageLayers.map(async (l, i) => {
         files.imageInputIdx.set(l.id, i + 1); // background is input 0
         if (fxPlan.sequences.has(l.id)) return; // frames are already on disk
-        await downloadLayerImage(l.src, join(dir, `layer-${i}.img`));
+        const redrawn = await downloadLayerImage(
+          l.src,
+          join(dir, `layer-${i}.img`),
+          input.scale ?? 1,
+        );
+        if (redrawn) files.crisp?.add(l.id);
       }),
     );
     await Promise.all(

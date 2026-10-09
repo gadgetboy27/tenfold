@@ -10,6 +10,8 @@ import {
 } from "@/lib/composition/layers";
 import { renderComposition, renderFanOut } from "@/lib/composition/export";
 import { sourcesRenderable } from "@/lib/composition/sources";
+import { isRenderScale, needsHdPlan } from "@/lib/composition/quality";
+import { getEntitlements } from "@/lib/billing/entitlements";
 
 // POST /api/compositions/export — headless FFmpeg render of a layered
 // composition to MP4. Free (composes assets the workspace already owns).
@@ -22,6 +24,13 @@ import { sourcesRenderable } from "@/lib/composition/sources";
 
 const bodySchema = z.object({
   doc: compositionDocSchema,
+  /**
+   * What to RENDER, when it differs from `doc` — a High render sends stickers
+   * redrawn at 2x with their scale halved (lib/composition/hires.ts). `doc` is
+   * still what is saved as the render's recipe, so reopening it gives back the
+   * editable ad, not one whose stickers shrink the moment they're edited.
+   */
+  renderDoc: compositionDocSchema.optional(),
   campaignId: z.string().uuid().nullable().optional(),
   compositionId: z.string().uuid().nullable().optional(),
   audioUrl: z.string().url().nullable().optional(),
@@ -31,11 +40,15 @@ const bodySchema = z.object({
     .max(3)
     .optional(),
   /**
-   * Output resolution multiplier. Capped at 3 — beyond that the file grows
-   * quadratically for a background photo that has no more detail to give, and
-   * a 4× 9:16 render is a 4320×7680 MP4 nobody asked for.
+   * Output resolution multiplier: Standard (1) or High (2) only — see
+   * lib/composition/quality.ts. Higher than Standard needs the HD plan, checked
+   * below. It used to accept anything from 1 to 3 from any signed-in user, and
+   * pixels grow with the square: a 3x 9:16 render is a 3240x5760 MP4.
    */
-  scale: z.number().min(1).max(3).optional(),
+  scale: z
+    .number()
+    .refine(isRenderScale, "Quality must be Standard or High")
+    .optional(),
   /**
    * Fingerprint of the stage doc this render was made from
    * (lib/composition/signature.ts), stored on the asset so the Publish page can
@@ -55,6 +68,24 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
   }
   const { doc, campaignId, compositionId, audioUrl, aspects, docSig } =
     parsed.data;
+  const renderDoc = parsed.data.renderDoc ?? doc;
+  const scale = parsed.data.scale ?? 1;
+
+  // High quality is a plan feature: it multiplies the server's render work.
+  // Checked before any work, and only when it was asked for, so a Standard
+  // render costs no extra lookup.
+  if (needsHdPlan(scale)) {
+    const ent = await getEntitlements(session.workspaceId);
+    if (!ent.hdExport) {
+      return NextResponse.json(
+        {
+          error: "High quality is a Pro feature — upgrade to unlock.",
+          upgrade: true,
+        },
+        { status: 403 },
+      );
+    }
+  }
 
   // When persisting to a campaign, verify it belongs to this workspace (scoped
   // db client) before writing asset/composition rows — tenant isolation, and it
@@ -75,10 +106,10 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
 
   // Every source must be fetchable by the server — a blob: URL only ever
   // existed in the user's browser tab.
-  const layerSrcs = doc.layers.flatMap((l) =>
+  const layerSrcs = renderDoc.layers.flatMap((l) =>
     l.kind === "image" ? [l.src] : [],
   );
-  if (!sourcesRenderable(doc.background.src, layerSrcs, audioUrl)) {
+  if (!sourcesRenderable(renderDoc.background.src, layerSrcs, audioUrl)) {
     return NextResponse.json(
       { error: "All layer sources must be uploaded before export." },
       { status: 400 },
@@ -101,11 +132,12 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
       type: "composed_video",
       url,
       storage_path: storagePath,
-      width_px: ASPECT_DESIGN[aspect].width,
-      height_px: ASPECT_DESIGN[aspect].height,
+      width_px: ASPECT_DESIGN[aspect].width * scale,
+      height_px: ASPECT_DESIGN[aspect].height * scale,
       metadata: {
         aspect,
         format: ASPECT_TO_FORMAT[aspect],
+        ...(scale > 1 ? { scale } : {}),
         // Only a single render is "the ad on the stage"; a fan-out's
         // per-aspect files are siblings of it, not matches for it.
         ...(docSig && !aspects ? { docSig } : {}),
@@ -178,11 +210,11 @@ export const POST = withWorkspace(async (req, { db, admin, session }) => {
   };
 
   const renderInput = {
-    doc,
+    doc: renderDoc,
     workspaceId: session.workspaceId,
     campaignId: campaignId ?? null,
     audioUrl: audioUrl ?? null,
-    scale: parsed.data.scale ?? 1,
+    scale,
   };
 
   // ── Fan-out: one MP4 per requested aspect ──────────────────────────────────

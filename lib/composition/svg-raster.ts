@@ -22,10 +22,15 @@ export function isSvg(bytes: Buffer): boolean {
 }
 
 /**
- * Rasterise at the SVG's own size — the same size the preview's canvas draws it
- * at — with transparency kept. The layer's scale is applied afterwards by the
- * export, exactly as for any other image, so preview and MP4 agree.
+ * Rasterise at the SVG's own size × `density` — the size the preview's canvas
+ * draws it at, with transparency kept. At Standard (density 1) the export then
+ * applies the layer's scale as for any image. For a High render the vector is
+ * drawn at 2x HERE, so it is genuinely sharp rather than a 1x bitmap blown up;
+ * the export is told (`GraphFiles.crisp`) not to scale it again.
  */
-export function svgToPng(bytes: Buffer): Promise<Buffer> {
-  return sharp(bytes).png().toBuffer();
+export function svgToPng(bytes: Buffer, density = 1): Promise<Buffer> {
+  // libvips draws SVG at 72 dpi by default; density scales the raster to match.
+  return sharp(bytes, { density: 72 * density })
+    .png()
+    .toBuffer();
 }

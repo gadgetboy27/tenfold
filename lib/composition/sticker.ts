@@ -176,18 +176,26 @@ export interface StickerRaster {
  * while typing; seeding on the text keeps it stable per word while still
  * varying between different words.
  */
-export function rasterizeSticker(spec: StickerSpec): StickerRaster {
+export function rasterizeSticker(
+  spec: StickerSpec,
+  /** Draw this many times larger: 1 for the editor, 2 for a High export, so a
+   *  sticker stays sharp when the render is 2x. Every size below follows it. */
+  density = 1,
+): StickerRaster {
+  const px = STICKER_FONT_PX * density;
+  const boxW = spec.boxW ? spec.boxW * density : undefined;
+  const boxH = spec.boxH ? spec.boxH * density : undefined;
   const weight = stickerWeight(spec);
-  const font = `${weight} ${STICKER_FONT_PX}px "${spec.font}", sans-serif`;
+  const font = `${weight} ${px}px "${spec.font}", sans-serif`;
   const effectSize = spec.effectSize ?? 1;
-  const pad = stickerPadding(spec.effect, STICKER_FONT_PX, effectSize);
+  const pad = stickerPadding(spec.effect, px, effectSize);
 
   const measure = document.createElement("canvas").getContext("2d")!;
   measure.font = font;
-  const lines = spec.boxW
+  const lines = boxW
     ? wrapToWidth(
         spec.text,
-        spec.boxW - pad * 2,
+        boxW - pad * 2,
         (t) => measure.measureText(t).width,
       )
     : spec.text.split("\n");
@@ -197,16 +205,14 @@ export function rasterizeSticker(spec: StickerSpec): StickerRaster {
   // Ascent/descent over the actual glyphs — for one line this is exactly the
   // old measurement, so stickers without a box keep their geometry.
   const m = measure.measureText(lines.join(""));
-  const ascent = Math.ceil(m.actualBoundingBoxAscent || STICKER_FONT_PX * 0.8);
-  const descent = Math.ceil(
-    m.actualBoundingBoxDescent || STICKER_FONT_PX * 0.2,
-  );
+  const ascent = Math.ceil(m.actualBoundingBoxAscent || px * 0.8);
+  const descent = Math.ceil(m.actualBoundingBoxDescent || px * 0.2);
 
-  const lineH = Math.round(STICKER_FONT_PX * 1.15);
+  const lineH = Math.round(px * 1.15);
   const blockH = (lines.length - 1) * lineH + ascent + descent;
   // Never narrower/shorter than the wrapped text needs, so nothing clips.
-  const width = Math.max(textW + pad * 2, Math.round(spec.boxW ?? 0));
-  const height = Math.max(blockH + pad * 2, Math.round(spec.boxH ?? 0));
+  const width = Math.max(textW + pad * 2, Math.round(boxW ?? 0));
+  const height = Math.max(blockH + pad * 2, Math.round(boxH ?? 0));
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -233,9 +239,9 @@ export function rasterizeSticker(spec: StickerSpec): StickerRaster {
     case "shadow": {
       ctx.save();
       ctx.shadowColor = spec.effectColor;
-      ctx.shadowBlur = STICKER_FONT_PX * 0.08;
-      ctx.shadowOffsetX = STICKER_FONT_PX * 0.05;
-      ctx.shadowOffsetY = STICKER_FONT_PX * 0.05;
+      ctx.shadowBlur = px * 0.08;
+      ctx.shadowOffsetX = px * 0.05;
+      ctx.shadowOffsetY = px * 0.05;
       glyph();
       ctx.restore();
       glyph();
@@ -244,7 +250,7 @@ export function rasterizeSticker(spec: StickerSpec): StickerRaster {
     case "glow": {
       ctx.save();
       ctx.shadowColor = spec.effectColor;
-      ctx.shadowBlur = STICKER_FONT_PX * 0.25;
+      ctx.shadowBlur = px * 0.25;
       glyph();
       glyph();
       glyph();
@@ -256,18 +262,18 @@ export function rasterizeSticker(spec: StickerSpec): StickerRaster {
       ctx.save();
       ctx.lineJoin = "round";
       ctx.strokeStyle = spec.effectColor;
-      ctx.lineWidth = STICKER_FONT_PX * 0.06;
+      ctx.lineWidth = px * 0.06;
       ctx.shadowColor = spec.effectColor;
-      ctx.shadowBlur = STICKER_FONT_PX * 0.3;
+      ctx.shadowBlur = px * 0.3;
       strokeGlyph();
       strokeGlyph();
-      ctx.shadowBlur = STICKER_FONT_PX * 0.08;
+      ctx.shadowBlur = px * 0.08;
       strokeGlyph();
       ctx.restore();
       // The tube's core — the sticker colour, lit from inside.
       ctx.save();
       ctx.shadowColor = spec.color;
-      ctx.shadowBlur = STICKER_FONT_PX * 0.04;
+      ctx.shadowBlur = px * 0.04;
       glyph();
       ctx.restore();
       break;
@@ -276,7 +282,7 @@ export function rasterizeSticker(spec: StickerSpec): StickerRaster {
       ctx.save();
       ctx.lineJoin = "round";
       ctx.strokeStyle = spec.effectColor;
-      ctx.lineWidth = STICKER_FONT_PX * 0.1;
+      ctx.lineWidth = px * 0.1;
       strokeGlyph();
       ctx.restore();
       glyph();
@@ -284,7 +290,7 @@ export function rasterizeSticker(spec: StickerSpec): StickerRaster {
     }
     case "marker": {
       const rand = seededRandom(hashSeed(spec.text + "marker"));
-      const w = STICKER_FONT_PX * 0.09 * effectSize;
+      const w = px * 0.09 * effectSize;
       ctx.save();
       ctx.lineJoin = "round";
       ctx.lineCap = "round";
@@ -308,7 +314,7 @@ export function rasterizeSticker(spec: StickerSpec): StickerRaster {
       ctx.strokeStyle = spec.effectColor;
       for (let i = 0; i < 5; i++) {
         ctx.globalAlpha = 0.08;
-        ctx.lineWidth = STICKER_FONT_PX * (0.03 + i * 0.015) * effectSize;
+        ctx.lineWidth = px * (0.03 + i * 0.015) * effectSize;
         strokeGlyph();
       }
       ctx.restore();
@@ -322,7 +328,7 @@ export function rasterizeSticker(spec: StickerSpec): StickerRaster {
         const dy = pad + (rand() - 0.5) * -0.1 * height + rand() * height * 0.9;
         ctx.globalAlpha = 0.15 + rand() * 0.2;
         ctx.beginPath();
-        ctx.arc(dx, dy, 0.6 + rand() * 1.8, 0, Math.PI * 2);
+        ctx.arc(dx, dy, (0.6 + rand() * 1.8) * density, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.restore();
@@ -331,14 +337,14 @@ export function rasterizeSticker(spec: StickerSpec): StickerRaster {
     case "calligraphy": {
       ctx.save();
       ctx.shadowColor = spec.effectColor;
-      ctx.shadowBlur = STICKER_FONT_PX * 0.015 * effectSize;
-      ctx.shadowOffsetX = STICKER_FONT_PX * 0.015 * effectSize;
-      ctx.shadowOffsetY = STICKER_FONT_PX * 0.02 * effectSize;
+      ctx.shadowBlur = px * 0.015 * effectSize;
+      ctx.shadowOffsetX = px * 0.015 * effectSize;
+      ctx.shadowOffsetY = px * 0.02 * effectSize;
       glyph();
       ctx.restore();
       ctx.save();
       ctx.strokeStyle = spec.effectColor;
-      ctx.lineWidth = STICKER_FONT_PX * 0.012 * effectSize;
+      ctx.lineWidth = px * 0.012 * effectSize;
       ctx.globalAlpha = 0.6;
       strokeGlyph();
       ctx.restore();
