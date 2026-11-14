@@ -19,9 +19,31 @@
  * - Only claim what the product actually does.
  */
 
+/** A comparison or spec table — answer engines lift tables whole. */
+export interface GuideTable {
+  columns: string[];
+  rows: string[][];
+}
+
 export interface GuideSection {
+  /** Phrase as the question a reader would actually type. */
   heading: string;
-  body: string[];
+  /**
+   * A 40–60 word direct answer, rendered straight under the heading. This is
+   * the passage an answer engine quotes, so it must stand alone — no "as
+   * above", no pronoun that points outside it.
+   */
+  answer?: string;
+  body?: string[];
+  /** One fact per bullet. */
+  bullets?: string[];
+  table?: GuideTable;
+}
+
+/** Visible Q&A that also emits FAQPage JSON-LD — never one without the other. */
+export interface GuideFaq {
+  q: string;
+  a: string;
 }
 
 export interface Guide {
@@ -34,6 +56,7 @@ export interface Guide {
   /** One-paragraph direct answer, rendered before the sections. */
   answer: string;
   sections: GuideSection[];
+  faq?: GuideFaq[];
 }
 
 export const GUIDES: Guide[] = [

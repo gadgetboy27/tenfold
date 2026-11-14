@@ -1,5 +1,9 @@
 import Link from "next/link";
 import { WELCOME_CREDITS } from "@/lib/billing/welcome";
+import {
+  LIVE_PLATFORM_NAMES,
+  UPCOMING_PLATFORM_NAMES,
+} from "@/lib/marketing/platforms";
 
 export interface FaqItem {
   q: string;
@@ -20,7 +24,7 @@ export const FAQ_ITEMS: FaqItem[] = [
   },
   {
     q: "Which platforms can I publish to?",
-    a: "Facebook, Instagram, TikTok, LinkedIn, X (Twitter), YouTube, Pinterest, Google Business Profile and more — 13 platforms in total, all from one publish button.",
+    a: `${LIVE_PLATFORM_NAMES} today, all from one publish button, with posts going out through your own connected accounts. ${UPCOMING_PLATFORM_NAMES} are built and switch on as each platform approves us.`,
   },
   {
     q: "What happens when my free credits run out?",

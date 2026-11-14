@@ -1,8 +1,8 @@
 # PrettyMuch
 
 > An AI creative pipeline for small businesses. One text prompt becomes images,
-> video, music and copy — then publishes to up to 13 social platforms from a
-> single button. Built in New Zealand, priced in NZD.
+> video, music and copy — then publishes to Facebook, Instagram, TikTok and
+> Bluesky from a single button. Built in New Zealand, priced in NZD.
 
 PrettyMuch is a web application (no install, no design software). A business
 describes what it wants in a sentence; the platform generates six images to
@@ -20,9 +20,10 @@ AI-written captions, brand-applied compositions, and scheduled social posts.
   brand kit (logo, colours, fonts) applied automatically.
 - **Logo & brand** — generate a logo from a brief, refine it, export a vector
   brand package.
-- **Publishing** — Facebook, Instagram, TikTok, LinkedIn, X, YouTube,
-  Pinterest, Google Business Profile and more, with scheduling and an approval
-  workflow for teams.
+- **Publishing** — Facebook, Instagram, TikTok and Bluesky, through the
+  business's own connected accounts, with scheduling and an approval workflow
+  for teams. LinkedIn, Pinterest, Reddit and YouTube are built and awaiting
+  each platform's developer approval.
 
 ## Pricing
 

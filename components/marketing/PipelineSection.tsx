@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { PenLine, Images, Target, GitBranch, Wand2, Send } from "lucide-react";
+import { LIVE_PLATFORM_COUNT_LABEL } from "@/lib/marketing/platforms";
 
 const STAGES = [
   { icon: PenLine, title: "Prompt", line: "Describe it once, in plain words." },
@@ -17,7 +18,11 @@ const STAGES = [
     line: "Branch it into video, music & script.",
   },
   { icon: Wand2, title: "Compose", line: "Stamp your brand. Add the words." },
-  { icon: Send, title: "Publish", line: "One click to 13 platforms." },
+  {
+    icon: Send,
+    title: "Publish",
+    line: `One click to ${LIVE_PLATFORM_COUNT_LABEL}.`,
+  },
 ];
 
 export function PipelineSection() {

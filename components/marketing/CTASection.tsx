@@ -4,18 +4,11 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, Check } from "lucide-react";
 import { WELCOME_CREDITS } from "@/lib/billing/welcome";
-
-// The real platforms PrettyMuch publishes to (via Ayrshare), with their brand colors.
-const PLATFORMS = [
-  { id: "instagram", short: "IG", label: "Instagram", color: "#E1306C" },
-  { id: "facebook", short: "FB", label: "Facebook", color: "#1877F2" },
-  { id: "twitter", short: "X", label: "X", color: "#ffffff" },
-  { id: "linkedin", short: "LI", label: "LinkedIn", color: "#0A66C2" },
-  { id: "youtube", short: "YT", label: "YouTube", color: "#FF0000" },
-  { id: "tiktok", short: "TT", label: "TikTok", color: "#69C9D0" },
-  { id: "pinterest", short: "PI", label: "Pinterest", color: "#E60023" },
-  { id: "gmb", short: "GB", label: "Google Business", color: "#4285F4" },
-];
+import {
+  LIVE_PLATFORMS,
+  LIVE_PLATFORM_COUNT_WORD,
+  UPCOMING_PLATFORM_NAMES,
+} from "@/lib/marketing/platforms";
 
 export function CTASection() {
   return (
@@ -30,7 +23,7 @@ export function CTASection() {
         <div className="pointer-events-none absolute left-1/2 top-0 -z-10 h-72 w-[600px] -translate-x-1/2 rounded-full bg-primary/25 blur-[120px]" />
 
         <p className="mb-4 text-sm font-medium uppercase tracking-[0.2em] text-primary">
-          One click to everywhere
+          One click, every connected network
         </p>
         <h2 className="font-serif text-4xl font-extrabold tracking-tight sm:text-5xl">
           Made once.
@@ -40,14 +33,14 @@ export function CTASection() {
           </span>
         </h2>
         <p className="mx-auto mt-5 max-w-lg text-muted-foreground">
-          Your finished campaign posts straight to every platform you sell on —
-          up to 13 — in a single click. No downloads, no reformatting, no
-          copy-paste between apps.
+          Your finished campaign posts straight to all{" "}
+          {LIVE_PLATFORM_COUNT_WORD} of your connected networks in a single
+          click. No downloads, no reformatting, no copy-paste between apps.
         </p>
 
         {/* Platform badges — the socials, in all their glory */}
         <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-          {PLATFORMS.map((p, i) => (
+          {LIVE_PLATFORMS.map((p, i) => (
             <motion.div
               key={p.id}
               initial={{ opacity: 0, scale: 0.6 }}
@@ -65,8 +58,11 @@ export function CTASection() {
               {p.short}
             </motion.div>
           ))}
-          <span className="inline-flex h-12 items-center rounded-full border border-white/10 bg-white/[0.04] px-4 text-sm text-muted-foreground backdrop-blur">
-            + more
+          <span
+            title={`Coming as each platform approves us: ${UPCOMING_PLATFORM_NAMES}`}
+            className="inline-flex h-12 items-center rounded-full border border-white/10 bg-white/[0.04] px-4 text-sm text-muted-foreground backdrop-blur"
+          >
+            + more coming
           </span>
         </div>
 

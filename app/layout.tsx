@@ -3,12 +3,12 @@ import { Toaster } from "react-hot-toast";
 import Script from "next/script";
 import "./globals.css";
 import { WELCOME_CREDITS } from "@/lib/billing/welcome";
+import { LIVE_PLATFORM_NAMES } from "@/lib/marketing/platforms";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://prettymuch.nz"),
   title: "PrettyMuch — one prompt, a whole campaign",
-  description:
-    "PrettyMuch turns a single prompt into images, video, music and copy — then publishes it to up to 13 social platforms. The AI creative pipeline for modern brands.",
+  description: `PrettyMuch turns a single prompt into images, video, music and copy — then publishes it to ${LIVE_PLATFORM_NAMES}. The AI creative pipeline for modern brands.`,
   alternates: { canonical: "/" },
   openGraph: {
     title: "PrettyMuch — one prompt, a whole campaign",

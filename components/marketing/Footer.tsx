@@ -1,5 +1,10 @@
 import Link from "next/link";
 import Image from "next/image";
+import {
+  BUSINESS_ADDRESS_LINE,
+  CONTACT_EMAIL,
+  SITE_NAME,
+} from "@/lib/seo/schema";
 
 export function Footer() {
   return (
@@ -56,7 +61,7 @@ export function Footer() {
             Privacy
           </Link>
           <a
-            href="mailto:support@prettymuch.nz"
+            href={`mailto:${CONTACT_EMAIL}`}
             className="transition-colors hover:text-foreground"
           >
             Contact
@@ -75,6 +80,13 @@ export function Footer() {
           </Link>
         </nav>
       </div>
+      {/* NAP line — same strings as the Organization schema, by construction. */}
+      <address className="mx-auto mt-6 max-w-6xl text-center text-xs not-italic text-muted-foreground sm:text-left">
+        {SITE_NAME} · {BUSINESS_ADDRESS_LINE} ·{" "}
+        <a href={`mailto:${CONTACT_EMAIL}`} className="hover:text-foreground">
+          {CONTACT_EMAIL}
+        </a>
+      </address>
     </footer>
   );
 }

@@ -6,6 +6,7 @@ import { motion, useScroll, useTransform } from "framer-motion";
 import { useRef } from "react";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { WELCOME_CREDITS } from "@/lib/billing/welcome";
+import { LIVE_PLATFORM_NAMES } from "@/lib/marketing/platforms";
 
 /** Floating, depth-parallax showcase image. */
 function FloatTile({
@@ -86,7 +87,7 @@ export function Hero() {
             className="mx-auto mt-6 max-w-xl text-lg text-muted-foreground lg:mx-0"
           >
             PrettyMuch turns a single idea into images, video, music and copy —
-            then publishes it to every platform you sell on. No agency. No
+            then publishes it straight to your social accounts. No agency. No
             editing suite. Just one sentence.
           </motion.p>
 
@@ -112,7 +113,7 @@ export function Hero() {
           </motion.div>
 
           <p className="mt-4 text-xs text-muted-foreground">
-            No card required · Publish to up to 13 platforms
+            No card required · Publish to {LIVE_PLATFORM_NAMES}
           </p>
         </div>
 
