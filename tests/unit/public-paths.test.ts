@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { isProtectedPath, PUBLIC_PREFIXES } from "@/lib/auth/public-paths";
 import { GUIDES } from "@/lib/marketing/guides";
+import { PILLARS } from "@/lib/marketing/pillars";
 
 describe("isProtectedPath", () => {
   it("gates workspace routes", () => {
@@ -41,6 +42,12 @@ describe("isProtectedPath", () => {
   it("keeps every published guide reachable", () => {
     for (const g of GUIDES) {
       expect(isProtectedPath(`/guides/${g.slug}`)).toBe(false);
+    }
+  });
+
+  it("keeps every pillar page reachable", () => {
+    for (const p of PILLARS) {
+      expect(isProtectedPath(p.path)).toBe(false);
     }
   });
 

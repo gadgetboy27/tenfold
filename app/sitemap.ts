@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { GUIDES } from "@/lib/marketing/guides";
+import { PILLARS } from "@/lib/marketing/pillars";
 import { SITE_URL } from "@/lib/seo/schema";
 
 /**
@@ -31,5 +32,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.6,
   }));
 
-  return [...pages, ...guides];
+  const pillars: MetadataRoute.Sitemap = PILLARS.map((p) => ({
+    url: `${SITE_URL}${p.path}`,
+    lastModified: new Date(p.updated),
+    changeFrequency: "monthly",
+    priority: 0.9,
+  }));
+
+  return [...pages, ...pillars, ...guides];
 }

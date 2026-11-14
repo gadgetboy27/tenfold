@@ -5,8 +5,9 @@ import { Starfield } from "@/components/marketing/Starfield";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
 import { Footer } from "@/components/marketing/Footer";
 import { StructuredData } from "@/components/marketing/StructuredData";
+import { GuideArticle, GuideCta } from "@/components/marketing/GuideArticle";
 import { GUIDES, getGuide } from "@/lib/marketing/guides";
-import { SITE_URL, SITE_NAME } from "@/lib/seo/schema";
+import { SITE_URL, SITE_NAME, faqPageSchema } from "@/lib/seo/schema";
 import { WELCOME_CREDITS } from "@/lib/billing/welcome";
 
 // Static params for every guide: these are pure content with no per-request
@@ -49,25 +50,30 @@ export default async function GuidePage({
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-background text-foreground">
       <StructuredData
-        data={{
-          "@context": "https://schema.org",
-          "@type": "Article",
-          headline: guide.title,
-          description: guide.description,
-          datePublished: guide.updated,
-          dateModified: guide.updated,
-          mainEntityOfPage: `${SITE_URL}/guides/${guide.slug}`,
-          author: { "@type": "Organization", name: SITE_NAME, url: SITE_URL },
-          publisher: {
-            "@type": "Organization",
-            name: SITE_NAME,
-            url: SITE_URL,
-            logo: {
-              "@type": "ImageObject",
-              url: `${SITE_URL}/brand/prettymuch-logo-square.png`,
+        data={[
+          {
+            "@context": "https://schema.org",
+            "@type": "Article",
+            headline: guide.title,
+            description: guide.description,
+            datePublished: guide.updated,
+            dateModified: guide.updated,
+            mainEntityOfPage: `${SITE_URL}/guides/${guide.slug}`,
+            author: { "@type": "Organization", name: SITE_NAME, url: SITE_URL },
+            publisher: {
+              "@type": "Organization",
+              name: SITE_NAME,
+              url: SITE_URL,
+              logo: {
+                "@type": "ImageObject",
+                url: `${SITE_URL}/brand/prettymuch-logo-square.png`,
+              },
             },
           },
-        }}
+          ...(guide.faq?.length
+            ? [faqPageSchema(guide.faq.map((f) => ({ q: f.q, plain: f.a })))]
+            : []),
+        ]}
       />
       <Starfield />
       <MarketingNav />
@@ -79,55 +85,11 @@ export default async function GuidePage({
           ← Back to {SITE_NAME}
         </Link>
 
-        <h1 className="mt-6 text-3xl font-bold leading-tight sm:text-4xl">
-          {guide.title}
-        </h1>
-        <p className="mt-2 text-xs text-muted-foreground">
-          Updated{" "}
-          {new Date(guide.updated).toLocaleDateString("en-NZ", {
-            day: "numeric",
-            month: "long",
-            year: "numeric",
-          })}
-        </p>
-
-        {/* The direct answer, up front. Burying it below preamble costs both
-            readers and the answer engines that increasingly surface pages. */}
-        <p className="mt-8 rounded-xl border border-primary/30 bg-primary/5 p-5 text-[15px] leading-relaxed text-foreground">
-          {guide.answer}
-        </p>
-
-        <div className="mt-10 space-y-10">
-          {guide.sections.map((s) => (
-            <section key={s.heading} className="space-y-3">
-              <h2 className="text-xl font-semibold">{s.heading}</h2>
-              {s.body.map((p, i) => (
-                <p
-                  key={i}
-                  className="text-[15px] leading-relaxed text-muted-foreground"
-                >
-                  {p}
-                </p>
-              ))}
-            </section>
-          ))}
-        </div>
-
-        <div className="mt-14 rounded-2xl border border-border bg-card p-6">
-          <p className="text-sm font-semibold text-foreground">
-            Make campaign images you can actually use
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {SITE_NAME} grants commercial rights to everything you generate.
-            Start with {WELCOME_CREDITS} free credits — no card required.
-          </p>
-          <Link
-            href="/signup"
-            className="mt-4 inline-flex rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground"
-          >
-            Get started free
-          </Link>
-        </div>
+        <GuideArticle guide={guide} />
+        <GuideCta
+          heading="Make campaign images you can actually use"
+          body={`${SITE_NAME} grants commercial rights to everything you generate. Start with ${WELCOME_CREDITS} free credits — no card required.`}
+        />
       </main>
       <Footer />
     </div>
