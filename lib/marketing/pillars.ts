@@ -15,6 +15,10 @@ import type { Guide } from "@/lib/marketing/guides";
 import { CREDIT_COSTS } from "@/lib/credits/costs";
 import { PLANS } from "@/lib/billing/plans";
 import { WELCOME_CREDITS } from "@/lib/billing/welcome";
+import {
+  LIVE_PLATFORM_NAMES,
+  UPCOMING_PLATFORM_NAMES,
+} from "@/lib/marketing/platforms";
 
 export interface Pillar extends Guide {
   /** Root-level path, e.g. "/ai-social-media-content". */
@@ -36,9 +40,9 @@ export const AI_SOCIAL_CONTENT_PILLAR: Pillar = {
   path: "/ai-social-media-content",
   serviceName: "AI social media content creation and publishing",
   title: "AI social media content for New Zealand small businesses",
-  description: `Turn one prompt into images, video, music and captions, then publish to Facebook, Instagram, TikTok and Bluesky. From NZ$${creator.priceNzd}/month.`,
+  description: `Turn one prompt into images, video, music and captions, then publish to ${LIVE_PLATFORM_NAMES}. From NZ$${creator.priceNzd}/month.`,
   updated: "2026-11-15",
-  answer: `PrettyMuch is a New Zealand AI tool that turns one written idea into a social media campaign: six images, a short video, a music track and a caption, styled with your brand kit and published straight to Facebook, Instagram, TikTok and Bluesky. Plans start at NZ$${creator.priceNzd} a month, and new accounts get ${WELCOME_CREDITS} free credits.`,
+  answer: `PrettyMuch is a New Zealand AI tool that turns one written idea into a social media campaign: six images, a short video, a music track and a caption, styled with your brand kit and published straight to ${LIVE_PLATFORM_NAMES}. Plans start at NZ$${creator.priceNzd} a month, and new accounts get ${WELCOME_CREDITS} free credits.`,
   sections: [
     {
       heading: "What does an AI social media content tool actually do?",
@@ -120,8 +124,7 @@ export const AI_SOCIAL_CONTENT_PILLAR: Pillar = {
     },
     {
       heading: "Which social networks can PrettyMuch publish to?",
-      answer:
-        "PrettyMuch publishes directly to Facebook Pages, Instagram, TikTok and Bluesky, using a connection your business owns rather than a paid intermediary. Publishing to those networks costs no credits. LinkedIn, Pinterest, Reddit and YouTube are built and switch on as each platform completes its developer approval.",
+      answer: `PrettyMuch publishes directly to ${LIVE_PLATFORM_NAMES}, using a connection your business owns rather than a paid intermediary. Publishing to those networks costs no credits. ${UPCOMING_PLATFORM_NAMES} are built and switch on as each platform completes its developer approval.`,
       bullets: [
         "Facebook and Instagram: connect once through Meta, then pick your Page.",
         "TikTok: video posts, with TikTok's own privacy and disclosure choices.",

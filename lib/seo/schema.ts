@@ -14,6 +14,8 @@
  * `lib/billing/plans.ts`'s server-only env reads.
  */
 
+import { LIVE_PLATFORM_NAMES } from "@/lib/marketing/platforms";
+
 export const SITE_URL = "https://prettymuch.nz";
 export const SITE_NAME = "PrettyMuch";
 export const CONTACT_EMAIL = "support@prettymuch.nz";
@@ -43,8 +45,7 @@ export function organizationSchema(): Json {
     name: SITE_NAME,
     url: SITE_URL,
     logo: `${SITE_URL}/brand/prettymuch-logo-square.png`,
-    description:
-      "AI creative pipeline for small businesses — one prompt becomes images, video, music and copy, published to 13 social platforms.",
+    description: `AI creative pipeline for small businesses — one prompt becomes images, video, music and copy, published to ${LIVE_PLATFORM_NAMES}.`,
     email: CONTACT_EMAIL,
     address: { "@type": "PostalAddress", ...BUSINESS_ADDRESS },
     areaServed: { "@type": "Country", name: "New Zealand" },
@@ -77,8 +78,7 @@ export function softwareApplicationSchema(
     applicationSubCategory: "Marketing Automation",
     operatingSystem: "Web",
     url: SITE_URL,
-    description:
-      "Turn one prompt into a full campaign — images, video, music and copy — then publish to up to 13 social platforms.",
+    description: `Turn one prompt into a full campaign — images, video, music and copy — then publish to ${LIVE_PLATFORM_NAMES}.`,
     offers: {
       "@type": "AggregateOffer",
       priceCurrency: "NZD",
